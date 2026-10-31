@@ -1,0 +1,23 @@
+name: probes
+on:
+  push:
+    paths: ['scripts/probes.mjs', 'lib/**', '.github/workflows/probes.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: probes
+  cancel-in-progress: true
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests first (a broken check never reads real data)
+        run: node --test test/*.test.mjs
+      - name: Probes (public data only)
+        run: node scripts/probes.mjs
