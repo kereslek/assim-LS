@@ -10,13 +10,15 @@ import { makeRpc, mapLimit, getJson } from '../lib/rpc.mjs';
 import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
 import { ETHEREUM as C, ZERO, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice } from '../lib/pools.mjs';
-import { readMaps, wordsFor } from '../lib/maps.mjs';
+import { readMaps, wordsFor, feeGrowthCalls, readFeeGrowth } from '../lib/maps.mjs';
 import { sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { hollowness, shapeTag, bandStats, depthHistogram, nearestWalls } from '../lib/shape.mjs';
 import { SWAP_TOPICS, decodeSwap, summarize, usdOfPair, swapFees } from '../lib/swaps.mjs';
 import { dailySigma, ratioByDay, markouts } from '../lib/flow.mjs';
 import { scorePool, recentMoves } from '../lib/score.mjs';
 import { dailyHistory } from '../lib/history.mjs';
+import { stickyShare, strandedShare } from '../lib/persistence.mjs';
+import { persistenceScore, flowScore, gemScore } from '../lib/gem.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 600_000, DAY_BLOCKS = 7200, GROUP = 40;
@@ -30,6 +32,8 @@ const say = (ok, area, msg) => { lines.push({ ok, area, msg }); console.log(`${o
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '—');
 const fr = (x) => (x == null ? '—' : `${Math.round(100 * x)}%`); // a fraction; missing shows —, never 0%
 const usd = (x) => (x == null ? '—' : x >= 1e9 ? `$${(x / 1e9).toFixed(2)}B` : x >= 1e6 ? `$${(x / 1e6).toFixed(1)}M` : x >= 1e3 ? `$${Math.round(x / 1e3)}k` : `$${Math.round(x)}`);
+const tally = (arr) => arr.reduce((m, k) => m.set(k, (m.get(k) || 0) + 1), new Map());
+const top = (m, n = 6) => [...m.entries()].sort((x, y) => y[1] - x[1]).slice(0, n).map(([k, v]) => `${k} ×${v}`).join(', ') || 'none';
 const median = (a) => { const s = a.filter((x) => x != null && Number.isFinite(x)).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
 async function timed(name, fn) { const t = Date.now(); try { return await fn(); } finally { timing[name] = Math.round((Date.now() - t) / 1000); } }
 function finish(code) {
@@ -49,6 +53,8 @@ const tok = new Map(list.tokens.map((t) => [t.address, t]));
 const B = (x) => (x == null ? null : BigInt(x));
 const rpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 4 });
 const mc = makeMulticall(rpc, { chunk: 400, concurrency: 4 });
+const ARCHIVE = ['https://eth.drpc.org', 'https://rpc.mevblocker.io', 'https://eth.blockscout.com/api/eth-rpc']; // serve old state (probes)
+const amc = makeMulticall(makeRpc(ARCHIVE, { timeout: 30000, maxRefusals: 6 }), { chunk: 300, concurrency: 3 });
 
 // 1. Which pools: every v3 pool ≥ $300k by its own balances; v4 pools with liquidity that an
 //    aggregator lists at ≥ $100k (v4 has no per-pool balances: its value comes from the map).
@@ -119,6 +125,8 @@ const got = await timed('swaps', () => mapLimit(groups, 2, (f) => logsAdaptive(r
 const unreadGroups = got.filter((g) => g == null).length;
 const unreadIds = new Set(groups.flatMap((g, i) => (got[i] == null ? (Array.isArray(g.address) ? g.address : g.topics[1]) : [])));
 const swaps = got.filter(Boolean).flat().map(decodeSwap).filter(Boolean);
+const byPoolEarly = new Map();
+for (const s of swaps) { if (!byPoolEarly.has(s.pool)) byPoolEarly.set(s.pool, []); byPoolEarly.get(s.pool).push(s); }
 const meta = new Map(mapped.map((p) => [p.id, p.v === 3 ? { fee: p.fee, feeProtocol: p.s.feeProtocol } : { protocolFee: p.s.protocolFee }]));
 const sums = summarize(swaps, meta);
 let lpUsd = 0, protoUsd = 0, volUsd = 0, unpricedPools = 0;
@@ -141,14 +149,37 @@ say(true, 'fees', `LP fees ${usd(lpUsd)} and protocol fees ${usd(protoUsd)} on $
 say(volRatio.length ? within(volRatio, 0.75, 1.25) / volRatio.length >= 0.7 : null, 'volume check', `24 h volume vs DexScreener: within ±25% for ${within(volRatio, 0.75, 1.25)} of ${volRatio.length}; median ratio ${median(volRatio)?.toFixed(3) ?? '—'}`);
 const yieldOf = (p) => (p.fees24h != null && p.mapUsd > 0 ? (365 * p.fees24h) / p.mapUsd : null);
 say(true, 'stranded', `${strandedPools.length} pools ≥ ${usd(FLOOR)} have ≥ 80% of their value parked away from the price (${strandedPools.filter((p) => p.tag === 'one-sided').length} one-sided); median fee yield on total value ${fr(median(strandedPools.map(yieldOf)))} vs ${fr(median(mapped.filter((p) => p.hollow < 0.8).map(yieldOf)))} for the rest`);
+// 3b. Cross-check (step 5): the swap replay against the pools' own fee counters. Every swap adds
+//     its LP fee ÷ the active liquidity to feeGrowthGlobal, so summing that over the day's swaps must
+//     reproduce the counter's change between the window's two ends (read through archive nodes).
+const Q128 = 2 ** 128;
+const fgCalls = (p) => feeGrowthCalls(p, C.v4StateView);
+const fgPlan = mapped.filter((p) => !unreadIds.has(p.id) && sums.get(p.id)?.swaps >= 10);
+const fgFlat = fgPlan.flatMap(fgCalls);
+const [fgNowR, fgThenR] = await timed('fee counters', () => Promise.all([amc(fgFlat, tag), amc(fgFlat, '0x' + (from - 1).toString(16))]));
+let k2 = 0;
+const fgRatios = [];
+let fgUnread = 0;
+for (const p of fgPlan) {
+  const n = fgCalls(p).length, a = readFeeGrowth(p, fgNowR.slice(k2, k2 + n)), z = readFeeGrowth(p, fgThenR.slice(k2, k2 + n));
+  k2 += n;
+  if (!a || !z) { fgUnread++; continue; }
+  const exp = [0, 0];
+  for (const s of byPoolEarly.get(p.id) || []) { const f = swapFees(s, meta.get(p.id)); if (f && s.liquidity > 0n) exp[s.in] += (Number(f.lp) * Q128) / Number(s.liquidity); }
+  for (const side of [0, 1]) {
+    const d = Number(BigInt.asUintN(256, a[side] - z[side]));
+    if (d > 0 && exp[side] > 0) fgRatios.push(exp[side] / d);
+  }
+}
+say(fgRatios.length ? within(fgRatios, 0.98, 1.02) / fgRatios.length >= 0.9 : null, 'fee identity', `replayed swaps vs the pools' fee counters over the same ${DAY_BLOCKS} blocks: within 2% for ${within(fgRatios, 0.98, 1.02)} of ${fgRatios.length} pool sides, within 10% for ${within(fgRatios, 0.9, 1.1)}; median ${median(fgRatios)?.toFixed(4) ?? '—'}; ${fgUnread} pools' counters unread`);
+
 // 4. Step 4 snapshot: volatility, scores and markouts.
 const WETH = C.quotes.find((q) => q.symbol === 'WETH').address;
 const keyOf = (a) => `ethereum:${a === ZERO ? WETH : a}`;
 const hist = await timed('history', () => dailyHistory(getJson, [...new Set(mapped.flatMap((p) => [keyOf(p.t0), keyOf(p.t1)]))]));
 const gp = await rpc.call('eth_gasPrice', []), ethUsd = tok.get(WETH)?.usd;
 const gasUsd = gp && ethUsd > 0 ? ((parseInt(gp, 16) * RERANGE_GAS) / 1e18) * ethUsd : null;
-const byPool = new Map();
-for (const s of swaps) { if (!byPool.has(s.pool)) byPool.set(s.pool, []); byPool.get(s.pool).push(s); }
+const byPool = byPoolEarly;
 for (const p of mapped) {
   const a = hist.series.get(keyOf(p.t0)), c = hist.series.get(keyOf(p.t1));
   const ratio = a && c ? ratioByDay(a, c) : null;
@@ -170,10 +201,63 @@ const mk = mapped.filter((p) => p.markout != null);
 say(true, 'flow', `markouts (${MARKOUT_BLOCKS} blocks after each swap) read for ${mk.length} pools: median ${fr(median(mk.map((p) => p.markout)))} of the fee; ${mk.filter((p) => p.markout <= 0.6).length} pass the toxic-flow filter (≤ 60%)`);
 const moved = mapped.filter((p) => p.sigma > 0 && p.move7dLog != null && p.lastDayLog != null && Math.abs(p.move7dLog) / (p.sigma * Math.sqrt(7)) >= 2 && Math.abs(p.lastDayLog) <= p.sigma);
 say(true, 'lenses today', `stranded ${strandedPools.filter((p) => p.tag === 'stranded').length}, one-sided ${strandedPools.filter((p) => p.tag === 'one-sided').length}, after a big move ${moved.length} (30-day averages, pool ages and calm-pair kinds come with stored history)`);
+// 5. Persistence from past maps (archive state at 10, 20 and 30 days ago) for the pools that look
+//    stranded or close to it today, plus the benchmark as the worked example; then the gem score.
+let budget = 250_000;
+const cands = mapped.filter((p) => p.hollow >= 0.5 || p.id === BENCH).filter((p) => { const w = wordsFor(p.tickSpacing).length * 3; if (w > budget && p.id !== BENCH) return false; budget -= w; return true; });
+const nowSeg = new Map(ready.map((p, i) => [p.id, maps[i]?.segments ?? null]));
+const pastBlocks = [10, 20, 30].map((d) => block - d * DAY_BLOCKS);
+let pastRead = 0, pastTried = 0;
+await timed('past maps', async () => {
+  for (const pb of pastBlocks) {
+    const ptag = '0x' + pb.toString(16);
+    const st = await amc(cands.flatMap((p) => (p.v === 3
+      ? [{ target: p.id, data: encodeCall('slot0()') }, { target: p.id, data: encodeCall('liquidity()') }]
+      : [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }])), ptag);
+    const alive = [];
+    cands.forEach((p, i) => {
+      const s0 = p.v === 3 ? readV3Slot0(st[2 * i]) : readV4Slot0(st[2 * i]), L = readUint(st[2 * i + 1]);
+      p.past = p.past || [];
+      if (s0 === false) { p.past.push({ hollow: null, segments: null, absent: true }); return; } // the pool did not exist yet
+      if (!s0 || L == null || !(s0.sqrtPriceX96 > 0n)) { p.past.push({ hollow: null, segments: null }); return; }
+      alive.push({ p, s0, L });
+    });
+    pastTried += alive.length;
+    const ms = alive.length ? await readMaps(amc, alive.map(({ p, s0, L }) => ({ v: p.v, id: p.id, tickSpacing: p.tickSpacing, tick: s0.tick, liquidity: L })), { stateView: C.v4StateView, tag: ptag }) : [];
+    alive.forEach(({ p, s0 }, i) => {
+      const m = ms[i];
+      if (!m || m.unread || !(m.checks.netSumZero && m.checks.matchesPool)) { p.past.push({ hollow: null, segments: null }); return; }
+      pastRead++;
+      const h = hollowness(m.segments, sqrtX96ToSqrt(s0.sqrtPriceX96), p.d1, s0.tick, m.checks.walkedLiquidity);
+      p.past.push({ hollow: h.hollow, segments: m.segments });
+    });
+  }
+});
+for (const p of cands) {
+  const hs = [p.hollow, ...p.past.map((x) => x.hollow)];
+  p.strandedShare = strandedShare(hs);
+  p.hollowAvg = hs.filter((h) => h != null).length >= 2 ? hs.filter((h) => h != null).reduce((a, x) => a + x, 0) / hs.filter((h) => h != null).length : null;
+  const oldest = [...p.past].reverse().find((x) => x.segments);
+  p.sticky = oldest ? stickyShare(nowSeg.get(p.id), oldest.segments, { tick: p.s.tick, activeL: p.L, sp: p.sqrt, d1: p.d1 }) : null;
+  const ws = [p.score?.wallSigmaBelow, p.score?.wallSigmaAbove].filter((x) => x != null);
+  const wsMin = ws.length ? Math.min(...ws) : null;
+  p.persistence = persistenceScore({ strandedDays30: p.strandedShare == null ? null : 30 * p.strandedShare, wallSigma: wsMin === Infinity ? 99 : wsMin, inactiveShare: p.sticky });
+  const r = sums.get(p.id);
+  p.flow = flowScore({ markoutToFee: p.markout, traders7d: r ? 7 * r.txs : null });
+  const warnings = [];
+  if (p.v === 4 && p.hooks && p.hooks !== ZERO) warnings.push('hooked pool');
+  if (r && r.swaps < 10) warnings.push('thin: under 10 swaps a day');
+  if (p.offMarket) warnings.push('pool price more than 10% off market');
+  p.gem = gemScore({ stranded: p.hollowAvg, net: p.score?.net ?? null, persistence: p.persistence, flow: p.flow, warnings });
+}
+const gems = cands.filter((p) => p.gem?.total != null && p.id !== BENCH);
+say(pastRead ? true : null, 'persistence', `past maps read ${pastRead} of ${pastTried} (${cands.length} pools × 3 dates through archive nodes); stranded in every snapshot ${cands.filter((p) => p.strandedShare === 1).length}; median share of today's parked value already there 30 days ago ${fr(median(cands.map((p) => p.sticky)))}`);
+say(true, 'gem scores', `${gems.length} candidates scored: ${gems.filter((p) => p.gem.total >= 60).length} at 60 or more, ${gems.filter((p) => p.gem.total >= 40).length} at 40 or more; median ${median(gems.map((p) => p.gem.total)) ?? '—'}; blank for missing inputs ${cands.filter((p) => p.gem && p.gem.total == null).length} (most often: ${top(tally(cands.flatMap((p) => p.gem?.missing ?? [])), 3)})`);
 const b = ready.find((p) => p.id === BENCH);
 if (b && b.tag) {
   say(true, 'benchmark', `UNI/WETH 0.3%: ${usd(b.mapUsd)} mapped, stranded ${fr(b.hollow)} (${b.tag}), ±9% holds ${fr(b.band9)}; 24 h volume ${usd(b.vol24h)}, LP fees ${usd(b.fees24h)}; protocol fee ${b.s.feeProtocol ? 'on' : 'off'}`);
   const k = b.score || {};
   say(true, 'benchmark score', `σ ${fr(b.sigma)} a day → range ±${fr(k.r)}; at $${EXAMPLE_TICKET}: fee APR ${fr(k.feeApr)}, LVR ${fr(k.lvr)}, net ${fr(k.net)}, edge ${k.edge?.toFixed(2) ?? '—'}, re-range every ${k.rerangeDays ? Math.round(k.rerangeDays) + ' days' : '—'}; markouts ${fr(b.markout)} of the fee; nearest walls ${k.wallSigmaBelow == null ? '—' : k.wallSigmaBelow === Infinity ? 'none in view' : k.wallSigmaBelow.toFixed(1) + ' σ-weeks'} below, ${k.wallSigmaAbove == null ? '—' : k.wallSigmaAbove === Infinity ? 'none in view' : k.wallSigmaAbove.toFixed(1) + ' σ-weeks'} above`);
+  say(true, 'benchmark persistence', `stranded in ${b.strandedShare == null ? '—' : Math.round(b.strandedShare * (b.past.filter((x) => x.hollow != null).length + 1))} of ${b.past.filter((x) => x.hollow != null).length + 1} snapshots (now, 10, 20, 30 days ago: ${[b.hollow, ...(b.past || []).map((x) => x.hollow)].map(fr).join(', ')}); parked value already there 30 days ago ${fr(b.sticky)}; gem ${b.gem?.total ?? 'blank'}${b.gem?.missing?.length ? ' (missing ' + b.gem.missing.join(', ') + ')' : ''}`);
 } else say(null, 'benchmark', 'not mapped');
 finish(badMaps ? 1 : 0);
