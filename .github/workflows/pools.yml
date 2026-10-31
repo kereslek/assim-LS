@@ -1,0 +1,25 @@
+name: pools
+on:
+  push:
+    paths: ['scripts/pools.mjs', 'lib/**', '.github/workflows/pools.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pools
+  cancel-in-progress: true
+jobs:
+  pools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Unit tests first (a broken check never reads real data)
+        run: node --test test/*.test.mjs
+      - name: Pool list (public market data only)
+        env:
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+        run: node scripts/pools.mjs
