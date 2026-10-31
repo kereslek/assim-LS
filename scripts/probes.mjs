@@ -100,6 +100,19 @@ async function probeContracts(eth, base) {
   say(c, 'contract base v4 pool manager', c == null ? 'unread' : c ? 'code present' : 'no code');
 }
 
+// Archive state: can the node answer a read at an old block? (Needed for maps from weeks ago.)
+async function probeArchive(rpcs) {
+  const ok = [];
+  for (const [label, url] of Object.entries(rpcs)) {
+    const r = makeRpc([url], { timeout: 12000, maxRefusals: 1 });
+    const v = await r.call('eth_call', [{ to: ETH.WETH, data: encodeCall('totalSupply()') }, '0x' + (15000000).toString(16)]);
+    const good = decodeWords(v)?.length === 1 && decodeWords(v)[0] > 0n;
+    if (good) ok.push(label);
+    say(good ? true : null, `archive eth ${label}`, good ? 'state at block 15,000,000 served' : 'no archive state');
+  }
+  return ok;
+}
+
 async function probeLogs(rpc, chain, blocks) {
   const bn = await rpc.call('eth_blockNumber', []);
   if (bn == null) return say(null, `logs ${chain}`, 'no block number');
@@ -156,12 +169,13 @@ const ethOk = await probeRpcs('eth', ETH_RPCS, '0x1');
 const baseOk = await probeRpcs('base', BASE_RPCS, '0x2105');
 await probeApis();
 await probeContracts(eth, base);
+const archive = await probeArchive(ETH_RPCS);
 await probeLogs(eth, 'eth', 30);
 await probeLogs(base, 'base', 180);
 const map = await probeMap(makeRpc(ethOk.length ? ethOk : Object.values(ETH_RPCS), { batchSize: 40 }));
 
 const count = (k) => results.filter((r) => r.ok === k).length;
-const summary = `probes: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · eth rpcs ${ethOk.length}/${Object.keys(ETH_RPCS).length} · base rpcs ${baseOk.length}/${Object.keys(BASE_RPCS).length} · map ${map ? (map.netSumZero && map.matchesPool ? 'complete' : 'INCOMPLETE') : 'unread'}`;
+const summary = `probes: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · eth rpcs ${ethOk.length}/${Object.keys(ETH_RPCS).length} · base rpcs ${baseOk.length}/${Object.keys(BASE_RPCS).length} · archive ${archive.length ? archive.join(', ') : 'none'} · map ${map ? (map.netSumZero && map.matchesPool ? 'complete' : 'INCOMPLETE') : 'unread'}`;
 console.log('\n' + summary);
 console.log(`::notice title=probes::${summary}`);
 const mapLines = results.filter((r) => r.area.startsWith('map') || r.area.startsWith('shape')).map((r) => r.msg);

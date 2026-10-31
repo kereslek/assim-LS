@@ -131,11 +131,11 @@ const logRpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 1000 }); // range re
 const head = await rpc.call('eth_getBlockByNumber', [tag, false]);
 const nowTs = head?.timestamp ? parseInt(head.timestamp, 16) : Math.floor(Date.now() / 1000);
 const timeOf = (b) => nowTs - (block - b) * 12; // post-merge slots are 12 s (missed slots make this slightly late)
-const ev = await timed('v3 events', () => pageLogs(getJson, { base: 'https://eth.blockscout.com/api', address: C.v3Factory, fromBlock: C.v3FactoryBlock, toBlock: block, tries: 5 }));
+const ev = await timed('v3 events', () => pageLogs(getJson, { base: 'https://eth.blockscout.com/api', address: C.v3Factory, fromBlock: C.v3FactoryBlock, toBlock: block, tries: 5, spacingMs: 1500 }));
 const created = ev.logs.map(decodePoolCreated).filter(Boolean);
 let eventsComplete = ev.complete, via = `Blockscout ${ev.calls} pages`;
 if (!ev.complete) {
-  const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 10000, maxStep: 400000, minStep: 500, segments: 6 }));
+  const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 9000, maxStep: 9000, minStep: 500, segments: 8 }));
   if (rest) {
     const seen = new Set(created.map((e) => e.id));
     for (const e of rest.map(decodePoolCreated).filter(Boolean)) if (!seen.has(e.id)) { seen.add(e.id); created.push(e); }
@@ -164,7 +164,7 @@ else say(null, 'v3 ages', 'unread (creation events incomplete)');
 const inPair = (a, b) => (universe.has(a) || quoteSet.has(a)) && (universe.has(b) || quoteSet.has(b)) && (quoteSet.has(a) || quoteSet.has(b));
 const byId4 = new Map(v4.map((p) => [p.id, p]));
 const added4 = [];
-const initLogs = await timed('v4 events', () => logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.initialize] }, block - WIN + 1, block, { step: 5000, maxStep: 50000, minStep: 250, segments: 2 }));
+const initLogs = await timed('v4 events', () => logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.initialize] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, segments: 2 }));
 if (initLogs) {
   const inits = initLogs.map(decodeInitialize).filter(Boolean);
   const mine = inits.filter((e) => inPair(e.t0, e.t1));
@@ -204,7 +204,11 @@ if (want.length) {
 if (added4.length) {
   const st = await mc(added4.flatMap((p) => [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }]), tag);
   added4.forEach((p, i) => { p.slot0 = readV4Slot0(st[2 * i]) || null; p.liquidity = readUint(st[2 * i + 1]); });
-  v4.push(...added4.filter((p) => p.slot0));
+  // an empty new pool is counted, not listed: it has no liquidity to map and no fees to share
+  const ev4 = added4.filter((p) => p.source === 'event'), live4 = ev4.filter((p) => p.slot0 && p.liquidity > 0n);
+  const combos = tally(ev4.map((p) => `${p.fee / 1e4}%/${p.tickSpacing}${p.hooks !== ZERO ? '+hook' : ''}`));
+  if (ev4.length) say(true, 'v4 new keys', `${ev4.length} new v4 pools outside the standard keys: ${live4.length} hold liquidity; most common fee/spacing: ${top(combos, 5)}`);
+  v4.push(...added4.filter((p) => p.slot0 && (p.source === 'aggregator' || p.liquidity > 0n)));
 }
 const hooked = v4.filter((p) => p.hooks && p.hooks !== ZERO);
 say(true, 'v4 list', `${v4.length} v4 pools: ${v4.filter((p) => !p.source).length} from standard keys, ${v4.filter((p) => p.source === 'event').length} from creation events, ${v4.filter((p) => p.source === 'aggregator').length} from listed ids; ${hooked.length} with hooks, ${v4.filter((p) => p.fee === DYNAMIC_FEE).length} with dynamic fees`);
