@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { liquidityMap, valueInRange, ticksForLog } from '../lib/v3math.mjs';
-import { bandStats, depthHistogram, nearestWalls, wallSigma, shapeTag, strandedDays } from '../lib/shape.mjs';
+import { bandStats, hollowness, depthHistogram, nearestWalls, wallSigma, shapeTag, strandedDays } from '../lib/shape.mjs';
+
+const shapeOf = (positions, tick = 0) => {
+  const m = liquidityMap(poolFrom(positions, tick));
+  return hollowness(m.segments, 1, 18, tick, m.checks.walkedLiquidity);
+};
 import { poolFrom } from './v3math.test.mjs';
 
 const near = (a, b, tol) => Math.abs(a - b) <= tol;
@@ -22,17 +27,27 @@ test('band split is exact: inside + outside = total, matches an independent sum'
   const expectedOut = v(strandedPositions[0]) + v(strandedPositions[1]);
   assert.ok(near(b.stranded, expectedOut / (expectedOut + v(strandedPositions[2])), 1e-9));
   assert.ok(b.stranded > 0.9);
-  assert.equal(shapeTag(b), 'stranded');
 });
 
-test('shapes: one-sided and peaked pools are told apart', () => {
-  const oneSided = liquidityMap(poolFrom([{ lo: 1800, hi: 4200, L: 10n ** 21n }, { lo: -300, hi: 300, L: 10n ** 19n }], 0));
-  assert.equal(shapeTag(bandStats(oneSided.segments, 1, 18, -band, band, 0)), 'one-sided');
-  const peaked = liquidityMap(poolFrom([{ lo: -600, hi: 600, L: 10n ** 21n }, { lo: -4200, hi: 4200, L: 10n ** 19n }], 0));
-  const b = bandStats(peaked.segments, 1, 18, -band, band, 0);
-  assert.ok(b.stranded < 0.5);
-  assert.equal(shapeTag(b), 'peaked');
-  assert.equal(shapeTag({ stranded: null }), null);
+test('hollowness: walls far from a thin price read as stranded', () => {
+  const h = shapeOf(strandedPositions);
+  assert.ok(h.hollow > 0.9, `hollow ${h.hollow}`);
+  assert.ok(h.aboveShare > 0.15 && h.aboveShare < 0.85);
+  assert.equal(shapeTag(h), 'stranded');
+  assert.equal(shapeTag(shapeOf([{ lo: 1800, hi: 4200, L: 10n ** 21n }, { lo: -300, hi: 300, L: 10n ** 19n }])), 'one-sided');
+  assert.equal(shapeTag({ hollow: null }), null);
+});
+
+test('regression: wide positions that include the price are served, not stranded', () => {
+  // The first definition (value outside a ±9% band) called this pool stranded; on the real chain it
+  // read 80% for UNI/WETH 0.3%. Wide liquidity includes the price, so it must count as zero.
+  const wide = [{ lo: -887220, hi: 887220, L: 10n ** 20n }, { lo: -20000, hi: 20000, L: 5n * 10n ** 19n }];
+  const m = liquidityMap(poolFrom(wide, 0));
+  assert.ok(bandStats(m.segments, 1, 18, -band, band, 0).stranded > 0.8); // the old lens misfires here
+  const h = shapeOf(wide);
+  assert.ok(h.hollow < 0.01, `hollow ${h.hollow}`);
+  assert.equal(shapeTag(h), 'served');
+  assert.equal(shapeTag(shapeOf([{ lo: -600, hi: 600, L: 10n ** 21n }, { lo: -4200, hi: 4200, L: 10n ** 19n }])), 'served'); // peaked at the price
 });
 
 test('depth histogram and walls: the big walls are found on the right sides', () => {

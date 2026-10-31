@@ -6,7 +6,7 @@ import { makeRpc, getJson } from '../lib/rpc.mjs';
 import { encodeCall, decodeWords, signed, toAddress } from '../lib/abi.mjs';
 import { topic } from '../lib/keccak.mjs';
 import { liquidityMap, ticksInWord, bitmapWordRange, sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
-import { bandStats, depthHistogram, nearestWalls, shapeTag } from '../lib/shape.mjs';
+import { bandStats, hollowness, depthHistogram, nearestWalls, shapeTag } from '../lib/shape.mjs';
 
 const ETH_RPCS = {
   publicnode: 'https://ethereum-rpc.publicnode.com', drpc: 'https://eth.drpc.org', '1rpc': 'https://1rpc.io/eth',
@@ -138,8 +138,10 @@ async function probeMap(rpc) {
   for (const r of [0.09, 0.2]) {
     const t = ticksForLog(r), b = bandStats(m.segments, sp, 18, tickCurrent - t, tickCurrent + t, tickCurrent);
     shape[r] = b;
-    say(true, 'shape UNI/WETH 0.3%', `±${Math.round(r * 100)}% holds ${pct(b.total ? b.inside / b.total : null)} of the value, ${pct(b.stranded)} sits outside (${shapeTag(b)})`);
+    say(true, 'shape UNI/WETH 0.3%', `±${Math.round(r * 100)}% band holds ${pct(b.total ? b.inside / b.total : null)} of the value`);
   }
+  const h = hollowness(m.segments, sp, 18, tickCurrent, m.checks.walkedLiquidity);
+  say(true, 'shape UNI/WETH 0.3%', `stranded (value above the price's own level): ${pct(h.hollow)}, ${pct(h.aboveShare)} of it above the price (${shapeTag(h)})`);
   const w = nearestWalls(depthHistogram(m.segments, sp, 18, tickCurrent));
   const down = (x) => (x == null ? '—' : x === Infinity ? 'none in view' : `−${Math.round((1 - Math.exp(-x)) * 100)}%`);
   const up = (x) => (x == null ? '—' : x === Infinity ? 'none in view' : `+${Math.round((Math.exp(x) - 1) * 100)}%`);
