@@ -1,7 +1,7 @@
 name: pools
 on:
   push:
-    paths: ['scripts/pools.mjs', 'lib/**', '.github/workflows/pools.yml']
+    paths: ['scripts/pools.mjs', 'scripts/scan.mjs', 'lib/**', '.github/workflows/pools.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,3 +23,6 @@ jobs:
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
         run: node scripts/pools.mjs
+      - name: Liquidity maps and a day of fees (public market data only)
+        if: always() && hashFiles('out/pools-ethereum.json') != ''
+        run: node scripts/scan.mjs

@@ -1,0 +1,135 @@
+// Phase 0, step 3: liquidity maps and a day of fees for the pools worth a look. Reads the pool list
+// that scripts/pools.mjs wrote in the same job, re-reads those pools' state at a fresh block, rebuilds
+// each full liquidity map at that block, and replays the last 24 h of swaps for volume and LP fees.
+// Public market data only: the log prints counts and distributions, never a pool or an address,
+// except the UNI/WETH 0.3% benchmark, which is public and named as the worked example.
+import fs from 'node:fs';
+import { makeRpc, mapLimit } from '../lib/rpc.mjs';
+import { makeMulticall } from '../lib/multicall.mjs';
+import { encodeCall } from '../lib/abi.mjs';
+import { ETHEREUM as C, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice } from '../lib/pools.mjs';
+import { readMaps, wordsFor } from '../lib/maps.mjs';
+import { sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
+import { hollowness, shapeTag, bandStats } from '../lib/shape.mjs';
+import { SWAP_TOPICS, decodeSwap, summarize, usdOfPair } from '../lib/swaps.mjs';
+import { logsAdaptive } from '../lib/logs-adaptive.mjs';
+
+const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 150_000, DAY_BLOCKS = 7200, GROUP = 40;
+const BENCH = '0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801';
+const V3_SPACING = { 100: 1, 500: 10, 3000: 60, 10000: 200 };
+const RPCS = ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth', 'https://rpc.mevblocker.io', 'https://rpc.flashbots.net', 'https://eth.blockscout.com/api/eth-rpc'];
+
+const lines = [], timing = {};
+const say = (ok, area, msg) => { lines.push({ ok, area, msg }); console.log(`${ok === true ? 'PASS' : ok === false ? 'FAIL' : 'N/A '} ${area}: ${msg}`); };
+const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '—');
+const fr = (x) => (x == null ? '—' : `${Math.round(100 * x)}%`); // a fraction; missing shows —, never 0%
+const usd = (x) => (x == null ? '—' : x >= 1e9 ? `$${(x / 1e9).toFixed(2)}B` : x >= 1e6 ? `$${(x / 1e6).toFixed(1)}M` : x >= 1e3 ? `$${Math.round(x / 1e3)}k` : `$${Math.round(x)}`);
+const median = (a) => { const s = a.filter((x) => x != null && Number.isFinite(x)).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
+async function timed(name, fn) { const t = Date.now(); try { return await fn(); } finally { timing[name] = Math.round((Date.now() - t) / 1000); } }
+function finish(code) {
+  const count = (k) => lines.filter((l) => l.ok === k).length;
+  const summary = `scan: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · steps ${Object.entries(timing).map(([k, v]) => `${k} ${v}s`).join(', ')}`;
+  console.log('\n' + summary);
+  console.log(`::notice title=maps and fees::${lines.map((l) => `${l.ok === true ? '✓' : l.ok === false ? '✗' : '·'} ${l.area}: ${l.msg}`).join(' | ')}`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${summary}\n\n| | Area | Result |\n|---|---|---|\n` +
+      lines.map((l) => `| ${l.ok === true ? 'PASS' : l.ok === false ? 'FAIL' : 'N/A'} | ${l.area} | ${l.msg} |`).join('\n') + '\n');
+  }
+  process.exit(code);
+}
+
+const list = JSON.parse(fs.readFileSync('out/pools-ethereum.json', 'utf8'));
+const tok = new Map(list.tokens.map((t) => [t.address, t]));
+const B = (x) => (x == null ? null : BigInt(x));
+const rpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 4 });
+const mc = makeMulticall(rpc, { chunk: 400, concurrency: 3 });
+
+// 1. Which pools: every v3 pool ≥ $300k by its own balances; v4 pools with liquidity that an
+//    aggregator lists at ≥ $100k (v4 has no per-pool balances: its value comes from the map).
+const pick = [
+  ...list.v3.filter((p) => p.tvl >= FLOOR || p.id === BENCH).map((p) => ({ ...p, v: 3, tickSpacing: V3_SPACING[p.fee] })),
+  ...list.v4.filter((p) => B(p.liquidity) > 0n && p.aggReserveUsd >= V4_PREFILTER).map((p) => ({ ...p, v: 4 })),
+].sort((a, b) => (b.tvl ?? b.aggReserveUsd ?? 0) - (a.tvl ?? a.aggReserveUsd ?? 0));
+let words = 0, skipped = 0;
+const chosen = [];
+for (const p of pick) {
+  const w = wordsFor(p.tickSpacing).length;
+  if (words + w > MAX_WORDS && p.id !== BENCH) { skipped++; continue; }
+  words += w; chosen.push(p);
+}
+
+// 2. Fresh block; state and maps all read there.
+const tag = await rpc.call('eth_blockNumber', []);
+if (tag == null) { say(null, 'block', 'no block number'); finish(1); }
+const block = parseInt(tag, 16);
+const st = await timed('state', () => mc(chosen.flatMap((p) => (p.v === 3
+  ? [{ target: p.id, data: encodeCall('slot0()') }, { target: p.id, data: encodeCall('liquidity()') }]
+  : [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }])), tag));
+chosen.forEach((p, i) => { p.s = (p.v === 3 ? readV3Slot0(st[2 * i]) : readV4Slot0(st[2 * i])) || null; p.L = readUint(st[2 * i + 1]); });
+const ready = chosen.filter((p) => p.s && p.L != null);
+const maps = await timed('maps', () => readMaps(mc, ready.map((p) => ({ v: p.v, id: p.id, tickSpacing: p.tickSpacing, tick: p.s.tick, liquidity: p.L })), { stateView: C.v4StateView, tag }));
+
+let complete = 0, unreadMaps = 0, badMaps = 0, ticksRead = 0;
+const tags = new Map(), v3Ratio = [], v4Ratio = [];
+ready.forEach((p, i) => {
+  const m = maps[i];
+  if (m.unread) { unreadMaps++; return; }
+  ticksRead += m.checks.initialized;
+  if (!(m.checks.netSumZero && m.checks.neverNegative && m.checks.matchesPool)) { badMaps++; return; }
+  complete++;
+  const d0 = tok.get(p.t0)?.decimals, d1 = tok.get(p.t1)?.decimals, u0 = tok.get(p.t0)?.usd, u1 = tok.get(p.t1)?.usd;
+  const sp = sqrtX96ToSqrt(B(p.s.sqrtPriceX96)), price = poolPrice(B(p.s.sqrtPriceX96), d0, d1);
+  const h = hollowness(m.segments, sp, d1, p.s.tick, m.checks.walkedLiquidity);
+  const per1 = u1 > 0 ? u1 : u0 > 0 && price > 0 ? u0 / price : null; // USD per token1
+  p.mapUsd = per1 != null ? h.total * per1 : null;
+  p.hollow = h.hollow; p.aboveShare = h.aboveShare; p.tag = shapeTag(h);
+  const t9 = ticksForLog(0.09), b9 = bandStats(m.segments, sp, d1, p.s.tick - t9, p.s.tick + t9, p.s.tick);
+  p.band9 = b9.total ? b9.inside / b9.total : null;
+  tags.set(p.tag, (tags.get(p.tag) || 0) + 1);
+  if (p.v === 3 && p.tvl > 0 && p.mapUsd != null) v3Ratio.push(p.mapUsd / p.tvl);
+  if (p.v === 4 && p.aggReserveUsd > 0 && p.mapUsd != null) v4Ratio.push(p.mapUsd / p.aggReserveUsd);
+});
+say(badMaps ? false : unreadMaps ? null : true, 'maps', `${complete} of ${ready.length} maps complete at block ${block} (liquidity sums to zero, never negative, walk = pool liquidity); ${badMaps} failed a check; ${unreadMaps} unread; ${skipped} skipped for the read budget; ${words} bitmap words, ${ticksRead} ticks`);
+const within = (a, lo, hi) => a.filter((r) => r >= lo && r <= hi).length;
+say(v3Ratio.length ? within(v3Ratio, 0.9, 1.02) / v3Ratio.length >= 0.9 : null, 'map value v3', `map value vs the pool's token balances: within −10%…+2% for ${within(v3Ratio, 0.9, 1.02)} of ${v3Ratio.length}; median ${median(v3Ratio)?.toFixed(3) ?? '—'} (balances also hold uncollected fees)`);
+say(v4Ratio.length ? within(v4Ratio, 0.75, 1.25) / v4Ratio.length >= 0.7 : null, 'map value v4', `map value vs aggregators: within ±25% for ${within(v4Ratio, 0.75, 1.25)} of ${v4Ratio.length}; median ${median(v4Ratio)?.toFixed(3) ?? '—'}`);
+const mapped = ready.filter((p) => p.tag);
+const strandedPools = mapped.filter((p) => p.hollow >= 0.8);
+say(true, 'shapes', `of ${mapped.length} mapped pools: ${[...tags].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}; median share of value within ±9% of the price ${fr(median(mapped.map((p) => p.band9)))}`);
+
+// 3. The last 24 h of swaps for the mapped pools: v3 per pool address, v4 through the PoolManager by pool id.
+const from = block - DAY_BLOCKS + 1;
+const v3ids = mapped.filter((p) => p.v === 3).map((p) => p.id), v4ids = mapped.filter((p) => p.v === 4).map((p) => p.id);
+const groups = [];
+for (let i = 0; i < v3ids.length; i += GROUP) groups.push({ address: v3ids.slice(i, i + GROUP), topics: [SWAP_TOPICS.v3] });
+for (let i = 0; i < v4ids.length; i += GROUP) groups.push({ address: C.v4PoolManager, topics: [SWAP_TOPICS.v4, v4ids.slice(i, i + GROUP)] });
+const got = await timed('swaps', () => mapLimit(groups, 2, (f) => logsAdaptive(rpc, f, from, block, { step: 1000 })));
+const unreadGroups = got.filter((g) => g == null).length;
+const unreadIds = new Set(groups.flatMap((g, i) => (got[i] == null ? (Array.isArray(g.address) ? g.address : g.topics[1]) : [])));
+const swaps = got.filter(Boolean).flat().map(decodeSwap).filter(Boolean);
+const meta = new Map(mapped.map((p) => [p.id, p.v === 3 ? { fee: p.fee, feeProtocol: p.s.feeProtocol } : { protocolFee: p.s.protocolFee }]));
+const sums = summarize(swaps, meta);
+let lpUsd = 0, protoUsd = 0, volUsd = 0, unpricedPools = 0;
+const volRatio = [];
+for (const p of mapped) {
+  if (unreadIds.has(p.id)) { p.fees24h = null; continue; }
+  const r = sums.get(p.id);
+  const d0 = tok.get(p.t0)?.decimals, d1 = tok.get(p.t1)?.decimals, u0 = tok.get(p.t0)?.usd, u1 = tok.get(p.t1)?.usd;
+  if (!r) { p.fees24h = 0; p.vol24h = 0; continue; } // read, and no swaps: a real zero
+  p.fees24h = r.unpriced ? null : usdOfPair(r.lp, d0, d1, u0, u1);
+  p.vol24h = usdOfPair(r.volume, d0, d1, u0, u1);
+  const pr = usdOfPair(r.protocol, d0, d1, u0, u1);
+  if (p.fees24h == null) { unpricedPools++; continue; }
+  lpUsd += p.fees24h; protoUsd += pr ?? 0; volUsd += p.vol24h ?? 0;
+  if (p.aggVolumeUsd24h > 0 && p.vol24h != null) volRatio.push(p.vol24h / p.aggVolumeUsd24h);
+}
+say(unreadGroups ? null : true, 'swaps', `${swaps.length} swaps in the last ${DAY_BLOCKS} blocks across ${sums.size} of ${mapped.length} pools; ${unreadGroups} of ${groups.length} log groups unread`);
+const protoOn = mapped.filter((p) => (p.v === 3 ? p.s.feeProtocol > 0 : p.s.protocolFee > 0));
+say(true, 'fees', `LP fees ${usd(lpUsd)} and protocol fees ${usd(protoUsd)} on ${usd(volUsd)} of volume in 24 h; protocol fee on in ${protoOn.filter((p) => p.v === 3).length} of ${mapped.filter((p) => p.v === 3).length} v3 and ${protoOn.filter((p) => p.v === 4).length} of ${mapped.filter((p) => p.v === 4).length} v4 pools; ${unpricedPools} pools unpriced`);
+say(volRatio.length ? within(volRatio, 0.75, 1.25) / volRatio.length >= 0.7 : null, 'volume check', `24 h volume vs DexScreener: within ±25% for ${within(volRatio, 0.75, 1.25)} of ${volRatio.length}; median ratio ${median(volRatio)?.toFixed(3) ?? '—'}`);
+const yieldOf = (p) => (p.fees24h != null && p.mapUsd > 0 ? (365 * p.fees24h) / p.mapUsd : null);
+say(true, 'stranded', `${strandedPools.length} pools ≥ ${usd(FLOOR)} have ≥ 80% of their value parked away from the price (${strandedPools.filter((p) => p.tag === 'one-sided').length} one-sided); median fee yield on total value ${fr(median(strandedPools.map(yieldOf)))} vs ${fr(median(mapped.filter((p) => p.hollow < 0.8).map(yieldOf)))} for the rest`);
+const b = ready.find((p) => p.id === BENCH);
+if (b && b.tag) say(true, 'benchmark', `UNI/WETH 0.3%: ${usd(b.mapUsd)} mapped, stranded ${fr(b.hollow)} (${b.tag}), ±9% holds ${fr(b.band9)}; 24 h volume ${usd(b.vol24h)}, LP fees ${usd(b.fees24h)}; protocol fee ${b.s.feeProtocol ? 'on' : 'off'}`);
+else say(null, 'benchmark', 'not mapped');
+finish(badMaps ? 1 : 0);

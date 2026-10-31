@@ -66,6 +66,10 @@ test('DexScreener pairs normalise; other chains and other dexes are not Uniswap 
   assert.deepEqual(p.map((x) => x.venue), [3, 4, null]);
   assert.equal(p[0].quoteSymbol, 'WETH');
   assert.equal(p[2].reserveUsd, null);
+  // regression: a null liquidity or volume must stay null, not become $0
+  const z = parseDexScreenerPairs([{ chainId: 'ethereum', dexId: 'uniswap', labels: ['v3'], pairAddress: a('8'), liquidity: { usd: null }, volume: { h24: '' } }]);
+  assert.equal(z[0].reserveUsd, null);
+  assert.equal(z[0].volumeUsd24h, null);
 });
 
 // A fake Etherscan-style API over made-up logs: 2,350 logs on 900 blocks, ascending.

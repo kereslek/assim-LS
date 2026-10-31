@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { selector } from '../lib/keccak.mjs';
 import {
   ZERO, ETHEREUM, TOPICS, v4PoolId, v3Candidates, v4Candidates, sortPair, readGetPool, readV4Slot0, readV3Slot0,
-  decodePoolCreated, decodeInitialize, poolPrice, tvlUsd, baseUsdAtPool,
+  decodePoolCreated, decodeInitialize, poolPrice, tvlUsd, baseUsdAtPool, poolKeysCall, readPoolKey,
 } from '../lib/pools.mjs';
 
 const w = (n) => BigInt.asUintN(256, BigInt(n)).toString(16).padStart(64, '0');
@@ -97,4 +97,17 @@ test('prices and TVL: missing inputs give null, never a partial sum', () => {
   assert.equal(baseUsdAtPool({ price: 0.5, quoteIs: 1, quoteUsd: 4 }), 2);
   assert.equal(baseUsdAtPool({ price: 0.5, quoteIs: 0, quoteUsd: 4 }), 8);
   assert.equal(baseUsdAtPool({ price: null, quoteIs: 0, quoteUsd: 4 }), null);
+});
+
+test('v4 keys from the PositionManager: bytes25 argument, and the key must hash back to the id', () => {
+  const id = ETH_USDC_INIT.topics[1];
+  const c = poolKeysCall(ETHEREUM.v4PositionManager, id);
+  assert.equal(c.data.slice(0, 10), selector('poolKeys(bytes25)'));
+  assert.equal(c.data.slice(10, 60), id.slice(2, 52)); // first 25 bytes, left-aligned
+  assert.equal(c.data.slice(60), '0'.repeat(14));
+  const answer = (cur1, fee, ts) => ({ ok: true, data: '0x' + w(0) + w(cur1) + w(fee) + w(ts) + w(0) });
+  assert.deepEqual(readPoolKey(answer(USDC, 500, 10), id), { currency0: ZERO, currency1: USDC, fee: 500, tickSpacing: 10, hooks: ZERO });
+  assert.equal(readPoolKey(answer(USDC, 3000, 60), id), false); // a key for some other pool
+  assert.equal(readPoolKey(answer(0, 0, 0), id), false); // never registered
+  assert.equal(readPoolKey(null, id), null);
 });

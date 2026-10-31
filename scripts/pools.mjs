@@ -1,7 +1,9 @@
 // Phase 0, step 2: the pool list for Ethereum. Universe (CoinGecko ranks 100–2000 with an Ethereum
 // token, plus the UNI benchmark) × quote tokens × fee tiers, looked up on-chain for Uniswap v3 and v4
-// at one block; then checked three ways: the v3 factory's own creation events, the same events read
-// through an RPC, and GeckoTerminal + DexScreener for pools of at least $300k.
+// at one block; plus v4 pools with any key from the last week's creation events and, for pools the
+// aggregators list, keys read from the v4 PositionManager. Checked three ways: the v3 factory's own
+// creation events, a recent window re-read through plain RPC chunks, and GeckoTerminal + DexScreener
+// for pools of at least $300k.
 // Public market data only: the log shows counts, ratios, dates, venue names and quote symbols, never an address.
 import fs from 'node:fs';
 import { makeRpc, getJson } from '../lib/rpc.mjs';
@@ -9,11 +11,12 @@ import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
 import {
   ETHEREUM as C, ZERO, TOPICS, DYNAMIC_FEE, v3Candidates, v4Candidates, getPoolCall, v4Slot0Call, readGetPool, readV4Slot0,
-  readV3Slot0, readUint, decodePoolCreated, poolPrice, tvlUsd, baseUsdAtPool,
+  readV3Slot0, readUint, decodePoolCreated, decodeInitialize, poolPrice, tvlUsd, baseUsdAtPool, poolKeysCall, readPoolKey,
 } from '../lib/pools.mjs';
 import { buildUniverse, fetchCoinGecko } from '../lib/universe.mjs';
 import { geckoTokenPools, dexScreenerTokenPairs, eachSpaced } from '../lib/aggregators.mjs';
 import { pageLogs, rpcLogs } from '../lib/logs.mjs';
+import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 
 const FLOOR = 300_000;
 const GECKO_SAMPLE = 40;
@@ -121,31 +124,58 @@ for (const p of v3) {
 const big3 = v3.filter((p) => p.tvl >= FLOOR);
 say(true, 'v3 tvl', `${big3.length} pools ≥ ${usd(FLOOR)} holding ${usd(big3.reduce((s, p) => s + p.tvl, 0))}; ${v3.filter((p) => p.tvl == null).length} unpriced; ${offMarket} trade more than 10% off market`);
 
-// 8. The v3 factory's own record: every pool created since 2021, read through Blockscout, compared
-//    with the lookups for our pairs, and a recent window re-read through an RPC.
-// Address only: the factory emits little besides PoolCreated, and Blockscout refuses address + topic over long ranges.
-const ev = await timed('v3 events', () => pageLogs(getJson, { base: 'https://eth.blockscout.com/api', address: C.v3Factory, fromBlock: C.v3FactoryBlock, toBlock: block }));
+// 8. The v3 factory's own record: every pool created since 2021 (Blockscout first; where it stops,
+//    the rest through RPCs), compared with the lookups for our pairs; a recent window re-read through
+//    plain RPC chunks. Address only: the factory emits little besides PoolCreated.
+const logRpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 1000 }); // range refusals must not drop a node
+const head = await rpc.call('eth_getBlockByNumber', [tag, false]);
+const nowTs = head?.timestamp ? parseInt(head.timestamp, 16) : Math.floor(Date.now() / 1000);
+const timeOf = (b) => nowTs - (block - b) * 12; // post-merge slots are 12 s (missed slots make this slightly late)
+const ev = await timed('v3 events', () => pageLogs(getJson, { base: 'https://eth.blockscout.com/api', address: C.v3Factory, fromBlock: C.v3FactoryBlock, toBlock: block, tries: 5 }));
 const created = ev.logs.map(decodePoolCreated).filter(Boolean);
-say(ev.complete ? true : null, 'v3 events', ev.complete ? `${created.length} pools created since May 2021 (${ev.calls} pages)` : `${created.length} creation events read, then INCOMPLETE: ${ev.reason} (${ev.calls} pages)`);
+let eventsComplete = ev.complete, via = `Blockscout ${ev.calls} pages`;
+if (!ev.complete) {
+  const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 10000, maxStep: 400000, minStep: 500, segments: 6 }));
+  if (rest) {
+    const seen = new Set(created.map((e) => e.id));
+    for (const e of rest.map(decodePoolCreated).filter(Boolean)) if (!seen.has(e.id)) { seen.add(e.id); created.push(e); }
+    eventsComplete = true;
+  }
+  via += ` stopped (${ev.reason}) at block ${ev.reached}; RPCs ${rest ? 'read the rest' : 'could not read the rest'}`;
+}
+for (const e of created) if (e.time == null) e.time = timeOf(e.block);
+say(eventsComplete ? true : null, 'v3 events', eventsComplete ? `${created.length} pools created since May 2021 (${via})` : `${created.length} creation events read, then INCOMPLETE (${via})`);
 const candKey = new Set(cand3.map((c) => `${c.t0}:${c.t1}:${c.fee}`));
 const ours = created.filter((e) => candKey.has(`${e.t0}:${e.t1}:${e.fee}`));
 const byId3 = new Map(v3.map((p) => [p.id, p]));
 const evIds = new Set(ours.map((e) => e.id));
 const onlyEvents = ours.filter((e) => !byId3.has(e.id)).length, onlyLookups = v3.filter((p) => !evIds.has(p.id)).length;
-say(ev.complete ? onlyEvents === 0 && onlyLookups === 0 : null, 'v3 cross-check', `our pairs in the factory's events ${ours.length}, in the lookups ${v3.length}; events only ${onlyEvents}, lookups only ${onlyLookups}`);
+say(eventsComplete ? onlyEvents === 0 && onlyLookups === 0 : null, 'v3 cross-check', `our pairs in the factory's events ${ours.length}, in the lookups ${v3.length}; events only ${onlyEvents}, lookups only ${onlyLookups}`);
 for (const e of ours) { const p = byId3.get(e.id); if (p) { p.createdBlock = e.block; p.createdAt = e.time; } }
 const WIN = 50000;
 const rl = await timed('rpc window', () => rpcLogs(rpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, block - WIN + 1, block, 10000));
 const inWin = created.filter((e) => e.block > block - WIN).length;
-say(rl && ev.complete ? rl.length === inWin : null, 'v3 events vs rpc', rl ? `last ${WIN} blocks: Blockscout ${inWin}, RPC ${rl.length}` : 'RPC window unread');
-const fresh = v3.filter((p) => p.createdAt && Date.now() / 1000 - p.createdAt < 30 * 86400);
-if (ev.complete) say(true, 'v3 ages', `${fresh.length} of our pools are under 30 days old (${fresh.filter((p) => p.tvl >= FLOOR).length} of them ≥ ${usd(FLOOR)})`);
+say(rl && eventsComplete ? rl.length === inWin : null, 'v3 events vs rpc', rl ? `last ${WIN} blocks: event list ${inWin}, plain RPC chunks ${rl.length}` : 'RPC window unread');
+const fresh = v3.filter((p) => p.createdAt && nowTs - p.createdAt < 30 * 86400);
+if (eventsComplete) say(true, 'v3 ages', `${fresh.length} of our pools are under 30 days old (${fresh.filter((p) => p.tvl >= FLOOR).length} of them ≥ ${usd(FLOOR)})`);
 else say(null, 'v3 ages', 'unread (creation events incomplete)');
 
-// 9. Aggregators: DexScreener for every token, GeckoTerminal for a rotating sample of tokens that
-//    have a listed Uniswap pool ≥ $300k. Which of those pools do we have?
-const allIds = new Map([...v3.map((p) => [p.id, p]), ...v4.map((p) => [p.id, p])]);
-const scoped = (p) => p.base && p.quote && (universe.has(p.base) || quoteSet.has(p.base)) && (universe.has(p.quote) || quoteSet.has(p.quote)) && (quoteSet.has(p.base) || quoteSet.has(p.quote));
+// 9. v4 pools created in the last week, any key (hooks, unusual fees): the feed for new pools.
+const inPair = (a, b) => (universe.has(a) || quoteSet.has(a)) && (universe.has(b) || quoteSet.has(b)) && (quoteSet.has(a) || quoteSet.has(b));
+const byId4 = new Map(v4.map((p) => [p.id, p]));
+const added4 = [];
+const initLogs = await timed('v4 events', () => logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.initialize] }, block - WIN + 1, block, { step: 5000, maxStep: 50000, minStep: 250, segments: 2 }));
+if (initLogs) {
+  const inits = initLogs.map(decodeInitialize).filter(Boolean);
+  const mine = inits.filter((e) => inPair(e.t0, e.t1));
+  for (const e of mine) if (!byId4.has(e.id)) { const p = { v: 4, id: e.id, t0: e.t0, t1: e.t1, fee: e.fee, tickSpacing: e.tickSpacing, hooks: e.hooks, source: 'event', createdBlock: e.block, createdAt: e.time ?? timeOf(e.block) }; byId4.set(e.id, p); added4.push(p); }
+  for (const e of mine) { const p = byId4.get(e.id); if (p && p.createdBlock == null) { p.createdBlock = e.block; p.createdAt = e.time ?? timeOf(e.block); } }
+  say(true, 'v4 events', `${inits.length} v4 pools created in the last ${WIN} blocks; ${mine.length} pair a universe token with a quote token (${mine.filter((e) => e.hooks !== ZERO).length} with hooks); ${added4.length} are outside the standard keys`);
+} else say(null, 'v4 events', 'unread (not counted as zero)');
+
+// 10. Aggregators: DexScreener for every token, GeckoTerminal for a rotating sample of tokens that
+//     have a listed Uniswap pool ≥ $300k.
+const scoped = (p) => p.base && p.quote && inPair(p.base, p.quote);
 const ds = await timed('dexscreener', () => eachSpaced(tokens, 260, (t) => dexScreenerTokenPairs(getJson, 'ethereum', t.address)));
 const gtTokens = (() => {
   const withBig = tokens.filter((t, i) => (ds[i] || []).some((p) => p.venue && p.reserveUsd >= FLOOR));
@@ -153,21 +183,46 @@ const gtTokens = (() => {
   return Array.from({ length: k }, (_, j) => withBig[(day * GECKO_SAMPLE + j) % n]);
 })();
 const gt = await timed('geckoterminal', () => eachSpaced(gtTokens, 2400, (t) => geckoTokenPools(getJson, 'eth', t.address)));
+const bigListed = (lists) => { const m = new Map(); for (const l of lists) for (const p of l || []) if (p.venue && p.reserveUsd >= FLOOR && scoped(p) && !m.has(p.id)) m.set(p.id, p); return m; };
 
-const missingV4 = new Set();
+// 11. v4 pools the aggregators list but our lookups missed: their key comes from the v4
+//     PositionManager on-chain (poolKeys), and must hash back to the same pool id.
+const want = [...new Set([...bigListed(ds).values(), ...bigListed(gt).values()].filter((p) => p.venue === 4 && !byId4.has(p.id)).map((p) => p.id))];
+if (want.length) {
+  const keys = await mc(want.map((id) => poolKeysCall(C.v4PositionManager, id)), tag);
+  let resolved = 0, unregistered = 0, unread = 0;
+  want.forEach((id, i) => {
+    const k = readPoolKey(keys[i], id);
+    if (k === null) { unread++; return; }
+    if (k === false) { unregistered++; return; }
+    resolved++;
+    const p = { v: 4, id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator' };
+    byId4.set(id, p); added4.push(p);
+  });
+  say(unread ? null : true, 'v4 keys', `${want.length} listed v4 pools ≥ ${usd(FLOOR)} outside our lookups: ${resolved} keys read on-chain and matched to their ids, ${unregistered} not registered with the PositionManager, ${unread} unread`);
+}
+if (added4.length) {
+  const st = await mc(added4.flatMap((p) => [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }]), tag);
+  added4.forEach((p, i) => { p.slot0 = readV4Slot0(st[2 * i]) || null; p.liquidity = readUint(st[2 * i + 1]); });
+  v4.push(...added4.filter((p) => p.slot0));
+}
+const hooked = v4.filter((p) => p.hooks && p.hooks !== ZERO);
+say(true, 'v4 list', `${v4.length} v4 pools: ${v4.filter((p) => !p.source).length} from standard keys, ${v4.filter((p) => p.source === 'event').length} from creation events, ${v4.filter((p) => p.source === 'aggregator').length} from listed ids; ${hooked.length} with hooks, ${v4.filter((p) => p.fee === DYNAMIC_FEE).length} with dynamic fees`);
+
+// 12. Recall: which listed pools ≥ $300k do we have — with the standard keys alone, and now.
+const stdIds = new Set([...v3.map((p) => p.id), ...v4.filter((p) => !p.source).map((p) => p.id)]);
+const allIds = new Map([...v3.map((p) => [p.id, p]), ...v4.map((p) => [p.id, p])]);
 function recall(name, lists, tokenCount) {
   const read = lists.filter(Boolean).length;
   if (!read) { say(null, `${name} recall`, tokenCount ? `unread (0 of ${tokenCount} tokens answered)` : 'no tokens to sample'); return null; }
-  const seen = new Map();
-  for (const l of lists) for (const p of l || []) if (p.venue && p.reserveUsd >= FLOOR && !seen.has(p.id)) seen.set(p.id, p);
-  const big = [...seen.values()];
-  const inScope = big.filter(scoped), out = big.filter((p) => !scoped(p));
-  const have = inScope.filter((p) => allIds.has(p.id));
+  const all = new Map();
+  for (const l of lists) for (const p of l || []) if (p.venue && p.reserveUsd >= FLOOR && !all.has(p.id)) all.set(p.id, p);
+  const big = [...all.values()], inScope = big.filter(scoped), out = big.filter((p) => !scoped(p));
+  const have = inScope.filter((p) => allIds.has(p.id)), std = inScope.filter((p) => stdIds.has(p.id));
   const miss = inScope.filter((p) => !allIds.has(p.id));
-  miss.filter((p) => p.venue === 4).forEach((p) => missingV4.add(p.id));
   const both = have.filter((p) => p.venue === 3 && allIds.get(p.id).tvl != null);
   const close = both.filter((p) => Math.abs(allIds.get(p.id).tvl / p.reserveUsd - 1) <= 0.15);
-  say(read === tokenCount ? true : null, `${name} recall`, `${read} of ${tokenCount} tokens read; ${inScope.length} Uniswap pools ≥ ${usd(FLOOR)} in scope (v3 ${inScope.filter((p) => p.venue === 3).length}, v4 ${inScope.filter((p) => p.venue === 4).length}): we have ${have.length} (${pct(have.length, inScope.length)}); missing v3 ${miss.filter((p) => p.venue === 3).length}, v4 ${miss.filter((p) => p.venue === 4).length}`);
+  say(read === tokenCount ? have.length === inScope.length : null, `${name} recall`, `${read} of ${tokenCount} tokens read; ${inScope.length} Uniswap pools ≥ ${usd(FLOOR)} in scope (v3 ${inScope.filter((p) => p.venue === 3).length}, v4 ${inScope.filter((p) => p.venue === 4).length}): we have ${have.length} (${pct(have.length, inScope.length)}; standard keys alone ${pct(std.length, inScope.length)}); missing v3 ${miss.filter((p) => p.venue === 3).length}, v4 ${miss.filter((p) => p.venue === 4).length}`);
   say(both.length ? close.length / both.length >= 0.9 : null, `${name} tvl`, `v3 TVL within 15% of theirs for ${close.length} of ${both.length} (${pct(close.length, both.length)}); median ratio ours/theirs ${both.length ? (both.map((p) => allIds.get(p.id).tvl / p.reserveUsd).sort((x, y) => x - y)[Math.floor(both.length / 2)]).toFixed(3) : '—'}`);
   say(true, `${name} scope`, `${out.length} pools ≥ ${usd(FLOOR)} pair with other quote tokens: ${top(tally(out.map((p) => p.quoteSymbol || '?')))}`);
   return { big, inScope, have };
@@ -180,18 +235,21 @@ if (dsr) {
   say(true, 'on-chain only', `${extra.length} of our ${big3.length} v3 pools ≥ ${usd(FLOOR)} are not in DexScreener's lists`);
 } else say(null, 'on-chain only', 'unread (no DexScreener lists)');
 
-// 10. Missing v4 pools: do they exist on-chain under keys we don't try (hooks, unusual fees)?
-if (missingV4.size) {
-  const ids = [...missingV4];
-  const s = await mc(ids.map((id) => v4Slot0Call(C.v4StateView, id)), tag);
-  const live = s.map(readV4Slot0);
-  const dyn = live.filter((x) => x && x.lpFee === 0 && x.protocolFee === 0).length;
-  say(true, 'v4 missing', `${ids.length} aggregator v4 pools not in our lookups: ${live.filter(Boolean).length} initialised on-chain (outside the four standard keys), ${live.filter((x) => x === false).length} not found, ${live.filter((x) => x === null).length} unread; fee-free or dynamic ${dyn}; dynamic-fee flag ${live.filter((x) => x && x.lpFee === DYNAMIC_FEE).length}`);
+// 13. The list itself stays on the runner for the next steps (public data, nothing committed yet),
+//     with what the aggregators said about each pool for later cross-checks.
+const agg = new Map();
+for (const l of [...ds, ...gt]) for (const p of l || []) {
+  const a = agg.get(p.id) || { reserveUsd: null, volumeUsd24h: null };
+  if (p.reserveUsd != null) a.reserveUsd = Math.max(a.reserveUsd ?? 0, p.reserveUsd);
+  if (p.volumeUsd24h != null) a.volumeUsd24h = Math.max(a.volumeUsd24h ?? 0, p.volumeUsd24h);
+  agg.set(p.id, a);
 }
-
-// 11. The list itself stays on the runner for the next steps (public data, nothing committed yet).
+for (const p of [...v3, ...v4]) { const a = agg.get(p.id); p.aggReserveUsd = a?.reserveUsd ?? null; p.aggVolumeUsd24h = a?.volumeUsd24h ?? null; }
 fs.mkdirSync('out', { recursive: true });
 const big = (x) => (typeof x === 'bigint' ? x.toString() : x);
-fs.writeFileSync('out/pools-ethereum.json', JSON.stringify({ t: Date.now(), block, v3, v4 }, (k, v) => big(v)));
+fs.writeFileSync('out/pools-ethereum.json', JSON.stringify({
+  t: Date.now(), block, v3, v4,
+  tokens: [...dec].map(([address, decimals]) => ({ address, decimals, usd: usdOf.get(address) ?? null, quote: quoteSet.has(address) })),
+}, (k, v) => big(v)));
 const ok = !unread3 && !unread4 && quotesRight;
-finish(ok && !(ev.complete && (onlyEvents || onlyLookups)) ? 0 : 1);
+finish(ok && !(eventsComplete && (onlyEvents || onlyLookups)) ? 0 : 1);
