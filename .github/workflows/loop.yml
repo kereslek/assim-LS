@@ -1,0 +1,94 @@
+name: loop
+# The always-on scanner loop: one long job runs a pass every SPACING seconds for about 5 h 20 min, then
+# dispatches its own successor (the one event the default token may start). The scripts come from the
+# commit named in loop/PIN, checked out into pinned/, so later pushes don't change a running loop;
+# promoting a version is a normal commit that edits loop/PIN.
+# Rehearsal mode: 3 short passes of a dummy pass (one planted failure), publish as a dry run, no successor.
+# Public log: pass/fail, counts, dates and timings (names and seconds) only; everything else is sealed.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'rehearsal (3 short dummy passes, dry-run publish, no successor) or live'
+        type: choice
+        options: [rehearsal, live]
+        default: rehearsal
+      by:
+        description: 'who started this run'
+        type: choice
+        options: [manual, self, watchdog]
+        default: manual
+  schedule:
+    - cron: '23 */6 * * *'   # backup only: queues behind a running loop (one run at a time)
+permissions:
+  contents: write   # publish the sealed data branch
+  actions: write    # dispatch the successor
+concurrency:
+  group: loop
+  cancel-in-progress: false
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      MODE: ${{ inputs.mode || 'live' }}
+      BY: ${{ inputs.by || 'schedule' }}
+      BRANCH: claude/ecstatic-dirac-wkrqja
+      LIVE_PASS: ''   # the live pass command; empty until the scan is wired in (part 2): the loop then runs nothing
+    steps:
+      - name: Read the pinned commit
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: loop
+          persist-credentials: false
+      - name: Which code runs
+        id: pin
+        run: |
+          sha=$(tr -d '[:space:]' < loop/PIN)
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo 'loop/PIN holds a commit SHA: no'; exit 1; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "mode $MODE, started by $BY; pinned code ${sha:0:12}"
+      - name: Check out the pinned scripts
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.pin.outputs.sha }}
+          path: pinned
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Unit tests first (the pinned code; a broken check never reads real data)
+        working-directory: pinned
+        run: node --test test/*.test.mjs
+      - name: Loop
+        working-directory: pinned
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+        run: |
+          if [ "$MODE" = rehearsal ]; then
+            REHEARSAL_FAIL_PASS=2 node scripts/loop.mjs --mode rehearsal --by "$BY" --pass 'node scripts/loop.mjs rehearsal-pass' --spacing 30 --max-passes 3 --dry-run
+          else
+            node scripts/loop.mjs --mode live --by "$BY" --pass "$LIVE_PASS" --spacing 360 --deadline-min 320
+          fi
+      - name: Publish the loop's own sealed log
+        if: always()
+        working-directory: pinned
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: |
+          if [ -z "$(ls out/data 2>/dev/null)" ]; then echo 'sealed files to publish: none'; exit 0; fi
+          # a real push only in live mode with a live pass wired in; otherwise a dry run
+          if [ "$MODE" = live ] && [ -n "$LIVE_PASS" ]; then node scripts/publish-data.mjs; else node scripts/publish-data.mjs --dry-run; fi
+      - name: Hand over to the next run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          next=$(cat pinned/out/loop/successor 2>/dev/null || echo no)
+          if [ "$MODE" != live ]; then echo 'successor dispatched: no (rehearsal)'; exit 0; fi
+          if [ "$next" != yes ]; then echo 'successor dispatched: no (the loop ran under 30 minutes or had nothing to run; the watchdog covers it)'; exit 0; fi
+          if gh workflow run loop.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" -f mode=live -f by=self; then
+            echo 'successor dispatched: yes'
+          else
+            echo 'successor dispatched: no (dispatch failed; the watchdog covers it)'
+          fi

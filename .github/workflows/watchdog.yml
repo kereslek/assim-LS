@@ -1,0 +1,55 @@
+name: watchdog
+# The backup route for the always-on loop: if no loop run is queued or in progress and the readable t of
+# live.json on the data branch is older than 20 minutes (or the file is missing), start the loop in live
+# mode. Disabled for now: the schedule stays commented out until the live pass is wired in; dispatch it
+# by hand with dry_run to see what it would do (yes/no). Public log: counts, minutes and yes/no only.
+on:
+  # schedule:
+  #   - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'only print what it would do (yes/no)'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: write   # dispatch the loop
+concurrency:
+  group: watchdog
+  cancel-in-progress: true
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BRANCH: claude/ecstatic-dirac-wkrqja
+      STALE_MIN: 20
+    steps:
+      - name: Read the pinned commit
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: loop
+          persist-credentials: false
+      - name: Which code runs
+        id: pin
+        run: |
+          sha=$(tr -d '[:space:]' < loop/PIN)
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then echo 'loop/PIN holds a commit SHA: no'; exit 1; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Check out the pinned scripts
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.pin.outputs.sha }}
+          path: pinned
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Is the loop alive?
+        working-directory: pinned
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'yes' || 'no' }}
+        run: |
+          if [ "$DRY" = yes ]; then node scripts/loop.mjs watchdog --dry-run --stale-min "$STALE_MIN"; else node scripts/loop.mjs watchdog --stale-min "$STALE_MIN"; fi
