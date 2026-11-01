@@ -21,5 +21,7 @@ jobs:
           node-version: 22
       - name: Unit tests first (a broken check never reads real data)
         run: node --test test/*.test.mjs
-      - name: Backtest (public market data only)
+      - name: Backtest (public market data only; results sealed with the lock)
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
         run: node --max-old-space-size=6144 scripts/backtest.mjs

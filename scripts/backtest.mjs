@@ -1,5 +1,6 @@
 // Backtest job: replays each shortlisted pool over the last 24 h, 7 days and 30 days with a
-// simulated LP position (lib/backtest*.mjs) and writes out/data/backtest.json (docs/DATA.md).
+// simulated LP position (lib/backtest*.mjs) and seals out/data/backtest.json (docs/DATA.md) through
+// lib/store.mjs.
 // Inputs read here: 31 days of Swap logs per pool (chunks ≤ 9,000 blocks, in three pieces so an
 // unread old stretch still leaves the short windows), the pool's state at 61 daily blocks through
 // archive nodes (window start prices, active liquidity, protocol fee settings by day, and 30 days
@@ -17,6 +18,8 @@ import { dailySigma } from '../lib/flow.mjs';
 import { scorePool } from '../lib/score.mjs';
 import { runBacktest, swapRateFor, HOLD_DAYS } from '../lib/backtest-run.mjs';
 import { auditBacktest } from '../lib/backtest-audit.mjs';
+import { loadConfig } from '../lib/config.mjs';
+import { openStore } from '../lib/store.mjs';
 
 const DAY_BLOCKS = 7200, DAILY = 61, RERANGE_GAS = 630_000, MAX_SWAPS = 400_000, TOP_FALLBACK = 3, TIME_BUDGET_MS = 45 * 60e3;
 const WINDOWS = { '24h': 1, '7d': 7, '30d': 30 };
@@ -46,27 +49,22 @@ function finish(code) {
   process.exit(code);
 }
 
-// The ticket: a made-up example until the sealed config (lib/config.mjs, another track) supplies it.
-// TODO(config): confirm the export name once lib/config.mjs lands.
-async function readTicket() {
-  const cfg = await import('../lib/config.mjs').catch(() => null);
-  const c = cfg ? (typeof cfg.loadConfig === 'function' ? await cfg.loadConfig() : cfg.config ?? cfg.default ?? null) : null;
-  return c && c.ticket > 0 ? { ticket: c.ticket, isPublic: false } : { ticket: 1000, isPublic: true };
-}
-
-// TODO(store): seal through lib/store.mjs once it lands (another track); until then plaintext.
-// out/ is gitignored and this job neither commits nor uploads it.
-async function writeResult(path, obj) {
-  const store = await import('../lib/store.mjs').catch(() => null);
-  if (store && typeof store.writeSealed === 'function') { await store.writeSealed(path, obj); return 'sealed'; }
-  fs.writeFileSync(path, JSON.stringify(obj));
-  return 'plaintext';
+// The ticket and hold days: the sealed config (lib/config.mjs) when there is one, else its made-up
+// public defaults. A sealed config that won't open stops the job: never a silent fallback. Its
+// error messages name a field, never a value.
+let config, sealed;
+try { ({ config, sealed } = loadConfig()); } catch (e) { say(false, 'config', String(e.message).slice(0, 160)); finish(1); }
+const ticket = config.ticket, isPublic = !sealed, holdDays = config.holdDays?.ethereum ?? HOLD_DAYS;
+// Output is sealed through lib/store.mjs, opened before any work so a wrong passphrase stops the
+// pass early. Without a passphrase (an offline run) nothing is written: plaintext never touches the disk.
+let store = null;
+if (process.env.LOCK_PASSPHRASE) {
+  try { store = openStore(); } catch { say(false, 'lock', 'the passphrase does not open lock/lock.json'); finish(1); }
 }
 
 const rpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 4 });
 const mc = makeMulticall(rpc, { chunk: 300, concurrency: 3 });
 const amc = makeMulticall(makeRpc(ARCHIVE, { timeout: 30000, maxRefusals: 6 }), { chunk: 300, concurrency: 3 });
-const { ticket, isPublic } = await readTicket();
 
 const tag = await rpc.call('eth_blockNumber', []);
 if (tag == null) { say(null, 'block', 'no block number'); finish(1); }
@@ -228,10 +226,10 @@ for (const p of known) {
       for (const s of prev) { const f = swapFees(s, s.meta); if (!f) { ok = false; break; } lp[s.in] += f.lp; }
       const feesPerDayUsd = ok ? usdOfPair(lp, p.d0, p.d1, u[0], u[1]) : null;
       forecastNet = scorePool({ tick: s0.tick, sqrt: spS, d1: p.d1, usdPer1: u[1], activeL: s0.L, feeTier: (p.v === 3 ? p.fee : s0.lpFee) / 1e6, feesPerDayUsd, sigma, walls: null },
-        { days: HOLD_DAYS, ticket, gasUsd }).net;
+        { days: holdDays, ticket, gasUsd }).net;
     }
     const feeTier = (p.v === 3 ? p.fee : s0.lpFee ?? p.fee) / 1e6;
-    const res = runBacktest({ swaps: ws, pool: { d0: p.d0, d1: p.d1, spacing: p.spacing, meta: null, feeTier }, start, end, usd: { ref: p.ref, refUsd: p.refUsd }, sigma, ticket, gasUsd, forecastNet, partial });
+    const res = runBacktest({ swaps: ws, pool: { d0: p.d0, d1: p.d1, spacing: p.spacing, meta: null, feeTier }, start, end, usd: { ref: p.ref, refUsd: p.refUsd }, sigma, holdDays, ticket, gasUsd, forecastNet, partial });
     if (!res.backtest) { miss(res.reason || 'inputs'); continue; }
     out.pools[p.id][w] = res.backtest;
     W.done++; if (partial) W.partial++;
@@ -262,8 +260,7 @@ if (answered) say(null, 'revert', `an endpoint answered (${answered.k} ${answere
 else say(null, 'revert', `unreachable for backtests: ${rv.map((x) => `${x.k} ${x.cls}`).join(', ')}; revert left null`);
 
 // 6. Write and report.
-fs.mkdirSync('out/data', { recursive: true });
-const how = await writeResult('out/data/backtest.json', out);
+const how = store ? (store.put('backtest.json', out), 'sealed') : 'not written';
 const nAud = audits.length, okAud = audits.filter((a) => a.ok).length, failedBy = {};
 for (const a of audits) for (const f of a.failed) failedBy[f] = (failedBy[f] || 0) + 1;
 say(tally.piecesUnread ? null : true, 'swaps', `${tally.swaps} swaps over 31 days across ${known.length} pools; ${tally.piecesUnread} of ${known.length * 3} log pieces unread; ${tally.dup} repeated logs removed`);
@@ -271,13 +268,13 @@ for (const [w, W] of Object.entries(tally.win)) say(W.done ? true : null, `windo
 say(nAud ? okAud === nAud : null, 'audit', `${okAud} of ${nAud} backtests pass every check (pool fees vs replay, per-swap fees, sums, costs ledger, identity)${nAud - okAud ? `; failing: ${Object.entries(failedBy).map(([k, v]) => `${k} ×${v}`).join(', ')}` : ''}`);
 const within = ratios.filter((q) => Math.abs(q - 1) <= 1e-6).length;
 say(ratios.length ? within === ratios.length : null, 'fee check', `engine's pool LP fees vs the scan's replay of the same window: within 0.0001% for ${within} of ${ratios.length} pool sides; median ratio ${median(ratios)?.toFixed(6) ?? '—'}`);
-say(true, 'leaders', Object.entries(best).map(([w, m]) => `${w}: ${Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ×${v}`).join(', ')}`).join(' · ') || 'none');
+if (isPublic) say(true, 'leaders', Object.entries(best).map(([w, m]) => `${w}: ${Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ×${v}`).join(', ')}`).join(' · ') || 'none');
 if (isPublic) {
   say(true, 'forecast', `realised minus forecast net APR at the $${ticket} example ticket: median ${fr(median(forecastGap))} over ${forecastGap.length} full windows`);
   for (const [w, b] of Object.entries(bench)) {
     const feeApr = b.feesUsd / ticket * 365 / b.days, lvrApr = b.lvrUsd / ticket * 365 / b.days, costApr = b.costsUsd / ticket * 365 / b.days;
     say(true, `benchmark ${w}`, `UNI/WETH 0.3% at the $${ticket} example ticket, ±${fr(b.range)} (σ ${fr(b.sigma)} a day, ${b.sigmaFrom}): net ${fr(b.net)} a year (fees ${fr(feeApr)}, loss vs holding ${fr(lvrApr)}, costs ${fr(costApr)}); forecast ${fr(b.forecastNet)}; in range ${fr(b.tir)}, ${b.reranges} re-centres, share of pool fees ${b.share == null ? '—' : (100 * b.share).toFixed(3) + '%'}; ${b.swaps} swaps; best strategy ${b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0]?.id ?? '—'}`);
   }
-} else for (const [w, b] of Object.entries(bench)) say(true, `benchmark ${w}`, `UNI/WETH 0.3%: in range ${fr(b.tir)}, ${b.reranges} re-centres, ${b.swaps} swaps`);
-say(how === 'sealed' ? true : null, 'output', `out/data/backtest.json written (${how}${how === 'plaintext' ? ': lib/store.mjs not there yet; not committed or uploaded' : ''})`);
+} else say(true, 'benchmark', `UNI/WETH 0.3% backtested for ${Object.keys(bench).join(', ') || 'no window'} (results sealed: the ticket and range are private)`);
+say(how === 'sealed' ? true : null, 'output', how === 'sealed' ? 'out/data/backtest.json sealed with the lock (publishing to the data branch comes with the always-on loop)' : 'out/data/backtest.json not written: no passphrase here, and plaintext never touches the disk');
 finish(nAud && okAud < nAud ? 1 : 0);
