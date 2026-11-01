@@ -140,4 +140,10 @@ test('the whole check: counts only in its output; fails on a find or on unread l
   assert.equal(res.complete, false);
   // a wrong passphrase can't open the sealed config: the check stops instead of searching less
   await assert.rejects(() => leakCheck({ repo: r.dir, env: { ...env, LOCK_PASSPHRASE: 'wrong' }, ...fakeGitHub(), say: () => {} }), /wrong passphrase/);
+  // the workflow's way: secrets as LEAK_SECRET_<NAME> env vars, no ALL_SECRETS
+  r.write('debug.txt', `token=${SECRET}\n`); r.g('add', '.'); r.g('commit', '-q', '-m', 'Debug 2');
+  const lines2 = [];
+  res = await leakCheck({ repo: r.dir, env: { LOCK_PASSPHRASE: DUMMY, LEAK_SECRET_COINGECKO_KEY: SECRET, GITHUB_REPOSITORY: 'o/r' }, ...fakeGitHub(), say: (l) => lines2.push(l) });
+  assert.match(lines2.join('\n'), /secrets 2;/);
+  assert.equal(res.git.found, 2, 'the passphrase file and the key file');
 });

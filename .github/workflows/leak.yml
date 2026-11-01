@@ -26,9 +26,11 @@ jobs:
           node-version: 22
       - name: Leak-check tests first (planted leaks must be found)
         run: node --test test/lock-leak.test.mjs
+      # Every secret goes in as LEAK_SECRET_<NAME>; add a line here when a new secret is added.
       - name: Leak check (counts and yes/no only)
         env:
-          ALL_SECRETS: ${{ toJSON(secrets) }}
           LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+          LEAK_SECRET_COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+          LEAK_SECRET_ETHERSCAN_KEY: ${{ secrets.ETHERSCAN_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/leak-check.mjs --logs 400

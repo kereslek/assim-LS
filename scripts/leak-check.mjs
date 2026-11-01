@@ -1,9 +1,10 @@
 // Leak check: no private string in any branch's any file version, commit message, file or ref name,
 // or in recent run logs. Runs inside Actions; the list of private strings is built there from the
-// sealed config's leakSensitive values plus every secret value the job can see. Prints counts and
-// yes/no only, never a string, a path or where a hit was. Fails on a find, or when it couldn't read
-// everything (an unread log is never counted as clean).
-//   ALL_SECRETS='${{ toJSON(secrets) }}' LOCK_PASSPHRASE=... GITHUB_TOKEN=... node scripts/leak-check.mjs [--logs 300] [--no-logs]
+// sealed config's leakSensitive values plus every secret value the job passes in: LOCK_PASSPHRASE
+// and each LEAK_SECRET_<NAME> env var (or, optionally, ALL_SECRETS as one JSON object). Prints counts
+// and yes/no only, never a string, a path or where a hit was. Fails on a find, or when it couldn't
+// read everything (an unread log is never counted as clean).
+//   LOCK_PASSPHRASE=... LEAK_SECRET_X=... GITHUB_TOKEN=... node scripts/leak-check.mjs [--logs 300] [--no-logs]
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -25,7 +26,7 @@ export function lowerAscii(buf) {
 export function buildNeedles({ leakSensitive = [], secrets = {} } = {}) {
   const fromConfig = leakStrings({ leakSensitive }, { min: MIN_LEN });
   const secretVals = Object.entries(secrets || {}).filter(([k, v]) => !SKIP_SECRETS.has(k.toLowerCase()) && typeof v === 'string' && v.length);
-  const longSecrets = secretVals.map(([, v]) => v.trim()).filter((v) => v.length >= MIN_LEN);
+  const longSecrets = [...new Set(secretVals.map(([, v]) => v.trim()).filter((v) => v.length >= MIN_LEN))];
   const all = new Set([...fromConfig.strings, ...longSecrets]);
   for (const s of [...all]) if (/^0x[0-9a-fA-F]{40,64}$/.test(s)) all.add(s.slice(2)); // addresses also appear unprefixed (topics, calldata)
   return {
@@ -129,7 +130,8 @@ export async function leakCheck({ repo = '.', lockDir = 'lock', env = process.en
   }
   let secrets = {};
   if (env.ALL_SECRETS) { try { secrets = JSON.parse(env.ALL_SECRETS); } catch { throw new Error('bad ALL_SECRETS: not JSON'); } }
-  else for (const k of ['LOCK_PASSPHRASE', 'COINGECKO_KEY', 'ETHERSCAN_KEY']) if (env[k]) secrets[k] = env[k];
+  if (env.LOCK_PASSPHRASE) secrets.LOCK_PASSPHRASE = env.LOCK_PASSPHRASE;
+  for (const [k, v] of Object.entries(env)) if (k.startsWith('LEAK_SECRET_') && v) secrets[k.slice(12)] = v;
   const { needles, counts } = buildNeedles({ leakSensitive, secrets });
   say(`sealed config present: ${sealed ? 'yes' : 'no'}`);
   say(`private strings searched: ${needles.length} (sealed config ${counts.config}, secrets ${counts.secrets}; too short to search: ${counts.short})`);
