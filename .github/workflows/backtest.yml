@@ -1,0 +1,25 @@
+name: backtest
+# Replays the shortlisted pools (or the UNI/WETH benchmark plus the largest pools) over 24 h, 7 days
+# and 30 days with a simulated LP position. The log prints counts, ratios and dates only.
+on:
+  schedule:
+    - cron: '41 4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: backtest
+  cancel-in-progress: false
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Unit tests first (a broken check never reads real data)
+        run: node --test test/*.test.mjs
+      - name: Backtest (public market data only)
+        run: node --max-old-space-size=6144 scripts/backtest.mjs
