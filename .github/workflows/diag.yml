@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       parts:
-        description: 'probe, events, scan (comma list)'
+        description: 'probe, events, scan, withevents (comma list)'
         default: 'probe'
 permissions:
   contents: read
@@ -33,7 +33,7 @@ jobs:
         if: contains(inputs.parts, 'events') || contains(inputs.parts, 'scan')
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
-          POOLS_SKIP: ${{ contains(inputs.parts, 'scan') && 'events,gecko' || 'events,gecko,dexscreener' }}
+          POOLS_SKIP: ${{ contains(inputs.parts, 'withevents') && 'gecko' || contains(inputs.parts, 'scan') && 'events,gecko' || 'events,gecko,dexscreener' }}
         run: node scripts/pools.mjs || true
       - name: Creation events per provider
         if: contains(inputs.parts, 'events')
