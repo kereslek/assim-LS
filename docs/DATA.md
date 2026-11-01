@@ -10,6 +10,7 @@ This file describes shapes only: it holds no data. Every value below lives seale
 | `live.json` | yes | every scanner pass | each pass |
 | `history.json` | yes | scanner | hourly |
 | `backtest.json` | yes | backtest job | daily and on demand |
+| `snapshots.json` | yes | scanner | when a pool gains an hourly row (about hourly) |
 | `inbox.json` | no (the X25519 public key only) | lock init | with `lock.json` |
 
 - **Envelope** (`lib/lock.mjs`): `{"lock":1,"t":<ms>,"z":1,"iv":"<b64>","ct":"<b64>"}`. `z` = gzip before sealing; only `t` is readable, so a staleness check needs no key.
@@ -33,7 +34,8 @@ This file describes shapes only: it holds no data. Every value below lives seale
   gemAt: 60,                    // gem threshold
   chains: [{ id: "ethereum"|"base", pools: <n>, unread: <n>, block: <n>, gasUsd: <re-range gas in $|null> }],
   health: {
-    loop: { passes24h: <n>, ok24h: <n>, lastGapMin: <n|null>, watchdogLast: <ms|null> } | null,
+    loop: { passes24h: <n>, ok24h: <n>, lastGapMin: <n|null>, watchdogLast: <ms|null>,   // written by the loop, not the pass
+            recent: [[<pass start ms>, <1 ok | 0 failed>]] } | null,                  // the last 24 h of passes plus the one before
     checks: [{ id: "<id>", label: "<short label>", ok: true|false|null, value: <0..1|null>, detail: "<one line>" }],
     sealedLog: { lines: <n>, errors: <n>, categories: { "<word>": <n> } }
   },
@@ -99,6 +101,19 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
                      d: [[t, price, lpFeesUsd, volUsd, parked]] } },   // daily, last 30 days
   health: [[t, okPasses, passes, unread]]                              // hourly
 }
+```
+
+## snapshots.json
+
+The raw state each pass reads, from which every time window is recomputed (`lib/snapshots.mjs`, `lib/windows.mjs`).
+
+```
+{
+  v: 1, t: <ms>,
+  pools: { "<id>": { h: Tier, d: Tier } }   // h: first row of each UTC hour, 7 days; d: first row of each UTC day, 30 days
+}
+Tier = { t: [<ms, then deltas>], block: [<n, then deltas>], sqrtP: ["<decimal>"], tick: [<n>], L: ["<decimal>"],
+         fg0: ["<decimal>"], fg1: ["<decimal>"], parked: [<basis points>] }   // parallel arrays; null = unread
 ```
 
 ## backtest.json

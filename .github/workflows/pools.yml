@@ -4,7 +4,7 @@ on:
     paths: ['scripts/pools.mjs', 'scripts/scan.mjs', '.github/workflows/pools.yml']   # lib changes: dispatch a run when needed
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write   # publish the sealed data branch (the owner approved replacing it each pass)
 concurrency:
   group: pools
   cancel-in-progress: false
@@ -30,11 +30,22 @@ jobs:
           path: out/cache
           key: history-${{ github.run_id }}
           restore-keys: history-
-      - name: Liquidity maps and a day of fees (public market data only)
+      - name: Restore the sealed data (snapshots and the last live.json)
+        if: always() && hashFiles('out/pools-ethereum.json') != ''
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: node scripts/publish-data.mjs --restore
+      - name: Liquidity maps, fees and windows (public log pass/fail and counts only; details sealed)
         if: always() && hashFiles('out/pools-ethereum.json') != ''
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
         run: node scripts/scan.mjs
+      - name: Publish the sealed data to the data branch
+        if: always() && hashFiles('out/data/live.json') != ''
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: node scripts/publish-data.mjs
       - name: Save the price-history cache
         if: always() && hashFiles('out/cache/history.json') != ''
         uses: actions/cache/save@v4

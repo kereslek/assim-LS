@@ -67,5 +67,5 @@ test('planted faults: wrong passphrase, unknown name, bad shape, tampered or for
 });
 
 test('the data file list matches the data contract plus the sealed log', () => {
-  assert.deepEqual([...DATA_FILES], ['live.json', 'history.json', 'backtest.json', 'log.json']);
+  assert.deepEqual([...DATA_FILES], ['live.json', 'history.json', 'backtest.json', 'log.json', 'snapshots.json']);
 });

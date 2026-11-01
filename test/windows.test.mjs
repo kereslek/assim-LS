@@ -271,3 +271,16 @@ test('a stranded one-sided pool with toxic flow: lenses, shape averages and the 
   // a pool parked on both sides of the price is plain stranded, not one-sided
   assert.ok(run({ ...sim, cur: { ...sim.cur, aboveShare: 0.5 } }, '24h', { pool }).lenses.includes('stranded'));
 });
+
+test('a backfill that measured the shape on a few past days still gives a 30-day average; too few gives null', () => {
+  const sim = simulate({ from: NOW - 31 * DAY, passMin: 60, price: wobble, parked: () => 0.9, seed: 41 });
+  const keep = (n) => sim.rows.map((r, i) => (i === sim.rows.length - 1 || (n > 0 && i % Math.floor(sim.rows.length / n) === 0) ? r : { ...r, parked: null }));
+  const sparse = merge(emptySeries(), keep(3), { now: NOW });
+  const w = run({ ...sim, series: sparse }, '30d', { pool: { ...POOL, flow: { '30d': { gemFlow: { markoutToFee: 0.2, traders7d: 300 } } } } });
+  assert.ok(Math.abs(w.parkedAvg - 0.9) < 1e-9 && w.strandedShare === 1, JSON.stringify([w.parkedAvg, w.strandedShare]));
+  assert.equal(w.markout, null, 'the latest replay scores the gem but is not shown as this window\'s markout');
+  assert.ok(!w.gem.missing.includes('flow'));
+  // planted fault: only the current shape read must not pass for a 30-day average
+  const thin = merge(emptySeries(), keep(0), { now: NOW });
+  assert.equal(run({ ...sim, series: thin }, '30d').parkedAvg, null);
+});

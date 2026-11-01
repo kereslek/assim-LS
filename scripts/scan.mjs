@@ -22,6 +22,12 @@ import { stickyShare, strandedShare } from '../lib/persistence.mjs';
 import { persistenceScore, flowScore, gemScore } from '../lib/gem.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 import { feeIdentity, replayFeeGrowth, feeIdentityPath, pathIndex, priceRatio } from '../lib/checks.mjs';
+import { installSealedLogs } from '../lib/quietlogs.mjs';
+import { openLock } from '../lib/lock.mjs';
+import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
+import { openStore } from '../lib/store.mjs';
+import { parseStore, serializeStore, mergeStore } from '../lib/snapshots.mjs';
+import { allWindows, deltaFg } from '../lib/windows.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 600_000, DAY_BLOCKS = 7200, GROUP = 40;
 const EXAMPLE_TICKET = 1000, HOLD_DAYS = 14, RERANGE_GAS = 630_000, MARKOUT_BLOCKS = 25; // a made-up example size, not anyone's position
@@ -30,7 +36,16 @@ const V3_SPACING = { 100: 1, 500: 10, 3000: 60, 10000: 200 };
 const RPCS = ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth', 'https://rpc.mevblocker.io', 'https://rpc.flashbots.net', 'https://eth.blockscout.com/api/eth-rpc'];
 
 const lines = [], timing = {};
-const say = (ok, area, msg) => { lines.push({ ok, area, msg }); console.log(`${ok === true ? 'PASS' : ok === false ? 'FAIL' : 'N/A '} ${area}: ${msg}`); };
+// With the lock (LOCK_PASSPHRASE set) every detail goes to the sealed log and the public log gets only
+// each check's area with pass/fail, counts and step timings. Without it (offline fakes) all prints.
+const SEALED = !!process.env.LOCK_PASSPHRASE;
+let pub = console.log;
+const say = (ok, area, msg) => {
+  lines.push({ ok, area, msg });
+  const head = `${ok === true ? 'PASS' : ok === false ? 'FAIL' : 'N/A '} ${area}`;
+  console.log(`${head}: ${msg}`);
+  if (SEALED) pub(head);
+};
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '—');
 const fr = (x) => (x == null ? '—' : `${Math.round(100 * x)}%`); // a fraction; missing shows —, never 0%
 const usd = (x) => (x == null ? '—' : x >= 1e9 ? `$${(x / 1e9).toFixed(2)}B` : x >= 1e6 ? `$${(x / 1e6).toFixed(1)}M` : x >= 1e3 ? `$${Math.round(x / 1e3)}k` : `$${Math.round(x)}`);
@@ -41,15 +56,26 @@ async function timed(name, fn) { const t = Date.now(); try { return await fn(); 
 function finish(code) {
   const count = (k) => lines.filter((l) => l.ok === k).length;
   const summary = `scan: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · steps ${Object.entries(timing).map(([k, v]) => `${k} ${v}s`).join(', ')}`;
-  console.log('\n' + summary);
-  console.log(`::notice title=maps and fees::${lines.map((l) => `${l.ok === true ? '✓' : l.ok === false ? '✗' : '·'} ${l.area}: ${l.msg}`).join(' | ')}`);
+  const detail = (l) => (SEALED ? '' : `: ${l.msg}`);
+  pub('\n' + summary);
+  pub(`::notice title=maps and fees::${lines.map((l) => `${l.ok === true ? '✓' : l.ok === false ? '✗' : '·'} ${l.area}${detail(l)}`).join(' | ')}`);
   if (process.env.GITHUB_STEP_SUMMARY) {
-    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${summary}\n\n| | Area | Result |\n|---|---|---|\n` +
-      lines.map((l) => `| ${l.ok === true ? 'PASS' : l.ok === false ? 'FAIL' : 'N/A'} | ${l.area} | ${l.msg} |`).join('\n') + '\n');
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${summary}\n\n| | Area${SEALED ? '' : ' | Result'} |\n|---|---${SEALED ? '' : '|---'}|\n` +
+      lines.map((l) => `| ${l.ok === true ? 'PASS' : l.ok === false ? 'FAIL' : 'N/A'} | ${l.area}${SEALED ? '' : ` | ${l.msg}`} |`).join('\n') + '\n');
   }
   process.exit(code);
 }
 
+// The lock first: a wrong passphrase stops the pass before anything is read or written.
+let store = null, logStats = null, config = JSON.parse(JSON.stringify(CONFIG_DEFAULTS));
+if (SEALED) {
+  let keys;
+  try { keys = openLock().keys; } catch (e) { console.log(`scan: ${/^(missing|bad|wrong)/.test(String(e?.message)) ? e.message : 'the lock does not open'}`); process.exit(1); }
+  const ql = installSealedLogs({ keys });
+  pub = ql.publicLog; logStats = ql.stats;
+  config = loadConfig({ keys }).config;
+  store = openStore({ keys });
+}
 const list = JSON.parse(fs.readFileSync('out/pools-ethereum.json', 'utf8'));
 const tok = new Map(list.tokens.map((t) => [t.address, t]));
 const B = (x) => (x == null ? null : BigInt(x));
@@ -77,6 +103,7 @@ for (const p of pick) {
 const tag = await rpc.call('eth_blockNumber', []);
 if (tag == null) { say(null, 'block', 'no block number'); finish(1); }
 const block = parseInt(tag, 16);
+const passT = Date.now(); // the pass time: the state below is read at this block
 const st = await timed('state', () => mc(chosen.flatMap((p) => (p.v === 3
   ? [{ target: p.id, data: encodeCall('slot0()') }, { target: p.id, data: encodeCall('liquidity()') }]
   : [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }])), tag));
@@ -330,4 +357,179 @@ if (b && b.tag) {
   say(true, 'benchmark score', `σ ${fr(b.sigma)} a day → range ±${fr(k.r)}; at $${EXAMPLE_TICKET}: fee APR ${fr(k.feeApr)}, LVR ${fr(k.lvr)}, net ${fr(k.net)}, edge ${k.edge?.toFixed(2) ?? '—'}, re-range every ${k.rerangeDays ? Math.round(k.rerangeDays) + ' days' : '—'}; markouts ${fr(b.markout)} of the fee; nearest walls ${k.wallSigmaBelow == null ? '—' : k.wallSigmaBelow === Infinity ? 'none in view' : k.wallSigmaBelow.toFixed(1) + ' σ-weeks'} below, ${k.wallSigmaAbove == null ? '—' : k.wallSigmaAbove === Infinity ? 'none in view' : k.wallSigmaAbove.toFixed(1) + ' σ-weeks'} above`);
   say(true, 'benchmark persistence', `stranded in ${b.strandedShare == null ? '—' : Math.round(b.strandedShare * (b.past.filter((x) => x.hollow != null).length + 1))} of ${b.past.filter((x) => x.hollow != null).length + 1} snapshots (now, 10, 20, 30 days ago: ${[b.hollow, ...(b.past || []).map((x) => x.hollow)].map(fr).join(', ')}); parked value already there 30 days ago ${fr(b.sticky)}; gem ${b.gem?.total ?? 'blank'}${b.gem?.missing?.length ? ' (missing ' + b.gem.missing.join(', ') + ')' : ''}`);
 } else say(null, 'benchmark', 'not mapped');
+// 6. Outputs (docs/DATA.md): the snapshot store, every config window per pool (lib/windows.mjs), then the
+//    sealed live.json, history.json (when a pool gains an hourly row) and snapshots.json, and the plain
+//    out/shortlist.json the backtest reads. With the lock only; offline runs stop at the shortlist.
+//    Anything this pass could not read is null, never 0.
+try {
+  await timed('outputs', writeOutputs);
+} catch (e) {
+  console.error(e);
+  say(false, 'outputs', `could not write the outputs (${String(e?.message || e).replace(/[^A-Za-z .:]/g, '').slice(0, 60)})`);
+  finish(1);
+}
 finish(badMaps ? 1 : 0);
+
+async function writeOutputs() {
+  const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
+  const rnd = (x, n = 6) => (isNum(x) ? Number(x.toPrecision(n)) : null);
+  // the stored snapshots (restored from the data branch); one that won't open or parse is never overwritten
+  let snaps = new Map(), snapsOk = true;
+  if (store) { try { const o = store.get('snapshots.json'); if (o) snaps = parseStore(o); } catch { snapsOk = false; } }
+  const sig = (m) => [...m].map(([id, x]) => `${id}:${x.h.length}:${x.h.at(-1)?.t}:${x.d.length}:${x.d.at(-1)?.t}`).sort().join('|');
+  const before = sig(snaps);
+  // fee growth now for every mapped pool (the 24 h check read it only for busy pools)
+  const fgNow = await mc(mapped.flatMap(fgCalls), tag);
+  const rows = new Map();
+  let k = 0;
+  for (const p of mapped) {
+    const n = fgCalls(p).length, fg = readFeeGrowth(p, fgNow.slice(k, k + n));
+    k += n;
+    p.row = { t: passT, block, sqrtPriceX96: B(p.s.sqrtPriceX96), tick: p.s.tick, L: p.L, fg0: fg?.[0] ?? null, fg1: fg?.[1] ?? null, parked: isNum(p.hollow) ? p.hollow : null };
+    rows.set(p.id, [p.row]);
+  }
+  // backfill: a pool with under 20 daily rows gets the last 30 days at the daily blocks (archive state)
+  const need = snapsOk ? mapped.filter((p) => (snaps.get(p.id)?.d.length ?? 0) < 20) : [];
+  let backfilled = 0;
+  if (need.length) {
+    const bfCalls = (p) => [stCalls(p)[1], ...fgCalls(p)];
+    const days = Array.from({ length: 30 }, (_, j) => j + 1);
+    const bf = await timed('backfill', () => mapLimit(days, 3, (d) => amc(need.flatMap(bfCalls), '0x' + (block - d * DAY_BLOCKS).toString(16))));
+    const at = new Map(mapped.map((p, i) => [p.id, i]));
+    days.forEach((d, j) => {
+      let o = 0;
+      for (const p of need) {
+        const n = 1 + fgCalls(p).length, ans = bf[j].slice(o, o + n);
+        o += n;
+        const raw = pxDays[d]?.[at.get(p.id) + 1];
+        const s0 = p.v === 3 ? readV3Slot0(raw) : readV4Slot0(raw);
+        const fg = readFeeGrowth(p, ans.slice(1)), L = readUint(ans[0]);
+        if (!s0 && !fg) continue; // not born yet, or unread: no row
+        const parked = d % 10 === 0 ? p.past?.[d / 10 - 1]?.hollow ?? null : null; // the past maps (10, 20, 30 days ago) where read
+        rows.get(p.id).push({ t: dayTs[d] * 1000, block: block - d * DAY_BLOCKS, sqrtPriceX96: s0 ? s0.sqrtPriceX96 : null, tick: s0 ? s0.tick : null, L: L ?? null, fg0: fg?.[0] ?? null, fg1: fg?.[1] ?? null, parked });
+        backfilled++;
+      }
+    });
+  }
+  const snaps2 = mergeStore(snapsOk ? snaps : new Map(), rows, { now: passT });
+  const changed = snapsOk && sig(snaps2) !== before;
+
+  // every window per pool
+  const prev = (() => { try { return store?.get('live.json') ?? null; } catch { return null; } })();
+  const firstAt = new Map((prev?.pools || []).map((x) => [x.id, x.gemFirstAt ?? null]));
+  const windows = config.windows, defaultWindow = windows.includes('30d') ? '30d' : windows[windows.length - 1];
+  const out = [];
+  for (const p of mapped) {
+    const t0 = tok.get(p.t0) || {}, t1 = tok.get(p.t1) || {};
+    let feeTier = null, keeps = null;
+    if (p.v === 3) {
+      const n0 = p.s.feeProtocol % 16, n1 = p.s.feeProtocol >> 4;
+      feeTier = p.fee / 1e6; keeps = [n0 ? 1 - 1 / n0 : 1, n1 ? 1 - 1 / n1 : 1];
+    } else if (isNum(p.s.lpFee) && isNum(p.s.protocolFee)) {
+      const lp = p.s.lpFee / 1e6, pf = [(p.s.protocolFee & 0xfff) / 1e6, (p.s.protocolFee >> 12) / 1e6];
+      const tiers = pf.map((x) => x + lp - x * lp), lpRate = pf.map((x) => lp * (1 - x));
+      feeTier = (tiers[0] + tiers[1]) / 2; keeps = feeTier > 0 ? lpRate.map((r) => r / feeTier) : null;
+    }
+    const pxNow = poolPrice(B(p.s.sqrtPriceX96), t0.decimals, t1.decimals);
+    const ratio = priceRatio({ poolPrice: pxNow, quoteIs: quoteAddrs.has(p.t1) ? 1 : 0, usd0: t0.usd, usd1: t1.usd });
+    const offMarket = ratio == null ? null : Math.abs(ratio - 1) > config.priceSanity;
+    const r = sums.get(p.id);
+    const warnings = [];
+    if (p.v === 4 && p.hooks && p.hooks !== ZERO) warnings.push('hooked pool');
+    if (r && r.swaps < 10) warnings.push('thin: under 10 swaps a day');
+    if (offMarket) warnings.push('pool price more than 10% off market');
+    const seg = segOf.get(p.id);
+    const cur = { ...p.row, aboveShare: p.aboveShare ?? null, segments: seg || undefined };
+    const w = allWindows({
+      series: snaps2.get(p.id), cur, chain: 'ethereum', config,
+      pool: { feeTier, lpKeeps: keeps, d0: t0.decimals, d1: t1.decimals, usd0: t0.usd ?? null, usd1: t1.usd ?? null, tvlUsd: p.tvl ?? p.mapUsd ?? null,
+        gasUsd, walls: p.walls ?? null, inactiveShare: p.sticky ?? null, warnings, fails: p.verified === false ? ['unverified: its hook can settle swaps outside the pool'] : [],
+        flow: (() => {
+          if (unreadIds.has(p.id)) return {};
+          const gemFlow = { markoutToFee: p.markout ?? null, traders7d: r ? 7 * r.txs : 0 }; // the latest day's replay, for the gem of longer windows
+          return { '24h': { swaps: r ? r.swaps : 0, traders: r ? r.txs : 0, markout: p.markout ?? null }, '7d': { gemFlow }, '30d': { gemFlow } };
+        })() },
+    });
+    const hist = seg ? depthHistogram(seg, p.sqrt, p.d1, p.s.tick) : null;
+    const gem = w[defaultWindow]?.gem?.total ?? null;
+    const series = snaps2.get(p.id);
+    out.push({
+      id: p.id, chain: 'ethereum', v: p.v, pair: `${symOf(p.t0)}/${symOf(p.t1)}`,
+      t0: { sym: symOf(p.t0), addr: p.t0, dec: t0.decimals ?? null, usd: t0.usd ?? null }, t1: { sym: symOf(p.t1), addr: p.t1, dec: t1.decimals ?? null, usd: t1.usd ?? null },
+      feeTier, dynamicFee: p.v === 4 && p.fee === DYNAMIC_FEE, lpKeeps: keeps ? (keeps[0] + keeps[1]) / 2 : null,
+      hooks: p.v === 4 ? p.hooks ?? null : null, verified: p.verified ?? null,
+      firstSeen: Math.min(passT, series?.d[0]?.t ?? passT, series?.h[0]?.t ?? passT), createdAt: null, pairAgeDays: null, young: null,
+      tvlUsd: p.tvl ?? null, mapUsd: p.mapUsd ?? null, aggUsd: p.aggReserveUsd ?? null,
+      price: rnd(pxNow, 10), marketRatio: rnd(ratio), offMarket,
+      shape: {
+        tag: p.tag ?? null, parked: p.hollow ?? null, above: p.aboveShare ?? null, band9: p.band9 ?? null, lpsAtPrice: null,
+        depth: hist && isNum(p.per1) ? hist.buckets.map((v, i) => [rnd(-hist.span + (i + 0.5) * hist.bucketLog, 4), rnd(v * p.per1, 5)]) : [],
+        walls: { below: isNum(p.walls?.below) ? p.walls.below : null, above: isNum(p.walls?.above) ? p.walls.above : null },
+      },
+      w,
+      checks: [
+        { id: 'maps-complete', label: 'map complete', ok: true },
+        { id: 'price-vs-market', label: 'price vs market', ok: ratio == null ? null : Math.abs(ratio - 1) <= 0.02 },
+        { id: 'verified', label: 'swaps reproduce the fee counters', ok: p.verified ?? null },
+      ],
+      gemFirstAt: firstAt.get(p.id) ?? (gem != null && gem >= config.gemAt ? passT : null),
+    });
+  }
+  const gemOf = (x) => x.w[defaultWindow]?.gem?.total ?? -1;
+  out.sort((a, b) => gemOf(b) - gemOf(a) || (b.tvlUsd ?? b.mapUsd ?? 0) - (a.tvlUsd ?? a.mapUsd ?? 0));
+
+  // the shortlist the backtest reads (plain, local, never printed): the best gem scores, plus the benchmark
+  const short = out.filter((x) => gemOf(x) >= 0).slice(0, 20).map((x) => x.id);
+  if (!short.includes(BENCH) && out.some((x) => x.id === BENCH)) short.push(BENCH);
+  fs.mkdirSync('out', { recursive: true });
+  fs.writeFileSync('out/shortlist.json', JSON.stringify({ t: passT, ids: short }));
+  const nWin = (wk) => out.filter((x) => x.w[wk] != null).length;
+  say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; snapshot rows backfilled ${backfilled}`);
+  if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
+
+  const area = (a) => lines.find((l) => l.area === a);
+  const chk = (id, label, a) => ({ id, label, ok: area(a)?.ok ?? null, value: null, detail: area(a)?.msg ?? '' });
+  const live = {
+    v: 1, t: passT, phase: 0, build: `scan-${(process.env.GITHUB_SHA || 'local').slice(0, 7)}`, next: null,
+    ticket: config.ticket, stopLoss: config.stopLoss, windows, defaultWindow, gemAt: config.gemAt,
+    chains: [{ id: 'ethereum', pools: out.length, unread: unreadMaps + badMaps + (chosen.length - ready.length), block, gasUsd: isNum(gasUsd) ? gasUsd : null }],
+    health: {
+      loop: prev?.health?.loop ?? null,
+      checks: [chk('fee-identity', 'fee identity', 'fee identity'), chk('price-vs-market', 'price vs market', 'price check'), chk('volume-vs-aggregator', 'volume vs aggregator', 'volume check'),
+        chk('maps-complete', 'maps complete', 'maps'), chk('lp-book', 'LP book', 'lp book'), chk('creation-events', 'creation events', 'creation events'),
+        chk('volatility-xcheck', 'volatility cross-check', 'volatility check'), chk('fees-vs-aggregator', 'fees vs aggregator', 'fees vs aggregator')],
+      sealedLog: logStats ? (({ lines: l, errors, categories }) => ({ lines: l, errors, categories }))(logStats()) : null,
+    },
+    bench: BENCH, pools: out,
+  };
+  store.put('live.json', live);
+  let histWritten = false;
+  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/history.json`))) {
+    const hp = {};
+    for (const p of mapped) {
+      const s2 = snaps2.get(p.id), t0 = tok.get(p.t0) || {}, t1 = tok.get(p.t1) || {};
+      if (!s2) continue;
+      const x = out.find((o) => o.id === p.id), rate = x.feeTier && x.lpKeeps ? x.feeTier * x.lpKeeps : null;
+      const usd = (a0, a1) => usdOfPair([a0, a1], t0.decimals, t1.decimals, t0.usd, t1.usd);
+      const px = (row) => (row.sqrtPriceX96 != null ? rnd(poolPrice(row.sqrtPriceX96, t0.decimals, t1.decimals), 8) : null);
+      const fees = (a, b) => {
+        if (!a || a.fg0 == null || a.fg1 == null || b.fg0 == null || b.fg1 == null || a.L == null || b.L == null) return null;
+        const L = a.L > 0n && b.L > 0n ? (2n * a.L * b.L) / (a.L + b.L) : a.L > b.L ? a.L : b.L;
+        return usd((deltaFg(a.fg0, b.fg0) * L) >> 128n, (deltaFg(a.fg1, b.fg1) * L) >> 128n);
+      };
+      hp[p.id] = {
+        h: s2.h.map((row, i) => [row.t, px(row), row.L == null ? null : Number(row.L), rnd(fees(s2.h[i - 1], row), 5), row.parked]),
+        d: s2.d.map((row, i) => { const f = fees(s2.d[i - 1], row); return [row.t, px(row), rnd(f, 5), f != null && rate ? rnd(f / rate, 5) : null, row.parked]; }),
+      };
+    }
+    let ph = null;
+    try { ph = store.get('history.json'); } catch { ph = null; }
+    const hour = Math.floor(passT / 3600e3) * 3600e3, health = (ph?.health || []).filter((x) => x[0] >= passT - 7 * 86400e3 && x[0] !== hour);
+    const last = (ph?.health || []).find((x) => x[0] === hour);
+    health.push([hour, (last?.[1] ?? 0) + (badMaps ? 0 : 1), (last?.[2] ?? 0) + 1, unreadMaps + badMaps]);
+    store.put('history.json', { v: 1, t: passT, pools: hp, health });
+    histWritten = true;
+  }
+  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snaps2), t: passT });
+  say(snapsOk ? true : false, 'sealed outputs', `live.json written with ${out.length} pools; history.json ${histWritten ? 'written' : 'kept (no new hourly row)'}; snapshots ${snapsOk ? (changed ? 'updated' : 'unchanged') : 'stored copy did not open: left as it was'}`);
+}
