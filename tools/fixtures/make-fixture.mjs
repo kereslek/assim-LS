@@ -102,7 +102,7 @@ const HEROES = [
   // planted fault: unverified, yet the data carries a gem score; the page must never call it a gem
   { base: 'TALI', quote: 'WETH', chain: 'base', v: 4, fee: 0.003, shape: 'stranded', tvl: 1.9e6, inside9: 80e3, lps: 3,
     sigma: 0.03, volDay: 150e3, ageDays: 95, pairAgeDays: 400, persistence: 0.8, markout: 0.3, traders7d: 100, usd: 0.55,
-    hooks: true, dynamicFee: true, verified: false, plantedGem: 88,
+    hooks: true, dynamicFee: true, verified: false, plantedGem: 95,
     vmul: { '24h': 1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 } },
   { base: 'DRUM', quote: 'USDC', chain: 'ethereum', v: 4, fee: 0.01, shape: 'mixed', tvl: 900e3, inside9: 200e3, lps: 7,
     sigma: 0.04, volDay: 30e3, ageDays: 60, pairAgeDays: 300, persistence: 0.4, markout: 0.5, traders7d: 50, usd: 0.12,
