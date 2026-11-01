@@ -23,9 +23,11 @@ This file describes shapes only: it holds no data. Every value below lives seale
 {
   v: 1,
   t: <ms>,                      // pass time
+  phase: 0|1|2|3,               // 0 read-only scanner, 1 paper trading, 2 small live, 3 auto-manage
   build: "<scanner build tag>",
   next: <ms|null>,              // expected next pass
   ticket: <usd>,                // example ticket every pool is scored at
+  stopLoss: <fraction>,         // position value drop, measured in the quote token, that closes a position (0.08)
   windows: ["24h", "7d", "30d"],
   defaultWindow: "30d",
   gemAt: 60,                    // gem threshold
@@ -50,7 +52,9 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
   t0: { sym, addr, dec, usd: <n|null> }, t1: { sym, addr, dec, usd: <n|null> },
   feeTier: <fraction, e.g. 0.003>, dynamicFee: <bool>, lpKeeps: <fraction LPs keep after the protocol's cut|null>,
   hooks: "<address>"|null,
-  verified: true|false|null,    // false = "unverified": its swaps can't be checked against its fee counters; never a gem
+  verified: true|false|null,    // true = swaps reproduce the fee counters; false = "unverified" (can't be checked, e.g. a hook
+                                //   that moves tokens outside the pool's books): never a gem; null = not checked yet
+                                //   (too few swaps, or unread): may be a gem, tagged "NOT CHECKED"
   firstSeen: <ms>, createdAt: <ms|null>, pairAgeDays: <n|null>, young: <bool>,   // young = pool under 30 days old
   tvlUsd: <n|null>, mapUsd: <n|null>, aggUsd: <n|null>,
   price: <token1 per token0>, marketRatio: <n|null>, offMarket: <bool>,
@@ -76,6 +80,7 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
   days: <days actually covered>, partial: <bool>,      // a young pool covers fewer days than the window
   volUsd, lpFeesUsd, protocolFeesUsd, swaps, traders,
   sigma: <daily volatility>, range: <half-width r, log>, rerangeDays: <n|null>,
+  inRangeUsd: <value already inside ±r: the "V" in fee APR = 365·F/(V+S); shown as ROOM>,
   feeApr, lvr, swapCost, gas, net, edge,               // annualised fractions at the ticket; edge = feeApr ÷ lvr
   aggApr: <fees ÷ total TVL: "what trackers show">,
   parkedAvg: <0..1|null>, strandedShare: <0..1|null>, markout: <markout ÷ fee|null>,
@@ -104,9 +109,11 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
   pools: { "<id>": { "24h": Backtest|null, "7d": Backtest|null, "30d": Backtest|null } }
 }
 Backtest = {
+  days: <days covered>, partial: <bool>, range: <half-width r, log>, trigger: "exit",   // the "ours" strategy's settings
   forecastNet: <the scanner's net APR at the window start>,
   net, netUsd, feesUsd, lvrUsd, costsUsd, tir: <time in range 0..1>, reranges, share: <share of pool fees>,
-  series: { t: [], px: [], lo: [], hi: [], fees: [], lvr: [], costs: [], net: [] },   // cumulative $, vs holding
+  series: { t: [], px: [], lo: [], hi: [], fees: [], lvr: [], costs: [], net: [] },   // cumulative $ vs holding the
+                                // starting tokens: fees ≥ 0, lvr ≤ 0, costs ≤ 0, net = fees + lvr + costs; lo/hi = range edges
   strategies: [{ id, name, net, netUsd, reranges, series: [] }],                       // ours, tight, wide, gamma, arrakis, full
   grid: { widths: [<r>], triggers: ["exit", "exit+12h", "exit+24h", "drift50", "drift75"], net: [[<apr>]] },
   revert: { net: <n|null>, within10: <bool|null> }      // Revert's backtest of the same range, where it answers
