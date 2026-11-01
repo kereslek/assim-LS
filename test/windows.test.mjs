@@ -113,10 +113,9 @@ test('a sole LP: pool fees are its L × Δfg; a ticket as big as the pool earns 
   const all = (parts) => share(run(sim, '24h', { config: { ...CONFIG, ticket: huge }, parts }), huge);
   assert.ok(Math.abs(half() - 0.5) < 1e-4, `half ${half()}`);
   assert.ok(Math.abs(all() - 1) < 1e-4, `all ${all()}`);
-  // planted fault: the dilution term dropped (the ticket's L next to the pool's not counted)
-  const noDilution = { dilution: () => 1 };
-  assert.ok(Math.abs(half(noDilution) - 0.5) > 0.1);
-  assert.ok(Math.abs(all(noDilution) - 1) > 0.1);
+  // planted faults: the dilution term dropped, or the shares swapped (the pool's share credited to the ticket)
+  assert.ok(Math.abs(half({ dilution: () => 1 }) - 0.5) > 0.1);
+  assert.ok(Math.abs(all({ dilution: (V, S) => V / (V + S) }) - 1) > 0.1);
 });
 
 // ---- a flat price ------------------------------------------------------------------------------------

@@ -27,11 +27,14 @@ import { openLock } from '../lib/lock.mjs';
 import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
 import { parseStore, serializeStore, mergeStore } from '../lib/snapshots.mjs';
-import { allWindows, deltaFg } from '../lib/windows.mjs';
+import { allWindows, deltaFg, gemWarnings, isHooked } from '../lib/windows.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 600_000, DAY_BLOCKS = 7200, GROUP = 40;
 const EXAMPLE_TICKET = 1000, HOLD_DAYS = 14, RERANGE_GAS = 630_000, MARKOUT_BLOCKS = 25; // a made-up example size, not anyone's position
 const BENCH = '0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801';
+// Parked liquidity starts beyond max(the suggested ±r, 2%) from the price: closer than that it is serving.
+const NEAR_MIN = 0.02;
+const nearOf = (p) => Math.max(NEAR_MIN, p.score?.r ?? 0);
 const V3_SPACING = { 100: 1, 500: 10, 3000: 60, 10000: 200 };
 const RPCS = ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth', 'https://rpc.mevblocker.io', 'https://rpc.flashbots.net', 'https://eth.blockscout.com/api/eth-rpc'];
 
@@ -121,7 +124,7 @@ ready.forEach((p, i) => {
   complete++;
   const d0 = tok.get(p.t0)?.decimals, d1 = tok.get(p.t1)?.decimals, u0 = tok.get(p.t0)?.usd, u1 = tok.get(p.t1)?.usd;
   const sp = sqrtX96ToSqrt(B(p.s.sqrtPriceX96)), price = poolPrice(B(p.s.sqrtPriceX96), d0, d1);
-  const h = hollowness(m.segments, sp, d1, p.s.tick, m.checks.walkedLiquidity);
+  const h = hollowness(m.segments, sp, d1, p.s.tick, m.checks.walkedLiquidity, { near: NEAR_MIN });
   const per1 = u1 > 0 ? u1 : u0 > 0 && price > 0 ? u0 / price : null; // USD per token1
   p.mapUsd = per1 != null ? h.total * per1 : null;
   p.hollow = h.hollow; p.aboveShare = h.aboveShare; p.tag = shapeTag(h);
@@ -201,6 +204,8 @@ say(true, 'stranded', `${strandedPools.length} pools ≥ ${usd(FLOOR)} have ≥ 
 const symOf = (a) => tok.get(a)?.symbol ?? C.quotes.find((q) => q.address === a)?.symbol ?? '?';
 const label = (p) => `${symOf(p.t0)}/${symOf(p.t1)} v${p.v} ${p.v === 4 && p.fee === DYNAMIC_FEE ? 'dynamic' : `${p.fee / 1e4}%`}`;
 for (const p of mapped) p.verified = p.v === 3 ? true : p.hooks == null ? null : !hookReturnsSwapDelta(p.hooks);
+// A v4 pool with a hook, or whose hook address was not read (it can't be shown to have none).
+const hookedPool = isHooked;
 const hookedOrDynamic = (p) => p.v === 4 && ((p.hooks && p.hooks !== ZERO) || p.fee === DYNAMIC_FEE);
 const fgCalls = (p) => feeGrowthCalls(p, C.v4StateView);
 const stCalls = (p) => (p.v === 3 ? [{ target: p.id, data: encodeCall('slot0()') }, { target: p.id, data: encodeCall('liquidity()') }]
@@ -280,6 +285,13 @@ for (const p of mapped) {
   const m = unreadIds.has(p.id) ? null : markouts(byPool.get(p.id) || [], { horizon: MARKOUT_BLOCKS, endBlock: block, feeOf: (s) => swapFees(s, meta.get(p.id))?.total ?? null });
   p.markout = m ? m.ratio : null;
 }
+// With the suggested range known, measure parked liquidity again beyond max(±r, 2%), and re-tag the shape.
+for (const p of mapped) {
+  const seg = segOf.get(p.id);
+  if (!seg || !(nearOf(p) > NEAR_MIN)) continue;
+  const h = hollowness(seg, p.sqrt, p.d1, p.s.tick, p.L, { near: nearOf(p) });
+  p.hollow = h.hollow; p.aboveShare = h.aboveShare; p.tag = shapeTag(h);
+}
 const withSigma = mapped.filter((p) => p.sigma != null), both = mapped.filter((p) => p.sigmaChain > 0 && p.sigmaMarket > 0);
 say(withSigma.length ? true : null, 'volatility', `30-day volatility for ${withSigma.length} of ${mapped.length} pools (${mapped.filter((p) => p.sigmaChain != null).length} from the pool's own daily price, ${withSigma.length - mapped.filter((p) => p.sigmaChain != null).length} from market history); median ${fr(median(withSigma.map((p) => p.sigma)))} a day; re-range gas ${gasUsd == null ? '—' : '$' + gasUsd.toFixed(2)}`);
 {
@@ -325,7 +337,7 @@ await timed('past maps', async () => {
       const m = ms[i];
       if (!m || m.unread || !(m.checks.netSumZero && m.checks.matchesPool)) { p.past.push({ hollow: null, segments: null }); return; }
       pastRead++;
-      const h = hollowness(m.segments, sqrtX96ToSqrt(s0.sqrtPriceX96), p.d1, s0.tick, m.checks.walkedLiquidity);
+      const h = hollowness(m.segments, sqrtX96ToSqrt(s0.sqrtPriceX96), p.d1, s0.tick, m.checks.walkedLiquidity, { near: nearOf(p) });
       p.past.push({ hollow: h.hollow, segments: m.segments });
     });
   }
@@ -342,7 +354,7 @@ for (const p of cands) {
   const r = sums.get(p.id);
   p.flow = flowScore({ markoutToFee: p.markout, traders7d: r ? 7 * r.txs : null });
   const warnings = [];
-  if (p.v === 4 && p.hooks && p.hooks !== ZERO) warnings.push('hooked pool');
+  if (hookedPool(p)) warnings.push('hooked pool');
   if (r && r.swaps < 10) warnings.push('thin: under 10 swaps a day');
   if (p.offMarket) warnings.push('pool price more than 10% off market');
   p.gem = gemScore({ stranded: p.hollowAvg, net: p.score?.net ?? null, persistence: p.persistence, flow: p.flow, warnings, fails: p.verified === false ? ['unverified: its hook can settle swaps outside the pool'] : [] });
@@ -434,16 +446,31 @@ async function writeOutputs() {
     const ratio = priceRatio({ poolPrice: pxNow, quoteIs: quoteAddrs.has(p.t1) ? 1 : 0, usd0: t0.usd, usd1: t1.usd });
     const offMarket = ratio == null ? null : Math.abs(ratio - 1) > config.priceSanity;
     const r = sums.get(p.id);
-    const warnings = [];
-    if (p.v === 4 && p.hooks && p.hooks !== ZERO) warnings.push('hooked pool');
-    if (r && r.swaps < 10) warnings.push('thin: under 10 swaps a day');
-    if (offMarket) warnings.push('pool price more than 10% off market');
+    const warnings = gemWarnings({ v: p.v, hooks: p.hooks, swaps24h: r ? r.swaps : unreadIds.has(p.id) ? null : 0, offMarket });
     const seg = segOf.get(p.id);
+    // the pool's checklist: a check that did not run is null, never a pass
+    const sides = fgSides.filter((x) => x.p === p && x.neu != null);
+    const within = (x, lo, hi) => (x == null || !Number.isFinite(x) ? null : x >= lo && x <= hi);
+    const checks = [
+      { id: 'maps-complete', label: 'map complete', ok: true },
+      { id: 'map-vs-balances', label: 'map within the pool balances', ok: p.v === 3 && p.tvl > 0 && p.mapUsd != null ? p.mapUsd / p.tvl <= 1.02 : null },
+      { id: 'price-vs-market', label: 'price vs market', ok: within(ratio, 0.98, 1.02) },
+      { id: 'fee-identity', label: 'swaps reproduce the fee counters', ok: sides.length ? sides.every((x) => in2(x.neu)) : null },
+      { id: 'verified', label: 'no hook settles swaps outside the pool', ok: p.verified ?? null },
+      { id: 'volume-vs-aggregator', label: 'volume vs aggregator', ok: p.aggVolumeUsd24h > 0 && p.vol24h != null ? within(p.vol24h / p.aggVolumeUsd24h, 0.75, 1.25) : null },
+      { id: 'volatility-xcheck', label: 'pool vs market volatility', ok: p.sigmaChain > 0 && p.sigmaMarket > 0 ? within(p.sigmaChain / p.sigmaMarket, 0.7, 1.3) : null },
+      { id: 'swaps-read', label: 'a day of swaps read', ok: unreadIds.has(p.id) ? null : true },
+      { id: 'markouts-read', label: 'markouts read', ok: p.markout != null ? true : null },
+      { id: 'lp-book', label: 'LP book adds up', ok: null },
+      { id: 'creation-events', label: 'creation event found', ok: null },
+      { id: 'fees-vs-aggregator', label: 'fees vs aggregator', ok: null },
+    ];
+    const ran = checks.filter((c) => c.ok != null).length, failed = checks.filter((c) => c.ok === false).map((c) => c.label);
     const cur = { ...p.row, aboveShare: p.aboveShare ?? null, segments: seg || undefined };
     const w = allWindows({
       series: snaps2.get(p.id), cur, chain: 'ethereum', config,
       pool: { feeTier, lpKeeps: keeps, d0: t0.decimals, d1: t1.decimals, usd0: t0.usd ?? null, usd1: t1.usd ?? null, tvlUsd: p.tvl ?? p.mapUsd ?? null,
-        gasUsd, walls: p.walls ?? null, inactiveShare: p.sticky ?? null, warnings, fails: p.verified === false ? ['unverified: its hook can settle swaps outside the pool'] : [],
+        gasUsd, walls: p.walls ?? null, inactiveShare: p.sticky ?? null, warnings, fails: failed, checks: { ran, total: checks.length },
         flow: (() => {
           if (unreadIds.has(p.id)) return {};
           const gemFlow = { markoutToFee: p.markout ?? null, traders7d: r ? 7 * r.txs : 0 }; // the latest day's replay, for the gem of longer windows
@@ -467,11 +494,7 @@ async function writeOutputs() {
         walls: { below: isNum(p.walls?.below) ? p.walls.below : null, above: isNum(p.walls?.above) ? p.walls.above : null },
       },
       w,
-      checks: [
-        { id: 'maps-complete', label: 'map complete', ok: true },
-        { id: 'price-vs-market', label: 'price vs market', ok: ratio == null ? null : Math.abs(ratio - 1) <= 0.02 },
-        { id: 'verified', label: 'swaps reproduce the fee counters', ok: p.verified ?? null },
-      ],
+      checks,
       gemFirstAt: firstAt.get(p.id) ?? (gem != null && gem >= config.gemAt ? passT : null),
     });
   }
