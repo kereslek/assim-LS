@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseMarketChart, makeHistoryCache, coinGeckoHistory, sampleAt, ratioAt, parseChart } from '../lib/history.mjs';
+import { parseMarketChart, makeHistoryCache, coinGeckoHistory, sampleAt, ratioAt, parseChart, dailyHistory } from '../lib/history.mjs';
 import { dailySigma } from '../lib/flow.mjs';
 
 const A = (c) => 'ethereum:0x' + c.repeat(40);
@@ -40,6 +40,20 @@ test('each token is fetched at most once a UTC day; the cache file survives betw
   assert.equal(r3.fetched, 2);
   fs.writeFileSync(file, '{broken');
   assert.equal(makeHistoryCache(file).size(), 0); // a broken cache is an empty one
+});
+
+test('DefiLlama fallback: a batch that gets 400 is split until the coin it refuses stands alone', async () => {
+  const keys = Array.from({ length: 8 }, (_, i) => A(String(i + 1)));
+  const calls = [];
+  const getJson = async (url) => {
+    const ks = decodeURIComponent(url.split('/chart/')[1].split('?')[0]).split(',');
+    calls.push(ks.length);
+    if (ks.includes(A('5'))) throw new Error('HTTP 400');
+    return { coins: Object.fromEntries(ks.map((k) => [k, { prices: [{ timestamp: 1, price: 2 }, { timestamp: 86401, price: 3 }] }])) };
+  };
+  const r = await dailyHistory(getJson, keys, { spacingMs: 0 });
+  assert.deepEqual([r.series.size, r.unread], [7, [A('5')]]);
+  assert.ok(r.splits >= 3 && calls.length <= 8);
 });
 
 test('an unanswered token is unread, not a series; unread never becomes a price', async () => {
