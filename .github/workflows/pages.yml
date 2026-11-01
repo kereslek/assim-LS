@@ -1,0 +1,70 @@
+name: pages
+# Deploys the dashboard to GitHub Pages (source: GitHub Actions). The site root is a blank page; the
+# dashboard sits in an unguessable folder and reads sealed data from the data branch. Only the page
+# and the lock file are published: never fixtures, never data files (they stay on the data branch).
+on:
+  push:
+    branches: ['claude/ecstatic-dirac-wkrqja']
+    paths: ['site/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+env:
+  SLUG: 442edd62612a5a84cc58 # generated once; obscurity is only an extra layer, the seal protects the data
+  DATA_BASE: https://raw.githubusercontent.com/kereslek/assim-LS/data/
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Page checks first (headers, CSP hash, no external hosts)
+        run: node --test test/site-page.test.mjs
+      - name: Build the site folder
+        run: |
+          set -euo pipefail
+          mkdir -p _site/"$SLUG"
+          cat > _site/index.html <<'EOF'
+          <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer"><title>Nothing to see here</title>
+          <style>body{margin:0;background:#0A1120;color:#566A90;font:13px/1.5 ui-monospace,monospace;display:grid;place-items:center;min-height:100vh}</style>
+          </head><body><p>nothing to see here</p></body></html>
+          EOF
+          printf 'User-agent: *\nDisallow: /\n' > _site/robots.txt
+          cp site/app/index.html _site/"$SLUG"/index.html
+          grep -q "<meta name=\"lps-data\" content=\"$DATA_BASE\">" _site/"$SLUG"/index.html || { echo "page does not read the data branch"; exit 1; }
+          # the lock file ships with the page when the data branch has one (salt, rounds, sealed check string only)
+          if git fetch -q --depth=1 origin data 2>/dev/null && git show FETCH_HEAD:lock.json > lock.tmp 2>/dev/null; then
+            node -e "const l=JSON.parse(require('fs').readFileSync('lock.tmp','utf8'));const k=Object.keys(l).sort().join(',');if(k!=='check,iter,lock,salt'||l.check.lock!==1)process.exit(1)" || { echo "lock.json has unexpected fields"; exit 1; }
+            mv lock.tmp _site/"$SLUG"/lock.json
+            echo "lock: shipped with the page"
+          else
+            echo "lock: no data branch yet; the page reads it from the data branch when it appears"
+          fi
+          # guard: nothing but these files, and no fixture or data file
+          find _site -type f | sort
+          if find _site -type f | grep -Ev "^_site/(index\.html|robots\.txt|$SLUG/index\.html|$SLUG/lock\.json)$"; then echo "unexpected file in the site"; exit 1; fi
+          if grep -rl '"fixture":true' _site; then echo "fixture data in the site"; exit 1; fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
