@@ -1,0 +1,41 @@
+name: site
+# The dashboard's browser tests on made-up, sealed fixtures: WebKit as an iPhone 15 and Chromium as a
+# Pixel 7, each also at laptop widths. Logs show pass/fail, counts and timings only.
+on:
+  push:
+    paths: ['site/**', 'tools/fixtures/**', 'tools/site-test.mjs', 'test/site*.test.mjs', 'lib/lock.mjs', '.github/workflows/site.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: webkit
+            device: iPhone 15
+          - browser: chromium
+            device: Pixel 7
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Page and fixture checks first (no browser)
+        run: node --test test/site*.test.mjs
+      - name: Install the pinned Playwright and its browser, outside the repo
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --silent playwright@1.63.0
+          npx playwright@1.63.0 install --with-deps ${{ matrix.browser }} >/dev/null
+      - name: Browser tests (${{ matrix.browser }} as ${{ matrix.device }})
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+        run: node tools/site-test.mjs --browser ${{ matrix.browser }} --device "${{ matrix.device }}"
