@@ -207,7 +207,7 @@ say(ver.length ? hit / ver.length >= 0.9 : null, 'fee identity', `replayed price
 const miss = ver.filter((x) => !in2(x.neu));
 const ex = [...oldMiss.filter((x) => x.p.verified === true && !in2(x.neu)), ...miss.filter((x) => in2(x.old) || x.old == null), ...oldMiss.filter((x) => in2(x.neu))].slice(0, 10);
 const r4 = (x) => (x == null ? '—' : Number.isFinite(x) ? x.toFixed(3) : '∞');
-say(true, 'fee identity misses', `left by cause: ${top(tally(miss.map(cause)), 7)}; examples (pair, side: old → path): ${ex.map((x) => `${label(x.p)} ${x.side ? symOf(x.p.t1) : symOf(x.p.t0)}: ${r4(x.old)} → ${r4(x.neu)} (${x.sd.crossing} of ${x.sd.swaps} swaps cross, ${x.sd.empty} through empty stretches, ${x.sd.extras} flash/donate, ${x.sd.still} with no price move, ${x.sd.backwards} against the price${x.endGap ? ', end price differs' : ''})`).join('; ') || 'none'}`);
+say(true, 'fee identity misses', `left by cause: ${top(tally(miss.map(cause)), 7)}; examples (pair, side: old → path): ${ex.map((x) => `${label(x.p)} ${x.side ? symOf(x.p.t1) : symOf(x.p.t0)}: ${r4(x.old)} → ${r4(x.neu)} (${x.sd.crossing} of ${x.sd.swaps} swaps cross, ${x.sd.empty} through empty stretches, ${x.sd.extras} flash/donate, ${x.sd.still} with no price move, ${x.sd.backwards} against the price, ${x.sd.inconsistent || 0} paying more than the fee rate${x.endGap ? ', end price differs' : ''})`).join('; ') || 'none'}`);
 
 // 4. Step 4 snapshot: volatility, scores and markouts.
 const WETH = C.quotes.find((q) => q.symbol === 'WETH').address;

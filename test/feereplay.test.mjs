@@ -137,6 +137,11 @@ test('v3: flash payments count (less the protocol 1/N); leaving them out, or a m
   });
   assert.ok(near(replayRatio(w)), JSON.stringify(replayRatio(w)));
   assert.ok(!near(replayRatio(w, { extras: [] }), 0.02));
+  // a duplicated event (same price twice) would book its whole input as fee: it is bounded and counted
+  const dup = { ...w, swaps: [...w.swaps.slice(0, 5), { ...w.swaps[4] }, ...w.swaps.slice(5)] };
+  const rd = replayRatio(dup), sd = replayFeeGrowth(dup).sides;
+  assert.ok(!near(rd, 0.02) && rd.every((x) => x == null || x < 1.5), JSON.stringify(rd));
+  assert.equal(sd[0].inconsistent + (sd[1].inconsistent || 0) >= 1 || sd[0].still + sd[1].still >= 1, true);
   const missed = { ...w, swaps: w.swaps.filter((_, i) => i !== 4) };
   assert.ok(!near(replayRatio(missed), 0.02));
   assert.ok(!near(replayRatio(w, { meta: { fee: 3000, feeProtocol: 0 } }), 0.02), 'a protocol fee read as off is caught');
