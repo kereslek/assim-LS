@@ -1,0 +1,11 @@
+{
+ "lock": 1,
+ "salt": "WuzK1czQ5zIA2PeGh6nVYg==",
+ "iter": 600000,
+ "check": {
+  "lock": 1,
+  "t": 0,
+  "iv": "lUofb/bIL+jKEk5w",
+  "ct": "/SDvUAwdi/D2HBhTbdGqc3Mv9psuBLAYcrtOHbWhlFcY"
+ }
+}
