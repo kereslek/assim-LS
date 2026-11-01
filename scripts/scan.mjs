@@ -9,18 +9,19 @@ import fs from 'node:fs';
 import { makeRpc, mapLimit, getJson } from '../lib/rpc.mjs';
 import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
-import { ETHEREUM as C, ZERO, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice, extremeFee } from '../lib/pools.mjs';
+import { ETHEREUM as C, ZERO, DYNAMIC_FEE, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice, extremeFee } from '../lib/pools.mjs';
 import { readMaps, wordsFor, feeGrowthCalls, readFeeGrowth } from '../lib/maps.mjs';
 import { sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { hollowness, shapeTag, bandStats, depthHistogram, nearestWalls } from '../lib/shape.mjs';
-import { SWAP_TOPICS, decodeSwap, summarize, usdOfPair, swapFees } from '../lib/swaps.mjs';
+import { SWAP_TOPICS, EXTRA_TOPICS, decodeSwap, decodeExtra, hookReturnsSwapDelta, summarize, usdOfPair, swapFees } from '../lib/swaps.mjs';
 import { dailySigma, ratioByDay, markouts } from '../lib/flow.mjs';
 import { scorePool, recentMoves } from '../lib/score.mjs';
-import { dailyHistory } from '../lib/history.mjs';
+import { coinGeckoHistory, dailyHistory, makeHistoryCache, ratioAt } from '../lib/history.mjs';
+import { MULTICALL3 } from '../lib/multicall.mjs';
 import { stickyShare, strandedShare } from '../lib/persistence.mjs';
 import { persistenceScore, flowScore, gemScore } from '../lib/gem.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
-import { feeIdentity, priceRatio } from '../lib/checks.mjs';
+import { feeIdentity, replayFeeGrowth, feeIdentityPath, pathIndex, priceRatio } from '../lib/checks.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 600_000, DAY_BLOCKS = 7200, GROUP = 40;
 const EXAMPLE_TICKET = 1000, HOLD_DAYS = 14, RERANGE_GAS = 630_000, MARKOUT_BLOCKS = 25; // a made-up example size, not anyone's position
@@ -126,14 +127,17 @@ say(true, 'shapes', `of ${mapped.length} mapped pools: ${[...tags].sort((a, b) =
 const from = block - DAY_BLOCKS + 1;
 const v3ids = mapped.filter((p) => p.v === 3).map((p) => p.id), v4ids = mapped.filter((p) => p.v === 4).map((p) => p.id);
 const groups = [];
-for (let i = 0; i < v3ids.length; i += GROUP) groups.push({ address: v3ids.slice(i, i + GROUP), topics: [SWAP_TOPICS.v3] });
-for (let i = 0; i < v4ids.length; i += GROUP) groups.push({ address: C.v4PoolManager, topics: [SWAP_TOPICS.v4, v4ids.slice(i, i + GROUP)] });
+// Flash (v3) and Donate (v4) ride along: they move the fee counters without a swap (step 3b).
+for (let i = 0; i < v3ids.length; i += GROUP) groups.push({ address: v3ids.slice(i, i + GROUP), topics: [[SWAP_TOPICS.v3, EXTRA_TOPICS.flash]] });
+for (let i = 0; i < v4ids.length; i += GROUP) groups.push({ address: C.v4PoolManager, topics: [[SWAP_TOPICS.v4, EXTRA_TOPICS.donate], v4ids.slice(i, i + GROUP)] });
 const got = await timed('swaps', () => mapLimit(groups, 2, (f) => logsAdaptive(rpc, f, from, block, { step: 1000 })));
 const unreadGroups = got.filter((g) => g == null).length;
 const unreadIds = new Set(groups.flatMap((g, i) => (got[i] == null ? (Array.isArray(g.address) ? g.address : g.topics[1]) : [])));
-const swaps = got.filter(Boolean).flat().map(decodeSwap).filter(Boolean);
-const byPoolEarly = new Map();
+const logsRead = got.filter(Boolean).flat();
+const swaps = logsRead.map(decodeSwap).filter(Boolean), extras = logsRead.map(decodeExtra).filter(Boolean);
+const byPoolEarly = new Map(), extrasByPool = new Map();
 for (const s of swaps) { if (!byPoolEarly.has(s.pool)) byPoolEarly.set(s.pool, []); byPoolEarly.get(s.pool).push(s); }
+for (const e of extras) { if (!extrasByPool.has(e.pool)) extrasByPool.set(e.pool, []); extrasByPool.get(e.pool).push(e); }
 const meta = new Map(mapped.map((p) => [p.id, p.v === 3 ? { fee: p.fee, feeProtocol: p.s.feeProtocol } : { protocolFee: p.s.protocolFee }]));
 const sums = summarize(swaps, meta);
 let lpUsd = 0, protoUsd = 0, volUsd = 0, unpricedPools = 0;
@@ -150,44 +154,80 @@ for (const p of mapped) {
   lpUsd += p.fees24h; protoUsd += pr ?? 0; volUsd += p.vol24h ?? 0;
   if (p.aggVolumeUsd24h > 0 && p.vol24h != null) volRatio.push(p.vol24h / p.aggVolumeUsd24h);
 }
-say(unreadGroups ? null : true, 'swaps', `${swaps.length} swaps in the last ${DAY_BLOCKS} blocks across ${sums.size} of ${mapped.length} pools; ${unreadGroups} of ${groups.length} log groups unread`);
+say(unreadGroups ? null : true, 'swaps', `${swaps.length} swaps in the last ${DAY_BLOCKS} blocks across ${sums.size} of ${mapped.length} pools (plus ${extras.filter((e) => e.kind === 'flash').length} v3 flash loans and ${extras.filter((e) => e.kind === 'donate').length} v4 donations); ${unreadGroups} of ${groups.length} log groups unread`);
 const protoOn = mapped.filter((p) => (p.v === 3 ? p.s.feeProtocol > 0 : p.s.protocolFee > 0));
 say(true, 'fees', `LP fees ${usd(lpUsd)} and protocol fees ${usd(protoUsd)} on ${usd(volUsd)} of volume in 24 h; protocol fee on in ${protoOn.filter((p) => p.v === 3).length} of ${mapped.filter((p) => p.v === 3).length} v3 and ${protoOn.filter((p) => p.v === 4).length} of ${mapped.filter((p) => p.v === 4).length} v4 pools; ${unpricedPools} pools unpriced`);
 say(volRatio.length ? within(volRatio, 0.75, 1.25) / volRatio.length >= 0.7 : null, 'volume check', `24 h volume vs DexScreener: within ±25% for ${within(volRatio, 0.75, 1.25)} of ${volRatio.length}; median ratio ${median(volRatio)?.toFixed(3) ?? '—'}`);
 const yieldOf = (p) => (p.fees24h != null && p.mapUsd > 0 ? (365 * p.fees24h) / p.mapUsd : null);
 say(true, 'stranded', `${strandedPools.length} pools ≥ ${usd(FLOOR)} have ≥ 80% of their value parked away from the price (${strandedPools.filter((p) => p.tag === 'one-sided').length} one-sided); median fee yield on total value ${fr(median(strandedPools.map(yieldOf)))} vs ${fr(median(mapped.filter((p) => p.hollow < 0.8).map(yieldOf)))} for the rest`);
-// 3b. Cross-check (step 5): the swap replay against the pools' own fee counters. Every swap adds
-//     its LP fee ÷ the active liquidity to feeGrowthGlobal, so summing that over the day's swaps must
-//     reproduce the counter's change between the window's two ends (read through archive nodes).
+// 3b. Cross-check (step 5): the swap replay against the pools' own fee counters over the same blocks
+//     (read through archive nodes at both ends). The replay walks each swap's price path from the
+//     previous swap's price (the window's first from slot0 at its start), so a swap that crosses
+//     ticks books each stretch at that stretch's liquidity, and stretches the end-block map shows
+//     empty book nothing (lib/checks.mjs replayFeeGrowth). v3 flash payments and v4 donations count.
+//     v4 pools whose hook can return swap deltas are "unverified": their hook can settle part of a
+//     swap outside the pool's books, so they are counted apart and never become gems.
+const symOf = (a) => tok.get(a)?.symbol ?? C.quotes.find((q) => q.address === a)?.symbol ?? '?';
+const label = (p) => `${symOf(p.t0)}/${symOf(p.t1)} v${p.v} ${p.v === 4 && p.fee === DYNAMIC_FEE ? 'dynamic' : `${p.fee / 1e4}%`}`;
+for (const p of mapped) p.verified = p.v === 3 ? true : p.hooks == null ? null : !hookReturnsSwapDelta(p.hooks);
+const hookedOrDynamic = (p) => p.v === 4 && ((p.hooks && p.hooks !== ZERO) || p.fee === DYNAMIC_FEE);
 const fgCalls = (p) => feeGrowthCalls(p, C.v4StateView);
+const stCalls = (p) => (p.v === 3 ? [{ target: p.id, data: encodeCall('slot0()') }, { target: p.id, data: encodeCall('liquidity()') }]
+  : [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }]);
 const fgPlan = mapped.filter((p) => !unreadIds.has(p.id) && sums.get(p.id)?.swaps >= 10);
-const fgFlat = fgPlan.flatMap(fgCalls);
-const [fgNowR, fgThenR] = await timed('fee counters', () => Promise.all([amc(fgFlat, tag), amc(fgFlat, '0x' + (from - 1).toString(16))]));
-let k2 = 0;
-const fgRatios = [];
-let fgUnread = 0;
+const [fgNowR, fgThenR] = await timed('fee counters', () => Promise.all([amc(fgPlan.flatMap(fgCalls), tag), amc(fgPlan.flatMap((p) => [...fgCalls(p), ...stCalls(p)]), '0x' + (from - 1).toString(16))]));
+const segOf = new Map(ready.map((p, i) => [p.id, maps[i]?.segments ?? null]));
+let kn = 0, kt = 0, fgUnread = 0;
+const fgSides = [];
 for (const p of fgPlan) {
-  const n = fgCalls(p).length, a = readFeeGrowth(p, fgNowR.slice(k2, k2 + n)), z = readFeeGrowth(p, fgThenR.slice(k2, k2 + n));
-  k2 += n;
-  const r = feeIdentity(byPoolEarly.get(p.id) || [], meta.get(p.id), z, a);
-  if (!r) { fgUnread++; continue; }
-  fgRatios.push(...r.filter((x) => x != null));
+  const n = fgCalls(p).length, thenR = fgThenR.slice(kt, kt + n + 2);
+  const a = readFeeGrowth(p, fgNowR.slice(kn, kn + n)), z = readFeeGrowth(p, thenR.slice(0, n));
+  kn += n; kt += n + 2;
+  const s0 = p.v === 3 ? readV3Slot0(thenR[n]) : readV4Slot0(thenR[n]), L0 = readUint(thenR[n + 1]);
+  const evs = byPoolEarly.get(p.id) || [], m = meta.get(p.id);
+  const rep = s0 && L0 != null ? replayFeeGrowth({ swaps: evs, extras: extrasByPool.get(p.id) || [], meta: m, start: { sqrtPriceX96: s0.sqrtPriceX96, liquidity: L0 }, path: pathIndex(segOf.get(p.id)) }) : null;
+  const neu = feeIdentityPath(rep, z, a), old = feeIdentity(evs, m, z, a);
+  if (!neu) { fgUnread++; continue; }
+  const endGap = rep.end.sqrtPriceX96 !== B(p.s.sqrtPriceX96); // the last swap's price must be the end block's
+  const feeMoved = p.v === 3 ? s0.feeProtocol !== p.s.feeProtocol : s0.protocolFee !== p.s.protocolFee;
+  for (const side of [0, 1]) if (neu[side] != null || old?.[side] != null) fgSides.push({ p, side, old: old?.[side] ?? null, neu: neu[side], sd: rep.sides[side], endGap, feeMoved });
 }
-say(fgRatios.length ? within(fgRatios, 0.98, 1.02) / fgRatios.length >= 0.9 : null, 'fee identity', `replayed swaps vs the pools' fee counters over the same ${DAY_BLOCKS} blocks: within 2% for ${within(fgRatios, 0.98, 1.02)} of ${fgRatios.length} pool sides, within 10% for ${within(fgRatios, 0.9, 1.1)}; median ${median(fgRatios)?.toFixed(4) ?? '—'}; ${fgUnread} pools' counters unread`);
+const in2 = (x) => x != null && x >= 0.98 && x <= 1.02;
+const cause = (x) => (hookedOrDynamic(x.p) ? 'hooked/dynamic-fee' : x.sd.extras ? 'donations/flash' : x.endGap || x.sd.backwards ? 'missing events'
+  : x.feeMoved ? 'fee setting changed' : x.sd.empty ? 'empty-stretch crossings' : x.sd.crossing ? 'crossing swaps' : 'other');
+const oldSides = fgSides.filter((x) => x.old != null), oldMiss = oldSides.filter((x) => !in2(x.old));
+say(true, 'fee identity before', `the old method (each swap's fee ÷ its post-swap liquidity) puts ${oldSides.length - oldMiss.length} of ${oldSides.length} sides within 2%; its misses by cause: ${top(tally(oldMiss.map(cause)), 7)}; the same misses replayed along the price path: ${oldMiss.filter((x) => in2(x.neu)).length} now within 2%`);
+const ver = fgSides.filter((x) => x.neu != null && x.p.verified === true), unver = fgSides.filter((x) => x.neu != null && x.p.verified !== true);
+const hit = ver.filter((x) => in2(x.neu)).length;
+say(ver.length ? hit / ver.length >= 0.9 : null, 'fee identity', `replayed price paths vs the pools' fee counters over the same ${DAY_BLOCKS} blocks: within 2% for ${hit} of ${ver.length} verifiable pool sides (${pct(hit, ver.length)}), within 10% for ${within(ver.map((x) => x.neu), 0.9, 1.1)}; median ${median(ver.map((x) => x.neu))?.toFixed(4) ?? '—'}; unverified (hooks that can return swap deltas, or unknown hooks) ${new Set(unver.map((x) => x.p.id)).size} pools, ${unver.filter((x) => in2(x.neu)).length} of ${unver.length} sides within 2%; ${fgUnread} pools' counters or start state unread`);
+const miss = ver.filter((x) => !in2(x.neu));
+const ex = [...oldMiss.filter((x) => x.p.verified === true && !in2(x.neu)), ...miss.filter((x) => in2(x.old) || x.old == null), ...oldMiss.filter((x) => in2(x.neu))].slice(0, 10);
+const r4 = (x) => (x == null ? '—' : Number.isFinite(x) ? x.toFixed(3) : '∞');
+say(true, 'fee identity misses', `left by cause: ${top(tally(miss.map(cause)), 7)}; examples (pair, side: old → path): ${ex.map((x) => `${label(x.p)} ${x.side ? symOf(x.p.t1) : symOf(x.p.t0)}: ${r4(x.old)} → ${r4(x.neu)} (${x.sd.crossing} of ${x.sd.swaps} swaps cross, ${x.sd.empty} through empty stretches, ${x.sd.extras} flash/donate${x.endGap ? ', end price differs' : ''})`).join('; ') || 'none'}`);
 
 // 4. Step 4 snapshot: volatility, scores and markouts.
 const WETH = C.quotes.find((q) => q.symbol === 'WETH').address;
 const keyOf = (a) => `ethereum:${a === ZERO ? WETH : a}`;
-const hist = await timed('history', () => dailyHistory(getJson, [...new Set(mapped.flatMap((p) => [keyOf(p.t0), keyOf(p.t1)]))]));
-// Each pool's own price at 31 daily blocks (archive state): that price is what range exits and LVR follow.
+// Market history for the volatility cross-check: CoinGecko by contract (hourly points over 30 days),
+// each token at most once a UTC day through a cache file the next pass reuses; DefiLlama's chart for
+// the tokens CoinGecko doesn't answer. Never a flat line for a token nobody answered.
+const histKeys = [...new Set(mapped.flatMap((p) => [keyOf(p.t0), keyOf(p.t1)]))];
+const hcache = makeHistoryCache('out/cache/history.json');
+const cgHist = await timed('history', () => coinGeckoHistory(getJson, histKeys, { key: process.env.COINGECKO_KEY || undefined, cache: hcache }));
+const llHist = cgHist.unread.length ? await timed('history fallback', () => dailyHistory(getJson, cgHist.unread)) : { series: new Map(), unread: [], lastError: null };
+try { hcache.save(); } catch { /* the next pass just fetches again */ }
+const hist = { series: new Map([...cgHist.series, ...llHist.series]), unread: llHist.unread.length ? llHist.unread : cgHist.unread.filter((k) => !llHist.series.has(k)) };
+// Each pool's own price at 31 daily blocks (archive state): that price is what range exits and LVR
+// follow. Each block's own timestamp comes along (Multicall3), so the market is sampled at the same moments.
 const nowSec = Math.floor(Date.now() / 1000);
-const pxCalls = mapped.map((p) => (p.v === 3 ? { target: p.id, data: encodeCall('slot0()') } : v4Slot0Call(C.v4StateView, p.id)));
+const pxCalls = [{ target: MULTICALL3, data: encodeCall('getCurrentBlockTimestamp()') }, ...mapped.map((p) => (p.v === 3 ? { target: p.id, data: encodeCall('slot0()') } : v4Slot0Call(C.v4StateView, p.id)))];
 const pxDays = await timed('daily prices', () => mapLimit(Array.from({ length: 31 }, (_, k) => block - k * DAY_BLOCKS), 3, (b) => amc(pxCalls, '0x' + b.toString(16))));
+const dayTs = pxDays.map((res, k) => { const ts = readUint(res[0]); return ts != null ? Number(ts) : nowSec - k * 86400; });
 mapped.forEach((p, i) => {
   p.dailyPx = [];
   pxDays.forEach((res, k) => {
-    const s0 = p.v === 3 ? readV3Slot0(res[i]) : readV4Slot0(res[i]);
-    if (s0 && s0.sqrtPriceX96 > 0n) { const x = Number(s0.sqrtPriceX96) / 2 ** 96; p.dailyPx.push({ t: nowSec - k * 86400, price: x * x }); }
+    const s0 = p.v === 3 ? readV3Slot0(res[i + 1]) : readV4Slot0(res[i + 1]);
+    if (s0 && s0.sqrtPriceX96 > 0n) { const x = Number(s0.sqrtPriceX96) / 2 ** 96; p.dailyPx.push({ t: dayTs[k], price: x * x }); }
   });
 });
 const gp = await rpc.call('eth_gasPrice', []), ethUsd = tok.get(WETH)?.usd;
@@ -195,7 +235,8 @@ const gasUsd = gp && ethUsd > 0 ? ((parseInt(gp, 16) * RERANGE_GAS) / 1e18) * et
 const byPool = byPoolEarly;
 for (const p of mapped) {
   const a = hist.series.get(keyOf(p.t0)), c = hist.series.get(keyOf(p.t1));
-  const ratio = a && c ? ratioByDay(a, c) : null;
+  // the market's token0-in-token1 at the pool's own sample moments (or by UTC day without them)
+  const ratio = a && c ? (p.dailyPx.length >= 8 ? ratioAt(a, c, p.dailyPx.map((x) => x.t)) : ratioByDay(a, c)) : null;
   p.sigmaChain = dailySigma(p.dailyPx);
   p.sigmaMarket = ratio ? dailySigma(ratio) : null;
   p.sigma = p.sigmaChain ?? p.sigmaMarket;
@@ -207,7 +248,13 @@ for (const p of mapped) {
 }
 const withSigma = mapped.filter((p) => p.sigma != null), both = mapped.filter((p) => p.sigmaChain > 0 && p.sigmaMarket > 0);
 say(withSigma.length ? true : null, 'volatility', `30-day volatility for ${withSigma.length} of ${mapped.length} pools (${mapped.filter((p) => p.sigmaChain != null).length} from the pool's own daily price, ${withSigma.length - mapped.filter((p) => p.sigmaChain != null).length} from market history); median ${fr(median(withSigma.map((p) => p.sigma)))} a day; re-range gas ${gasUsd == null ? '—' : '$' + gasUsd.toFixed(2)}`);
-say(both.length ? within(both.map((p) => p.sigmaChain / p.sigmaMarket), 0.7, 1.3) / both.length >= 0.7 : null, 'volatility check', `pool vs market volatility within 30% for ${within(both.map((p) => p.sigmaChain / p.sigmaMarket), 0.7, 1.3)} of ${both.length}; market histories unread ${hist.unread.length}${hist.lastError ? ` (last error: ${hist.lastError})` : ''}`);
+{
+  const sc = mapped.filter((p) => p.score?.net != null), readM = sc.filter((p) => p.sigmaMarket != null), rr = both.map((p) => p.sigmaChain / p.sigmaMarket);
+  const calm = both.filter((p) => p.sigmaChain < 0.002 && p.sigmaMarket < 0.002);
+  say(sc.length && both.length ? readM.length / sc.length >= 0.9 && within(rr, 0.7, 1.3) / both.length >= 0.7 : null, 'volatility check',
+    `market volatility read for ${readM.length} of ${sc.length} scored pools (${pct(readM.length, sc.length)}); pool vs market within 30% for ${within(rr, 0.7, 1.3)} of ${both.length} (${pct(within(rr, 0.7, 1.3), both.length)}), median ratio ${median(rr)?.toFixed(2) ?? '—'}; calm pairs (both under 0.2% a day) ${calm.length}, within 30% ${within(calm.map((p) => p.sigmaChain / p.sigmaMarket), 0.7, 1.3)}` +
+    `; history: CoinGecko ${cgHist.fetched} fetched + ${cgHist.cached} from today's cache (${cgHist.calls} calls${cgHist.lastError ? `, last error ${cgHist.lastError}` : ''}), DefiLlama fallback ${llHist.series.size} of ${cgHist.unread.length}${llHist.lastError ? ` (last error ${llHist.lastError})` : ''}, unread ${hist.unread.length} of ${histKeys.length} tokens`);
+}
 const scored = mapped.filter((p) => p.score?.net != null);
 const pos = scored.filter((p) => p.score.net > 0), edgy = scored.filter((p) => p.score.edge > 1);
 say(true, 'scores', `at a $${EXAMPLE_TICKET} example ticket over ${HOLD_DAYS}-day ranges: ${scored.length} pools scored; net APR above zero for ${pos.length}, fees above LVR (edge > 1) for ${edgy.length}; median fee APR ${fr(median(scored.map((p) => p.score.feeApr)))}, LVR ${fr(median(scored.map((p) => p.score.lvr)))}, net ${fr(median(scored.map((p) => p.score.net)))}`);
@@ -264,7 +311,7 @@ for (const p of cands) {
   if (p.v === 4 && p.hooks && p.hooks !== ZERO) warnings.push('hooked pool');
   if (r && r.swaps < 10) warnings.push('thin: under 10 swaps a day');
   if (p.offMarket) warnings.push('pool price more than 10% off market');
-  p.gem = gemScore({ stranded: p.hollowAvg, net: p.score?.net ?? null, persistence: p.persistence, flow: p.flow, warnings });
+  p.gem = gemScore({ stranded: p.hollowAvg, net: p.score?.net ?? null, persistence: p.persistence, flow: p.flow, warnings, fails: p.verified === false ? ['unverified: its hook can settle swaps outside the pool'] : [] });
 }
 const gems = cands.filter((p) => p.gem?.total != null && p.id !== BENCH);
 say(pastRead ? true : null, 'persistence', `past maps read ${pastRead} of ${pastTried} (${cands.length} pools × 3 dates through archive nodes); stranded in every snapshot ${cands.filter((p) => p.strandedShare === 1).length}; median share of today's parked value already there 30 days ago ${fr(median(cands.map((p) => p.sticky)))}`);

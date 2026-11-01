@@ -2,7 +2,7 @@
 // chain whose maps, balances, slot0 and swaps all agree with made-up positions.
 import fs from 'node:fs';
 import { selector } from '../../lib/keccak.mjs';
-import { amountsInRange, sqrtAtTick } from '../../lib/v3math.mjs';
+import { amountsInRange, sqrtAtTick, amount0Delta } from '../../lib/v3math.mjs';
 import { SWAP_TOPICS } from '../../lib/swaps.mjs';
 import { ETHEREUM as C, ZERO } from '../../lib/pools.mjs';
 const W = (v) => BigInt.asUintN(256, BigInt(v)).toString(16).padStart(64, '0');
@@ -11,6 +11,7 @@ const T1 = A('1'), T2 = A('2'), UNI = '0x1f9840a85d5af5bf1d1762f925bdaddc4201f98
 const USD = { [T1]: 2, [T2]: 0.5, [UNI]: 7, [WETH]: 2250, [ZERO]: 2250, [USDC]: 1 };
 const DEC = { [T1]: 18, [T2]: 6, [UNI]: 18, [WETH]: 18, [ZERO]: 18, [USDC]: 6 };
 const r600 = (t) => Math.round(t / 600) * 600;
+const SWAP = 10; // token0 per made-up swap, small next to each pool's liquidity
 const mk = (tick, wallAbove, k = 1n) => [{ lo: r600(tick) - 1200, hi: r600(tick) + 1200, L: (10n ** 21n) / k }, { lo: -886800, hi: 886800, L: (10n ** 19n) / k }, { lo: r600(tick) + 6000, hi: r600(tick) + 9000, L: wallAbove / k }];
 const tickOf = (p) => Math.floor(Math.log(p) / Math.log(1.0001));
 const pools = [
@@ -31,19 +32,35 @@ const pools = [
 });
 const list = {
   t: Date.now(), block: 20000000,
-  v3: pools.filter((p) => p.v === 3).map((p) => ({ id: p.id, t0: p.t0, t1: p.t1, fee: p.fee, tvl: p.tvl, aggReserveUsd: p.tvl * 0.98, aggVolumeUsd24h: 12 * 1000 * USD[p.t0] })),
+  v3: pools.filter((p) => p.v === 3).map((p) => ({ id: p.id, t0: p.t0, t1: p.t1, fee: p.fee, tvl: p.tvl, aggReserveUsd: p.tvl * 0.98, aggVolumeUsd24h: 12 * SWAP * USD[p.t0] })),
   v4: pools.filter((p) => p.v === 4).map((p) => ({ id: p.id, t0: p.t0, t1: p.t1, fee: p.fee, tickSpacing: p.ts, hooks: ZERO, liquidity: String(p.L), aggReserveUsd: 2e6, aggVolumeUsd24h: null })),
-  tokens: Object.keys(DEC).map((a) => ({ address: a, decimals: DEC[a], usd: USD[a], quote: [WETH, USDC, ZERO].includes(a) })),
+  tokens: Object.keys(DEC).map((a) => ({ address: a, decimals: DEC[a], symbol: { [T1]: 'ONE', [T2]: 'TWO', [UNI]: 'UNI', [WETH]: 'WETH', [ZERO]: 'ETH', [USDC]: 'USDC' }[a], usd: USD[a], quote: [WETH, USDC, ZERO].includes(a) })),
 };
 console.error('[fake] tvl', pools.map((p) => Math.round(p.tvl)).join(', '));
 fs.mkdirSync('out', { recursive: true });
 fs.writeFileSync('out/pools-ethereum.json', JSON.stringify(list));
-const S = { fg0: selector('feeGrowthGlobal0X128()'), fg1: selector('feeGrowthGlobal1X128()'), fg4: selector('getFeeGrowthGlobals(bytes32)'), s0: selector('slot0()'), liq: selector('liquidity()'), bm3: selector('tickBitmap(int16)'), t3: selector('ticks(int24)'), s4: selector('getSlot0(bytes32)'), l4: selector('getLiquidity(bytes32)'), bm4: selector('getTickBitmap(bytes32,int16)'), t4: selector('getTickLiquidity(bytes32,int24)') };
-const sqrtX96 = (p, tag) => { const k = tag ? Math.round((BLOCK - parseInt(tag, 16)) / 7200) : 0; return BigInt(Math.floor(p.sp * Math.exp(k ? (k % 2 ? 0.01 : -0.01) : 0) * 2 ** 96)); };
+const S = { ts: selector('getCurrentBlockTimestamp()'), fg0: selector('feeGrowthGlobal0X128()'), fg1: selector('feeGrowthGlobal1X128()'), fg4: selector('getFeeGrowthGlobals(bytes32)'), s0: selector('slot0()'), liq: selector('liquidity()'), bm3: selector('tickBitmap(int16)'), t3: selector('ticks(int24)'), s4: selector('getSlot0(bytes32)'), l4: selector('getLiquidity(bytes32)'), bm4: selector('getTickBitmap(bytes32,int16)'), t4: selector('getTickLiquidity(bytes32,int24)') };
+const wobble = (p, k) => BigInt(Math.floor(p.sp * Math.exp(k ? (k % 2 ? 0.01 : -0.01) : 0) * 2 ** 96));
+const sqrtX96 = (p, tag) => { const k = tag ? Math.round((BLOCK - parseInt(tag, 16)) / 7200) : 0; return k === 0 ? p.sim.end : wobble(p, k); };
 const BASE_FG = 10n ** 40n;
-const fgDelta = (p) => { const amt0 = 1000n * 10n ** BigInt(DEC[p.t0]), total = (amt0 * BigInt(p.fee)) / 1000000n, proto = p.v === 3 && p.id === A('a') ? total / 4n : 0n; return 12n * (((total - proto) * (1n << 128n)) / p.L); };
+// The day's swaps as the pool books them: 12 sells of SWAP token0 from the window-start price, each
+// inside one stretch of liquidity; the fee counter grows by (fee − protocol cut) ÷ liquidity per swap.
+for (const p of pools) {
+  let P = wobble(p, 1), fg = 0n;
+  const amt0 = BigInt(SWAP) * 10n ** BigInt(DEC[p.t0]), fee = BigInt(p.fee), steps = [];
+  for (let k = 11; k >= 0; k--) {
+    const lessFee = (amt0 * (1000000n - fee)) / 1000000n, L = p.L;
+    const n1 = L << 96n, den = n1 + lessFee * P, next = (n1 * P + den - 1n) / den; // getNextSqrtPriceFromAmount0RoundingUp
+    const f = amt0 - amount0Delta(next, P, L, true), cut = p.v === 3 && p.id === A('a') ? f / 4n : 0n;
+    fg += ((f - cut) << 128n) / L;
+    steps[k] = next; P = next;
+  }
+  p.sim = { steps, end: P, fg };
+}
+const fgDelta = (p) => p.sim.fg;
 function answer(target, data, tag) {
   const t = target.toLowerCase(), sel = data.slice(0, 10), v4 = [S.s4, S.l4, S.bm4, S.t4, S.fg4].includes(sel);
+  if (t === '0xca11bde05977b3631167028862be2a173976ca11' && sel === S.ts) return W(Math.floor(Date.now() / 1000) - (BLOCK - parseInt(tag, 16)) * 12);
   const p = v4 ? pools.find((x) => x.id === '0x' + data.slice(10, 74)) : pools.find((x) => x.id === t);
   if (!p) return null;
   const arg = () => Number(BigInt.asIntN(256, BigInt('0x' + (v4 ? data.slice(74, 138) : data.slice(10, 74)))));
@@ -78,9 +95,9 @@ function swapsFor(f) {
     for (let k = 0; k < 12; k++) {
       const b = BLOCK - 100 - k * 500;
       if (b < from || b > to) continue;
-      const amt0 = 1000n * 10n ** BigInt(DEC[p.t0]); // 1000 token0 in
-      const amt1 = BigInt(Math.floor(1000 * (USD[p.t0] / USD[p.t1]) * 10 ** DEC[p.t1]));
-      const data = v4 ? W(-amt0) + W(amt1) + W(sqrtX96(p)) + W(p.L) + W(p.tick) + W(p.fee) : W(amt0) + W(-amt1) + W(sqrtX96(p)) + W(p.L) + W(p.tick);
+      const amt0 = BigInt(SWAP) * 10n ** BigInt(DEC[p.t0]); // SWAP token0 in
+      const amt1 = BigInt(Math.floor(SWAP * (USD[p.t0] / USD[p.t1]) * 10 ** DEC[p.t1]));
+      const data = v4 ? W(-amt0) + W(amt1) + W(p.sim.steps[k]) + W(p.L) + W(p.tick) + W(p.fee) : W(amt0) + W(-amt1) + W(p.sim.steps[k]) + W(p.L) + W(p.tick);
       out.push({ address: v4 ? C.v4PoolManager : p.id, topics: v4 ? [SWAP_TOPICS.v4, p.id, '0x' + W(7)] : [SWAP_TOPICS.v3, '0x' + W(7), '0x' + W(8)], data: '0x' + data, blockNumber: '0x' + b.toString(16), logIndex: '0x' + k.toString(16), transactionHash: '0xt' + p.id.slice(2, 8) + k });
     }
   }
@@ -96,6 +113,13 @@ function rpc(q) {
 }
 globalThis.fetch = async (url, init = {}) => {
   const u = String(url);
+  if (u.includes('api.coingecko.com') && u.includes('/market_chart')) { // hourly for 30 days; UNI is left to the DefiLlama fallback
+    const addr = u.split('/contract/')[1].split('/')[0], j = Object.keys(USD).indexOf(addr);
+    if (addr === UNI || j < 0) return { ok: false, status: 404, json: async () => ({ error: 'coin not found' }) };
+    const now = Date.now();
+    const prices = Array.from({ length: 721 }, (_, i) => { const t = now - (720 - i) * 3600e3, d = Math.floor((now - t) / 86400e3); return [t, USD[addr] * Math.exp((d % 2 ? 1 : -1) * 0.01 * (j + 1))]; });
+    return { ok: true, status: 200, json: async () => ({ prices }) };
+  }
   if (u.includes('coins.llama.fi/chart/')) {
     const keys = decodeURIComponent(u.split('/chart/')[1].split('?')[0]).split(',');
     const now = Math.floor(Date.now() / 1000);
