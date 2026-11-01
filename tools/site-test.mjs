@@ -42,7 +42,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,refresh,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -142,7 +142,7 @@ async function testUnlock(browser) {
 const AUDIT = () => {
   const vw = document.documentElement.clientWidth, out = { hscroll: document.documentElement.scrollWidth - vw, offRight: [], small: [], short: [], clipped: [], covered: [] };
   const vis = (el) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
-  const inScroll = (el) => !!el.closest('.tbl-box, .heat-box, .sheet-body');
+  const inScroll = (el) => !!el.closest('.tbl-box, .heat-box, .sheet-body, .tabs');
   const name = (el) => (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '')) + ' "' + (el.textContent || '').trim().slice(0, 24) + '"';
   for (const el of document.querySelectorAll('#app *, header *, footer *, #banner')) {
     if (!vis(el) || (el.closest('svg') && el.tagName.toLowerCase() !== 'svg')) continue; // an svg's own box counts, its insides don't
@@ -272,6 +272,16 @@ async function testStates(browser) {
   ok('planted: …and shows up literally in the table', (await t.page.innerText('#all tbody')).includes('<img src=x'));
   await t.page.fill('#f-q', 'TALI');
   await sleep(300);
+  await t.page.fill('#f-q', '');
+  await sleep(300);
+  if (await t.page.isVisible('#all-more button')) { await t.page.click('#all-more button'); await sleep(200); }
+  for (const wk of ['24h', '7d', '30d']) {
+    await setWin(t.page, wk);
+    const gems = await t.page.evaluate(() => ({ head: +((document.querySelector('#next .sub').textContent.match(/(\d+) gems?/) || [])[1]), pills: document.querySelectorAll('#all tbody .pill.gem').length }));
+    ok(`planted ${wk}: the gem count never includes an unverified pool`, gems.head === gems.pills, `${gems.head} vs ${gems.pills}`);
+  }
+  await t.page.fill('#f-q', 'TALI');
+  await sleep(300);
   for (const wk of ['24h', '7d', '30d']) {
     await setWin(t.page, wk);
     ok(`planted ${wk}: an unverified pool is never the best find`, (await t.page.textContent('#best h2')) !== 'TALI/WETH');
@@ -342,6 +352,75 @@ async function testStates(browser) {
   await t.ctx.close();
 }
 
+// ---------- 4b. best-find tabs: every tab swaps the whole card ----------
+async function testTabs(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const tabs = await p.$$eval('#best [role="tab"]', (ts) => ts.map((x) => ({ id: x.dataset.id, pair: x.querySelector('.tn').textContent, tags: x.innerText })));
+    ok(`tabs ${tag}: ten pools of the window`, tabs.length === 10, tabs.length);
+    ok(`tabs ${tag}: the best find is selected first`, (await p.textContent('#best h2')) === 'VELNA/WETH' && (await p.getAttribute('#best [aria-selected="true"]', 'data-id')) === tabs.find((x) => x.pair === 'VELNA/WETH').id);
+    const cards = new Set(), bad = [];
+    for (const x of tabs) {
+      await p.evaluate((id) => { window.dispatchEvent(new WheelEvent('wheel')); const b = [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.dataset.id === id); b.scrollIntoView({ block: 'center', inline: 'nearest' }); b.click(); }, x.id);
+      await sleep(120);
+      const c = await p.evaluate(() => ({ h: document.querySelector('#best h2').textContent, sel: document.querySelector('#best [aria-selected="true"]').dataset.id, body: document.querySelector('#best .best-body').innerText + document.querySelector('#best .checks').innerText, full: document.querySelector('#best [data-act="detail"]').dataset.id }));
+      if (c.h !== x.pair || c.sel !== x.id || c.full !== x.id) bad.push(x.pair);
+      cards.add(c.body);
+    }
+    ok(`tabs ${tag}: every tab swaps the whole card (${tabs.length} pressed)`, bad.length === 0 && cards.size === tabs.length, bad.join(', ') + ` ${cards.size} cards`);
+    const tali = tabs.find((x) => x.pair === 'TALI/WETH');
+    ok(`tabs ${tag}: an unverified pool sits last, tagged, never a gem`, tali && /UNVERIFIED/.test(tali.tags) && /HOOK/.test(tali.tags) && tabs[tabs.length - 1].pair === 'TALI/WETH');
+    await p.evaluate((id) => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.dataset.id === id).click(), tali.id);
+    await sleep(120);
+    ok(`tabs ${tag}: …its card says so`, /NEVER A GEM/.test(await p.innerText('#best')));
+    const numa = tabs.find((x) => x.pair === 'NUMA/USDC');
+    await p.evaluate((id) => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.dataset.id === id).click(), numa.id);
+    await sleep(120);
+    ok(`tabs ${tag}: checks read "N of 12 ran · M pass" (not run is never a pass)`, /11 of 12 ran · 11 pass/.test(await p.innerText('#best .checks')), (await p.innerText('#best .checks')).slice(0, 40));
+    // keyboard: arrows move along the tabs
+    await p.focus('#best [aria-selected="true"]');
+    const before = await p.getAttribute('#best [aria-selected="true"]', 'data-id');
+    await p.keyboard.press('ArrowRight');
+    await sleep(120);
+    const after = await p.evaluate(() => ({ sel: document.querySelector('#best [aria-selected="true"]').dataset.id, focus: document.activeElement && document.activeElement.dataset.id }));
+    ok(`tabs ${tag}: arrow keys move the selection and the focus`, after.sel !== before && after.focus === after.sel);
+    // remembered per device; reset when the window's top 10 doesn't hold it
+    const kova = tabs.find((x) => x.pair === 'KOVA/WETH');
+    await p.evaluate((id) => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.dataset.id === id).click(), kova.id);
+    await p.reload();
+    await waitApp(p);
+    ok(`tabs ${tag}: the choice is remembered after a reload`, (await p.textContent('#best h2')) === 'KOVA/WETH');
+    await setWin(p, '24h');
+    ok(`tabs ${tag}: a pool outside the new window's top 10 resets to its best find`, (await p.textContent('#best h2')) === 'NUMA/USDC' && (await p.evaluate(() => localStorage.getItem('lps.best'))) === null);
+    ok(`tabs ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4c. the refresh button ----------
+async function testRefresh(browser) {
+  const t = await openUnlocked(browser, 'default', { phone: true }), p = t.page;
+  let n = 0;
+  p.on('request', (r) => { if (/\/(live|history|backtest)\.json\?t=/.test(r.url())) n++; });
+  ok('refresh: a labelled icon button, 44 px', (await p.getAttribute('#refresh', 'aria-label')) === 'Refresh' && (await p.$eval('#refresh', (b) => b.getBoundingClientRect().height)) >= 43.5);
+  await p.route('**/live.json*', async (r) => { await sleep(700); await r.continue(); });
+  await p.click('#refresh');
+  await sleep(150);
+  ok('refresh: spins while loading', (await p.getAttribute('#refresh', 'class')).includes('spin'));
+  await p.click('#refresh', { force: true }).catch(() => {});
+  await p.waitForFunction(() => /Updated \d\d:\d\d/.test(document.querySelector('#refresh-msg').textContent), null, { timeout: 8000 });
+  ok('refresh: re-fetches live, history and backtest at once, double taps ignored', n === 3, n + ' requests');
+  ok('refresh: says "Updated hh:mm" in the owner’s time zone', /^Updated \d\d:\d\d (CET|CEST|GMT\+\d)$/.test(await p.textContent('#refresh-msg')), await p.textContent('#refresh-msg'));
+  await p.unroute('**/live.json*');
+  await p.route('**/live.json*', (r) => r.abort());
+  await sleep(1600);
+  await p.click('#refresh');
+  await p.waitForFunction(() => /Refresh failed/.test(document.querySelector('#refresh-msg').textContent), null, { timeout: 8000 });
+  ok('refresh: a failure keeps the last good data and says so', /^Refresh failed — showing data from \d\d:\d\d$/.test(await p.textContent('#refresh-msg')) && (await p.textContent('#best h2')) === 'VELNA/WETH');
+  ok('refresh: no page errors', t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+}
+
 // ---------- 5. click audit: press every control, check the DOM answered ----------
 const SIG = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '');
 async function controls(page) {
@@ -380,7 +459,8 @@ async function testClicks(browser) {
     const queue = [...first.sigs];
     while (queue.length) {
       const sig = queue.shift();
-      if (done.has(sig) || /^(lock|retry|lock-retry|pass|unlock)$/.test(sig)) continue; // lock is a danger control: tested on its own
+      if (done.has(sig) || /^(lock|retry|lock-retry|pass|unlock)$/.test(sig)) continue;
+      if (sig === 'refresh') await sleep(1600); // the button ignores taps within 1.5 s of the last // lock is a danger control: tested on its own
       done.add(sig);
       if (!(await press(p, sig))) { bad.push(sig + ' not found'); continue; }
       const act = sig.split(':')[0];
@@ -442,7 +522,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, refresh: testRefresh, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;
