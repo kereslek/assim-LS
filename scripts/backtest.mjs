@@ -18,7 +18,7 @@ import { dailySigma } from '../lib/flow.mjs';
 import { scorePool } from '../lib/score.mjs';
 import { runBacktest, swapRateFor, HOLD_DAYS } from '../lib/backtest-run.mjs';
 import { auditBacktest } from '../lib/backtest-audit.mjs';
-import { loadConfig } from '../lib/config.mjs';
+import { loadConfig, DEFAULTS } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
 
 const DAY_BLOCKS = 7200, DAILY = 61, RERANGE_GAS = 630_000, MAX_SWAPS = 400_000, TOP_FALLBACK = 3, TIME_BUDGET_MS = 45 * 60e3;
@@ -233,17 +233,18 @@ for (const p of known) {
     const fees = hdr.slice(0, k + 1).map((h) => h?.baseFee).filter((x) => x != null);
     const gasUsd = fees.length && ethUsd ? (((fees.reduce((a, x) => a + x, 0) / fees.length + tipWei) * RERANGE_GAS) / 1e18) * ethUsd : null;
     // the scanner's forecast at the window start: the same score from the state then and the day before it
-    let forecastNet = null;
     const spS = Number(s0.sqrtPriceX96) / 2 ** 96, Ph = spS * spS * 10 ** (p.d0 - p.d1);
     const u = p.ref === 1 ? [p.refUsd * Ph, p.refUsd] : [p.refUsd, p.refUsd / Ph];
+    let feesPerDayUsd = null;
     if (!partial && got[n === 1 ? 1 : n === 7 ? 1 : 2] != null) {
       const prev = swaps.filter((s) => s.block > S - DAY_BLOCKS && s.block <= S), lp = [0n, 0n];
       let ok = true;
       for (const s of prev) { const f = swapFees(s, s.meta); if (!f) { ok = false; break; } lp[s.in] += f.lp; }
-      const feesPerDayUsd = ok ? usdOfPair(lp, p.d0, p.d1, u[0], u[1]) : null;
-      forecastNet = scorePool({ tick: s0.tick, sqrt: spS, d1: p.d1, usdPer1: u[1], activeL: s0.L, feeTier: (p.v === 3 ? p.fee : s0.lpFee) / 1e6, feesPerDayUsd, sigma, walls: null },
-        { days: holdDays, ticket, gasUsd }).net;
+      feesPerDayUsd = ok ? usdOfPair(lp, p.d0, p.d1, u[0], u[1]) : null;
     }
+    const forecastAt = (tk, hd) => (feesPerDayUsd == null ? null : scorePool({ tick: s0.tick, sqrt: spS, d1: p.d1, usdPer1: u[1], activeL: s0.L, feeTier: (p.v === 3 ? p.fee : s0.lpFee) / 1e6, feesPerDayUsd, sigma, walls: null },
+      { days: hd, ticket: tk, gasUsd }).net);
+    const forecastNet = forecastAt(ticket, holdDays);
     const feeTier = (p.v === 3 ? p.fee : s0.lpFee ?? p.fee) / 1e6;
     const res = runBacktest({ swaps: ws, pool: { d0: p.d0, d1: p.d1, spacing: p.spacing, meta: null, feeTier }, start, end, usd: { ref: p.ref, refUsd: p.refUsd }, sigma, holdDays, ticket, gasUsd, forecastNet, partial });
     if (!res.backtest) { miss(res.reason || 'inputs'); continue; }
@@ -256,7 +257,13 @@ for (const p of known) {
     const b = res.backtest, top = b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0];
     if (top) { best[w] = best[w] || {}; best[w][top.id] = (best[w][top.id] || 0) + 1; }
     if (b.forecastNet != null && b.net != null) forecastGap.push(b.net - b.forecastNet);
-    if (p.id === BENCH) { bench[w] = b; benchPath[w] = pathStats(ws, spS); }
+    if (p.id === BENCH) {
+      // the public log shows the benchmark at the made-up defaults, run again in memory and never written
+      const pub = isPublic ? b : runBacktest({ swaps: ws, pool: { d0: p.d0, d1: p.d1, spacing: p.spacing, meta: null, feeTier }, start, end, usd: { ref: p.ref, refUsd: p.refUsd }, sigma,
+        holdDays: DEFAULTS.holdDays.ethereum, ticket: DEFAULTS.ticket, gasUsd, forecastNet: forecastAt(DEFAULTS.ticket, DEFAULTS.holdDays.ethereum), partial }).backtest;
+      if (pub) bench[w] = pub;
+      benchPath[w] = pathStats(ws, spS);
+    }
   }
 }
 
@@ -285,13 +292,11 @@ say(nAud ? okAud === nAud : null, 'audit', `${okAud} of ${nAud} backtests pass e
 const within = ratios.filter((q) => Math.abs(q - 1) <= 1e-6).length;
 say(ratios.length ? within === ratios.length : null, 'fee check', `engine's pool LP fees vs the scan's replay of the same window: within 0.0001% for ${within} of ${ratios.length} pool sides; median ratio ${median(ratios)?.toFixed(6) ?? '—'}`);
 if (isPublic) say(true, 'leaders', Object.entries(best).map(([w, m]) => `${w}: ${Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ×${v}`).join(', ')}`).join(' · ') || 'none');
-if (isPublic) {
-  say(true, 'forecast', `realised minus forecast net APR at the $${ticket} example ticket: median ${fr(median(forecastGap))} over ${forecastGap.length} full windows`);
-  for (const [w, b] of Object.entries(bench)) {
-    const feeApr = b.feesUsd / ticket * 365 / b.days, lvrApr = b.lvrUsd / ticket * 365 / b.days, costApr = b.costsUsd / ticket * 365 / b.days;
-    say(true, `benchmark ${w}`, `UNI/WETH 0.3% at the $${ticket} example ticket, ±${fr(b.range)} (σ ${fr(b.sigma)} a day, ${b.sigmaFrom}): net ${fr(b.net)} a year (fees ${fr(feeApr)}, loss vs holding ${fr(lvrApr)}, costs ${fr(costApr)}); forecast ${fr(b.forecastNet)}; in range ${fr(b.tir)}, ${b.reranges} re-centres, share of pool fees ${b.share == null ? '—' : (100 * b.share).toFixed(3) + '%'}; ${b.swaps} swaps; best strategy ${b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0]?.id ?? '—'}`);
-  }
-} else say(true, 'benchmark', `UNI/WETH 0.3% backtested for ${Object.keys(bench).join(', ') || 'no window'} (results sealed: the ticket and range are private)`);
+if (isPublic) say(true, 'forecast', `realised minus forecast net APR at the $${ticket} example ticket: median ${fr(median(forecastGap))} over ${forecastGap.length} full windows`);
+for (const [w, b] of Object.entries(bench)) {
+  const tk = DEFAULTS.ticket, feeApr = b.feesUsd / tk * 365 / b.days, lvrApr = b.lvrUsd / tk * 365 / b.days, costApr = b.costsUsd / tk * 365 / b.days;
+  say(true, `benchmark ${w}`, `UNI/WETH 0.3% at the $${tk} example ticket, ±${fr(b.range)} (σ ${fr(b.sigma)} a day, ${b.sigmaFrom}): net ${fr(b.net)} a year (fees ${fr(feeApr)}, loss vs holding ${fr(lvrApr)}, costs ${fr(costApr)}); forecast ${fr(b.forecastNet)}; in range ${fr(b.tir)}, ${b.reranges} re-centres, share of pool fees ${b.share == null ? '—' : (100 * b.share).toFixed(3) + '%'}; ${b.swaps} swaps; best strategy ${b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0]?.id ?? '—'}`);
+}
 for (const [w, q] of Object.entries(benchPath)) say(true, `benchmark path ${w}`, `${q.blocks} blocks with swaps; ${q.spikes} went ≥ 5% away and came back within the block (largest ${fr(q.maxSpike)}); block closes ranged ${fr(q.lo)} to +${fr(q.hi)} from the start`);
 say(how === 'sealed' ? true : null, 'output', how === 'sealed' ? 'out/data/backtest.json sealed with the lock (publishing to the data branch comes with the always-on loop)' : 'out/data/backtest.json not written: no passphrase here, and plaintext never touches the disk');
 finish(nAud && okAud < nAud ? 1 : 0);
