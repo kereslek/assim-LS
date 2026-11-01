@@ -17,7 +17,7 @@ parameters and results log live in their private strategy doc.
 
 - Every Uniswap pool ≥ $300k that DexScreener (137) and GeckoTerminal (61) list on Ethereum is found. v3 TVL is within 15% of theirs for all of them.
 - 227 of 227 liquidity maps are complete. Prices are within 2% of market for 75 of 80 pools ≥ $1M.
-- 187 pools scored, at a $1,000 example ticket. 34 are stranded or one-sided; 4 of them have a gem score of 60 or more.
+- 187 pools scored at the example ticket. 34 are stranded or one-sided; 4 of them have a gem score of 60 or more.
 
 ## Known issues (next fixes, Phase 0 step 5)
 
@@ -27,12 +27,22 @@ parameters and results log live in their private strategy doc.
 2. **v3 creation events:** 228 pools found by lookup are missing from the event list. Blockscout stops after 11 pages at block 16,410,882, and RPCs read the rest. Find which block ranges come back short.
 3. **DefiLlama price history:** the chart API returns HTTP 400. Volatility comes from each pool's own daily price meanwhile.
 
-## Next steps
+## Next steps: Run 1 (started 1 Nov 2026)
 
-- **Step 5:** fix the three issues above; then every cross-check is green on two runs in a row.
-- **Step 6:** encrypted dashboard in layout C. Needs the owner's `LOCK_PASSPHRASE` Actions secret and their yes to publish on `gh-pages`.
-- **Step 7:** always-on loop and watchdog. Needs the owner's yes for a storage branch.
-- **Step 8:** Base.
+The full plan, its run log and the owner's answers are in the private strategy doc, tab "Run plan". In order:
+
+1. Fee check: fix swaps that cross ticks; label hooked and dynamic-fee v4 pools "unverified" (never gems).
+2. v3 creation events: close the gap.
+3. Price history: CoinGecko (Demo key) as the volatility cross-check.
+4. Lock: sealed config, results and logs; leak check; run pruning.
+5. Time windows: every metric at 24 hours, 7 days and 30 days (default).
+6. Two green runs in a row.
+7. Dashboard v0.1 (layout C) on gh-pages, encrypted, device- and click-audited.
+8. Always-on loop, watchdog, storage branch.
+9. Visual backtest: replay, leaderboard, strategy lab.
+10. Base.
+11. Phase 2 design doc (private).
+12. End-of-run audit and report.
 
 ## Owner's yeses (1 Nov 2026)
 
