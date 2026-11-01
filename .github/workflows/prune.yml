@@ -1,0 +1,30 @@
+name: prune
+# Delete finished workflow runs older than 7 days (owner pre-approved: a public repo's run logs are
+# public). Pages through every run first; never deletes a run that is still going. Counts only.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '47 2 * * *'   # daily 02:47 UTC
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: prune
+  cancel-in-progress: false
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Prune tests first (an active run is never deleted)
+        run: node --test test/lock-prune.test.mjs
+      - name: Delete finished runs older than 7 days (counts only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/prune-runs.mjs --days 7

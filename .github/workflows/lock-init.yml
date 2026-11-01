@@ -1,0 +1,47 @@
+name: lock-init
+# Create the lock once from the LOCK_PASSPHRASE secret, then commit lock/lock.json (salt, rounds, a
+# sealed check) and lock/inbox.json (the X25519 public key only) to the branch it was dispatched on.
+# It never overwrites an existing lock (a new salt would orphan every sealed file): if one exists, it
+# prints yes/no for "the passphrase opens it". Never prints the passphrase.
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: lock-init
+  cancel-in-progress: false
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Lock tests first (a broken lock never touches the real secret)
+        run: node --test test/lock*.test.mjs test/config.test.mjs test/store.test.mjs test/inbox*.test.mjs
+      - name: Create the lock, or check the passphrase against the existing one (yes/no)
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: |
+          git pull -q --ff-only origin "$GITHUB_REF_NAME"
+          node scripts/lock-init.mjs
+      - name: Commit the new lock files (only when just created)
+        run: |
+          git add lock/lock.json lock/inbox.json
+          if git diff --cached --quiet; then echo 'new lock files to commit: no'; exit 0; fi
+          echo 'new lock files to commit: yes'
+          printf '%s\n' 'Create the lock: salt, rounds, check and the inbox public key' '' \
+            'Written once by the lock-init workflow from the passphrase secret. Public parts only;' \
+            'an existing lock is never overwritten.' '' \
+            'Co-Authored-By: Claude <noreply@anthropic.com>' \
+            'Claude-Session: https://claude.ai/code/session_01VbmfDGsjysgMQYwqeJybjA' > "$RUNNER_TEMP/msg"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -F "$RUNNER_TEMP/msg"
+          for i in 1 2 3 4; do
+            if git push -q origin "HEAD:$GITHUB_REF_NAME"; then echo 'pushed: yes'; exit 0; fi
+            sleep $((2 ** i))
+            # a lock that appeared meanwhile conflicts here, and this run's lock is dropped
+            git pull -q --rebase origin "$GITHUB_REF_NAME" || { echo 'another lock appeared meanwhile: yes (nothing pushed)'; exit 1; }
+          done
+          echo 'pushed: no'; exit 1

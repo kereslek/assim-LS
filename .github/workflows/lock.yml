@@ -1,0 +1,109 @@
+name: lock
+# The lock rehearsal: the whole lock end to end on a throwaway copy with a dummy passphrase (never the
+# real one), then a yes/no check that the real lock and the sealed config open. Public log: yes/no and
+# counts only.
+on:
+  push:
+    paths:
+      - 'lib/lock.mjs'
+      - 'lib/inbox.mjs'
+      - 'lib/quietlogs.mjs'
+      - 'lib/config.mjs'
+      - 'lib/store.mjs'
+      - 'scripts/lock-init.mjs'
+      - 'scripts/seal-input.mjs'
+      - 'scripts/publish-data.mjs'
+      - 'scripts/leak-check.mjs'
+      - 'scripts/prune-runs.mjs'
+      - 'test/lock*.test.mjs'
+      - 'test/config.test.mjs'
+      - 'test/store.test.mjs'
+      - 'test/inbox*.test.mjs'
+      - 'lock/**'
+      - '.github/workflows/lock.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lock
+  cancel-in-progress: true
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LOCK_PASSPHRASE: rehearsal-dummy-passphrase-not-a-secret
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Lock tests (planted faults, the page-side WebCrypto check, the end-to-end rehearsal)
+        run: node --test test/lock*.test.mjs test/config.test.mjs test/store.test.mjs test/inbox*.test.mjs
+      - name: Rehearsal through the scripts at production rounds (throwaway folder, dummy passphrase)
+        run: |
+          set -euo pipefail
+          W="$GITHUB_WORKSPACE"; R="$RUNNER_TEMP/rehearsal"; rm -rf "$R"; mkdir -p "$R"; cd "$R"
+          git init -q -b code . && git init -q --bare origin.git && git remote add origin "$R/origin.git"
+          echo '-- 1. init (600k rounds), then a second init must leave the lock alone'
+          node "$W/scripts/lock-init.mjs"
+          cp lock/lock.json lock.before
+          node "$W/scripts/lock-init.mjs" > init2.txt
+          grep -q 'lock created now: no' init2.txt
+          cmp -s lock/lock.json lock.before && echo 'second init left the lock alone: yes'
+          echo '-- 2. seal a made-up config through the inbox (no secret needed)'
+          echo '{"ticket":2718,"gemAt":61,"leakSensitive":["made-up-rehearsal-label"]}' | env -u LOCK_PASSPHRASE node "$W/scripts/seal-input.mjs" --out lock/config.sealed.json
+          if grep -q 'rehearsal-label' lock/config.sealed.json; then echo 'plaintext in the sealed config: yes'; exit 1; fi
+          echo '-- 3. a pass opens the config, seals its outputs and its log'
+          printf '%s\n' \
+            "import { installSealedLogs } from '$W/lib/quietlogs.mjs';" \
+            "import { loadConfig } from '$W/lib/config.mjs';" \
+            "import { openStore } from '$W/lib/store.mjs';" \
+            "installSealedLogs();" \
+            "const { config, sealed } = loadConfig();" \
+            "if (!sealed || config.ticket !== 2718 || config.gemAt !== 61) throw new Error('config did not open');" \
+            "const store = openStore(), t = Date.now();" \
+            "for (const f of ['live.json', 'history.json', 'backtest.json']) store.put(f, { v: 1, t, ticket: config.ticket });" \
+            "console.warn('RPC made-up warning');" > pass.mjs
+          node pass.mjs
+          ls out/data | tr '\n' ' '; echo
+          if grep -rq '2718' out/data; then echo 'plaintext in the outputs: yes'; exit 1; fi
+          echo '-- 4. publish, dry run'
+          node "$W/scripts/publish-data.mjs" --dry-run
+          echo '-- 5. a wrong passphrase stops everything'
+          before=$(sha256sum out/data/* lock/lock.json | sha256sum)
+          if LOCK_PASSPHRASE=rehearsal-wrong-passphrase node pass.mjs >/dev/null 2>&1; then echo 'wrong passphrase stopped the pass: no'; exit 1; fi
+          if LOCK_PASSPHRASE=rehearsal-wrong-passphrase node "$W/scripts/publish-data.mjs" --dry-run; then echo 'wrong passphrase stopped the publish: no'; exit 1; fi
+          if LOCK_PASSPHRASE=rehearsal-wrong-passphrase node "$W/scripts/lock-init.mjs"; then echo 'wrong passphrase refused by init: no'; exit 1; fi
+          after=$(sha256sum out/data/* lock/lock.json | sha256sum)
+          [ "$before" = "$after" ] && echo 'wrong passphrase resealed nothing: yes'
+          echo '-- 6. data aimed at the code branch is refused'
+          if node "$W/scripts/publish-data.mjs" --branch code; then echo 'code branch refused: no'; exit 1; fi
+          echo 'rehearsal: pass'
+
+  real:
+    needs: rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: The real lock and sealed config open (yes/no only)
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: |
+          if [ ! -f lock/lock.json ]; then echo 'real lock present: no (dispatch lock-init)'; exit 0; fi
+          echo 'real lock present: yes'
+          node scripts/lock-init.mjs --verify
+          node --input-type=module -e "
+            import { loadConfig } from './lib/config.mjs';
+            let r = null;
+            try { r = loadConfig(); } catch { console.log('sealed config opens and its fields are valid: no'); process.exit(1); }
+            console.log('sealed config present: ' + (r.sealed ? 'yes' : 'no'));
+            if (r.sealed) console.log('sealed config opens and its fields are valid: yes');"
