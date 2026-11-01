@@ -39,3 +39,18 @@ test('LP book (v4 events): positions at the price add up to the pool liquidity; 
   assert.deepEqual([whale.ok, whale.concentrated], [true, true]); // planted: one LP over 60%
   assert.equal(lpBook(null, { tick: 5, activeL: 1n }), null); // unread history: null, never a pass
 });
+
+test('sell test: what arrives must be at least 95% of the quote; a tax or a revert fails; a setup that did not take is unread', async () => {
+  const { sellVerdict, balanceKeys, sellCalls } = await import('../lib/selltest.mjs');
+  const W = (v) => ({ ok: true, data: '0x' + BigInt(v).toString(16).padStart(64, '0') });
+  const amt = 10n ** 18n;
+  assert.equal(sellVerdict([W(amt), W(5), W(1), W(1000), W(1005)], amt).ok, true);
+  assert.equal(sellVerdict([W(amt), W(5), W(1), W(1000), W(905)], amt).ok, false); // planted: a 10% tax on the way out
+  assert.equal(sellVerdict([W(amt), W(5), W(1), { ok: false, data: '0x' }, W(5)], amt).ok, false); // planted: a honeypot's revert
+  assert.equal(sellVerdict([W(7), W(5), W(1), W(1000), W(1005)], amt).ok, null); // balance slot wrong: can't tell, not a pass
+  assert.equal(sellVerdict(null, amt).ok, null);
+  const keys = balanceKeys();
+  assert.equal(keys.length, 33);
+  assert.equal(new Set(keys).size, 33);
+  assert.equal(sellCalls({ tokenIn: '0x' + '1'.repeat(40), tokenOut: '0x' + '2'.repeat(40), fee: 3000, amountIn: amt })[3].data.slice(0, 10), '0x04e45aaf'); // SwapRouter02.exactInputSingle
+});

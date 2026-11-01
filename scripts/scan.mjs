@@ -19,6 +19,7 @@ import { scorePool, recentMoves } from '../lib/score.mjs';
 import { coinGeckoHistory, dailyHistory, makeHistoryCache, ratioAt } from '../lib/history.mjs';
 import { MULTICALL3 } from '../lib/multicall.mjs';
 import { verifiedSources, makeVerifiedCache } from '../lib/etherscan.mjs';
+import { findBalanceKey, sellTest } from '../lib/selltest.mjs';
 import { stickyShare, strandedShare } from '../lib/persistence.mjs';
 import { persistenceScore, flowScore, gemScore } from '../lib/gem.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
@@ -472,6 +473,23 @@ async function writeOutputs() {
     fs.writeFileSync(bookFile, JSON.stringify({ v: 1, to: block, ids: keep, ev: keep.flatMap((id) => (bookEv.get(id) || []).map((m) => [id, m.sender, m.tickLower, m.tickUpper, String(m.liquidityDelta), m.salt])) }));
   } catch { /* read again next pass */ }
   const bookOf = new Map(mapped.filter((p) => p.v === 4).map((p) => [p.id, bookUnread.has(p.id) ? null : lpBook(bookEv.get(p.id) || [], { tick: p.s.tick, activeL: p.L })]));
+  // sell-test, v3: sell about $100 of the non-quote token through the pool in a simulated call (lib/selltest.mjs).
+  // Each token's balance slot is probed once and kept in a cache; a token without one is unread.
+  const slotFile = 'out/cache/balance-slots.json';
+  let slots = {};
+  try { slots = JSON.parse(fs.readFileSync(slotFile, 'utf8')) || {}; } catch { /* probe again */ }
+  const sellOf = new Map(), sellRpc = makeRpc(RPCS, { timeout: 20000, maxRefusals: 1000 }); // its own endpoints: override refusals mustn't drop nodes elsewhere
+  await timed('sell test', () => mapLimit(mapped.filter((p) => p.v === 3), 4, async (p) => {
+    const inIs = quoteAddrs.has(p.t0) && !quoteAddrs.has(p.t1) ? 1 : 0, tokenIn = inIs ? p.t1 : p.t0, tokenOut = inIs ? p.t0 : p.t1;
+    const ti = tok.get(tokenIn);
+    if (!(ti?.usd > 0) || ti.decimals == null) { sellOf.set(p.id, null); return; }
+    try {
+      if (slots[tokenIn] == null) { const k = await findBalanceKey(sellRpc, tokenIn); if (k) slots[tokenIn] = k; }
+      const amountIn = BigInt(Math.floor((100 / ti.usd) * 10 ** Math.min(ti.decimals, 15))) * 10n ** BigInt(Math.max(0, ti.decimals - 15));
+      sellOf.set(p.id, (await sellTest(sellRpc, { tokenIn, tokenOut, fee: p.fee, amountIn, key: slots[tokenIn] ?? null })).ok);
+    } catch { sellOf.set(p.id, null); }
+  }));
+  try { fs.mkdirSync('out/cache', { recursive: true }); fs.writeFileSync(slotFile, JSON.stringify(slots)); } catch { /* probe again next pass */ }
   // every window per pool
   const prev = (() => { try { return store?.get('live.json') ?? null; } catch { return null; } })();
   const firstAt = new Map((prev?.pools || []).map((x) => [x.id, x.gemFirstAt ?? null]));
@@ -510,6 +528,7 @@ async function writeOutputs() {
       { id: 'creation-events', label: 'creation event found', ok: creationCheck({ createdAt: p.createdAt, complete: p.v === 3 ? list.v3EventsComplete === true : false }) },
       { id: 'fees-vs-aggregator', label: 'fees vs aggregator', ok: feesVsAggregator({ feesUsd: p.fees24h != null && p.proto24h != null ? p.fees24h + p.proto24h : null, aggVolumeUsd: p.aggVolumeUsd24h, feeTier: p.v === 4 && p.fee === DYNAMIC_FEE ? null : feeTier }).ok },
       { id: 'contract-verified', label: 'both tokens\' source verified', ok: bothVerified(p) },
+      ...(p.v === 3 ? [{ id: 'sell-test', label: 'a small sell goes through (≥ 95% of the quote)', ok: sellOf.get(p.id) ?? null }] : []),
       // the LP book is read for v4 pools only so far (v3 needs the position manager's history): v3 lists neither
       ...(p.v === 4 ? [
         { id: 'lp-book', label: 'LP book adds up', ok: bookOf.get(p.id)?.ok ?? null },
@@ -566,7 +585,7 @@ async function writeOutputs() {
   fs.mkdirSync('out', { recursive: true });
   fs.writeFileSync('out/shortlist.json', JSON.stringify({ t: passT, ids: short }));
   const tallyCheck = (id) => { const c = out.map((x) => x.checks.find((k) => k.id === id)?.ok); return `${id} ${c.filter((v) => v === true).length} pass / ${c.filter((v) => v === false).length} fail / ${c.filter((v) => v == null).length} not run`; };
-  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank', 'contract-verified', 'lp-book', 'lp-concentration', 'window-vs-replay'].map(tallyCheck).join('; '));
+  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank', 'contract-verified', 'lp-book', 'lp-concentration', 'sell-test', 'window-vs-replay'].map(tallyCheck).join('; '));
   const wvr = mapped.map((p) => p.windowVsReplay).filter((x) => x != null), bm = mapped.find((p) => p.id === BENCH);
   say(wvr.length ? wvr.filter((x) => Math.abs(x - 1) <= 0.1).length / wvr.length >= 0.8 : null, 'window vs replay',
     `24 h LP fees from the fee counters within 10% of the swap replay for ${wvr.filter((x) => Math.abs(x - 1) <= 0.1).length} of ${wvr.length} pools; median ratio ${median(wvr)?.toFixed(3) ?? '—'}`);
