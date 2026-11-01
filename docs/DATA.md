@@ -40,7 +40,15 @@ This file describes shapes only: it holds no data. Every value below lives seale
     sealedLog: { lines: <n>, errors: <n>, categories: { "<word>": <n> } }
   },
   bench: "<pool id>",           // UNI/WETH 0.3% on Ethereum
-  pools: [Pool]                 // every scored pool, sorted by the default window's gem score
+  pools: [Pool],                // every scored pool, sorted by the default window's gem score
+  pairs: { "<addr>-<addr>": Pair }   // every pool of a pair side by side (lib/pairs.mjs); key = the two token
+                                     // addresses, lower first, native ETH read as WETH
+}
+Pair = {
+  label: "<SYM>/<SYM>", pools: ["<pool id>"], best: "<pool id>"|null,   // best = highest net APR in the default
+                                                                       // window among verified pools with data
+  w: { "24h"|"7d"|"30d": { volUsd: <n|null>, lpFeesUsd: <n|null>, unread: <pools without a number>,
+       rows: [{ id, volumeShare: <0..1|null>, feesPer1kDay: <USD a day for $1,000 at the price, after dilution|null>, net: <APR|null> }] } }
 }
 ```
 
@@ -50,7 +58,7 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
 
 ```
 {
-  id: "<v3 pool address or v4 pool id>", chain: "ethereum"|"base", v: 3|4, pair: "<SYM0>/<SYM1>",
+  id: "<v3 pool address or v4 pool id>", chain: "ethereum"|"base", v: 3|4, pair: "<SYM0>/<SYM1>", pairKey: "<key in pairs>",
   t0: { sym, addr, dec, usd: <n|null> }, t1: { sym, addr, dec, usd: <n|null> },
   feeTier: <fraction, e.g. 0.003>, dynamicFee: <bool>, lpKeeps: <fraction LPs keep after the protocol's cut|null>,
   hooks: "<address>"|null,

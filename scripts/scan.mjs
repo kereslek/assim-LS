@@ -30,6 +30,7 @@ import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
 import { parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
 import { allWindows, deltaFg, gemWarnings, isHooked } from '../lib/windows.mjs';
+import { buildPairs } from '../lib/pairs.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 600_000, DAY_BLOCKS = 7200, GROUP = 40;
 const EXAMPLE_TICKET = 1000, HOLD_DAYS = 14, RERANGE_GAS = 630_000, MARKOUT_BLOCKS = 25; // a made-up example size, not anyone's position
@@ -599,6 +600,9 @@ async function writeOutputs() {
 
   const area = (a) => lines.find((l) => l.area === a);
   const chk = (id, label, a) => ({ id, label, ok: area(a)?.ok ?? null, value: null, detail: area(a)?.msg ?? '' });
+  // the pair view: every pool of a pair side by side (native ETH counts as WETH)
+  const { pairs, keyOf } = buildPairs(out, { weth: WETH, windows, defaultWindow });
+  for (const x of out) x.pairKey = keyOf.get(x.id);
   const live = {
     v: 1, t: passT, phase: 0, build: `scan-${(process.env.GITHUB_SHA || 'local').slice(0, 7)}`, next: null,
     ticket: config.ticket, stopLoss: config.stopLoss, windows, defaultWindow, gemAt: config.gemAt,
@@ -610,7 +614,7 @@ async function writeOutputs() {
         chk('volatility-xcheck', 'volatility cross-check', 'volatility check'), chk('fees-vs-aggregator', 'fees vs aggregator', 'fees vs aggregator')],
       sealedLog: logStats ? (({ lines: l, errors, categories }) => ({ lines: l, errors, categories }))(logStats()) : null,
     },
-    bench: BENCH, pools: out,
+    bench: BENCH, pools: out, pairs,
   };
   store.put('live.json', live);
   let histWritten = false;
