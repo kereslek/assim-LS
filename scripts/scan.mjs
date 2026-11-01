@@ -130,10 +130,14 @@ const groups = [];
 // Flash (v3) and Donate (v4) ride along: they move the fee counters without a swap (step 3b).
 for (let i = 0; i < v3ids.length; i += GROUP) groups.push({ address: v3ids.slice(i, i + GROUP), topics: [[SWAP_TOPICS.v3, EXTRA_TOPICS.flash]] });
 for (let i = 0; i < v4ids.length; i += GROUP) groups.push({ address: C.v4PoolManager, topics: [[SWAP_TOPICS.v4, EXTRA_TOPICS.donate], v4ids.slice(i, i + GROUP)] });
-const got = await timed('swaps', () => mapLimit(groups, 2, (f) => logsAdaptive(rpc, f, from, block, { step: 1000 })));
+// Log reads skip rpc.flashbots.net (silently empty or short answers) and confirm any empty answer with a second node.
+const logRpc = makeRpc(RPCS.filter((u) => !u.includes('flashbots')), { timeout: 30000, maxRefusals: 1000 });
+const got = await timed('swaps', () => mapLimit(groups, 2, (f) => logsAdaptive(logRpc, f, from, block, { step: 1000, confirmEmpty: true, retries: 2 })));
 const unreadGroups = got.filter((g) => g == null).length;
 const unreadIds = new Set(groups.flatMap((g, i) => (got[i] == null ? (Array.isArray(g.address) ? g.address : g.topics[1]) : [])));
-const logsRead = got.filter(Boolean).flat();
+const seenLog = new Set();
+let dupLogs = 0;
+const logsRead = got.filter(Boolean).flat().filter((l) => { const k = `${l.transactionHash}:${parseInt(l.logIndex, 16)}`; if (seenLog.has(k)) { dupLogs++; return false; } seenLog.add(k); return true; });
 const swaps = logsRead.map(decodeSwap).filter(Boolean), extras = logsRead.map(decodeExtra).filter(Boolean);
 const byPoolEarly = new Map(), extrasByPool = new Map();
 for (const s of swaps) { if (!byPoolEarly.has(s.pool)) byPoolEarly.set(s.pool, []); byPoolEarly.get(s.pool).push(s); }
@@ -154,7 +158,7 @@ for (const p of mapped) {
   lpUsd += p.fees24h; protoUsd += pr ?? 0; volUsd += p.vol24h ?? 0;
   if (p.aggVolumeUsd24h > 0 && p.vol24h != null) volRatio.push(p.vol24h / p.aggVolumeUsd24h);
 }
-say(unreadGroups ? null : true, 'swaps', `${swaps.length} swaps in the last ${DAY_BLOCKS} blocks across ${sums.size} of ${mapped.length} pools (plus ${extras.filter((e) => e.kind === 'flash').length} v3 flash loans and ${extras.filter((e) => e.kind === 'donate').length} v4 donations); ${unreadGroups} of ${groups.length} log groups unread`);
+say(unreadGroups ? null : true, 'swaps', `${swaps.length} swaps in the last ${DAY_BLOCKS} blocks across ${sums.size} of ${mapped.length} pools (plus ${extras.filter((e) => e.kind === 'flash').length} v3 flash loans and ${extras.filter((e) => e.kind === 'donate').length} v4 donations); ${unreadGroups} of ${groups.length} log groups unread; ${dupLogs} duplicate logs dropped`);
 const protoOn = mapped.filter((p) => (p.v === 3 ? p.s.feeProtocol > 0 : p.s.protocolFee > 0));
 say(true, 'fees', `LP fees ${usd(lpUsd)} and protocol fees ${usd(protoUsd)} on ${usd(volUsd)} of volume in 24 h; protocol fee on in ${protoOn.filter((p) => p.v === 3).length} of ${mapped.filter((p) => p.v === 3).length} v3 and ${protoOn.filter((p) => p.v === 4).length} of ${mapped.filter((p) => p.v === 4).length} v4 pools; ${unpricedPools} pools unpriced`);
 say(volRatio.length ? within(volRatio, 0.75, 1.25) / volRatio.length >= 0.7 : null, 'volume check', `24 h volume vs DexScreener: within ±25% for ${within(volRatio, 0.75, 1.25)} of ${volRatio.length}; median ratio ${median(volRatio)?.toFixed(3) ?? '—'}`);
@@ -203,7 +207,7 @@ say(ver.length ? hit / ver.length >= 0.9 : null, 'fee identity', `replayed price
 const miss = ver.filter((x) => !in2(x.neu));
 const ex = [...oldMiss.filter((x) => x.p.verified === true && !in2(x.neu)), ...miss.filter((x) => in2(x.old) || x.old == null), ...oldMiss.filter((x) => in2(x.neu))].slice(0, 10);
 const r4 = (x) => (x == null ? '—' : Number.isFinite(x) ? x.toFixed(3) : '∞');
-say(true, 'fee identity misses', `left by cause: ${top(tally(miss.map(cause)), 7)}; examples (pair, side: old → path): ${ex.map((x) => `${label(x.p)} ${x.side ? symOf(x.p.t1) : symOf(x.p.t0)}: ${r4(x.old)} → ${r4(x.neu)} (${x.sd.crossing} of ${x.sd.swaps} swaps cross, ${x.sd.empty} through empty stretches, ${x.sd.extras} flash/donate${x.endGap ? ', end price differs' : ''})`).join('; ') || 'none'}`);
+say(true, 'fee identity misses', `left by cause: ${top(tally(miss.map(cause)), 7)}; examples (pair, side: old → path): ${ex.map((x) => `${label(x.p)} ${x.side ? symOf(x.p.t1) : symOf(x.p.t0)}: ${r4(x.old)} → ${r4(x.neu)} (${x.sd.crossing} of ${x.sd.swaps} swaps cross, ${x.sd.empty} through empty stretches, ${x.sd.extras} flash/donate, ${x.sd.still} with no price move, ${x.sd.backwards} against the price${x.endGap ? ', end price differs' : ''})`).join('; ') || 'none'}`);
 
 // 4. Step 4 snapshot: volatility, scores and markouts.
 const WETH = C.quotes.find((q) => q.symbol === 'WETH').address;

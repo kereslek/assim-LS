@@ -129,7 +129,12 @@ say(true, 'v3 tvl', `${big3.length} pools ≥ ${usd(FLOOR)} holding ${usd(big3.r
 // 8. The v3 factory's own record: every pool created since 2021 (Blockscout first; where it stops,
 //    the rest through RPCs), compared with the lookups for our pairs; a recent window re-read through
 //    plain RPC chunks. Address only: the factory emits little besides PoolCreated.
-const logRpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 1000 }); // range refusals must not drop a node
+// Log reads skip rpc.flashbots.net: it answers [] or a short list for ranges it doesn't hold, with no
+// error (a diagnostic run: 243 empty and 16 short chunks of creation events). And an empty answer from
+// any node counts only once a second node confirms it (lib/logs-adaptive.mjs confirmEmpty).
+const LOG_RPCS = RPCS.filter((u) => !u.includes('flashbots'));
+const logRpc = makeRpc(LOG_RPCS, { timeout: 30000, maxRefusals: 1000 }); // range refusals must not drop a node
+const logStats = {};
 const head = await rpc.call('eth_getBlockByNumber', [tag, false]);
 const nowTs = head?.timestamp ? parseInt(head.timestamp, 16) : Math.floor(Date.now() / 1000);
 const timeOf = (b) => nowTs - (block - b) * 12; // post-merge slots are 12 s (missed slots make this slightly late)
@@ -137,13 +142,13 @@ const ev = SKIP.has('events') ? { logs: [], complete: false, calls: 0, reason: '
 const created = ev.logs.map(decodePoolCreated).filter(Boolean);
 let eventsComplete = ev.complete, via = `Blockscout ${ev.calls} pages`;
 if (!ev.complete && !SKIP.has('events')) {
-  const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 9000, maxStep: 9000, minStep: 500, segments: 3, retries: 3, waitMs: 3000 }));
+  const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 9000, maxStep: 9000, minStep: 500, segments: 3, retries: 3, waitMs: 3000, confirmEmpty: true, stats: logStats }));
   if (rest) {
     const seen = new Set(created.map((e) => e.id));
     for (const e of rest.map(decodePoolCreated).filter(Boolean)) if (!seen.has(e.id)) { seen.add(e.id); created.push(e); }
     eventsComplete = true;
   }
-  via += ` stopped (${ev.reason}) at block ${ev.reached}; RPCs ${rest ? 'read the rest' : 'could not read the rest'}`;
+  via += ` stopped (${ev.reason}) at block ${ev.reached}; RPCs ${rest ? 'read the rest' : 'could not read the rest'}; empty answers confirmed by a second node ${logStats.emptyChecked || 0}, of which wrong ${logStats.emptyWrong || 0}`;
 }
 for (const e of created) if (e.time == null) e.time = timeOf(e.block);
 say(eventsComplete ? true : null, 'v3 events', eventsComplete ? `${created.length} pools created since May 2021 (${via})` : `${created.length} creation events read, then INCOMPLETE (${via})`);
@@ -155,7 +160,7 @@ const onlyEvents = ours.filter((e) => !byId3.has(e.id)).length, onlyLookups = v3
 say(eventsComplete ? onlyEvents === 0 && onlyLookups === 0 : null, 'v3 cross-check', `our pairs in the factory's events ${ours.length}, in the lookups ${v3.length}; events only ${onlyEvents}, lookups only ${onlyLookups}`);
 for (const e of ours) { const p = byId3.get(e.id); if (p) { p.createdBlock = e.block; p.createdAt = e.time; } }
 const WIN = 50000;
-const rl = await timed('rpc window', () => rpcLogs(rpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, block - WIN + 1, block, 10000));
+const rl = await timed('rpc window', () => rpcLogs(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, block - WIN + 1, block, 10000));
 const inWin = created.filter((e) => e.block > block - WIN).length;
 say(rl && eventsComplete ? rl.length === inWin : null, 'v3 events vs rpc', rl ? `last ${WIN} blocks: event list ${inWin}, plain RPC chunks ${rl.length}` : 'RPC window unread');
 const fresh = v3.filter((p) => p.createdAt && nowTs - p.createdAt < 30 * 86400);
@@ -172,7 +177,7 @@ const readV4State = async (ps) => {
   const st = await mc(ps.flatMap((p) => [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }]), tag);
   ps.forEach((p, i) => { p.slot0 = readV4Slot0(st[2 * i]) || null; p.liquidity = readUint(st[2 * i + 1]); });
 };
-const initLogs = await timed('v4 events', () => logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.initialize] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, segments: 2, retries: 2 }));
+const initLogs = await timed('v4 events', () => logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.initialize] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, segments: 2, retries: 2, confirmEmpty: true }));
 if (initLogs) {
   const inits = initLogs.map(decodeInitialize).filter(Boolean);
   const mine = inits.filter((e) => inPair(e.t0, e.t1));
@@ -181,7 +186,7 @@ if (initLogs) {
   const ids = ev4.filter((p) => !extremeFee(p.fee)).map((p) => p.id), net = new Map();
   let mlUnread = 0;
   for (let i = 0; i < ids.length; i += 100) {
-    const ml = await logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.modifyLiquidity, ids.slice(i, i + 100)] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, retries: 2 });
+    const ml = await logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.modifyLiquidity, ids.slice(i, i + 100)] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, retries: 2, confirmEmpty: true });
     if (!ml) { mlUnread += ids.slice(i, i + 100).length; continue; }
     for (const m of ml.map(decodeModifyLiquidity).filter(Boolean)) net.set(m.id, (net.get(m.id) || 0n) + m.liquidityDelta);
   }
