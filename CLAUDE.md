@@ -8,6 +8,12 @@
 > - Values marked *(verify)* are standard protocol facts that weren't re-checked against the chain.
 > - The rest ran in production.
 
+## Standing rules from the owner (1 Nov 2026)
+
+- **Usage budget.** Use at most 90% of each 5-hour usage window, then stop and carry on in the next window. This session never uses more than 50% of the weekly token budget.
+  - Claude can't see the exact percentages. The session record shows only a status (allowed / warning). When it shows a warning, pause autonomous work (no self-scheduled wake-ups, no unattended runs) and ask the owner.
+- **Scope.** This project is assim-LS only. Other repositories attached to a session are not part of it: don't read them, change them or bring them up.
+
 **Reference implementation:**
 - Repo: `kereslek/k-telemetry` (public).
 - Code on the dev branch `claude/new-session-argqhq`; the relay and the page deployed on `gh-pages`.
