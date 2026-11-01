@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3AglzmTizm+Q7xDcuJo1E1AQtwquKh5bOiuWkFIEir0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-l5Xf1/yjPYnLDu/nrGmIPvG17nYQKtafbafUuTFdHIg='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -92,6 +92,21 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 .pv .share{display:flex;align-items:center;gap:6px;justify-content:flex-end}
 .pv .share i{display:block;height:6px;border-radius:3px;background:var(--accent)}
 .tag.gold{border-color:var(--gold);color:var(--gold)}
+
+/* daily fee strip, pattern chip, gem-now parts */
+.daily{display:grid;gap:4px}
+.daily svg{display:block;width:100%;height:44px}
+.chip.p-steady{color:var(--accent);border-color:rgba(22,199,132,.55)}
+.chip.p-bursty{color:var(--warn);border-color:rgba(250,178,25,.55)}
+.chip.p-emerging{color:#22D3EE;border-color:rgba(34,211,238,.55)}
+.chip.p-fading,.chip.p-mixed{color:var(--muted);border-color:var(--line3)}
+.oneoff{font-size:12px;color:var(--warn);border-left:3px solid var(--warn);padding:4px 8px;background:rgba(250,178,25,.08)}
+.gemnow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.gemnow>div{display:grid;gap:3px;min-width:0}
+.gemnow .track{height:6px;border-radius:3px;background:var(--grid);overflow:hidden}
+.gemnow .track i{display:block;height:100%;background:var(--gold)}
+.gemnow .v{font:600 12px/1.2 var(--mono);color:var(--fg)}
+@media (max-width:420px){.gemnow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* layout */
 main{max-width:1400px;margin:0 auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
@@ -586,6 +601,10 @@ function tagsHtml(p, wk = S.win) {
   if (p.verified === false) t.push('<span class="tag bad" title="Its swaps can’t be checked against its fee counters: never a gem">UNVERIFIED</span>');
   if (p.verified === null) t.push('<span class="tag amber" title="Fee check not run yet (too few swaps, or unread)">NOT CHECKED</span>');
   if (p.young) t.push('<span class="tag amber">YOUNG POOL</span>');
+  const gt = (W(p, wk) && W(p, wk).gem && Array.isArray(W(p, wk).gem.tags)) ? W(p, wk).gem.tags : [];
+  if (gt.includes('unchecked')) t.push('<span class="tag amber" title="A safety check didn’t run: the gem is capped at 40">UNCHECKED</span>');
+  if (gt.includes('unconfirmed')) t.push('<span class="tag amber">UNCONFIRMED</span>');
+  if (gt.includes('one-off')) t.push('<span class="tag amber">ONE-OFF</span>');
   if (p.hooks) t.push('<span class="tag amber">HOOK</span>');
   if (p.offMarket) t.push('<span class="tag amber">OFF MARKET</span>');
   const w = W(p, wk);
@@ -978,10 +997,15 @@ function checksLine(p) {
   const c = Array.isArray(p.checks) ? p.checks : [];
   if (!c.length) return `<div class="checks"><span><b>Checks not read</b> (${DASH})</span></div>`;
   const ok = c.filter((x) => x.ok === true).length, bad = c.filter((x) => x.ok === false).length, nul = c.length - ok - bad;
+  const SAFE_IDS = ['contract-verified', 'sell-test', 'token-age-rank', 'verified']; // lib/gem.mjs SAFETY_CHECKS
+  const isSafe = (x) => (x.kind ? x.kind === 'safe' : SAFE_IDS.includes(x.id));
+  const safe = c.filter(isSafe), data = c.filter((x) => !isSafe(x));
+  const sOk = safe.filter((x) => x.ok === true).length, sMark = safe.some((x) => x.ok === false) ? '✗' : sOk === safe.length ? '✓' : '?';
+  const dOk = data.filter((x) => x.ok === true).length; // a check that didn't run is never a pass
   const mark = bad ? '<svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M3 3 9 9M9 3 3 9" stroke="#E2664C" stroke-width="1.9"/></svg>'
     : '<svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M2.2 6.3 4.9 9 9.8 3.4" fill="none" stroke="#2FBF4A" stroke-width="1.9"/></svg>';
   const items = c.map((x) => `<span class="${x.ok === true ? 'ck-ok' : x.ok === false ? 'ck-bad' : 'ck-null'}">${x.ok === false ? '✗ ' : x.ok == null ? '? ' : ''}${esc(x.label)}</span>`).join(' · ');
-  return `<div class="checks">${mark}<p><b>${ok + bad} of ${c.length} ran · ${ok} pass</b>${bad ? ` · ${bad} fail${bad === 1 ? 's' : ''}` : ''}${nul ? ` · ${nul} not run` : ''} · ${items}</p></div>`;
+  return `<div class="checks">${mark}<p><b>Safe ${sMark} ${sOk}/${safe.length} · Data ${dOk}/${data.length}</b>${bad ? ` · ${bad} fail${bad === 1 ? 's' : ''}` : ''}${nul ? ` · ${nul} not run` : ''} · ${items}</p></div>`;
 }
 // one plain sentence; a missing figure drops its clause instead of printing "— of the —"
 function sentence(outside, tvl, w, lps, perDay) {
@@ -1053,11 +1077,43 @@ function renderBest() {
     + `<p class="sentence">${sentence(outside, tvl, w, lps, perDay)}</p>`
     + `<div class="chips"><span class="chip">EDGE ${times(w.edge)}</span><span class="chip">σ ${pct(w.sigma, { dp: 1 })}/DAY</span>`
     + `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span><span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`
-    + `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span></div>`
+    + `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>${patternChip(p)}</div>`
+    + dailyStrip(p, w) + gemNow(p, w)
     + `</div><div class="best-r"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">LOG SCALE · ±45%</span></div>${liqChart(p, w)}</div></div>`
     + checksLine(p)
     + `<div class="btns"><button type="button" class="btn" disabled>Paper-trade · Phase 1</button><button type="button" class="btn" disabled>Propose live · Phase 2</button>`
     + `<button type="button" class="btn" data-act="detail" data-id="${esc(p.id)}">Full breakdown</button></div>`;
+}
+
+// Gem now: yield now 45 + thinness 25 + flow 20 + staying power 10. Older data (stranded, persistence) shows dashes.
+const GEM_PARTS = [['Yield now', 'yield', 45], ['Thinness', 'thinness', 25], ['Flow', 'flow', 20], ['Staying power', 'staying', 10]];
+function gemPartsList(g) {
+  if (!g) return [];
+  const isNow = 'thinness' in g || 'staying' in g; // in older data "yield" and "flow" had other scales: don't mix them in
+  return GEM_PARTS.map(([n, k, mx]) => [n, isNow && isNum(g[k]) ? g[k] : null, mx]);
+}
+function gemNow(p, w) {
+  const g = w && w.gem;
+  if (!g || p.verified === false) return '';
+  const parts = gemPartsList(g);
+  return `<div class="dsec"><span class="lbl">Gem now ${isNum(g.total) ? g.total : DASH} · how it adds up</span><div class="gemnow">`
+    + parts.map(([n, v, mx]) => `<div><span class="lbl">${esc(n)}</span><span class="track"><i style="width:${isNum(v) ? Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0) : 0}%"></i></span><span class="v">${isNum(v) ? v : DASH}/${mx}</span></div>`).join('') + '</div></div>';
+}
+const PATTERN_TXT = { steady: 'STEADY', bursty: 'BURSTY', emerging: 'EMERGING', fading: 'FADING', mixed: 'MIXED' };
+const patternChip = (p) => (PATTERN_TXT[p.pattern] ? `<span class="chip p-${p.pattern}" title="How the fees arrived over 30 days">${PATTERN_TXT[p.pattern]}</span>` : '');
+// one-off: the scanner's tag, or most of the biggest day's fees from a single transaction
+const oneOff = (p, w) => !!((w && w.gem && Array.isArray(w.gem.tags) && w.gem.tags.includes('one-off')) || (p.burst && isNum(p.burst.oneTrader) && p.burst.oneTrader >= 0.5));
+function dailyStrip(p, w) {
+  const d = (Array.isArray(p.daily) ? p.daily : []).filter((x) => x && isNum(x.t));
+  const v = d.map((x) => (isNum(x.feesPer1k) && x.feesPer1k >= 0 ? x.feesPer1k : null));
+  const warn = oneOff(p, w) ? `<p class="oneoff">One-off: a single trader paid most of the top day’s fees. Don’t count on it again.</p>` : '';
+  if (!v.some(isNum)) return `<div class="daily"><span class="lbl">Fees per $1,000 · daily</span><p class="sub">${DASH} not read yet</p>${warn}</div>`;
+  const sorted = v.filter(isNum).sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)], mx = sorted[sorted.length - 1] || 1;
+  const iMax = v.indexOf(mx), Wd = 300, Ht = 44, bw = Wd / v.length;
+  let s = `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" role="img" aria-label="Fees per 1,000 dollars, one bar per day; the median is marked">`;
+  v.forEach((x, i) => { if (isNum(x)) s += `<rect x="${(i * bw + 0.4).toFixed(1)}" y="${(Ht - (x / mx) * (Ht - 2)).toFixed(1)}" width="${Math.max(0.6, bw - 0.8).toFixed(1)}" height="${((x / mx) * (Ht - 2)).toFixed(1)}" fill="${i === iMax ? '#E8B84A' : '#16C784'}"/>`; });
+  s += `<line class="median" x1="0" x2="${Wd}" y1="${(Ht - (med / mx) * (Ht - 2)).toFixed(1)}" y2="${(Ht - (med / mx) * (Ht - 2)).toFixed(1)}" stroke="#E6EDF3" stroke-dasharray="3 2" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>`;
+  return `<div class="daily"><div class="pane-title"><span class="lbl">Fees per $1,000 · ${v.length} days</span><span class="lbl">median $${med.toFixed(2)} · max $${mx.toFixed(2)} on ${dm(d[iMax].t)}</span></div>${s}${warn}</div>`;
 }
 
 // ---------- next best ----------
@@ -1582,13 +1638,13 @@ function renderDetail() {
     ['Fee APR', (x) => pct(x.feeApr)], ['LVR', (x) => pct(x.lvr)], ['Re-centre swaps', (x) => pct(x.swapCost)], ['Gas', (x) => pct(x.gas)],
     ['Net APR', (x) => pct(x.net)], ['Edge', (x) => times(x.edge)], ['Aggregator APR', (x) => pct(x.aggApr)],
     ['Parked (avg)', (x) => pct(x.parkedAvg)], ['Stranded share', (x) => pct(x.strandedShare)], ['Markout ÷ fee', (x) => (isNum(x.markout) ? x.markout.toFixed(2) : DASH)],
-    ['Gem score', (x) => (p.verified === false ? 'never (unverified)' : x.gem && isNum(x.gem.total) ? String(x.gem.total) : DASH)],
+    ['Gem now', (x) => (p.verified === false ? 'never (unverified)' : x.gem && isNum(x.gem.total) ? String(x.gem.total) : DASH)],
   ];
   const wins = (L.windows || WINS).filter((x) => WINS.includes(x));
   const wt = `<div class="tbl-box" style="margin:0"><table class="wtbl"><thead><tr><th><span class="lbl" style="display:block;padding:0">Window</span></th>${wins.map((x) => `<th class="${x === wk ? 'cur' : ''}"><span class="lbl">${WIN_LABEL[x]}</span></th>`).join('')}</tr></thead><tbody>`
     + rowsDef.map(([name, f]) => `<tr><td>${esc(name)}</td>${wins.map((x) => { const ww = W(p, x); return `<td class="${x === wk ? 'cur' : ''}${name === 'Net APR' && ww && ww.net < 0 ? ' neg' : ''}">${ww ? f(ww) : DASH}</td>`; }).join('')}</tr>`).join('') + '</tbody></table></div>';
   const gem = w && w.gem;
-  const parts = gem && p.verified !== false ? [['Stranded', gem.stranded, 25], ['Yield', gem.yield, 35], ['Persistence', gem.persistence, 25], ['Flow', gem.flow, 15]]
+  const parts = gem && p.verified !== false ? gemPartsList(gem)
     .map(([n2, v, mx]) => `<span>${n2}</span><span class="track"><i style="width:${isNum(v) ? Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0) : 0}%"></i></span><span class="mono">${isNum(v) ? v : DASH}/${mx}</span>`).join('') : '';
   const hist = S.hist && S.hist.pools && S.hist.pools[p.id];
   const s2 = p.shape || {};
@@ -1608,7 +1664,8 @@ function renderDetail() {
     + `<p class="sentence" style="margin-top:8px">${w ? `${WIN_WORD[wk]} net APR <b class="${w.net < 0 ? 'neg' : ''}">${pct(w.net)}</b> at ${usdFull(L.ticket)} · fees ${pct(w.feeApr)} · LVR ${pct(w.lvr)}.` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + (w ? `<div class="dsec"><span class="lbl">Breakdown · ${WIN_LABEL[wk]}</span>${breakdown(w)}</div>` : '')
     + `<div class="dsec"><span class="lbl">Every window</span>${wt}</div>`
-    + (parts ? `<div class="dsec"><span class="lbl">Gem score parts · ${WIN_LABEL[wk]}</span><div class="parts">${parts}</div></div>` : '')
+    + `<div class="dsec">${dailyStrip(p, w)}</div>`
+    + (parts ? `<div class="dsec"><span class="lbl">Gem now parts · ${WIN_LABEL[wk]}</span><div class="parts">${parts}</div></div>` : '')
     + (gem && ((gem.warnings || []).length || (gem.missing || []).length) ? `<div class="dsec"><span class="lbl">Warnings and missing inputs</span><ul class="plain">${(gem.warnings || []).map((x) => `<li>${esc(x)}</li>`).join('')}${(gem.missing || []).map((x) => `<li>${esc(x)} not read</li>`).join('')}</ul></div>` : '')
     + (w && Array.isArray(w.lenses) && w.lenses.length ? `<div class="dsec"><span class="lbl">Lenses</span><div class="tags">${w.lenses.map((l) => `<span class="tag">${esc(LENS_NAME[l] || l)}</span>`).join('')}</div></div>` : '')
     + `<div class="minis">${miniLine(w && w.spark && w.spark.px, `Price · ${WIN_LABEL[wk]} · log`, true)}${miniBars(w && w.spark && w.spark.fees, `LP fees · ${WIN_LABEL[wk]}`)}`

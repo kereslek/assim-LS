@@ -21,6 +21,7 @@ test('live.json has every field of the contract', () => {
   keys(live, ['v', 't', 'phase', 'build', 'next', 'ticket', 'stopLoss', 'windows', 'defaultWindow', 'gemAt', 'chains', 'health', 'bench', 'pools'], 'live');
   assert.equal(live.v, 1);
   assert.deepEqual(live.windows, W);
+  assert.equal(live.defaultWindow, '24h');
   assert.equal(live.fixture, true, 'fixtures carry fixture: true (the page shows the MOCKUP ribbon)');
   for (const c of live.chains) keys(c, ['id', 'pools', 'unread', 'block', 'gasUsd'], 'chain');
   keys(live.health, ['loop', 'checks', 'sealedLog'], 'health');
@@ -45,7 +46,7 @@ test('every pool and window follows the contract and adds up', () => {
       windows++;
       keys(w, ['days', 'partial', 'volUsd', 'lpFeesUsd', 'protocolFeesUsd', 'swaps', 'traders', 'sigma', 'range', 'rerangeDays', 'inRangeUsd',
         'feeApr', 'lvr', 'swapCost', 'gas', 'net', 'edge', 'aggApr', 'parkedAvg', 'strandedShare', 'markout', 'gem', 'lenses', 'spark'], `${p.pair} ${wk}`);
-      keys(w.gem, ['total', 'stranded', 'yield', 'persistence', 'flow', 'warnings', 'missing'], 'gem');
+      keys(w.gem, ['total', 'yield', 'thinness', 'flow', 'staying', 'warnings', 'missing', 'tags'], 'gem');
       for (const k of ['feeApr', 'lvr', 'swapCost', 'gas', 'net', 'edge', 'aggApr', 'sigma', 'range', 'inRangeUsd']) assert.ok(numOrNull(w[k]), `${k} is a number or null`);
       if ([w.feeApr, w.lvr, w.swapCost, w.gas, w.net].every(isNum)) assert.ok(close(w.feeApr - w.lvr - w.swapCost - w.gas, w.net), 'net = fees - LVR - swaps - gas');
       if (isNum(w.feeApr) && isNum(w.lvr)) assert.ok(close(w.feeApr / w.lvr, w.edge, 2e-3), 'edge = feeApr / lvr');
@@ -59,6 +60,13 @@ test('every pool and window follows the contract and adds up', () => {
 test('the cases the page must handle are all present', () => {
   const pools = live.pools;
   assert.ok(pools.some((p) => p.young), 'a young pool');
+  const pat = (sym) => pools.find((p) => p.t0.sym === sym && p.pair.endsWith('/WETH') || p.t0.sym === sym && sym !== 'VELNA');
+  assert.equal(pat('VELNA').pattern, 'steady');
+  assert.equal(pat('KOVA').pattern, 'bursty');
+  assert.equal(pat('NUMA').pattern, 'emerging');
+  assert.ok(pat('BOJA').burst.oneTrader >= 0.5 && pat('BOJA').w['30d'].gem.tags.includes('one-off'), 'a one-off pool');
+  for (const p of pools) for (const d of p.daily) assert.ok(isNum(d.t) && d.feesPer1k >= 0);
+  assert.ok(['contract-verified', 'sell-test', 'token-age-rank', 'verified'].every((id) => pools[0].checks.some((c) => c.id === id)), 'the four safety checks');
   const velna = pools.filter((p) => p.t0.sym === 'VELNA' && ['WETH', 'ETH'].includes(p.t1.sym));
   const pr = live.pairs[velna[0].pairKey];
   assert.ok(pr && pr.pools.length === velna.length && velna.every((p) => p.pairKey === velna[0].pairKey), 'one pair key for WETH and native ETH');

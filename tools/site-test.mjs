@@ -42,7 +42,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,pairs,refresh,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,refresh,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -98,6 +98,8 @@ async function openUnlocked(browser, c = 'default', o = {}) {
   await t.page.goto(url(c, o.q || ''));
   await unlockWith(t.page, FIXTURE_PASSPHRASE);
   await waitApp(t.page);
+  const wk = o.win === undefined ? '30d' : o.win; // most checks read the 30-day view; null keeps the page's own default
+  if (wk && (await t.page.getAttribute(`#winseg [data-w="${wk}"]`, 'aria-pressed')) !== 'true') await setWin(t.page, wk);
   return t;
 }
 const bodyText = (page) => page.evaluate(() => document.body.innerText);
@@ -121,7 +123,7 @@ async function testUnlock(browser) {
   await page.fill('#pass', FIXTURE_PASSPHRASE);
   await page.click('#unlock-btn');
   await waitApp(page);
-  ok('unlock: the right passphrase opens the data', (await page.textContent('#best h2')) === 'VELNA/WETH');
+  ok('unlock: the right passphrase opens the data', (await page.textContent('#best h2')) === 'NUMA/USDC');
   ok('unlock: fixture data carries the MOCKUP ribbon', await page.isVisible('#ribbon'));
   ok('unlock: footer shows the BUILD constant', /build v\d/.test(await page.textContent('#foot-l')));
   ok('unlock: opens at the top', (await page.evaluate(() => scrollY)) === 0);
@@ -226,9 +228,9 @@ async function testLayout(browser) {
 const TILES = ['#scanner', '#bench', '#best', '#next', '#all tbody', '#bt-lead', '#bt-lab', '#ns-body'];
 async function testWindows(browser) {
   for (const phone of [true, false]) {
-    const t = await openUnlocked(browser, 'default', { phone, width: 1440 });
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, win: null });
     const tag = phone ? 'phone' : 'laptop';
-    ok(`windows ${tag}: 30D is the default`, (await t.page.getAttribute('#winseg [data-w="30d"]', 'aria-pressed')) === 'true');
+    ok(`windows ${tag}: 24H is the default (the data's own)`, (await t.page.getAttribute('#winseg [data-w="24h"]', 'aria-pressed')) === 'true');
     const seen = {};
     for (const wk of ['24h', '7d', '30d']) {
       await setWin(t.page, wk);
@@ -376,7 +378,7 @@ async function testTabs(browser) {
     const numa = tabs.find((x) => x.pair === 'NUMA/USDC');
     await p.evaluate((id) => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.dataset.id === id).click(), numa.id);
     await sleep(120);
-    ok(`tabs ${tag}: checks read "N of 12 ran · M pass" (not run is never a pass)`, /11 of 12 ran · 11 pass/.test(await p.innerText('#best .checks')), (await p.innerText('#best .checks')).slice(0, 40));
+    ok(`tabs ${tag}: checks read "Safe ? 3/4 · Data 8/8" (not run is never a pass)`, /Safe \? 3\/4 · Data 8\/8 · 1 not run/.test(await p.innerText('#best .checks')), (await p.innerText('#best .checks')).slice(0, 40));
     // keyboard: arrows move along the tabs
     await p.focus('#best [aria-selected="true"]');
     const before = await p.getAttribute('#best [aria-selected="true"]', 'data-id');
@@ -393,6 +395,31 @@ async function testTabs(browser) {
     await setWin(p, '24h');
     ok(`tabs ${tag}: a pool outside the new window's top 10 resets to its best find`, (await p.textContent('#best h2')) === 'NUMA/USDC' && (await p.evaluate(() => localStorage.getItem('lps.best'))) === null);
     ok(`tabs ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4a. daily fees, pattern, one-off, gem-now parts ----------
+async function testDaily(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const pick = async (pair) => { await p.evaluate((pair) => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.querySelector('.tn').textContent === pair).click(), pair); await sleep(120); };
+    const read = () => p.evaluate(() => ({ chip: (document.querySelector('#best .chips [class*="p-"]') || {}).textContent, bars: document.querySelectorAll('#best .daily svg rect').length,
+      median: !!document.querySelector('#best .daily line.median'), lab: document.querySelector('#best .daily .pane-title').innerText, oneoff: !!document.querySelector('#best .oneoff'),
+      gem: (document.querySelector('#best .gemnow') || {}).innerText || '', checks: document.querySelector('#best .checks').innerText, tags: document.querySelector('#best .tags').innerText }));
+    let a = await read();
+    ok(`daily ${tag}: a 30-day strip of fees per $1,000, median marked, max labelled`, a.bars === 30 && a.median && /median \$\d+\.\d\d · max \$\d+\.\d\d on \d+ \w+/i.test(a.lab), `${a.bars} ${a.median} ${a.lab}`);
+    ok(`daily ${tag}: a steady pool says STEADY`, a.chip === 'STEADY' && !a.oneoff);
+    ok(`daily ${tag}: gem now parts carry the new names`, ['Yield now', 'Thinness', 'Flow', 'Staying power'].every((n) => a.gem.toLowerCase().includes(n.toLowerCase())) && /\/45/.test(a.gem) && /\/10/.test(a.gem));
+    ok(`daily ${tag}: checks read "Safe ✓ 4/4 · Data 8/8"`, /Safe ✓ 4\/4 · Data 8\/8/.test(a.checks), a.checks.slice(0, 30));
+    await pick('KOVA/WETH'); a = await read();
+    ok(`daily ${tag}: a one-day spike says BURSTY`, a.chip === 'BURSTY');
+    await pick('NUMA/USDC'); a = await read();
+    ok(`daily ${tag}: a rising pool says EMERGING`, a.chip === 'EMERGING');
+    await pick('BOJA/USDC'); a = await read();
+    ok(`daily ${tag}: a one-trader day carries a one-off warning and tag`, a.oneoff && /ONE-OFF/.test(a.tags));
+    ok(`daily ${tag}: no NaN`, noJunk(await p.innerText('#best')));
+    ok(`daily ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
 }
@@ -569,7 +596,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, pairs: testPairs, refresh: testRefresh, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, refresh: testRefresh, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;

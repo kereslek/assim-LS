@@ -28,6 +28,9 @@ const WINDOWS = ['24h', '7d', '30d'];
 const SPAN = { '24h': 1, '7d': 7, '30d': 30 };
 const TICKET = 1000; // the owner scores every pool at $1,000
 const GEM_AT = 60;
+const DEFAULT_WINDOW = '24h'; // the owner's default view
+// the 30-day daily story of four heroes; every other pool gets a quiet random one
+const PATTERN = { VELNA: 'steady', KOVA: 'bursty', NUMA: 'emerging', BOJA: 'one-off' };
 const CHAIN_GAS = { ethereum: 4.1, base: 0.08 };
 
 // ---------- seeded randomness ----------
@@ -342,7 +345,9 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
       : p._spec.firstGemAgoH != null && any ? Math.round(now - p._spec.firstGemAgoH * H)
       : g != null && g >= GEM_AT ? Math.round(now - between(r, 2, 12) * D) : null;
   }
-  const byGem = (a, b) => (b.w['30d']?.gem?.total ?? -1) - (a.w['30d']?.gem?.total ?? -1);
+  const r2 = rng(seed + 99);
+  for (const p of pools) addDaily(r2, p, now);
+  const byGem = (a, b) => (b.w[DEFAULT_WINDOW]?.gem?.total ?? -1) - (a.w[DEFAULT_WINDOW]?.gem?.total ?? -1);
   pools.sort(byGem);
   const bench = pools.find((p) => p._spec.bench);
   // pairs, as lib/pairs.mjs publishes them: key = the two token addresses, lower first, native ETH read as WETH
@@ -368,7 +373,7 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
         }),
       };
     }
-    const cand = pr.w['30d'].rows.filter((r) => isNum(r.net) && ps.find((p) => p.id === r.id).verified !== false).sort((a, b) => b.net - a.net);
+    const cand = pr.w[DEFAULT_WINDOW].rows.filter((r) => isNum(r.net) && ps.find((p) => p.id === r.id).verified !== false).sort((a, b) => b.net - a.net);
     pr.best = cand.length ? cand[0].id : null;
   }
 
@@ -388,7 +393,7 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
   ];
   const live = {
     v: 1, t: now, phase: 0, build: 'scan-fixture', next: now + 6 * 60e3, ticket: TICKET, stopLoss: 0.08,
-    windows: [...WINDOWS], defaultWindow: '30d', gemAt: GEM_AT, fixture: true, chains,
+    windows: [...WINDOWS], defaultWindow: DEFAULT_WINDOW, gemAt: GEM_AT, fixture: true, chains,
     health: {
       loop: { passes24h: 226, ok24h: 223, lastGapMin: 7, watchdogLast: now - 41 * 60e3 },
       checks: checkDefs.map(([id, label, value, detail]) => ({ id, label, ok: value == null ? null : value >= 0.9, value, detail })),
@@ -404,12 +409,44 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
   return { live, history, backtest };
 }
 
+// 30 days of fees per $1,000 and net, plus the shape of the fee stream (pattern, burst) and the gem's tags.
+// Parts are renamed to "Gem now" (yield now 45, thinness 25, flow 20, staying power 10); totals stay as scored.
+function addDaily(r, p, now) {
+  const kind = PATTERN[p.t0.sym] && p.pair.endsWith(PATTERN[p.t0.sym] === 'steady' ? '/WETH' : '') ? PATTERN[p.t0.sym] : r() < 0.15 ? 'fading' : r() < 0.2 ? 'bursty' : 'steady';
+  const w = p.w['30d'] || p.w['7d'] || p.w['24h'];
+  const base = w && isNum(w.lpFeesUsd) && isNum(w.inRangeUsd) && w.days > 0 ? ((w.lpFeesUsd / w.days) * 1000) / (w.inRangeUsd + 1000) : null;
+  const days = Math.min(30, Math.floor(p.createdAt ? (now - p.createdAt) / D : 30));
+  const spike = Math.floor(between(r, 6, 26));
+  p.daily = base == null ? [] : Array.from({ length: Math.max(0, days) }, (_, i) => {
+    const x = i / 29;
+    let m = kind === 'emerging' ? 0.25 + 1.6 * x * x : kind === 'fading' ? 1.6 - 1.3 * x : 1;
+    if ((kind === 'bursty' || kind === 'one-off') && i === spike) m = kind === 'one-off' ? 14 : 8;
+    else if (kind === 'bursty' || kind === 'one-off') m = 0.5;
+    const f = Math.max(0, base * m * between(r, 0.75, 1.25));
+    return { t: Math.floor(now / D) * D - (days - 1 - i) * D, feesPer1k: sig(f, 4), net: w && isNum(w.net) ? sig(w.net * m * between(r, 0.8, 1.2), 4) : null };
+  });
+  const fees = p.daily.map((d) => d.feesPer1k).sort((a, b) => a - b);
+  const median = fees.length ? fees[Math.floor(fees.length / 2)] : null, max = fees.length ? fees[fees.length - 1] : null;
+  p.pattern = !fees.length ? null : kind === 'one-off' ? 'bursty' : kind;
+  p.burst = !fees.length ? null : { maxDay: max, medianDay: median, burstDays: p.daily.filter((d) => d.feesPer1k > 3 * median).length, oneTrader: sig(kind === 'one-off' ? 0.92 : between(r, 0.05, 0.3), 3) };
+  for (const wk of WINDOWS) {
+    const g = p.w[wk] && p.w[wk].gem;
+    if (!g) continue;
+    const tags = [];
+    if (p.verified === null) tags.push('unchecked');
+    if (p.young) tags.push('unconfirmed');
+    if (kind === 'one-off') tags.push('one-off');
+    const sc = (v, from, to) => (isNum(v) ? Math.round((v / from) * to) : null);
+    p.w[wk].gem = { total: g.total, yield: sc(g.yield, 35, 45), thinness: g.stranded, flow: sc(g.flow, 15, 20), staying: sc(g.persistence, 25, 10), warnings: g.warnings, missing: g.missing, tags };
+  }
+}
+
 function makeChecks(r, spec, pool) {
   const age = Math.round(spec.pairAgeDays);
   const list = [
-    ['code', 'code verified', true],
-    ['sell', 'sell test', true],
-    ['age', `${age}-day token`, age >= 30],
+    ['contract-verified', 'code verified', true],
+    ['sell-test', 'sell test', true],
+    ['token-age-rank', `${age}-day token`, age >= 30],
     ['market', pool.offMarket ? 'off market' : 'on market', !pool.offMarket],
     ['fee-days', 'fees on 7/7 days', true],
     ['lp-keeps', pool.lpKeeps == null ? 'LP cut not read' : `LPs keep ${Math.round(pool.lpKeeps * 100)}%`, pool.lpKeeps == null ? null : true],
@@ -418,7 +455,7 @@ function makeChecks(r, spec, pool) {
     ['trend', spec.bigmove ? 'big move' : 'calm trend', !spec.bigmove],
     ['gas', 'gas OK', true],
     ['hook', pool.hooks ? 'unreviewed hook' : 'no hook', !pool.hooks],
-    ['fee-check', pool.verified === true ? 'fee check passes' : pool.verified === false ? 'fee check impossible' : 'fee check not run', pool.verified],
+    ['verified', pool.verified === true ? 'fee check passes' : pool.verified === false ? 'fee check impossible' : 'fee check not run', pool.verified],
   ];
   return list.map(([id, label, ok]) => ({ id, label, ok }));
 }
