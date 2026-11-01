@@ -21,7 +21,7 @@ import { MULTICALL3 } from '../lib/multicall.mjs';
 import { stickyShare, strandedShare } from '../lib/persistence.mjs';
 import { persistenceScore, flowScore, gemScore } from '../lib/gem.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
-import { feeIdentity, replayFeeGrowth, feeIdentityPath, pathIndex, priceRatio } from '../lib/checks.mjs';
+import { feeIdentity, replayFeeGrowth, feeIdentityPath, pathIndex, priceRatio, creationCheck, feesVsAggregator, tokenAgeRank } from '../lib/checks.mjs';
 import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { openLock } from '../lib/lock.mjs';
 import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
@@ -184,6 +184,7 @@ for (const p of mapped) {
   p.fees24h = r.unpriced ? null : usdOfPair(r.lp, d0, d1, u0, u1);
   p.vol24h = usdOfPair(r.volume, d0, d1, u0, u1);
   const pr = usdOfPair(r.protocol, d0, d1, u0, u1);
+  p.proto24h = pr;
   if (p.fees24h == null) { unpricedPools++; continue; }
   lpUsd += p.fees24h; protoUsd += pr ?? 0; volUsd += p.vol24h ?? 0;
   if (p.aggVolumeUsd24h > 0 && p.vol24h != null) volRatio.push(p.vol24h / p.aggVolumeUsd24h);
@@ -461,9 +462,9 @@ async function writeOutputs() {
       { id: 'volatility-xcheck', label: 'pool vs market volatility', ok: p.sigmaChain > 0 && p.sigmaMarket > 0 ? within(p.sigmaChain / p.sigmaMarket, 0.7, 1.3) : null },
       { id: 'swaps-read', label: 'a day of swaps read', ok: unreadIds.has(p.id) ? null : true },
       { id: 'markouts-read', label: 'markouts read', ok: p.markout != null ? true : null },
-      { id: 'lp-book', label: 'LP book adds up', ok: null },
-      { id: 'creation-events', label: 'creation event found', ok: null },
-      { id: 'fees-vs-aggregator', label: 'fees vs aggregator', ok: null },
+      { id: 'creation-events', label: 'creation event found', ok: creationCheck({ createdAt: p.createdAt, complete: p.v === 3 ? list.v3EventsComplete === true : false }) },
+      { id: 'fees-vs-aggregator', label: 'fees vs aggregator', ok: feesVsAggregator({ feesUsd: p.fees24h != null && p.proto24h != null ? p.fees24h + p.proto24h : null, aggVolumeUsd: p.aggVolumeUsd24h, feeTier: p.v === 4 && p.fee === DYNAMIC_FEE ? null : feeTier }).ok },
+      { id: 'token-age-rank', label: `tokens ranked and trading ${config.minPairAgeDays}+ days`, ok: tokenAgeRank([tok.get(p.t0), tok.get(p.t1)].map((t) => t && { quote: !!t.quote, rank: t.rank ?? null, firstPoolAt: t.firstPoolAt ?? null }), { now: passT / 1000, minDays: config.minPairAgeDays }) },
     ];
     const ran = checks.filter((c) => c.ok != null).length, failed = checks.filter((c) => c.ok === false).map((c) => c.label);
     const cur = { ...p.row, aboveShare: p.aboveShare ?? null, segments: seg || undefined };
@@ -485,7 +486,8 @@ async function writeOutputs() {
       t0: { sym: symOf(p.t0), addr: p.t0, dec: t0.decimals ?? null, usd: t0.usd ?? null }, t1: { sym: symOf(p.t1), addr: p.t1, dec: t1.decimals ?? null, usd: t1.usd ?? null },
       feeTier, dynamicFee: p.v === 4 && p.fee === DYNAMIC_FEE, lpKeeps: keeps ? (keeps[0] + keeps[1]) / 2 : null,
       hooks: p.v === 4 ? p.hooks ?? null : null, verified: p.verified ?? null,
-      firstSeen: Math.min(passT, series?.d[0]?.t ?? passT, series?.h[0]?.t ?? passT), createdAt: null, pairAgeDays: null, young: null,
+      firstSeen: Math.min(passT, series?.d[0]?.t ?? passT, series?.h[0]?.t ?? passT),
+      createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null, pairAgeDays: isNum(p.createdAt) ? rnd((passT / 1000 - p.createdAt) / 86400, 2) : null, young: isNum(p.createdAt) ? passT / 1000 - p.createdAt < 30 * 86400 : null,
       tvlUsd: p.tvl ?? null, mapUsd: p.mapUsd ?? null, aggUsd: p.aggReserveUsd ?? null,
       price: rnd(pxNow, 10), marketRatio: rnd(ratio), offMarket,
       shape: {
@@ -506,6 +508,8 @@ async function writeOutputs() {
   if (!short.includes(BENCH) && out.some((x) => x.id === BENCH)) short.push(BENCH);
   fs.mkdirSync('out', { recursive: true });
   fs.writeFileSync('out/shortlist.json', JSON.stringify({ t: passT, ids: short }));
+  const tallyCheck = (id) => { const c = out.map((x) => x.checks.find((k) => k.id === id)?.ok); return `${id} ${c.filter((v) => v === true).length} pass / ${c.filter((v) => v === false).length} fail / ${c.filter((v) => v == null).length} not run`; };
+  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank'].map(tallyCheck).join('; '));
   const nWin = (wk) => out.filter((x) => x.w[wk] != null).length;
   say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; snapshot rows backfilled ${backfilled}`);
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }

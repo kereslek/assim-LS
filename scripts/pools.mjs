@@ -270,9 +270,14 @@ for (const p of [...v3, ...v4]) { const a = agg.get(p.id); p.aggReserveUsd = a?.
 fs.mkdirSync('out', { recursive: true });
 const big = (x) => (typeof x === 'bigint' ? x.toString() : x);
 const symOf = new Map([...C.quotes.map((q) => [q.address, q.symbol]), ...tokens.map((t) => [t.address, t.symbol])]); // public tickers, for pair labels
+const rankOf = new Map(tokens.map((t) => [t.address, t.rank ?? null]));
+// Each universe token's first Uniswap v3 pool (any pair): how long it has traded there. Only from a complete event record.
+const firstPoolAt = new Map();
+if (eventsComplete) for (const e of created) for (const a of [e.t0, e.t1]) if (universe.has(a) && e.time != null && !(firstPoolAt.get(a) <= e.time)) firstPoolAt.set(a, e.time);
 fs.writeFileSync('out/pools-ethereum.json', JSON.stringify({
   t: Date.now(), block, v3, v4,
-  tokens: [...dec].map(([address, decimals]) => ({ address, decimals, symbol: symOf.get(address) ?? null, usd: usdOf.get(address) ?? null, quote: quoteSet.has(address) })),
+  v3EventsComplete: eventsComplete, v4EventsFrom: block - WIN + 1,
+  tokens: [...dec].map(([address, decimals]) => ({ address, decimals, symbol: symOf.get(address) ?? null, usd: usdOf.get(address) ?? null, quote: quoteSet.has(address), rank: rankOf.get(address) ?? null, firstPoolAt: firstPoolAt.get(address) ?? null })),
 }, (k, v) => big(v)));
 const ok = !unread3 && !unread4 && quotesRight;
 finish(ok && !(eventsComplete && (onlyEvents || onlyLookups)) ? 0 : 1);
