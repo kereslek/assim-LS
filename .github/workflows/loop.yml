@@ -65,6 +65,7 @@ jobs:
         env:
           LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+          ETHERSCAN_KEY: ${{ secrets.ETHERSCAN_KEY }}
         run: |
           if [ "$MODE" = rehearsal ]; then
             REHEARSAL_FAIL_PASS=2 node scripts/loop.mjs --mode rehearsal --by "$BY" --pass 'node scripts/loop.mjs rehearsal-pass' --spacing 30 --max-passes 3 --dry-run

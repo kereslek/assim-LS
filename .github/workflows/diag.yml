@@ -49,6 +49,7 @@ jobs:
         if: contains(inputs.parts, 'scan') && hashFiles('out/pools-ethereum.json') != ''
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+          ETHERSCAN_KEY: ${{ secrets.ETHERSCAN_KEY }}
         run: node scripts/scan.mjs
       - name: Save the price-history cache
         if: always() && hashFiles('out/cache/history.json') != ''

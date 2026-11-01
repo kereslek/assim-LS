@@ -18,6 +18,7 @@ import { dailySigma, ratioByDay, markouts } from '../lib/flow.mjs';
 import { scorePool, recentMoves } from '../lib/score.mjs';
 import { coinGeckoHistory, dailyHistory, makeHistoryCache, ratioAt } from '../lib/history.mjs';
 import { MULTICALL3 } from '../lib/multicall.mjs';
+import { verifiedSources, makeVerifiedCache } from '../lib/etherscan.mjs';
 import { stickyShare, strandedShare } from '../lib/persistence.mjs';
 import { persistenceScore, flowScore, gemScore } from '../lib/gem.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
@@ -427,6 +428,14 @@ async function writeOutputs() {
   const snaps2 = mergeStore(snapsOk ? snaps : new Map(), rows, { now: passT });
   const changed = snapsOk && sig(snaps2) !== before;
 
+  // contract-verified: both tokens' source on Etherscan (cached a week; no key or a refused call: unread)
+  const vCache = makeVerifiedCache('out/cache/etherscan.json');
+  const vTok = [...new Set(mapped.flatMap((p) => [p.t0, p.t1]).filter((a) => a !== ZERO))];
+  const vs = await timed('etherscan', () => verifiedSources(getJson, vTok, { key: process.env.ETHERSCAN_KEY || undefined, cache: vCache }));
+  try { vCache.save(); } catch { /* read again next pass */ }
+  const vOf = (a) => (a === ZERO ? true : vs.verified.get(a) ?? null);
+  const bothVerified = (p) => { const v = [vOf(p.t0), vOf(p.t1)]; return v.includes(false) ? false : v.includes(null) ? null : true; };
+  say(vs.calls || vs.cached ? true : null, 'contract source', `tokens with verified source on Etherscan ${[...vs.verified.values()].filter((x) => x === true).length} of ${vTok.length}, unverified ${[...vs.verified.values()].filter((x) => x === false).length}, unread ${[...vs.verified.values()].filter((x) => x == null).length} (${vs.fetched} read, ${vs.cached} from the week's cache${vs.lastError ? `, last error ${vs.lastError}` : ''})`);
   // every window per pool
   const prev = (() => { try { return store?.get('live.json') ?? null; } catch { return null; } })();
   const firstAt = new Map((prev?.pools || []).map((x) => [x.id, x.gemFirstAt ?? null]));
@@ -464,6 +473,7 @@ async function writeOutputs() {
       { id: 'markouts-read', label: 'markouts read', ok: p.markout != null ? true : null },
       { id: 'creation-events', label: 'creation event found', ok: creationCheck({ createdAt: p.createdAt, complete: p.v === 3 ? list.v3EventsComplete === true : false }) },
       { id: 'fees-vs-aggregator', label: 'fees vs aggregator', ok: feesVsAggregator({ feesUsd: p.fees24h != null && p.proto24h != null ? p.fees24h + p.proto24h : null, aggVolumeUsd: p.aggVolumeUsd24h, feeTier: p.v === 4 && p.fee === DYNAMIC_FEE ? null : feeTier }).ok },
+      { id: 'contract-verified', label: 'both tokens\' source verified', ok: bothVerified(p) },
       { id: 'token-age-rank', label: `tokens ranked and trading ${config.minPairAgeDays}+ days`, ok: tokenAgeRank([tok.get(p.t0), tok.get(p.t1)].map((t) => t && { quote: !!t.quote, rank: t.rank ?? null, firstPoolAt: t.firstPoolAt ?? null }), { now: passT / 1000, minDays: config.minPairAgeDays }) },
     ];
     const ran = checks.filter((c) => c.ok != null).length, failed = checks.filter((c) => c.ok === false).map((c) => c.label);
@@ -509,7 +519,7 @@ async function writeOutputs() {
   fs.mkdirSync('out', { recursive: true });
   fs.writeFileSync('out/shortlist.json', JSON.stringify({ t: passT, ids: short }));
   const tallyCheck = (id) => { const c = out.map((x) => x.checks.find((k) => k.id === id)?.ok); return `${id} ${c.filter((v) => v === true).length} pass / ${c.filter((v) => v === false).length} fail / ${c.filter((v) => v == null).length} not run`; };
-  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank'].map(tallyCheck).join('; '));
+  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank', 'contract-verified'].map(tallyCheck).join('; '));
   const nWin = (wk) => out.filter((x) => x.w[wk] != null).length;
   say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; snapshot rows backfilled ${backfilled}`);
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
