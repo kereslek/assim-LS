@@ -111,11 +111,15 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
 Backtest = {
   days: <days covered>, partial: <bool>, range: <half-width r, log>, trigger: "exit",   // the "ours" strategy's settings
   forecastNet: <the scanner's net APR at the window start>,
-  net, netUsd, feesUsd, lvrUsd, costsUsd, tir: <time in range 0..1>, reranges, share: <share of pool fees>,
+  net: <annualised, steady state: excludes the one-time entry cost, like the forecast>,
+  netUsd, feesUsd, lvrUsd, costsUsd, entryUsd,          // $ over the window; lvrUsd and costsUsd ≤ 0; netUsd includes entryUsd (≤ 0)
+  tir: <time in range 0..1>, reranges, share: <share of pool fees>, sigma, sigmaFrom: "pool"|"market", swaps,
   series: { t: [], px: [], lo: [], hi: [], fees: [], lvr: [], costs: [], net: [] },   // cumulative $ vs holding the
                                 // starting tokens: fees ≥ 0, lvr ≤ 0, costs ≤ 0, net = fees + lvr + costs; lo/hi = range edges
   strategies: [{ id, name, net, netUsd, reranges, series: [] }],                       // ours, tight, wide, gamma, arrakis, full
   grid: { widths: [<r>], triggers: ["exit", "exit+12h", "exit+24h", "drift50", "drift75"], net: [[<apr>]] },
-  revert: { net: <n|null>, within10: <bool|null> }      // Revert's backtest of the same range, where it answers
+  revert: { net: <n|null>, within10: <bool|null> },     // Revert's backtest of the same range: no public API, so null
+  realCheck: { positions: <n>, within2: <n>, median: <ratio|null> } | null   // simulated fee per unit L vs real
+                                // in-range positions' actual fee growth over the same window
 }
 ```
