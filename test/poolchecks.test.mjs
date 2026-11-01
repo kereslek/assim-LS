@@ -27,3 +27,15 @@ test('token age and rank: a ranked token older than the minimum passes; unranked
   assert.equal(tokenAgeRank([{ rank: 500, firstPoolAt: null }, q], { now, minDays: 180 }), null);
   assert.equal(tokenAgeRank([q, q], { now, minDays: 180 }), true);
 });
+
+test('LP book (v4 events): positions at the price add up to the pool liquidity; a lost event or one big LP is caught', async () => {
+  const { lpBook } = await import('../lib/checks.mjs');
+  const ev = (sender, lo, hi, d, salt = '0') => ({ sender, tickLower: lo, tickUpper: hi, liquidityDelta: BigInt(d), salt });
+  const events = [ev('a', -100, 100, 500), ev('b', -50, 60, 300), ev('a', -100, 100, -100), ev('c', 200, 400, 900), ev('d', -10, 10, 250, '7')];
+  const r = lpBook(events, { tick: 5, activeL: 950n });
+  assert.deepEqual([r.ok, r.lpsAtPrice, r.concentrated], [true, 3, false]);
+  assert.equal(lpBook(events.slice(1), { tick: 5, activeL: 950n }).ok, false); // planted: a lost add
+  const whale = lpBook([...events, ev('w', -20, 20, 5000)], { tick: 5, activeL: 5950n });
+  assert.deepEqual([whale.ok, whale.concentrated], [true, true]); // planted: one LP over 60%
+  assert.equal(lpBook(null, { tick: 5, activeL: 1n }), null); // unread history: null, never a pass
+});

@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import { makeRpc, mapLimit, getJson } from '../lib/rpc.mjs';
 import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
-import { ETHEREUM as C, ZERO, DYNAMIC_FEE, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice, extremeFee } from '../lib/pools.mjs';
+import { ETHEREUM as C, ZERO, DYNAMIC_FEE, TOPICS, decodeModifyLiquidity, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice, extremeFee } from '../lib/pools.mjs';
 import { readMaps, wordsFor, feeGrowthCalls, readFeeGrowth } from '../lib/maps.mjs';
 import { sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { hollowness, shapeTag, bandStats, depthHistogram, nearestWalls } from '../lib/shape.mjs';
@@ -22,7 +22,7 @@ import { verifiedSources, makeVerifiedCache } from '../lib/etherscan.mjs';
 import { stickyShare, strandedShare } from '../lib/persistence.mjs';
 import { persistenceScore, flowScore, gemScore } from '../lib/gem.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
-import { feeIdentity, replayFeeGrowth, feeIdentityPath, pathIndex, priceRatio, creationCheck, feesVsAggregator, tokenAgeRank } from '../lib/checks.mjs';
+import { feeIdentity, replayFeeGrowth, feeIdentityPath, pathIndex, priceRatio, creationCheck, feesVsAggregator, tokenAgeRank, lpBook } from '../lib/checks.mjs';
 import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { openLock } from '../lib/lock.mjs';
 import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
@@ -447,6 +447,31 @@ async function writeOutputs() {
   const vOf = (a) => (a === ZERO ? true : vs.verified.get(a) ?? null);
   const bothVerified = (p) => { const v = [vOf(p.t0), vOf(p.t1)]; return v.includes(false) ? false : v.includes(null) ? null : true; };
   say(vs.calls || vs.cached ? true : null, 'contract source', `tokens with verified source on Etherscan ${[...vs.verified.values()].filter((x) => x === true).length} of ${vTok.length}, unverified ${[...vs.verified.values()].filter((x) => x === false).length}, unread ${[...vs.verified.values()].filter((x) => x == null).length} (${vs.fetched} read, ${vs.cached} from the week's cache${vs.lastError ? `, last error ${vs.lastError}` : ''})`);
+  // lp-book and lp-concentration, v4: every ModifyLiquidity since the PoolManager went live, summed per
+  // position. The events read so far are cached with the block they reach, so a pass reads only new
+  // blocks (and a new pool's whole history). A group that stays unread leaves its pools null.
+  const V4_FROM = 21_600_000, bookFile = 'out/cache/v4book.json';
+  let bc = { v: 1, to: null, ids: [], ev: [] };
+  try { const j = JSON.parse(fs.readFileSync(bookFile, 'utf8')); if (j?.v === 1 && Array.isArray(j.ev)) bc = j; } catch { /* start over */ }
+  const v4m = mapped.filter((p) => p.v === 4).map((p) => p.id), known = new Set(bc.to != null && bc.to <= block ? bc.ids : []);
+  const bookEv = new Map(), bookUnread = new Set();
+  for (const e of bc.to != null && bc.to <= block ? bc.ev : []) { if (!bookEv.has(e[0])) bookEv.set(e[0], []); bookEv.get(e[0]).push({ sender: e[1], tickLower: e[2], tickUpper: e[3], liquidityDelta: BigInt(e[4]), salt: e[5] }); }
+  await timed('lp book', async () => {
+    const plans = [[v4m.filter((id) => known.has(id)), (bc.to ?? V4_FROM - 1) + 1], [v4m.filter((id) => !known.has(id)), V4_FROM]];
+    for (const [ids, fromB] of plans) for (let i = 0; i < ids.length; i += 50) {
+      const part = ids.slice(i, i + 50);
+      if (fromB > block) continue;
+      const got = await logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.modifyLiquidity, part] }, fromB, block, { step: 9000, maxStep: 9000, minStep: 250, segments: 4, retries: 2, confirmEmpty: true });
+      if (!got) { part.forEach((id) => bookUnread.add(id)); continue; }
+      for (const m of got.map(decodeModifyLiquidity).filter(Boolean)) { if (!bookEv.has(m.id)) bookEv.set(m.id, []); bookEv.get(m.id).push(m); }
+    }
+  });
+  try {
+    const keep = v4m.filter((id) => !bookUnread.has(id));
+    fs.mkdirSync('out/cache', { recursive: true });
+    fs.writeFileSync(bookFile, JSON.stringify({ v: 1, to: block, ids: keep, ev: keep.flatMap((id) => (bookEv.get(id) || []).map((m) => [id, m.sender, m.tickLower, m.tickUpper, String(m.liquidityDelta), m.salt])) }));
+  } catch { /* read again next pass */ }
+  const bookOf = new Map(mapped.filter((p) => p.v === 4).map((p) => [p.id, bookUnread.has(p.id) ? null : lpBook(bookEv.get(p.id) || [], { tick: p.s.tick, activeL: p.L })]));
   // every window per pool
   const prev = (() => { try { return store?.get('live.json') ?? null; } catch { return null; } })();
   const firstAt = new Map((prev?.pools || []).map((x) => [x.id, x.gemFirstAt ?? null]));
@@ -485,6 +510,11 @@ async function writeOutputs() {
       { id: 'creation-events', label: 'creation event found', ok: creationCheck({ createdAt: p.createdAt, complete: p.v === 3 ? list.v3EventsComplete === true : false }) },
       { id: 'fees-vs-aggregator', label: 'fees vs aggregator', ok: feesVsAggregator({ feesUsd: p.fees24h != null && p.proto24h != null ? p.fees24h + p.proto24h : null, aggVolumeUsd: p.aggVolumeUsd24h, feeTier: p.v === 4 && p.fee === DYNAMIC_FEE ? null : feeTier }).ok },
       { id: 'contract-verified', label: 'both tokens\' source verified', ok: bothVerified(p) },
+      // the LP book is read for v4 pools only so far (v3 needs the position manager's history): v3 lists neither
+      ...(p.v === 4 ? [
+        { id: 'lp-book', label: 'LP book adds up', ok: bookOf.get(p.id)?.ok ?? null },
+        { id: 'lp-concentration', label: 'no LP over 60% at the price', ok: bookOf.get(p.id)?.concentrated == null ? null : !bookOf.get(p.id).concentrated },
+      ] : []),
       { id: 'token-age-rank', label: `tokens ranked and trading ${config.minPairAgeDays}+ days`, ok: tokenAgeRank([tok.get(p.t0), tok.get(p.t1)].map((t) => t && { quote: !!t.quote, rank: t.rank ?? null, firstPoolAt: t.firstPoolAt ?? null }), { now: passT / 1000, minDays: config.minPairAgeDays }) },
     ];
     const cur = { ...p.row, aboveShare: p.aboveShare ?? null, segments: seg || undefined };
@@ -518,7 +548,7 @@ async function writeOutputs() {
       tvlUsd: p.tvl ?? null, mapUsd: p.mapUsd ?? null, aggUsd: p.aggReserveUsd ?? null,
       price: rnd(pxNow, 10), marketRatio: rnd(ratio), offMarket,
       shape: {
-        tag: p.tag ?? null, parked: p.hollow ?? null, above: p.aboveShare ?? null, band9: p.band9 ?? null, lpsAtPrice: null,
+        tag: p.tag ?? null, parked: p.hollow ?? null, above: p.aboveShare ?? null, band9: p.band9 ?? null, lpsAtPrice: p.v === 4 ? bookOf.get(p.id)?.lpsAtPrice ?? null : null,
         depth: hist && isNum(p.per1) ? hist.buckets.map((v, i) => [rnd(-hist.span + (i + 0.5) * hist.bucketLog, 4), rnd(v * p.per1, 5)]) : [],
         walls: { below: isNum(p.walls?.below) ? p.walls.below : null, above: isNum(p.walls?.above) ? p.walls.above : null },
       },
@@ -536,7 +566,7 @@ async function writeOutputs() {
   fs.mkdirSync('out', { recursive: true });
   fs.writeFileSync('out/shortlist.json', JSON.stringify({ t: passT, ids: short }));
   const tallyCheck = (id) => { const c = out.map((x) => x.checks.find((k) => k.id === id)?.ok); return `${id} ${c.filter((v) => v === true).length} pass / ${c.filter((v) => v === false).length} fail / ${c.filter((v) => v == null).length} not run`; };
-  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank', 'contract-verified', 'window-vs-replay'].map(tallyCheck).join('; '));
+  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank', 'contract-verified', 'lp-book', 'lp-concentration', 'window-vs-replay'].map(tallyCheck).join('; '));
   const wvr = mapped.map((p) => p.windowVsReplay).filter((x) => x != null), bm = mapped.find((p) => p.id === BENCH);
   say(wvr.length ? wvr.filter((x) => Math.abs(x - 1) <= 0.1).length / wvr.length >= 0.8 : null, 'window vs replay',
     `24 h LP fees from the fee counters within 10% of the swap replay for ${wvr.filter((x) => Math.abs(x - 1) <= 0.1).length} of ${wvr.length} pools; median ratio ${median(wvr)?.toFixed(3) ?? '—'}`);
