@@ -476,10 +476,11 @@ function makeBacktest(r, pools, now) {
       const gasUsd = CHAIN_GAS[p.chain];
       const base = { px, vol, stepH, inside: w.inRangeUsd, feesDay, fee: p.feeTier, gasUsd, fullShare: TICKET / ((p.tvlUsd || 1e6) + TICKET) / conc(w.range) * 3 };
       const apr = (usd, weight = 1) => (usd / (TICKET * weight)) * (365 / w.days);
+      const steady = (S) => apr(S.net[n] - S.net[0]); // the entry cost sits in the first step
       const rr = w.range;
       const R = (x) => Math.max(0.01, Math.round(x * 100) / 100);
       const ours = simulate({ ...base, r: rr });
-      const strat = (id, name, S) => ({ id, name, net: sig(apr(S.net[n]), 4), netUsd: sig(S.net[n], 5), reranges: S.n, series: S.net.map((v) => sig(v, 5)) });
+      const strat = (id, name, S) => ({ id, name, net: sig(steady(S), 4), netUsd: cents(S.net[n]), reranges: S.n, series: S.net.map(cents) });
       const pc = (x) => `±${Math.round(x * 100)}%`;
       const tight = simulate({ ...base, r: R(rr * 0.45) });
       const wide = simulate({ ...base, r: R(rr * 2) });
@@ -499,15 +500,18 @@ function makeBacktest(r, pools, now) {
       const trigs = [{ wait: 0 }, { wait: 12 / stepH }, { wait: 24 / stepH }, { drift: 0.5 }, { drift: 0.75 }];
       const grid = {
         widths, triggers: ['exit', 'exit+12h', 'exit+24h', 'drift50', 'drift75'],
-        net: widths.map((wd) => trigs.map((tg) => sig(apr(simulate({ ...base, r: wd, ...tg }).net[n]), 4))),
+        net: widths.map((wd) => trigs.map((tg) => sig(steady(simulate({ ...base, r: wd, ...tg })), 4))),
       };
-      const net = apr(ours.net[n]);
+      const net = steady(ours);
       const forecastNet = w.net == null ? null : sig(w.net + between(r, -0.25, 0.12), 4);
-      const rv = r() < 0.8 ? sig(net + between(r, -0.08, 0.08), 4) : null;
+      const rv = p._spec.base === 'VELNA' ? sig(net + between(r, -0.08, 0.08), 4) : null; // Revert has no public API: null but for one pool, to draw both cases
+      const positions = Math.round(between(r, 3, 14));
+      const within2 = Math.min(positions, Math.round(positions * between(r, 0.6, 1)));
       entry[wk] = {
         days: w.days, partial: w.partial, range: rr, trigger: 'exit',
         forecastNet, net: sig(net, 4), netUsd: cents(cents(ours.fees[n]) + cents(ours.lvr[n]) + cents(ours.costs[n])),
-        feesUsd: cents(ours.fees[n]), lvrUsd: cents(ours.lvr[n]), costsUsd: cents(ours.costs[n]), tir: sig(ours.tir, 4), reranges: ours.n, share: sig(ours.share, 4),
+        feesUsd: cents(ours.fees[n]), lvrUsd: cents(ours.lvr[n]), costsUsd: cents(ours.costs[n]), entryUsd: cents(ours.costs[0]),
+        sigma: w.sigma, sigmaFrom: r() < 0.7 ? 'pool' : 'market', swaps: w.swaps, tir: sig(ours.tir, 4), reranges: ours.n, share: sig(ours.share, 4),
         series: {
           t: px.map((_, i) => Math.round(t0 + i * stepH * H)), px: px.map((x) => sig(x, 6)),
           lo: ours.lo.map((x) => sig(x, 6)), hi: ours.hi.map((x) => sig(x, 6)),
@@ -516,6 +520,7 @@ function makeBacktest(r, pools, now) {
         },
         strategies, grid,
         revert: rv == null ? { net: null, within10: null } : { net: rv, within10: Math.abs(rv - net) <= 0.1 },
+        realCheck: r() < 0.75 ? { positions, within2, median: sig(between(r, 0.97, 1.04), 4) } : null,
       };
     }
     out.pools[p.id] = entry;

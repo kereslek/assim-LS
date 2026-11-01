@@ -111,10 +111,12 @@ async function testUnlock(browser) {
   await page.goto(url('default'));
   await page.waitForSelector('#lockscreen:not([hidden])');
   ok('unlock: asks for the passphrase on first visit', await page.isVisible('#pass'));
+  ok('unlock: no window switch before there is data', !(await page.isVisible('#winseg')));
   ok('unlock: no data before the key', !(await page.isVisible('#app')) && !(await domText(page)).includes('VELNA'));
   await unlockWith(page, 'not the passphrase');
   await page.waitForSelector('#lock-msg.err', { timeout: 20000 });
   ok('unlock: a wrong passphrase gets a clear message', /Wrong passphrase/.test(await page.textContent('#lock-msg')));
+  await snap(page, 'state-wrong-pass');
   ok('unlock: a wrong passphrase shows no data', !(await page.isVisible('#app')) && !(await domText(page)).includes('VELNA'));
   await page.fill('#pass', FIXTURE_PASSPHRASE);
   await page.click('#unlock-btn');
@@ -245,6 +247,7 @@ async function testWindows(browser) {
 }
 
 // ---------- 4. states: fresh, late, stale, empty, missing, re-keyed, failing, planted faults ----------
+async function snap(page, tag, sel) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await (sel ? page.locator(sel).first().screenshot({ path: path.join(SHOTS, tag + '.png') }) : page.screenshot({ path: path.join(SHOTS, tag + '.png') })); } }
 async function badge(page) { return { cls: await page.getAttribute('#fresh', 'class'), txt: await page.textContent('#fresh-t') }; }
 async function testStates(browser) {
   let t = await openUnlocked(browser, 'default');
@@ -255,8 +258,9 @@ async function testStates(browser) {
   await t.page.evaluate(() => window.LPS.refresh());
   await t.page.waitForSelector('#banner:not([hidden])', { timeout: 10000 });
   b = await badge(t.page);
+  await snap(t.page, 'state-refresh-failed');
   ok('states: a failed refresh keeps the last good data', (await t.page.textContent('#best h2')) === 'VELNA/WETH' && (await t.page.isVisible('#app')));
-  ok('states: …marked stale with a banner', /stale/.test(b.cls) && /Couldn’t refresh/.test(await t.page.textContent('#banner')));
+  ok('states: …marked stale with a banner', /stale/.test(b.cls) && /REFRESH FAILED/.test(b.txt) && /Couldn’t refresh/.test(await t.page.textContent('#banner')), b.txt);
   await t.page.unroute('**/live.json*');
   await t.page.evaluate(() => window.LPS.refresh());
   await t.page.waitForSelector('#banner', { state: 'hidden', timeout: 10000 });
@@ -296,10 +300,12 @@ async function testStates(browser) {
     t = await openUnlocked(browser, c);
     b = await badge(t.page);
     ok(`states: ${c} data shows ${cls}`, b.cls.includes(cls) && re.test(b.txt), b.txt);
+    await snap(t.page, 'state-' + c, 'header');
     await t.ctx.close();
   }
   t = await openUnlocked(browser, 'nogems');
   ok('states: no gems → an honest empty best find', /No gem in the/.test(await t.page.innerText('#best')));
+  await snap(t.page, 'state-nogems');
   ok('states: no gems → no backtests yet', /No backtests/.test(await t.page.innerText('#bt')));
   ok('states: no gems → no NaN', noJunk(await bodyText(t.page)));
   ok('states: no page errors (nogems)', t.errors.length === 0, t.errors[0]);
@@ -307,6 +313,7 @@ async function testStates(browser) {
   t = await openUnlocked(browser, 'nofiles');
   ok('states: missing backtest file → "not published yet"', /No backtests published yet/.test(await t.page.innerText('#bt')));
   ok('states: missing history file → health says so', /history not published yet/.test(await t.page.innerText('#health')));
+  await snap(t.page, 'state-nofiles-bt', '#bt');
   ok('states: no page errors (nofiles)', t.errors.length === 0, t.errors[0]);
   await t.ctx.close();
   // re-keyed data: the lock opens, the data doesn't, nothing shows
@@ -314,12 +321,14 @@ async function testStates(browser) {
   await t.page.goto(url('rekeyed'));
   await unlockWith(t.page, FIXTURE_PASSPHRASE);
   await t.page.waitForSelector('#loaderr:not([hidden])', { timeout: 20000 });
+  await snap(t.page, 'state-rekeyed');
   ok('states: data sealed under another key shows nothing', !(await t.page.isVisible('#app')) && /different passphrase/.test(await t.page.textContent('#loaderr')) && !(await domText(t.page)).includes('VELNA'));
   await t.ctx.close();
   // no lock file at all
   t = await newPage(browser);
   await t.page.goto(url('missing-case'));
   await t.page.waitForSelector('#lock-msg.err', { timeout: 20000 });
+  await snap(t.page, 'state-nolock');
   ok('states: a missing lock file is said plainly, with a retry', /Can’t load the lock file/.test(await t.page.textContent('#lock-msg')) && (await t.page.isVisible('#lock-retry')));
   await t.ctx.close();
   // new since you last looked: per device

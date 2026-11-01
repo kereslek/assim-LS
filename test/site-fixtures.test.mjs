@@ -86,7 +86,12 @@ test('backtests add up: series signs, net = fees + lvr + costs, strategies and g
     for (const wk of W) {
       const b = backtest.pools[id][wk];
       if (b === null) continue;
-      keys(b, ['days', 'partial', 'range', 'trigger', 'forecastNet', 'net', 'netUsd', 'feesUsd', 'lvrUsd', 'costsUsd', 'tir', 'reranges', 'share', 'series', 'strategies', 'grid', 'revert'], 'backtest');
+      keys(b, ['days', 'partial', 'range', 'trigger', 'forecastNet', 'net', 'netUsd', 'feesUsd', 'lvrUsd', 'costsUsd', 'entryUsd', 'tir', 'reranges', 'share',
+        'sigma', 'sigmaFrom', 'swaps', 'series', 'strategies', 'grid', 'revert', 'realCheck'], 'backtest');
+      assert.ok(b.lvrUsd <= 0 && b.costsUsd <= 0 && b.entryUsd <= 0 && b.feesUsd >= 0);
+      assert.ok(close(b.feesUsd + b.lvrUsd + b.costsUsd, b.netUsd, 1e-3), 'netUsd = fees + lvr + costs (entry included)');
+      assert.ok(close(((b.netUsd - b.entryUsd) / backtest.ticket) * (365 / b.days), b.net, 3e-3), 'net APR leaves out the entry cost');
+      assert.ok(['pool', 'market'].includes(b.sigmaFrom));
       const s = b.series, n = s.t.length;
       for (const k of ['px', 'lo', 'hi', 'fees', 'lvr', 'costs', 'net']) assert.equal(s[k].length, n, k);
       for (let i = 0; i < n; i++) {

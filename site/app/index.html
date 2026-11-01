@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2wYyMKaqFgR68mz2Nrb2/AfB9s6dQzLHcjtPeD1E5WY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-7oxb4o4KtHQdAQ1l/hAj3uvAHbLGgN/6+Qm4OLpb6pc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
 <title>LP Shape Scanner</title>
@@ -101,7 +101,7 @@ main>section,main>aside{min-width:0;scroll-margin-top:12px}
 .tile .line b{color:var(--fg2);font-weight:600}
 .tile-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px}
 .tile-head .lbl{white-space:nowrap}
-button.tile{cursor:pointer;color:var(--fg);font:inherit;min-height:44px}
+button.tile{cursor:pointer;color:var(--fg);font:inherit;min-height:44px;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start}
 button.tile:hover{border-color:var(--line3)}
 .ph{padding:1px 6px;border-radius:4px;border:1px dashed var(--line3)}
 .ns-row{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:6px 0;border:0;border-top:1px solid var(--grid);background:transparent;text-align:left;cursor:pointer}
@@ -265,7 +265,7 @@ tr.sel td{background:rgba(34,211,238,.08)}
 .lock-card .btn{background:var(--accent2);border-color:var(--accent2);color:var(--accent-ink);font-weight:700}
 .lock-msg{min-height:1.4em;font-size:13px;color:var(--fg2)}
 .lock-msg.err{color:var(--neg);font-weight:600}
-.loaderr{max-width:640px;margin:24px auto;padding:16px}
+.loaderr{max-width:640px;width:calc(100% - 32px);margin:24px auto;padding:16px}
 
 /* detail sheet */
 .sheet{position:fixed;inset:0;z-index:50}
@@ -322,7 +322,7 @@ footer .btn{font-family:var(--sans)}
   <div class="hdr-right">
     <span class="badge" id="fresh" role="status"><span class="dot"></span><span id="fresh-t">NO DATA YET</span></span>
     <span class="badge" title="Every data file is sealed with AES-256-GCM"><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="6.5" rx="1.5" fill="#AEBBD0"/><path d="M3 5V3.6a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="#AEBBD0" stroke-width="1.4"/></svg>SEALED</span>
-    <div class="seg" role="group" aria-label="Time window" id="winseg">
+    <div class="seg" role="group" aria-label="Time window" id="winseg" hidden>
       <button type="button" data-act="win" data-w="24h" aria-pressed="false">24H</button><button type="button" data-act="win" data-w="7d" aria-pressed="false">7D</button><button type="button" data-act="win" data-w="30d" aria-pressed="true">30D</button>
     </div>
   </div>
@@ -403,6 +403,7 @@ footer .btn{font-family:var(--sans)}
           <div class="pane-title"><span class="lbl">Cumulative $ vs holding</span></div>
           <div class="chart" id="rp-money"></div>
           <p class="caption" id="rp-eq"></p>
+          <p class="caption" id="rp-real"></p>
         </div>
         <div class="scrub">
           <button type="button" class="play" id="rp-play" data-act="play" aria-label="Play the replay"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" id="rp-play-ico"><path d="M2 1 L11 6 L2 11Z"/></svg></button>
@@ -690,7 +691,7 @@ const stopTimer = () => { clearInterval(timer); timer = 0; };
 
 // ---------- unlock / lock ----------
 function lockMsg(t, err) { const m = $('#lock-msg'); m.textContent = t || ''; m.className = 'lock-msg' + (err ? ' err' : ''); }
-function showLock() { $('#lockscreen').hidden = false; $('#app').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
+function showLock() { $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
 async function onUnlock(ev) {
   ev.preventDefault();
   const input = $('#pass'), btn = $('#unlock-btn'), pass = input.value;
@@ -733,7 +734,7 @@ async function lockDevice() {
   renderFresh(); renderBanner();
 }
 function showLoadError(e) {
-  $('#app').hidden = true;
+  $('#app').hidden = true; $('#winseg').hidden = true;
   $('#loaderr').hidden = false;
   $('#loaderr-msg').textContent = e.kind === 'key' ? `Unlocked, but ${e.message}. Nothing is shown.`
     : e.kind === 'shape' ? `Unlocked, but ${e.message}. Nothing is shown.`
@@ -742,6 +743,7 @@ function showLoadError(e) {
 
 async function boot() {
   try { history.scrollRestoration = 'manual'; } catch (e) { /* old browser */ }
+  $('#foot-l').textContent = `build ${BUILD} · data sealed (AES-256-GCM) · times Europe/Budapest`;
   scrollTo(0, 0);
   try { S.lock = await getLock(); } catch (e) {
     showLock();
@@ -762,9 +764,11 @@ function renderFresh() {
   if (!isNum(t)) { el.className = 'badge'; tx.textContent = 'NO DATA YET'; el.title = ''; return; }
   const age = Math.max(0, Date.now() - t), min = age / 6e4;
   let cls, txt;
-  if (min < 15 && !S.failing) { cls = 'fresh'; txt = `FRESH · ${hm(t)} · ${min < 1 ? 'JUST NOW' : Math.floor(min) + ' MIN AGO'}`; }
-  else if (min < 60 && !S.failing) { cls = 'late'; txt = `LATE · ${hm(t)} · ${Math.floor(min)} MIN AGO`; }
-  else { cls = 'stale'; txt = `STALE · ${hm(t)} · ${min < 60 ? Math.floor(min) + ' MIN AGO' : ageTxt(age) + ' old'}`; }
+  const failing = S.failing && S.live; // showing an older pass because the newest couldn't be read
+  if (failing) { cls = 'stale'; txt = `STALE · ${hm(t)} · ${min < 60 ? 'REFRESH FAILED' : ageTxt(age) + ' old'}`; }
+  else if (min < 15) { cls = 'fresh'; txt = `FRESH · ${hm(t)} · ${min < 1 ? 'JUST NOW' : Math.floor(min) + ' MIN AGO'}`; }
+  else if (min < 60) { cls = 'late'; txt = `LATE · ${hm(t)} · ${Math.floor(min)} MIN AGO`; }
+  else { cls = 'stale'; txt = `STALE · ${hm(t)} · ${ageTxt(age)} old`; }
   el.className = 'badge ' + cls; tx.textContent = txt; el.title = 'Scanner pass ' + full(t);
 }
 function renderBanner() {
@@ -791,6 +795,7 @@ function renderAll() {
   }
   store.set('lps.lastVisit', String(Date.now()));
   ensureWin();
+  $('#winseg').hidden = false;
   $('#app').hidden = false; $('#loaderr').hidden = true; $('#lockscreen').hidden = true;
   $('#ribbon').hidden = S.live.fixture !== true;
   const ph = S.live.phase;
@@ -819,7 +824,7 @@ function renderGlance() {
   $('#ns-body').innerHTML = !fresh.length ? '<span class="big" style="font-size:16px">Nothing new</span><span class="line">No pool reached the gem bar since then.</span>'
     : fresh.slice(0, 3).map((p) => {
       const w = W(p);
-      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)} · gem since ${dmhm(p.gemFirstAt)}</span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></button>`;
+      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)} · since ${dmhm(p.gemFirstAt)}</span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></button>`;
     }).join('') + (fresh.length > 3 ? `<span class="line">and ${fresh.length - 3} more in the table</span>` : '');
   // scanner
   const chains = L.chains || [];
@@ -896,8 +901,8 @@ function liqChart(p, w) {
     const part = depth.filter(([o]) => !inR(o) && Math.sign(o) === side && o !== 0);
     const v = sum(part.map((d) => d[1]));
     if (v < tot * 0.05) continue;
-    const c = sum(part.map(([o, x]) => o * x)) / v, top = Math.max(...part.map((d) => d[1])) / max;
-    s += `<span class="mlab" style="left:clamp(48px, ${pctX(c)}, calc(100% - 48px));top:${Math.max(0, Math.round(20 + (1 - top) * 116 - 16))}px">${usd(v)} parked</span>`;
+    const c = sum(part.map(([o, x]) => o * x)) / v;
+    s += `<span class="mlab" style="left:clamp(48px, ${pctX(c)}, calc(100% - 48px));top:${side < 0 ? 0 : 11}px">${usd(v)} parked</span>`;
   }
   const lps = p.shape && p.shape.lpsAtPrice;
   const room = w && w.inRangeUsd;
@@ -1182,11 +1187,12 @@ function renderReplay(row) {
   const span = s.t[n] - s.t[0], days = (s.t[cut] - s.t[0]) / D;
   const ticket = isNum(S.bt.ticket) ? S.bt.ticket : null;
   const net = s.net[cut];
-  const apr = isNum(net) && ticket && days > 0 ? (net / ticket) * (365 / days) : null;
+  const entry = isNum(b.entryUsd) ? b.entryUsd : null; // like the forecast, the APR leaves out the one-time entry cost
+  const apr = isNum(net) && ticket && days > 0 ? ((net - (entry == null ? 0 : entry)) / ticket) * (365 / days) : null;
   let inr = 0;
   for (let i = 1; i <= cut; i++) if (isNum(s.lo[i - 1]) && s.px[i] >= s.lo[i - 1] && s.px[i] <= s.hi[i - 1]) inr++;
   const re = recentres(s).filter((i) => i <= cut);
-  $('#rp-strip').innerHTML = `<div><span class="lbl">Net APR</span><span class="v acc">${pct(apr, { sign: true })}</span><span class="s">${usd(ticket)} ticket</span></div>`
+  $('#rp-strip').innerHTML = `<div><span class="lbl">Net APR</span><span class="v acc">${pct(apr, { sign: true })}</span><span class="s">${usd(ticket)} · ${entry == null ? 'incl. entry' : 'entry ' + usd(entry) + ' aside'}</span></div>`
     + `<div><span class="lbl">vs holding</span><span class="v${net < 0 ? ' neg' : ''}">${usd(net, { sign: true })}</span><span class="s">${days.toFixed(days < 2 ? 1 : 0)} days</span></div>`
     + `<div><span class="lbl">In range</span><span class="v">${pct(inr / cut)}</span><span class="s">of ${int(cut)} steps</span></div>`
     + `<div><span class="lbl">Re-ranges</span><span class="v">${re.length}</span><span class="s">${usd(s.costs[cut])} swap + gas</span></div>`
@@ -1245,6 +1251,11 @@ function renderReplay(row) {
   mbox.innerHTML = m + '</svg>';
   $('#rp-eq').innerHTML = `Lines end at the summary: fees <b>${usd(s.fees[cut])}</b> ${MINUS} LVR <b>${usd(Math.abs(s.lvr[cut]))}</b> ${MINUS} costs <b>${usd(Math.abs(s.costs[cut]))}</b> = net <b>${usd(net, { sign: true })}</b>.`;
   $('#rp-when').textContent = `${dm(s.t[cut])} ${hm(s.t[cut])} · day ${days.toFixed(1)}`;
+  const rc = b.realCheck;
+  $('#rp-real').innerHTML = (rc && isNum(rc.positions) && rc.positions > 0
+    ? `Simulated fees checked against <b>${int(rc.positions)}</b> real in-range position${rc.positions === 1 ? '' : 's'}: <b>${int(rc.within2)}</b> within 2%, median ratio <b>${isNum(rc.median) ? rc.median.toFixed(2) + '×' : DASH}</b>.`
+    : `Real-position check: no in-range positions to compare this window (${DASH}).`)
+    + ` σ ${pct(b.sigma, { dp: 1 })}/day from ${b.sigmaFrom === 'market' ? 'the market price' : b.sigmaFrom === 'pool' ? 'the pool’s own prices' : DASH}.`;
 }
 function renderLab(row) {
   const lab = $('#bt-lab'), b = row.b, p = row.p, n = b.series.t.length - 1;
@@ -1258,7 +1269,7 @@ function renderLab(row) {
       + `<span class="ap${st.net < 0 ? ' neg' : ''}">${pct(st.net, { sign: true })}</span><span class="rr">${int(st.reranges)} · ${usd(st.netUsd, { sign: true })}</span></div>`).join('')
     + `<div class="strat"><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" stroke="#8494AE" stroke-width="1.4" stroke-dasharray="3 2"/></svg><span class="nm muted">Hold the starting tokens (baseline)</span><span class="ap muted">0%</span><span class="rr">0 · $0</span></div>`;
   const rv = b.revert || {};
-  h += `<p class="caption" style="margin-top:8px">${isNum(rv.net) ? `Revert’s backtest of the same range: <b>${pct(rv.net, { sign: true })}</b>, ${rv.within10 === true ? 'within 10 pts of ours' : rv.within10 === false ? 'more than 10 pts from ours' : 'gap not read'}.` : `Revert’s backtest: no answer for this range (${DASH}).`}</p></div>`;
+  h += `<p class="caption" style="margin-top:8px">${isNum(rv.net) ? `Revert’s backtest of the same range: <b>${pct(rv.net, { sign: true })}</b>, ${rv.within10 === true ? 'within 10 pts of ours' : rv.within10 === false ? 'more than 10 pts from ours' : 'gap not read'}.` : `Revert’s backtest of the same range: not compared, it has no public API (${DASH}).`}</p></div>`;
   // heat map: width × trigger
   const gr = b.grid || {};
   const ok = Array.isArray(gr.widths) && Array.isArray(gr.triggers) && Array.isArray(gr.net) && gr.net.length === gr.widths.length;
@@ -1276,7 +1287,7 @@ function renderLab(row) {
         let bg = 'var(--raised)', ink = '';
         if (isNum(v)) {
           const a = Math.min(1, Math.abs(v) / span);
-          if (v >= 0) { bg = `rgba(34,211,238,${(0.1 + a * 0.62).toFixed(2)})`; if (a > 0.62) ink = ';color:#04121A;font-weight:700'; } else bg = `rgba(226,102,76,${(0.14 + a * 0.6).toFixed(2)})`;
+          if (v >= 0) { bg = `rgba(34,211,238,${(0.1 + a * 0.75).toFixed(2)})`; if (a >= 0.75) ink = ';color:#04121A;font-weight:700'; } // dark ink only on bright cells else bg = `rgba(226,102,76,${(0.14 + a * 0.6).toFixed(2)})`;
         }
         hh += `<div class="cell${i === oi && j === oj ? ' ours' : ''}${i === best.i && j === best.j ? ' best' : ''}" style="background:${bg}${ink}">${isNum(v) ? (v < 0 ? MINUS : '') + Math.abs(v * 100).toFixed(0) : DASH}</div>`;
       });
