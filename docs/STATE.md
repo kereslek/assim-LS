@@ -7,42 +7,42 @@ parameters and results log live in their private strategy doc.
 
 - **Code:** branch `claude/ecstatic-dirac-wkrqja`, which is also the repo's default branch.
 - **Workflows:**
-  - `test`: unit tests, made-up data only.
-  - `probes`: which RPCs and APIs answer from GitHub, which serve old state, and the UNI/WETH benchmark map.
-  - `pools`: the pool list (`scripts/pools.mjs`), then maps, fees, scores and cross-checks (`scripts/scan.mjs`). About 35 minutes; a new run queues behind a running one.
-- **Operating guide:** the `lp-scanner-ops` skill (`.claude/skills/lp-scanner-ops`).
-- **Offline fakes:** `tools/fakes/` runs each script end to end on made-up data. Run from an empty folder, e.g. `mkdir -p /tmp/run && cd /tmp/run && node <repo>/tools/fakes/fake-scan.mjs`. Their red lines are mismatches planted in the fake data. `FAULT=protocol` plants a misread protocol fee for the fee-identity check to catch.
+  - `test`: unit tests, made-up data only (222 tests on 1 Nov).
+  - `probes`: which RPCs and APIs answer from GitHub; the UNI/WETH benchmark map.
+  - `pools`: the pool list (`scripts/pools.mjs`), then maps, fees, scores and cross-checks (`scripts/scan.mjs`). About 35 minutes; runs queue. Dispatch it for lib changes (a push to `lib/` doesn't start it).
+  - `diag`: a fast diagnostic run of the cross-checks (skips creation events and GeckoTerminal).
+  - `lock`: lock rehearsal with a dummy passphrase, then yes/no that the real lock and the sealed config open. `lock-init`: created the real lock once (refuses to overwrite).
+  - `leak` (weekly) and `prune` (daily, runs older than 7 days). A new Actions secret needs one line in `leak.yml`.
+  - `backtest`: daily at 04:41 UTC; seals `backtest.json`.
+  - `site`: the dashboard's tests in Actions (WebKit as an iPhone 15, Chromium as a Pixel 7) on made-up data.
+  - `loop` and `watchdog`: the always-on loop; rehearsed, not live yet (`LIVE_PASS` unset, watchdog cron commented out).
+- **Lock:** `lock/lock.json` (salt, rounds, check), `lock/inbox.json` (public key), `lock/config.sealed.json` (the owner's settings, sealed). `scripts/seal-input.mjs` seals new private inputs.
+- **Data contract:** `docs/DATA.md`.
+- **Dashboard:** `site/app/index.html` (single file); fixtures in `tools/fixtures/`, browser tests in `tools/site-test.mjs` (after editing the page's script, run `node tools/site-test.mjs --fix-csp`).
+- **Operating guide:** the `lp-scanner-ops` skill. **Offline fakes:** `tools/fakes/`.
 
-## Latest run (1 Nov 2026, 01:00 UTC)
+## Status after Run 1's first day (1 Nov 2026, 13:00 Budapest)
 
-- Every Uniswap pool ≥ $300k that DexScreener (137) and GeckoTerminal (61) list on Ethereum is found. v3 TVL is within 15% of theirs for all of them.
-- 227 of 227 liquidity maps are complete. Prices are within 2% of market for 75 of 80 pools ≥ $1M.
-- 187 pools scored at the example ticket. 34 are stranded or one-sided; 4 of them have a gem score of 60 or more.
+Paused for the owner's weekly usage cap; Run 1 resumes on its own on Sat 7 Nov at 06:05.
 
-## Known issues (next fixes, Phase 0 step 5)
+| Item | State |
+|---|---|
+| Fee identity | 279 of 280 verifiable pool sides within 2% (diagnostic run 41302360043); 274 of 280 on the last full run. Hook pools that can move tokens outside the pool's books are `verified: false` |
+| v3 creation events | 1 lookup pool still missing (was 209). Log reads skip `rpc.flashbots.net` (empty answers with no error); an empty answer counts only when a second node confirms it |
+| Price history | CoinGecko hourly history cached daily: read for 95% of scored pools, within 30% of the pool's own volatility for 84%. DefiLlama's 400 came from 30-coin batches: now 8 per call, split on 400 |
+| Lock | Done: real lock, sealed settings, sealed store and logs, publish to `data`, leak check clean, pruning |
+| Backtest | Engine, strategies, grid, audit and daily job; real positions agree within 2% (12 of 12); entry cost reported apart from the yearly net; RPC rate-limit fix `e2c0a83` awaiting a real run |
+| Windows and loop | Part 1 done and rehearsed: `lib/snapshots.mjs`, `lib/windows.mjs`, `scripts/loop.mjs`, `loop.yml`, `watchdog.yml`, `loop/PIN` |
+| Dashboard | Built on made-up data: every section, unlock/lock, 171 browser checks, 12 planted faults caught; the Actions device run and a last screenshot pass remain |
 
-1. **Fee identity:** replayed swaps vs the pools' fee counters agree within 2% for 234 of 288 pool sides. The target is 90%; the median is 1.0000. Suspects:
-   - swaps that cross ticks, where the event's liquidity is the post-swap value;
-   - hooked or dynamic-fee v4 pools.
-2. **v3 creation events:** 228 pools found by lookup are missing from the event list. Blockscout stops after 11 pages at block 16,410,882, and RPCs read the rest. Find which block ranges come back short.
-3. **DefiLlama price history:** the chart API returns HTTP 400. Volatility comes from each pool's own daily price meanwhile.
+## Resume notes (in this order)
 
-## Next steps: Run 1 (started 1 Nov 2026)
-
-The full plan, its run log and the owner's answers are in the private strategy doc, tab "Run plan". In order:
-
-1. Fee check: fix swaps that cross ticks; label hooked and dynamic-fee v4 pools "unverified" (never gems).
-2. v3 creation events: close the gap.
-3. Price history: CoinGecko (Demo key) as the volatility cross-check.
-4. Lock: sealed config, results and logs; leak check; run pruning.
-5. Time windows: every metric at 24 hours, 7 days and 30 days (default).
-6. Two green runs in a row.
-7. Dashboard v0.1 (layout C) on gh-pages, encrypted, device- and click-audited.
-8. Always-on loop, watchdog, storage branch.
-9. Visual backtest: replay, leaderboard, strategy lab.
-10. Base.
-11. Phase 2 design doc (private).
-12. End-of-run audit and report.
+1. Read pools run 41303327738 (`e9ac205`) and the backtest run after `e2c0a83`; find the last missing creation event.
+2. Windows and loop, part 2: the scan becomes the loop's pass (`LIVE_PASS`), emits `live.json`, `history.json` and `out/shortlist.json` per `docs/DATA.md`; add a sealed snapshots file to `lib/store.mjs` (published hourly); per-window swaps/traders/markout, `lpKeeps`, walls, inactive share and segments from the scan; `health.loop.recent` into `docs/DATA.md`; re-pin `loop/PIN`; enable the watchdog cron.
+3. Two green full runs in a row, then a milestone ping.
+4. Dashboard: the Actions device run, re-run planted faults, last screenshot pass; then deploy to gh-pages (unguessable folder) once `live.json` is real; audit back on iPhone, Android, iPad and laptop; then stop the Saturday reminder.
+5. Always-on: 24 hours with ≥ 95% of passes OK; the 14-day clock starts.
+6. Base; end-of-run audit twice; report.
 
 ## Owner's yeses (1 Nov 2026)
 
