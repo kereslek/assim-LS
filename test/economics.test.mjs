@@ -16,6 +16,7 @@ test('re-ranges: a ±9% range at 3.4% daily sigma exits about every 7 days', () 
   assert.ok(near(365 / rerangesPerYear(0.034, 0.09), 7.0, 0.05));
   assert.equal(suggestRange(0.034, 7), 0.09);
   assert.equal(suggestRange(null, 7), null);
+  assert.equal(suggestRange(0, 14), 0.01); // a perfect peg gets the minimum range, not a blank
   assert.ok(near(swapCostPerRerange(0.003), 0.00175, 1e-12));
   assert.ok(near(swapCostPerRerange(0.01), 0.00175, 1e-12)); // a 1% pool re-centres through a cheaper route
   assert.ok(near(swapCostPerRerange(0.0005), 0.0005, 1e-12));

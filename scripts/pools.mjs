@@ -11,7 +11,7 @@ import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
 import {
   ETHEREUM as C, ZERO, TOPICS, DYNAMIC_FEE, v3Candidates, v4Candidates, getPoolCall, v4Slot0Call, readGetPool, readV4Slot0,
-  readV3Slot0, readUint, decodePoolCreated, decodeInitialize, poolPrice, tvlUsd, baseUsdAtPool, poolKeysCall, readPoolKey,
+  readV3Slot0, readUint, decodePoolCreated, decodeInitialize, decodeModifyLiquidity, extremeFee, poolPrice, tvlUsd, baseUsdAtPool, poolKeysCall, readPoolKey,
 } from '../lib/pools.mjs';
 import { buildUniverse, fetchCoinGecko } from '../lib/universe.mjs';
 import { geckoTokenPools, dexScreenerTokenPairs, eachSpaced } from '../lib/aggregators.mjs';
@@ -135,7 +135,7 @@ const ev = await timed('v3 events', () => pageLogs(getJson, { base: 'https://eth
 const created = ev.logs.map(decodePoolCreated).filter(Boolean);
 let eventsComplete = ev.complete, via = `Blockscout ${ev.calls} pages`;
 if (!ev.complete) {
-  const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 9000, maxStep: 9000, minStep: 500, segments: 8 }));
+  const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 9000, maxStep: 9000, minStep: 500, segments: 3, retries: 3, waitMs: 3000 }));
   if (rest) {
     const seen = new Set(created.map((e) => e.id));
     for (const e of rest.map(decodePoolCreated).filter(Boolean)) if (!seen.has(e.id)) { seen.add(e.id); created.push(e); }
@@ -161,16 +161,34 @@ if (eventsComplete) say(true, 'v3 ages', `${fresh.length} of our pools are under
 else say(null, 'v3 ages', 'unread (creation events incomplete)');
 
 // 9. v4 pools created in the last week, any key (hooks, unusual fees): the feed for new pools.
+//    A new pool counts if it holds liquidity anywhere, at the price or away from it (its
+//    ModifyLiquidity events add up above zero): a pool with all of it out of range is exactly
+//    the one-sided kind this scanner looks for. Fees above 1% are traps, counted and left out.
 const inPair = (a, b) => (universe.has(a) || quoteSet.has(a)) && (universe.has(b) || quoteSet.has(b)) && (quoteSet.has(a) || quoteSet.has(b));
-const byId4 = new Map(v4.map((p) => [p.id, p]));
-const added4 = [];
-const initLogs = await timed('v4 events', () => logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.initialize] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, segments: 2 }));
+const stdIds4 = new Set(v4.map((p) => p.id));
+const readV4State = async (ps) => {
+  const st = await mc(ps.flatMap((p) => [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }]), tag);
+  ps.forEach((p, i) => { p.slot0 = readV4Slot0(st[2 * i]) || null; p.liquidity = readUint(st[2 * i + 1]); });
+};
+const initLogs = await timed('v4 events', () => logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.initialize] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, segments: 2, retries: 2 }));
 if (initLogs) {
   const inits = initLogs.map(decodeInitialize).filter(Boolean);
   const mine = inits.filter((e) => inPair(e.t0, e.t1));
-  for (const e of mine) if (!byId4.has(e.id)) { const p = { v: 4, id: e.id, t0: e.t0, t1: e.t1, fee: e.fee, tickSpacing: e.tickSpacing, hooks: e.hooks, source: 'event', createdBlock: e.block, createdAt: e.time ?? timeOf(e.block) }; byId4.set(e.id, p); added4.push(p); }
-  for (const e of mine) { const p = byId4.get(e.id); if (p && p.createdBlock == null) { p.createdBlock = e.block; p.createdAt = e.time ?? timeOf(e.block); } }
-  say(true, 'v4 events', `${inits.length} v4 pools created in the last ${WIN} blocks; ${mine.length} pair a universe token with a quote token (${mine.filter((e) => e.hooks !== ZERO).length} with hooks); ${added4.length} are outside the standard keys`);
+  const ev4 = mine.filter((e) => !stdIds4.has(e.id)).map((e) => ({ v: 4, id: e.id, t0: e.t0, t1: e.t1, fee: e.fee, tickSpacing: e.tickSpacing, hooks: e.hooks, source: 'event', createdBlock: e.block, createdAt: e.time ?? timeOf(e.block) }));
+  for (const e of mine) { const p = v4.find((q) => q.id === e.id); if (p) { p.createdBlock = e.block; p.createdAt = e.time ?? timeOf(e.block); } }
+  const ids = ev4.filter((p) => !extremeFee(p.fee)).map((p) => p.id), net = new Map();
+  let mlUnread = 0;
+  for (let i = 0; i < ids.length; i += 100) {
+    const ml = await logsAdaptive(logRpc, { address: C.v4PoolManager, topics: [TOPICS.modifyLiquidity, ids.slice(i, i + 100)] }, block - WIN + 1, block, { step: 9000, maxStep: 9000, minStep: 250, retries: 2 });
+    if (!ml) { mlUnread += ids.slice(i, i + 100).length; continue; }
+    for (const m of ml.map(decodeModifyLiquidity).filter(Boolean)) net.set(m.id, (net.get(m.id) || 0n) + m.liquidityDelta);
+  }
+  await readV4State(ev4);
+  const extreme = ev4.filter((p) => extremeFee(p.fee)).length;
+  const keep = ev4.filter((p) => p.slot0 && !extremeFee(p.fee) && (p.liquidity > 0n || (net.get(p.id) || 0n) > 0n));
+  v4.push(...keep);
+  const combos = tally(keep.map((p) => `${p.fee === DYNAMIC_FEE ? 'dynamic' : p.fee / 1e4 + '%'}/${p.tickSpacing}${p.hooks !== ZERO ? '+hook' : ''}`));
+  say(mlUnread ? null : true, 'v4 events', `${inits.length} v4 pools created in the last ${WIN} blocks; ${mine.length} pair a universe token with a quote token, ${ev4.length} outside the standard keys: ${extreme} charge over 1% (left out), ${keep.length} hold liquidity (${keep.filter((p) => !(p.liquidity > 0n)).length} of them only away from the price); kept by fee/spacing: ${top(combos, 5)}${mlUnread ? `; liquidity events unread for ${mlUnread}` : ''}`);
 } else say(null, 'v4 events', 'unread (not counted as zero)');
 
 // 10. Aggregators: DexScreener for every token, GeckoTerminal for a rotating sample of tokens that
@@ -185,30 +203,23 @@ const gtTokens = (() => {
 const gt = await timed('geckoterminal', () => eachSpaced(gtTokens, 2400, (t) => geckoTokenPools(getJson, 'eth', t.address)));
 const bigListed = (lists) => { const m = new Map(); for (const l of lists) for (const p of l || []) if (p.venue && p.reserveUsd >= FLOOR && scoped(p) && !m.has(p.id)) m.set(p.id, p); return m; };
 
-// 11. v4 pools the aggregators list but our lookups missed: their key comes from the v4
+// 11. v4 pools the aggregators list but our list still lacks: their key comes from the v4
 //     PositionManager on-chain (poolKeys), and must hash back to the same pool id.
-const want = [...new Set([...bigListed(ds).values(), ...bigListed(gt).values()].filter((p) => p.venue === 4 && !byId4.has(p.id)).map((p) => p.id))];
+const have4 = new Set(v4.map((p) => p.id));
+const want = [...new Set([...bigListed(ds).values(), ...bigListed(gt).values()].filter((p) => p.venue === 4 && !have4.has(p.id)).map((p) => p.id))];
 if (want.length) {
   const keys = await mc(want.map((id) => poolKeysCall(C.v4PositionManager, id)), tag);
-  let resolved = 0, unregistered = 0, unread = 0;
+  let unregistered = 0, unread = 0;
+  const found = [];
   want.forEach((id, i) => {
     const k = readPoolKey(keys[i], id);
     if (k === null) { unread++; return; }
     if (k === false) { unregistered++; return; }
-    resolved++;
-    const p = { v: 4, id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator' };
-    byId4.set(id, p); added4.push(p);
+    found.push({ v: 4, id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator' });
   });
-  say(unread ? null : true, 'v4 keys', `${want.length} listed v4 pools ≥ ${usd(FLOOR)} outside our lookups: ${resolved} keys read on-chain and matched to their ids, ${unregistered} not registered with the PositionManager, ${unread} unread`);
-}
-if (added4.length) {
-  const st = await mc(added4.flatMap((p) => [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }]), tag);
-  added4.forEach((p, i) => { p.slot0 = readV4Slot0(st[2 * i]) || null; p.liquidity = readUint(st[2 * i + 1]); });
-  // an empty new pool is counted, not listed: it has no liquidity to map and no fees to share
-  const ev4 = added4.filter((p) => p.source === 'event'), live4 = ev4.filter((p) => p.slot0 && p.liquidity > 0n);
-  const combos = tally(ev4.map((p) => `${p.fee / 1e4}%/${p.tickSpacing}${p.hooks !== ZERO ? '+hook' : ''}`));
-  if (ev4.length) say(true, 'v4 new keys', `${ev4.length} new v4 pools outside the standard keys: ${live4.length} hold liquidity; most common fee/spacing: ${top(combos, 5)}`);
-  v4.push(...added4.filter((p) => p.slot0 && (p.source === 'aggregator' || p.liquidity > 0n)));
+  await readV4State(found);
+  v4.push(...found.filter((p) => p.slot0));
+  say(unread ? null : true, 'v4 keys', `${want.length} listed v4 pools ≥ ${usd(FLOOR)} not in our list yet: ${found.length} keys read on-chain and matched to their ids, ${unregistered} not registered with the PositionManager, ${unread} unread`);
 }
 const hooked = v4.filter((p) => p.hooks && p.hooks !== ZERO);
 say(true, 'v4 list', `${v4.length} v4 pools: ${v4.filter((p) => !p.source).length} from standard keys, ${v4.filter((p) => p.source === 'event').length} from creation events, ${v4.filter((p) => p.source === 'aggregator').length} from listed ids; ${hooked.length} with hooks, ${v4.filter((p) => p.fee === DYNAMIC_FEE).length} with dynamic fees`);

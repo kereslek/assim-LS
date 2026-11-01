@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import { makeRpc, mapLimit, getJson } from '../lib/rpc.mjs';
 import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
-import { ETHEREUM as C, ZERO, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice } from '../lib/pools.mjs';
+import { ETHEREUM as C, ZERO, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice, extremeFee } from '../lib/pools.mjs';
 import { readMaps, wordsFor, feeGrowthCalls, readFeeGrowth } from '../lib/maps.mjs';
 import { sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { hollowness, shapeTag, bandStats, depthHistogram, nearestWalls } from '../lib/shape.mjs';
@@ -56,11 +56,12 @@ const mc = makeMulticall(rpc, { chunk: 400, concurrency: 4 });
 const ARCHIVE = ['https://eth.drpc.org', 'https://rpc.mevblocker.io', 'https://eth.blockscout.com/api/eth-rpc']; // serve old state (probes)
 const amc = makeMulticall(makeRpc(ARCHIVE, { timeout: 30000, maxRefusals: 6 }), { chunk: 300, concurrency: 3 });
 
-// 1. Which pools: every v3 pool ≥ $300k by its own balances; v4 pools with liquidity that an
-//    aggregator lists at ≥ $100k (v4 has no per-pool balances: its value comes from the map).
+// 1. Which pools: every v3 pool ≥ $300k by its own balances; v4 pools an aggregator lists at
+//    ≥ $100k, and new v4 pools that hold liquidity (v4 has no per-pool balances: its value comes
+//    from the map). Liquidity only away from the price still counts: that is the one-sided kind.
 const pick = [
   ...list.v3.filter((p) => p.tvl >= FLOOR || p.id === BENCH).map((p) => ({ ...p, v: 3, tickSpacing: V3_SPACING[p.fee] })),
-  ...list.v4.filter((p) => B(p.liquidity) > 0n && p.aggReserveUsd >= V4_PREFILTER).map((p) => ({ ...p, v: 4 })),
+  ...list.v4.filter((p) => !extremeFee(p.fee) && (p.aggReserveUsd >= V4_PREFILTER || p.source === 'event')).map((p) => ({ ...p, v: 4 })),
 ].sort((a, b) => (b.tvl ?? b.aggReserveUsd ?? 0) - (a.tvl ?? a.aggReserveUsd ?? 0));
 let words = 0, skipped = 0;
 const chosen = [];
@@ -177,21 +178,35 @@ say(fgRatios.length ? within(fgRatios, 0.98, 1.02) / fgRatios.length >= 0.9 : nu
 const WETH = C.quotes.find((q) => q.symbol === 'WETH').address;
 const keyOf = (a) => `ethereum:${a === ZERO ? WETH : a}`;
 const hist = await timed('history', () => dailyHistory(getJson, [...new Set(mapped.flatMap((p) => [keyOf(p.t0), keyOf(p.t1)]))]));
+// Each pool's own price at 31 daily blocks (archive state): that price is what range exits and LVR follow.
+const nowSec = Math.floor(Date.now() / 1000);
+const pxCalls = mapped.map((p) => (p.v === 3 ? { target: p.id, data: encodeCall('slot0()') } : v4Slot0Call(C.v4StateView, p.id)));
+const pxDays = await timed('daily prices', () => mapLimit(Array.from({ length: 31 }, (_, k) => block - k * DAY_BLOCKS), 3, (b) => amc(pxCalls, '0x' + b.toString(16))));
+mapped.forEach((p, i) => {
+  p.dailyPx = [];
+  pxDays.forEach((res, k) => {
+    const s0 = p.v === 3 ? readV3Slot0(res[i]) : readV4Slot0(res[i]);
+    if (s0 && s0.sqrtPriceX96 > 0n) { const x = Number(s0.sqrtPriceX96) / 2 ** 96; p.dailyPx.push({ t: nowSec - k * 86400, price: x * x }); }
+  });
+});
 const gp = await rpc.call('eth_gasPrice', []), ethUsd = tok.get(WETH)?.usd;
 const gasUsd = gp && ethUsd > 0 ? ((parseInt(gp, 16) * RERANGE_GAS) / 1e18) * ethUsd : null;
 const byPool = byPoolEarly;
 for (const p of mapped) {
   const a = hist.series.get(keyOf(p.t0)), c = hist.series.get(keyOf(p.t1));
   const ratio = a && c ? ratioByDay(a, c) : null;
-  p.sigma = ratio ? dailySigma(ratio) : null;
-  Object.assign(p, ratio ? recentMoves(ratio) : { move7dLog: null, lastDayLog: null });
+  p.sigmaChain = dailySigma(p.dailyPx);
+  p.sigmaMarket = ratio ? dailySigma(ratio) : null;
+  p.sigma = p.sigmaChain ?? p.sigmaMarket;
+  Object.assign(p, p.dailyPx.length >= 8 ? recentMoves(p.dailyPx) : ratio ? recentMoves(ratio) : { move7dLog: null, lastDayLog: null });
   p.score = scorePool({ tick: p.s.tick, sqrt: p.sqrt, d1: p.d1, usdPer1: p.per1, activeL: p.L, feeTier: (p.v === 3 ? p.fee : p.s.lpFee) / 1e6, feesPerDayUsd: p.fees24h, sigma: p.sigma, walls: p.walls },
     { days: HOLD_DAYS, ticket: EXAMPLE_TICKET, gasUsd });
   const m = unreadIds.has(p.id) ? null : markouts(byPool.get(p.id) || [], { horizon: MARKOUT_BLOCKS, endBlock: block, feeOf: (s) => swapFees(s, meta.get(p.id))?.total ?? null });
   p.markout = m ? m.ratio : null;
 }
-const withSigma = mapped.filter((p) => p.sigma != null);
-say(hist.unread.length ? null : true, 'volatility', `30-day volatility read for ${withSigma.length} of ${mapped.length} pools (median ${fr(median(withSigma.map((p) => p.sigma)))} a day); ${hist.unread.length} price histories unread; re-range gas ${gasUsd == null ? '—' : '$' + gasUsd.toFixed(2)}`);
+const withSigma = mapped.filter((p) => p.sigma != null), both = mapped.filter((p) => p.sigmaChain > 0 && p.sigmaMarket > 0);
+say(withSigma.length ? true : null, 'volatility', `30-day volatility for ${withSigma.length} of ${mapped.length} pools (${mapped.filter((p) => p.sigmaChain != null).length} from the pool's own daily price, ${withSigma.length - mapped.filter((p) => p.sigmaChain != null).length} from market history); median ${fr(median(withSigma.map((p) => p.sigma)))} a day; re-range gas ${gasUsd == null ? '—' : '$' + gasUsd.toFixed(2)}`);
+say(both.length ? within(both.map((p) => p.sigmaChain / p.sigmaMarket), 0.7, 1.3) / both.length >= 0.7 : null, 'volatility check', `pool vs market volatility within 30% for ${within(both.map((p) => p.sigmaChain / p.sigmaMarket), 0.7, 1.3)} of ${both.length}; market histories unread ${hist.unread.length}${hist.lastError ? ` (last error: ${hist.lastError})` : ''}`);
 const scored = mapped.filter((p) => p.score?.net != null);
 const pos = scored.filter((p) => p.score.net > 0), edgy = scored.filter((p) => p.score.edge > 1);
 say(true, 'scores', `at a $${EXAMPLE_TICKET} example ticket over ${HOLD_DAYS}-day ranges: ${scored.length} pools scored; net APR above zero for ${pos.length}, fees above LVR (edge > 1) for ${edgy.length}; median fee APR ${fr(median(scored.map((p) => p.score.feeApr)))}, LVR ${fr(median(scored.map((p) => p.score.lvr)))}, net ${fr(median(scored.map((p) => p.score.net)))}`);
