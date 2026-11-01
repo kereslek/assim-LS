@@ -34,10 +34,12 @@ parameters and results log live in their private strategy doc.
 - **Step 7:** always-on loop and watchdog. Needs the owner's yes for a storage branch.
 - **Step 8:** Base.
 
-## Awaiting the owner's yes
+## Owner's yeses (1 Nov 2026)
 
-- A storage branch for sealed results, and `gh-pages` for the dashboard.
-- Slimming CLAUDE.md: move the long reference parts to `docs/handout.md` to cut what every turn loads.
+- **Granted:** `gh-pages` for the dashboard and a storage branch for sealed results. Create them when steps 6 and 7 are built.
+- **Done:** history rewritten once. The owner's personal notes left CLAUDE.md for the private strategy doc (tab "Owner notes"), and the model name left the first commit.
+- **Done:** CLAUDE.md slimmed. The long reference parts moved word for word to `docs/handout.md`.
+- **Owner to do:** Actions secrets `LOCK_PASSPHRASE`, `COINGECKO_KEY`, `ETHERSCAN_KEY`.
 
 ## Rules
 
