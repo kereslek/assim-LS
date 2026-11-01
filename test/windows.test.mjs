@@ -236,7 +236,7 @@ test('unread rows are bridged by the counters, never read as zero; missing input
   assert.ok(c6.lpFeesUsd > 0);
   // no swap replay for this window → swaps, traders and markout null, and the gem says what is missing
   assert.ok(w.swaps === null && w.traders === null && w.markout === null);
-  assert.ok(w.gem.total === null && w.gem.missing.includes('flow') && w.gem.missing.includes('persistence'));
+  assert.ok(w.gem.total === null && w.gem.missing.includes('flow'));
   // every field null-or-finite in all of these
   for (const x of [w, c1, c2, c3, c4, c5, c6]) assert.ok(clean(x));
 });
@@ -254,7 +254,7 @@ test('a stranded one-sided pool with toxic flow: lenses, shape averages and the 
   assert.ok(w24.lenses.includes('toxic') && !w7.lenses.includes('toxic'), 'toxic above the config threshold only');
   assert.deepEqual([w24.swaps, w24.traders, w24.markout], [240, 60, 0.8]);
   assert.ok(Number.isInteger(w7.gem.total), JSON.stringify(w7.gem));
-  assert.equal(w7.gem.stranded + w7.gem.yield + w7.gem.persistence + w7.gem.flow, w7.gem.total);
+  assert.equal(w7.gem.yield + w7.gem.thinness + w7.gem.flow + w7.gem.staying, w7.gem.total);
   // a failed check blocks the gem; a warning costs 10 points
   const blocked = allWindows({ series: sim.series, cur, pool: { ...pool, fails: ['unverified'] }, config: CONFIG, chain: 'ethereum' })['7d'];
   assert.equal(blocked.gem.total, null);

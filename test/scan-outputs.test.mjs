@@ -42,6 +42,9 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
   const live = store.get('live.json'), hist = store.get('history.json'), snaps = store.get('snapshots.json');
   assert.ok(contractOk(live), 'live.json follows the contract');
   assert.ok(live.pools.every((p) => live.pairs[p.pairKey]?.pools.includes(p.id)), 'every pool sits in its pair');
+  assert.equal(live.defaultWindow, '24h');
+  assert.ok(live.pools.every((p) => Array.isArray(p.daily) && p.daily.length <= 30 && 'pattern' in p && 'burst' in p && !('daily' in (p.w['24h'] || {}))));
+  assert.ok(live.pools.every((p) => p.w['24h'] == null || Array.isArray(p.w['24h'].gem.tags)), 'Gem now carries its tags');
   assert.equal(live.ticket, 2718, 'the sealed config reaches live.json');
   assert.equal(live.gemAt, 57);
   assert.ok(live.pools.every((p) => p.w['30d'] && p.w['30d'].days >= 29), 'the backfill gives a full 30-day window on the first pass');

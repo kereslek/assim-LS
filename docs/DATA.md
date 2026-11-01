@@ -30,7 +30,7 @@ This file describes shapes only: it holds no data. Every value below lives seale
   ticket: <usd>,                // example ticket every pool is scored at
   stopLoss: <fraction>,         // position value drop, measured in the quote token, that closes a position (0.08)
   windows: ["24h", "7d", "30d"],
-  defaultWindow: "30d",
+  defaultWindow: "24h",         // Gem now reads the last day
   gemAt: 60,                    // gem threshold
   chains: [{ id: "ethereum"|"base", pools: <n>, unread: <n>, block: <n>, gasUsd: <re-range gas in $|null> }],
   health: {
@@ -79,7 +79,11 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
   },
   w: { "24h": Window|null, "7d": Window|null, "30d": Window|null },
   checks: [{ id: "<id>", label: "<short>", ok: true|false|null }],   // the per-pool checklist, e.g. "12/12 checks pass"
-  gemFirstAt: <ms|null>         // first pass where the default window's gem reached gemAt ("new since you last looked")
+  gemFirstAt: <ms|null>,        // first pass where the default window's gem reached gemAt ("new since you last looked")
+  daily: [{ t, feesPer1k, net }],   // up to 30 days: USD a day for $1,000 at the price after dilution at the ticket, and
+                                    // net of LVR and re-range costs; the latest entry is the last 24 hours
+  pattern: "steady"|"bursty"|"emerging"|"fading"|"mixed"|null,
+  burst: { maxDay, medianDay, burstDays, oneTrader: <share of the biggest day's fees from its largest tx|null> }
 }
 ```
 
@@ -94,7 +98,11 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
   feeApr, lvr, swapCost, gas, net, edge,               // annualised fractions at the ticket; edge = feeApr ÷ lvr
   aggApr: <fees ÷ total TVL: "what trackers show">,
   parkedAvg: <0..1|null>, strandedShare: <0..1|null>, markout: <markout ÷ fee|null>,
-  gem: { total: <0..100|null>, stranded, yield, persistence, flow, warnings: ["..."], missing: ["..."] },
+  gem: { total: <0..100|null>, yield, thinness, flow, staying, warnings: ["..."], missing: ["..."],
+         tags: ["unconfirmed"|"one-off"|"unchecked"] },
+       // Gem now (lib/gem.mjs gemNow): yield now 45 (the median of the last 7 days' net per $1,000 a day) + thinness 25
+       // (the day's LP fees ÷ the value at the price) + flow 20 (markout ÷ fee, traders) + staying power 10 (bonus).
+       // A failed check → no gem; a safety check not run → capped at 40 ("unchecked"); a data check not run → −5.
   lenses: ["stranded"|"one-sided"|"fresh"|"bigmove"|"calm"|"toxic"],
   spark: { px: [<n>], fees: [<n>] }                    // about 24 points each, for sparklines
 }

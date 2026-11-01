@@ -7,6 +7,7 @@ import { liquidityMap, valueInRange, ticksForLog } from '../lib/v3math.mjs';
 import { hollowness, shapeTag } from '../lib/shape.mjs';
 import { HOUR, DAY, merge, emptySeries } from '../lib/snapshots.mjs';
 import { windowMetrics, gemWarnings, isHooked } from '../lib/windows.mjs';
+import { gemNow } from '../lib/gem.mjs';
 
 const NOW = Date.UTC(2026, 10, 1, 15, 0);
 const Q = 1n << 128n;
@@ -70,29 +71,21 @@ test('(2) fee APR at the ticket is 365·F/(V+S): ~1% next to $10M in range, the 
   }
 });
 
-test('(3) gem: unrun checks cap it at 40, hooked pools take the warning, stranded is 0 under 0.8 parked', () => {
-  // a stranded pool that would score high
-  const rows = [];
-  for (let t = NOW - 3 * DAY; t <= NOW; t += HOUR) {
-    const k = (t - NOW + 3 * DAY) / HOUR;
-    rows.push({ t, block: 1 + k, sqrtPriceX96: (1n << 96n) + BigInt(Math.round(Math.sin(k) * 1e24)), tick: 0, L: 10n ** 18n, fg0: 3n * Q, fg1: 5n * Q + BigInt(k) * ((2000000000n * Q) / 10n ** 18n), parked: 0.97 });
-  }
-  const series = merge(emptySeries(), rows, { now: NOW });
-  const cur = { ...rows.at(-1), aboveShare: 0.95 };
-  const pool = { ...POOL, tvlUsd: 2e5, walls: { below: Infinity, above: 0.5 }, inactiveShare: 1, flow: { '24h': { swaps: 500, traders: 200, markout: 0.05 } } };
-  const run = (extra, c = cur) => windowMetrics({ window: '24h', series, cur: c, pool: { ...pool, ...extra }, config: CONFIG, chain: 'ethereum' });
-  const all = run({ checks: { ran: 12, total: 12 } });
-  assert.ok(all.gem.total > 40, `precondition: a high gem with every check run (${all.gem.total})`);
-  const few = run({ checks: { ran: 3, total: 12 } });
-  assert.ok(few.gem.total <= 40, `capped: ${few.gem.total}`);
-  assert.ok(few.gem.warnings.includes('only 3 of 12 checks ran'));
+test('(3) gem: unrun safety checks cap it at 40 ("unchecked"), unrun data checks cost 5 each, hooked pools take the warning', () => {
+  const ok = (id) => ({ id, label: id, ok: true }), un = (id) => ({ id, label: id, ok: null });
+  const safety = ['contract-verified', 'sell-test', 'token-age-rank', 'verified'], data = ['fee-identity', 'price-vs-market', 'lp-book'];
+  const strong = { netPer1kDay: 2, thinness: 0.01, markoutToFee: 0.05, traders7d: 300, persistence: 1 };
+  const all = gemNow({ ...strong, checks: [...safety, ...data].map(ok) });
+  assert.ok(all.total > 40, `precondition: a high gem with every check run (${all.total})`);
+  const noSafety = gemNow({ ...strong, checks: [...safety.slice(1).map(ok), un('contract-verified'), ...data.map(ok)] });
+  assert.ok(noSafety.total <= 40 && noSafety.tags.includes('unchecked'), JSON.stringify(noSafety));
+  const noData = gemNow({ ...strong, checks: [...safety.map(ok), ...data.slice(1).map(ok), un('fee-identity')] });
+  assert.equal(noData.total, all.total - 5);
+  assert.equal(gemNow({ ...strong, checks: [...safety.map(ok), { id: 'sell-test', ok: false }] }).total, null, 'a failed safety check: no gem');
+  assert.equal(gemNow({ ...strong, checks: [...safety.map(ok), { id: 'price-vs-market', ok: false }] }).total, null, 'a failed data check: no gem');
   // hooked pools, and pools whose hook was never read, take the −10 warning
   assert.ok(isHooked({ v: 4, hooks: '0x0000000000000000000000000000000000004444' }) && isHooked({ v: 4, hooks: undefined }));
   assert.ok(!isHooked({ v: 4, hooks: '0x0000000000000000000000000000000000000000' }) && !isHooked({ v: 3 }));
-  const hooked = run({ checks: { ran: 12, total: 12 }, warnings: gemWarnings({ v: 4, hooks: undefined, swaps24h: 500 }) });
-  assert.equal(hooked.gem.total, Math.max(0, all.gem.total - 10));
-  // under 0.8 parked the stranded part is 0
-  const served = merge(emptySeries(), rows.map((r) => ({ ...r, parked: 0.5 })), { now: NOW });
-  const s = windowMetrics({ window: '24h', series: served, cur: { ...cur, parked: 0.5 }, pool: { ...pool, checks: { ran: 12, total: 12 } }, config: CONFIG, chain: 'ethereum' });
-  assert.equal(s.gem.stranded, 0);
+  const hooked = gemNow({ ...strong, checks: [...safety, ...data].map(ok), warnings: gemWarnings({ v: 4, hooks: undefined, swaps24h: 500 }) });
+  assert.equal(hooked.total, Math.max(0, all.total - 10));
 });

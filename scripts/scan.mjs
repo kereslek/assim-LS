@@ -497,7 +497,7 @@ async function writeOutputs() {
   // every window per pool
   const prev = (() => { try { return store?.get('live.json') ?? null; } catch { return null; } })();
   const firstAt = new Map((prev?.pools || []).map((x) => [x.id, x.gemFirstAt ?? null]));
-  const windows = config.windows, defaultWindow = windows.includes('30d') ? '30d' : windows[windows.length - 1];
+  const windows = config.windows, defaultWindow = windows.includes('24h') ? '24h' : windows[0]; // Gem now reads the last day
   const out = [];
   for (const p of mapped) {
     const t0 = tok.get(p.t0) || {}, t1 = tok.get(p.t1) || {};
@@ -544,12 +544,21 @@ async function writeOutputs() {
     const winsWith = (cks) => allWindows({
       series: snaps2.get(p.id), cur, chain: 'ethereum', config,
       pool: { feeTier, lpKeeps: keeps, d0: t0.decimals, d1: t1.decimals, usd0: t0.usd ?? null, usd1: t1.usd ?? null, tvlUsd: p.tvl ?? p.mapUsd ?? null,
-        gasUsd, walls: p.walls ?? null, inactiveShare: p.sticky ?? null, warnings, fails: cks.filter((c) => c.ok === false).map((c) => c.label),
-        checks: { ran: cks.filter((c) => c.ok != null).length, total: cks.length },
+        gasUsd, walls: p.walls ?? null, inactiveShare: p.sticky ?? null, warnings, checkList: cks,
         flow: (() => {
           if (unreadIds.has(p.id)) return {};
           const gemFlow = { markoutToFee: p.markout ?? null, traders7d: r ? 7 * r.txs : 0 }; // the latest day's replay, for the gem of longer windows
-          return { '24h': { swaps: r ? r.swaps : 0, traders: r ? r.txs : 0, markout: p.markout ?? null }, '7d': { gemFlow }, '30d': { gemFlow } };
+          // the day's largest tx's share of its LP fees (a burst one trader paid is a one-off)
+          let tot = 0, top = 0, unpriced = false;
+          const byTx = new Map();
+          for (const sw of byPoolEarly.get(p.id) || []) {
+            const f = swapFees(sw, meta.get(p.id)), u = f ? usdOfPair(sw.in === 0 ? [f.lp, 0n] : [0n, f.lp], t0.decimals, t1.decimals, t0.usd, t1.usd) : null;
+            if (u == null) { unpriced = true; continue; }
+            byTx.set(sw.tx, (byTx.get(sw.tx) || 0) + u); tot += u;
+          }
+          for (const v of byTx.values()) top = Math.max(top, v);
+          const topTxShare = !unpriced && tot > 0 ? top / tot : null;
+          return { '24h': { swaps: r ? r.swaps : 0, traders: r ? r.txs : 0, markout: p.markout ?? null, topTxShare }, '7d': { gemFlow }, '30d': { gemFlow } };
         })() },
     });
     // the 24 h window's LP fees (from the fee counters) against the exact swap replay of the same day: within 10%
@@ -575,7 +584,8 @@ async function writeOutputs() {
         depth: hist && isNum(p.per1) ? hist.buckets.map((v, i) => [rnd(-hist.span + (i + 0.5) * hist.bucketLog, 4), rnd(v * p.per1, 5)]) : [],
         walls: { below: isNum(p.walls?.below) ? p.walls.below : null, above: isNum(p.walls?.above) ? p.walls.above : null },
       },
-      w,
+      w: Object.fromEntries(Object.entries(w).map(([k, x]) => [k, x && (({ daily: _d, ...rest }) => rest)(x)])),
+      daily: w[defaultWindow]?.daily ?? [], pattern: w[defaultWindow]?.pattern ?? null, burst: w[defaultWindow]?.burst ?? null,
       checks,
       gemFirstAt: firstAt.get(p.id) ?? (gem != null && gem >= config.gemAt ? passT : null),
     });
