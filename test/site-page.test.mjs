@@ -32,7 +32,10 @@ test('self-contained: no external scripts, styles or fonts', () => {
   assert.ok(!/<script[^>]+src=/.test(html));
   assert.ok(!/<link[^>]+stylesheet/.test(html));
   const hosts = [...html.matchAll(/https?:\/\/([^/"'\s);]+)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(hosts)].sort(), ['raw.githubusercontent.com']);
+  assert.deepEqual([...new Set(hosts)].filter((h) => h !== 'www.w3.org').sort(), ['raw.githubusercontent.com']); // w3.org: the svg namespace, never fetched
+  assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
+  assert.match(html, /<link rel="apple-touch-icon" href="data:image\/png;base64,/);
+  assert.ok(/img-src data:/.test(csp), 'the inline icons are allowed');
 });
 
 test('the inline script compiles and carries the build and lock constants', () => {

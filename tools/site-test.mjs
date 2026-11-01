@@ -102,7 +102,7 @@ async function openUnlocked(browser, c = 'default', o = {}) {
 }
 const bodyText = (page) => page.evaluate(() => document.body.innerText);
 const domText = (page) => page.evaluate(() => document.body.textContent); // hidden elements included: locked means gone, not hidden
-const noJunk = (txt) => !/\bNaN\b|\bundefined\b|\bInfinity\b|\[object /.test(txt);
+const noJunk = (txt) => !/\bNaN\b|\bundefined\b|\bInfinity\b|\[object |— of the —|\$1\.0K/.test(txt); // a dash sentence or a rounded ticket is junk too
 async function setWin(page, wk) { await page.click(`#winseg button[data-w="${wk}"]`); await sleep(150); }
 
 // ---------- 1. unlock: wrong, right, kept, locked ----------
