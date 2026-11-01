@@ -34,7 +34,8 @@ jobs:
       MODE: ${{ inputs.mode || 'live' }}
       BY: ${{ inputs.by || 'schedule' }}
       BRANCH: claude/ecstatic-dirac-wkrqja
-      LIVE_PASS: ''   # the live pass command; empty until the scan is wired in (part 2): the loop then runs nothing
+      # the live pass: the pool list when it is over 6 hours old, then the scan (maps, fees, windows, sealed outputs)
+      LIVE_PASS: 'if [ ! -f out/pools-ethereum.json ] || [ $(( $(date +%s) - $(stat -c %Y out/pools-ethereum.json) )) -gt 21600 ]; then node scripts/pools.mjs; fi && node scripts/scan.mjs'
     steps:
       - name: Read the pinned commit
         uses: actions/checkout@v5
@@ -68,7 +69,7 @@ jobs:
           if [ "$MODE" = rehearsal ]; then
             REHEARSAL_FAIL_PASS=2 node scripts/loop.mjs --mode rehearsal --by "$BY" --pass 'node scripts/loop.mjs rehearsal-pass' --spacing 30 --max-passes 3 --dry-run
           else
-            node scripts/loop.mjs --mode live --by "$BY" --pass "$LIVE_PASS" --spacing 360 --deadline-min 320
+            node scripts/loop.mjs --mode live --by "$BY" --pass "$LIVE_PASS" --spacing 360 --deadline-min 320 --pass-timeout-min 50
           fi
       - name: Publish the loop's own sealed log
         if: always()
