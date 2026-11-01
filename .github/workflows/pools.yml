@@ -1,7 +1,7 @@
 name: pools
 on:
   push:
-    paths: ['scripts/pools.mjs', 'scripts/scan.mjs', 'lib/**', '.github/workflows/pools.yml']
+    paths: ['scripts/pools.mjs', 'scripts/scan.mjs', '.github/workflows/pools.yml']   # lib changes: dispatch a run when needed
   workflow_dispatch:
 permissions:
   contents: read
