@@ -233,10 +233,15 @@ for (const w of Object.keys(WINDOWS)) if (pools.length > known.length) { tally.w
 for (const p of known) {
   if (Date.now() - T0 > TIME_BUDGET_MS) { for (const w of Object.keys(WINDOWS)) { tally.win[w].unread++; tally.win[w].why.time = (tally.win[w].why.time || 0) + 1; } continue; }
   const filter = p.v === 3 ? { address: p.id, topics: [SWAP_TOPICS.v3] } : { address: C.v4PoolManager, topics: [SWAP_TOPICS.v4, p.id] };
-  const got = await timed('swaps', () => Promise.all(PIECES.map(([a, b], i) => logsAdaptive(rpc, filter, a, b, { step: 2000, maxStep: 9000, segments: i === 2 ? 3 : 1, retries: 2 }))));
+  // a fresh client per pool: one that dropped every node after a burst of rate limits would answer nothing again
+  const lrpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 4 });
+  const got = await timed('swaps', () => Promise.all(PIECES.map(([a, b], i) => logsAdaptive(lrpc, filter, a, b, { step: 2000, maxStep: 9000, segments: i === 2 ? 3 : 1, retries: 2 }))));
+  // a piece public nodes refused (rate limits on busy pools) gets one slower second pass, on another fresh client, before it counts as unread
+  for (let i = 0; i < PIECES.length; i++) if (got[i] == null) got[i] = await timed('swaps', () => logsAdaptive(makeRpc(RPCS, { timeout: 30000, maxRefusals: 6 }), filter, PIECES[i][0], PIECES[i][1], { step: 1000, minStep: 250, maxStep: 4000, segments: 1, retries: 2, waitMs: 3000 }));
   // positions' liquidity changes over 45 days, for the real-position check (v3 Mint/Burn, v4 ModifyLiquidity)
   const posFilter = p.v === 3 ? { address: p.id, topics: [[POSITION_TOPICS.mint, POSITION_TOPICS.burn]] } : { address: C.v4PoolManager, topics: [POSITION_TOPICS.modify, p.id] };
-  const posLogs = await timed('positions', () => logsAdaptive(rpc, posFilter, E - POS_DAYS * DAY_BLOCKS + 1, E, { step: 9000, maxStep: 9000, segments: 2, retries: 2 }));
+  const posLogs = await timed('positions', async () => (await logsAdaptive(lrpc, posFilter, E - POS_DAYS * DAY_BLOCKS + 1, E, { step: 9000, maxStep: 9000, segments: 2, retries: 2 }))
+    ?? logsAdaptive(makeRpc(RPCS, { timeout: 30000, maxRefusals: 6 }), posFilter, E - POS_DAYS * DAY_BLOCKS + 1, E, { step: 2000, minStep: 500, maxStep: 4000, segments: 1, retries: 2, waitMs: 3000 }));
   const posEvents = posLogs ? posLogs.map(decodePositionEvent).filter(Boolean) : null;
   tally.piecesUnread += got.filter((g) => g == null).length;
   const seen = new Set(), swaps = [];
