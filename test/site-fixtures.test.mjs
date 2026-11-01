@@ -59,6 +59,14 @@ test('every pool and window follows the contract and adds up', () => {
 test('the cases the page must handle are all present', () => {
   const pools = live.pools;
   assert.ok(pools.some((p) => p.young), 'a young pool');
+  const velna = pools.filter((p) => p.t0.sym === 'VELNA' && ['WETH', 'ETH'].includes(p.t1.sym));
+  const pr = live.pairs[velna[0].pairKey];
+  assert.ok(pr && pr.pools.length === velna.length && velna.every((p) => p.pairKey === velna[0].pairKey), 'one pair key for WETH and native ETH');
+  for (const wk of W) assert.ok(close(pr.w[wk].rows.reduce((a, r) => a + (r.volumeShare || 0), 0), 1, 2e-3), 'volume shares add to 1');
+  assert.ok(pr.best && pools.find((p) => p.id === pr.best).verified !== false, 'best to enter is a verified pool');
+  const top = pr.w['30d'].rows.slice().sort((a2, b2) => b2.net - a2.net)[0];
+  assert.equal(pools.find((p) => p.id === top.id).verified, false, 'planted: the unverified pool has the highest net, so a guard that slips shows');
+  assert.ok(velna.length >= 3 && velna.length <= 4 && velna.some((p) => p.t1.sym === 'ETH') && velna.some((p) => p.verified === false), 'a pair with 3-4 pools, one in native ETH, one unverified');
   assert.ok(pools.some((p) => p.verified === false && p.w['30d']?.gem.total == null), 'an unverified pool without a score');
   assert.ok(pools.some((p) => p.verified === null), 'a pool not checked yet');
   assert.ok(pools.some((p) => p.hooks), 'a hooked pool');

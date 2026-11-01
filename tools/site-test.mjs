@@ -42,7 +42,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,refresh,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,pairs,refresh,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -73,7 +73,7 @@ let ORIGIN = '';
 const url = (c, q = '') => `${ORIGIN}/app/index.html?base=/fx/${c}/${q}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null } = {}) {
-  const base = phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: { width, height } };
+  const base = phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: phone ? { width: 390, height: 844 } : { width, height } }; // phone = 390 px here, the device in Actions
   if (BROWSER !== 'chromium') delete base.defaultBrowserType;
   const ctx = await browser.newContext({ ...base, reducedMotion });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
@@ -397,6 +397,53 @@ async function testTabs(browser) {
   }
 }
 
+// ---------- 4b2. the pair view ----------
+async function testPairs(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    await p.click('#best h2 button[data-act="pair"]');
+    await p.waitForSelector('#sheet:not([hidden])');
+    const read = () => p.evaluate(() => {
+      const rows = [...document.querySelectorAll('#sheet tr[data-act="pair-row"]')];
+      return { title: document.querySelector('#sheet-title').textContent, n: rows.length, gold: rows.filter((r) => r.classList.contains('gold')).map((r) => ({ id: r.dataset.id, txt: r.innerText })),
+        segs: document.querySelectorAll('#sheet .pv-bar > div').length, shares: rows.map((r) => parseFloat(r.children[1].textContent) || 0), body: document.querySelector('#sheet-body').innerText };
+    });
+    let a = await read();
+    await snap(p, 'pair-' + tag);
+    ok(`pairs ${tag}: the title opens the pair view, one row per pool`, a.title === 'VELNA/WETH' && a.n === 4, `${a.title} ${a.n}`);
+    ok(`pairs ${tag}: one gold BEST TO ENTER row, never an unverified pool`, a.gold.length === 1 && /BEST TO ENTER/.test(a.gold[0].txt) && !/UNVERIFIED/.test(a.gold[0].txt), a.gold.map((g) => g.txt.slice(0, 30)).join('|'));
+    ok(`pairs ${tag}: unverified pools are tagged`, /UNVERIFIED/.test(a.body));
+    ok(`pairs ${tag}: the volume bar splits across the pools and adds up`, a.segs === 4 && Math.abs(a.shares.reduce((x, y) => x + y, 0) - 100) <= 3, a.shares.join('+'));
+    ok(`pairs ${tag}: no NaN`, noJunk(a.body));
+    await p.click('#sheet-win [data-w="24h"]');
+    await sleep(200);
+    const b = await read();
+    ok(`pairs ${tag}: it follows the window switch`, b.body !== a.body && b.gold.length === 1 && b.gold[0].id !== a.gold[0].id);
+    ok(`pairs ${tag}: …and in every window the best to enter is never unverified`, b.gold.length === 1 && !/UNVERIFIED/.test(b.gold[0].txt));
+    // a row opens that pool in the best-find card
+    const pick = await p.evaluate(() => { const r = [...document.querySelectorAll('#sheet tr[data-act="pair-row"]')].find((x) => !x.classList.contains('gold') && /ETH · v3|ETH$/.test(x.children[0].textContent) && /· ETH/.test(x.children[0].textContent)); return r ? r.dataset.id : document.querySelector('#sheet tr[data-act="pair-row"]:not(.gold)').dataset.id; });
+    await p.evaluate((id) => document.querySelector(`#sheet tr[data-id="${id}"]`).click(), pick);
+    await sleep(1400);
+    const c = await p.evaluate(() => ({ open: !document.querySelector('#sheet').hidden, full: document.querySelector('#best [data-act="detail"]').dataset.id, h: document.querySelector('#best h2').textContent, kick: document.querySelector('#best').innerText, top: document.querySelector('#best').getBoundingClientRect().top }));
+    ok(`pairs ${tag}: a row opens that pool in the best-find card`, !c.open && c.full === pick && c.h === 'VELNA/WETH' && c.top >= -2 && c.top < 400, `${c.open} ${c.h} ${Math.round(c.top)}`);
+    // the pair name opens the view from the table and from next best too
+    await setWin(p, '30d');
+    await p.fill('#f-q', 'VELNA');
+    await sleep(300);
+    await p.click('#all tbody .pairbtn');
+    await p.waitForSelector('#sheet:not([hidden])');
+    ok(`pairs ${tag}: the table's pair name opens the same view`, (await p.textContent('#sheet-title')) === 'VELNA/WETH' && (await p.$$('#sheet tr[data-act="pair-row"]')).length === 4);
+    await p.click('#sheet-close');
+    await p.fill('#f-q', '');
+    await p.click('#next .pairbtn');
+    await p.waitForSelector('#sheet:not([hidden])');
+    ok(`pairs ${tag}: next best's pair name opens a pair view`, (await p.$$('#sheet tr[data-act="pair-row"]')).length >= 1);
+    await p.click('#sheet-close');
+    ok(`pairs ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
 // ---------- 4c. the refresh button ----------
 async function testRefresh(browser) {
   const t = await openUnlocked(browser, 'default', { phone: true }), p = t.page;
@@ -475,7 +522,7 @@ async function testClicks(browser) {
       const mut = await p.evaluate(() => window.__mut);
       let good = mut > 0;
       if (act === 'jump') good = await headingInView(p, sig.split(':')[1]);
-      if (act === 'detail') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
+      if (act === 'detail' || act === 'pair') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
       if (act === 'win') good = good && (await p.getAttribute(`#winseg [data-w="${sig.split(':')[1]}"]`, 'aria-pressed')) === 'true';
@@ -522,7 +569,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, refresh: testRefresh, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, pairs: testPairs, refresh: testRefresh, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;

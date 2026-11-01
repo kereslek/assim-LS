@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-d8z5L5+XuF4/4D4BGPfDyR4bSm97/U1XfnkiMZjuqJI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3AglzmTizm+Q7xDcuJo1E1AQtwquKh5bOiuWkFIEir0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -79,6 +79,19 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 .tab .tag{padding:0 4px}
 .tab:focus-visible{outline:none}
 .tab:focus-visible .tp{outline:2px solid var(--accent);outline-offset:1px}
+
+/* pair links and the pair view */
+.pairbtn{display:block;min-height:44px;width:100%;padding:2px 0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.pairbtn .pn,.pairbtn .pn2,.best-h-btn{text-decoration:underline dotted rgba(22,199,132,.6);text-underline-offset:3px}
+.best-h-btn{min-height:44px;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left}
+.pv-bar{display:flex;height:22px;gap:2px;border-radius:4px;overflow:hidden}
+.pv-bar>div{min-width:3px;display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--mono);color:#03140C;overflow:hidden;white-space:nowrap}
+.pv td{vertical-align:middle}
+.pv tr.gold td{background:rgba(232,184,74,.1)}
+.pv tr.gold td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
+.pv .share{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.pv .share i{display:block;height:6px;border-radius:3px;background:var(--accent)}
+.tag.gold{border-color:var(--gold);color:var(--gold)}
 
 /* layout */
 main{max-width:1400px;margin:0 auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
@@ -449,7 +462,8 @@ footer .btn{font-family:var(--sans)}
   <div class="scrim" data-scrim></div>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
     <div class="sheet-head">
-      <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><h2 id="sheet-title">—</h2><div class="lbl" id="sheet-meta" style="margin-top:3px"></div></div>
+      <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><h2 id="sheet-title">—</h2><div class="lbl" id="sheet-meta" style="margin-top:3px"></div>
+        <div class="seg winsel" role="group" aria-label="Time window" id="sheet-win" style="margin-top:8px"><button type="button" data-act="win" data-w="24h" aria-pressed="false">24H</button><button type="button" data-act="win" data-w="7d" aria-pressed="false">7D</button><button type="button" data-act="win" data-w="30d" aria-pressed="true">30D</button></div></div>
       <button type="button" class="btn" id="sheet-close" data-act="close-detail">Close</button>
     </div>
     <div class="sheet-body" id="sheet-body"></div>
@@ -585,6 +599,14 @@ function gemPill(p, wk = S.win) {
   if (p.verified === false) return `<span class="pill void" title="Unverified: never a gem">${g == null ? DASH : g}</span>`;
   return `<span class="pill${isGem(p, wk) ? ' gem' : ''}">${g == null ? DASH : g}</span>`;
 }
+
+// ---------- pairs: derived from the pools' tokens until live.json carries them (WETH and ETH are one pair) ----------
+const symN = (s) => { const u = String(s || '').toUpperCase(); return u === 'ETH' ? 'WETH' : u; };
+const pairSyms = (p) => (p.t0 && p.t1 ? [p.t0.sym, p.t1.sym] : String(p.pair || '').split('/'));
+const PAIRS = () => (S.live && S.live.pairs && typeof S.live.pairs === 'object' ? S.live.pairs : null);
+const pairKey = (p) => (PAIRS() && p.pairKey && PAIRS()[p.pairKey] ? p.pairKey : pairSyms(p).map(symN).sort().join('/'));
+const pairPools = (key) => { const pr = PAIRS() && PAIRS()[key]; return pr && Array.isArray(pr.pools) ? pr.pools.map(poolById).filter(Boolean) : S.live.pools.filter((p) => pairKey(p) === key); };
+const pairName = (key) => { const pr = PAIRS() && PAIRS()[key]; if (pr && pr.label) return pr.label; const p = pairPools(key)[0]; return p ? pairSyms(p).map(symN).join('/') : key; };
 
 // ---------- crypto: PBKDF2 → AES-256-GCM, exactly as lib/lock.mjs ----------
 const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -822,7 +844,7 @@ function ensureWin() {
   const ok = (S.live.windows || WINS).filter((w) => WINS.includes(w));
   if (!S.win) S.win = store.get('lps.win');
   if (!ok.includes(S.win)) S.win = ok.includes(S.live.defaultWindow) ? S.live.defaultWindow : ok.includes('30d') ? '30d' : ok[0] || '30d';
-  for (const b of $$('#winseg button')) { b.setAttribute('aria-pressed', String(b.dataset.w === S.win)); b.disabled = !ok.includes(b.dataset.w); }
+  for (const b of $$('#winseg button, #sheet-win button')) { b.setAttribute('aria-pressed', String(b.dataset.w === S.win)); b.disabled = !ok.includes(b.dataset.w); }
 }
 const PANELS = [['glance', renderGlance], ['best', renderBest], ['next', renderNext], ['all', renderTable], ['bt', renderBt], ['health', renderHealth]];
 function renderAll() {
@@ -848,6 +870,7 @@ function renderAll() {
     }
   }
   if (S.detail) renderDetail();
+  if (S.pair) renderPair();
   S.rendered = true;
   if (!S.touched) scrollTo(0, 0);
 }
@@ -1000,9 +1023,10 @@ function renderBest() {
   const L = S.live, wk = S.win, el = $('#best');
   const list = topTen(wk), best = list.find((x) => isGem(x, wk)) || null;
   const want = S.bestSel !== undefined ? S.bestSel : store.get('lps.best');
-  let p = want ? list.find((x) => x.id === want) : null;
+  let p = want ? list.find((x) => x.id === want) || (S.bestExtra === want ? poolById(want) : null) : null;
   if (want && !p) { S.bestSel = null; store.del('lps.best'); } // not in this window's top 10: back to the best find
   if (!p) p = best;
+  if (p && !list.includes(p)) list.unshift(p); // opened from the pair view: it gets a tab of its own
   const tabs = list.length ? `<div class="tabs" role="tablist" aria-label="Top ${list.length} pools, ${WIN_LABEL[wk]}">`
     + list.map((x, i) => `<button type="button" role="tab" class="tab" data-act="tab" data-id="${esc(x.id)}" aria-selected="${x === p}" tabindex="${x === p || (!p && i === 0) ? 0 : -1}"><span class="tp"><span class="tn">${esc(x.pair)}</span>${tabTags(x)}</span></button>`).join('')
     + '</div>' : '';
@@ -1012,7 +1036,7 @@ function renderBest() {
     return;
   }
   const rank = list.indexOf(p) + 1;
-  const kick = p === best ? 'BEST FIND NOW' : `#${rank} OF ${list.length} · ${p.verified === false ? 'UNVERIFIED · NEVER A GEM' : isGem(p, wk) ? 'GEM' : 'ON WATCH'}`;
+  const kick = p === best ? 'BEST FIND NOW' : p.id === S.bestExtra && !topTen(wk).includes(p) ? `FROM THE PAIR VIEW · ${p.verified === false ? 'UNVERIFIED · NEVER A GEM' : isGem(p, wk) ? 'GEM' : 'NOT IN THE TOP 10'}` : `#${rank} OF ${list.length} · ${p.verified === false ? 'UNVERIFIED · NEVER A GEM' : isGem(p, wk) ? 'GEM' : 'ON WATCH'}`;
   const w = W(p, wk), tvl = p.tvlUsd;
   const outside = isNum(tvl) && tvl > 0 && isNum(w.inRangeUsd) ? Math.max(0, 1 - w.inRangeUsd / tvl) : null;
   const perDay = isNum(w.lpFeesUsd) && isNum(w.days) && w.days > 0 ? w.lpFeesUsd / w.days : null;
@@ -1020,7 +1044,7 @@ function renderBest() {
   const daysTxt = w.partial ? `${+w.days.toFixed(1)}-day` : WIN_WORD[wk];
   el.innerHTML = `<div class="lbl acc">TOP ${list.length} · ${WIN_LABEL[wk]} · TAP A POOL</div>${tabs}<div class="best-head"><div class="grow">`
     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
-    + `<h2 id="best-h">${esc(p.pair)}</h2>`
+    + `<h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>`
     + `<div class="lbl best-meta">${feeTxt(p.feeTier)} · ${chainLong(p.chain)} · UNISWAP V${esc(p.v)} · ${rangeTxt(w.range)}</div>`
     + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + `<div class="best-body"><div class="best-l">`
@@ -1057,8 +1081,8 @@ function renderNext() {
   const watch = ranked.filter((p) => !isGem(p, wk)).length;
   const rows = ranked.map((p) => {
     const w = W(p, wk);
-    return `<button type="button" class="nb-row" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<span class="nb-main"><span class="pn">${esc(p.pair)}</span>`
-      + `<span class="nb-meta"><span class="lbl">${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></button>`;
+    return `<div class="nb-row" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<button type="button" class="pairbtn nb-main" data-act="pair" data-key="${esc(pairKey(p))}"><span class="pn">${esc(p.pair)}</span>`
+      + `<span class="nb-meta"><span class="lbl">${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></button>${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
   }).join('');
   $('#next').innerHTML = `<div class="sec-head"><h2 id="next-h">Next best</h2><span class="sub" style="margin:0">${int(gems)} gem${gems === 1 ? '' : 's'} ≥ ${gemAt()} · ${int(watch)} on watch · ${WIN_WORD[wk]} net at ${usdFull(L.ticket)}</span></div>`
     + (rows || `<p class="empty" style="margin:0 12px 12px">No other scored pool in the ${WIN_WORD[wk]} window.</p>`)
@@ -1116,7 +1140,7 @@ function renderTable() {
     return `<th aria-sort="${on ? (S.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="lbl" data-act="sort" data-k="${c.k}">${esc(c.h).replace('σ', '<span style="text-transform:none">σ</span>')}${on ? (S.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
   }).join('') + '</tr>';
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td><span class="pn2">${esc(p.pair)}</span><span class="pm">${metaTxt(p)}</span><span class="tags">${tagsHtml(p, wk)}</span></td>`
+    + `<td><button type="button" class="pairbtn" data-act="pair" data-key="${esc(pairKey(p))}"><span class="pn2">${esc(p.pair)}</span><span class="pm">${metaTxt(p)}</span><span class="tags">${tagsHtml(p, wk)}</span></button></td>`
     + `<td>${gemPill(p, wk)}</td>`
     + COLS.slice(2).map((c) => { const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
@@ -1463,9 +1487,57 @@ function renderHealth() {
 }
 
 // ---------- detail sheet ----------
+const PV_COL = ['#16C784', '#E8B84A', '#6EA9FF', '#B6A2FF', '#F290C4', '#98A6BA'];
+function openPair(key, opener) {
+  if (!pairPools(key).length) return;
+  S.pair = key; S.detail = null; S.opener = opener || null;
+  renderPair();
+  $('#sheet').hidden = false;
+  document.documentElement.classList.add('modal-open');
+  $('#sheet-body').scrollTop = 0;
+  setTimeout(() => $('#sheet-close').focus({ preventScroll: true }), 0);
+}
+function renderPair() {
+  const wk = S.win, L = S.live, pools = pairPools(S.pair), pr = PAIRS() && PAIRS()[S.pair];
+  const prw = pr && pr.w && pr.w[wk] && Array.isArray(pr.w[wk].rows) ? pr.w[wk] : null; // the scanner's numbers when it sent them
+  const rows = pools.map((p) => {
+    const w = W(p, wk), perDay = w && isNum(w.lpFeesUsd) && w.days > 0 ? w.lpFeesUsd / w.days : null, d = prw && prw.rows.find((r) => r.id === p.id);
+    const per1k = d ? (isNum(d.feesPer1kDay) ? d.feesPer1kDay : null) : isNum(perDay) && w && isNum(w.inRangeUsd) ? (perDay * 1000) / (w.inRangeUsd + 1000) : null;
+    return { p, w, vol: w && isNum(w.volUsd) ? w.volUsd : null, share: d ? (isNum(d.volumeShare) ? d.volumeShare : null) : undefined, perDay, per1k, net: d ? (isNum(d.net) ? d.net : null) : w && isNum(w.net) ? w.net : null };
+  }).sort((a, b) => (b.vol ?? -1) - (a.vol ?? -1));
+  const totVol = prw && isNum(prw.volUsd) ? prw.volUsd : sum(rows.map((r) => r.vol));
+  for (const r of rows) if (r.share === undefined) r.share = totVol > 0 && r.vol != null ? r.vol / totVol : null;
+  // best to enter: the highest net APR among pools whose fees can be checked (the scanner's pick in its default window)
+  const verifiedBest = rows.filter((r) => r.p.verified !== false && isNum(r.net)).sort((a, b) => b.net - a.net)[0] || null;
+  const sent = pr && wk === L.defaultWindow && pr.best ? rows.find((r) => r.p.id === pr.best && r.p.verified !== false) : null;
+  const best = sent || verifiedBest;
+  const name = pairName(S.pair);
+  $('#sheet-kicker').textContent = `PAIR VIEW · ${WIN_LABEL[wk]}`;
+  $('#sheet-title').textContent = name;
+  $('#sheet-meta').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${[...new Set(pools.map((p) => chainLong(p.chain)))].join(' + ')} · ${usd(totVol)} ${WIN_WORD[wk]} volume`;
+  const label = (p) => `${feeTxt(p.feeTier)} · v${esc(p.v)} · ${chainShort(p.chain)}${p.t1 && p.t1.sym === 'ETH' ? ' · ETH' : ''}`;
+  const bar = totVol > 0 ? `<div class="pv-bar" role="img" aria-label="How the pair's ${WIN_WORD[wk]} volume splits across its pools">`
+    + rows.map((r, i) => (r.share ? `<div style="flex:${r.share.toFixed(4)} 1 0;background:${PV_COL[i % PV_COL.length]}" title="${label(r.p)}">${r.share > 0.12 ? pct(r.share, { dp: 0 }) : ''}</div>` : '')).join('') + '</div>'
+    + `<div class="legend" style="margin-top:6px">${rows.map((r, i) => `<span><i class="sw" style="background:${PV_COL[i % PV_COL.length]}"></i>${label(r.p)} ${pct(r.share, { dp: 0 })}</span>`).join('')}</div>`
+    : `<p class="empty">Volume not read for this window (${DASH}).</p>`;
+  const tbl = `<div class="tbl-box" style="margin:0"><table class="pv"><thead><tr>${['Pool', 'Volume share', 'LP fees / day', 'Value at the price', 'Fees per $1,000 / day', 'Net APR', 'Shape'].map((h) => `<th><span class="lbl" style="display:block;padding:6px 8px">${h}</span></th>`).join('')}</tr></thead><tbody>`
+    + rows.map((r) => `<tr class="row${r === best ? ' gold' : ''}" data-act="pair-row" data-id="${esc(r.p.id)}" tabindex="0"><td><span class="pn2">${label(r.p)}</span><span class="tags">${r === best ? '<span class="tag gold">BEST TO ENTER</span>' : ''}${tagsHtml(r.p, wk)}</span></td>`
+      + `<td><span class="share"><i style="width:${isNum(r.share) ? Math.max(2, Math.round(r.share * 60)) : 0}px"></i>${pct(r.share, { dp: 0 })}</span></td>`
+      + `<td>${usd(r.perDay)}</td><td>${usd(r.w && r.w.inRangeUsd)}</td><td>${isNum(r.per1k) ? '$' + r.per1k.toFixed(2) : DASH}</td>`
+      + `<td class="${r.net < 0 ? 'neg' : ''}">${pct(r.net)}</td><td>${shapeSpark(r.p, r.w)}</td></tr>`).join('') + '</tbody></table></div>';
+  $('#sheet-body').innerHTML = `<div class="dsec"><span class="lbl">Where the ${WIN_WORD[wk]} volume trades</span>${bar}</div>`
+    + `<div class="dsec"><span class="lbl">Every pool of the pair · tap one to open it in the best-find card</span>${tbl}`
+    + `<p class="caption">${best ? `Best to enter: <b>${label(best.p)}</b>, the highest net APR at ${usdFull(L.ticket)} among pools whose fees can be checked.` : `No pool of this pair has a net APR to compare (${DASH}).`} Value at the price = what already sits inside the suggested range.</p></div>`;
+}
+function pairRowToCard(id) {
+  closeDetail();
+  S.bestExtra = id;
+  setBestSel(id, false);
+  jumpTo('#best');
+}
 function openDetail(id, opener) {
   if (!poolById(id)) return;
-  S.detail = id; S.opener = opener || null;
+  S.detail = id; S.pair = null; S.opener = opener || null;
   renderDetail();
   $('#sheet').hidden = false;
   document.documentElement.classList.add('modal-open');
@@ -1476,7 +1548,7 @@ function closeDetail() {
   if ($('#sheet').hidden) return;
   $('#sheet').hidden = true;
   document.documentElement.classList.remove('modal-open');
-  S.detail = null;
+  S.detail = null; S.pair = null;
   const o = S.opener; S.opener = null;
   if (o && document.contains(o)) o.focus({ preventScroll: true });
 }
@@ -1568,7 +1640,7 @@ function jumpTo(sel) {
 // ---------- events ----------
 function setWin(wk) {
   if (!WINS.includes(wk) || wk === S.win) return;
-  S.win = wk; S.cut = null; stopPlay();
+  S.win = wk; S.cut = null; S.bestExtra = null; stopPlay();
   store.set('lps.win', wk);
   renderAll();
 }
@@ -1579,6 +1651,8 @@ document.addEventListener('click', (e) => {
   switch (el.dataset.act) {
     case 'win': setWin(el.dataset.w); break;
     case 'tab': setBestSel(el.dataset.id, false); break;
+    case 'pair': openPair(el.dataset.key, el); break;
+    case 'pair-row': pairRowToCard(el.dataset.id); break;
     case 'refresh': manualRefresh(); break;
     case 'jump': jumpTo(el.dataset.to); break;
     case 'detail': if (el.dataset.id) openDetail(el.dataset.id, el); break;
@@ -1604,7 +1678,7 @@ document.addEventListener('keydown', (e) => {
     setBestSel(all[j].dataset.id, true);
     return;
   }
-  const el = e.target.closest && e.target.closest('tr[data-act]');
+  const el = e.target === document.activeElement && e.target.matches && e.target.matches('tr[data-act], [role="button"][data-act]') ? e.target : null;
   if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); el.click(); }
   if (e.key === 'Tab' && !$('#sheet').hidden) { // keep focus inside the open sheet
     const f = $$('#sheet button, #sheet [tabindex="0"], #sheet [href]').filter((x) => !x.disabled && x.offsetParent !== null);

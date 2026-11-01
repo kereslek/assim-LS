@@ -141,6 +141,20 @@ const HEROES = [
     bench: true, vmul: { '24h': 0.8, '7d': 1.1, '30d': 1 }, smul: { '24h': 1.2, '7d': 1, '30d': 1 } },
 ];
 
+// More pools of the VELNA/WETH pair (one quoted in native ETH, which is the same pair), for the pair view.
+// They come last so every pool before them keeps its random draws.
+const PAIR_EXTRAS = [
+  { base: 'VELNA', quote: 'WETH', chain: 'base', v: 3, fee: 0.01, shape: 'mixed', tvl: 640e3, inside9: 150e3, lps: 6,
+    sigma: 0.034, volDay: 26e3, ageDays: 300, pairAgeDays: 412, persistence: 0.2, markout: 0.35, traders7d: 60, usd: 0.85,
+    vmul: { '24h': 1.4, '7d': 1.1, '30d': 1 }, smul: { '24h': 1.3, '7d': 1.05, '30d': 1 } },
+  { base: 'VELNA', quote: 'ETH', chain: 'base', v: 4, fee: 0.003, shape: 'served', tvl: 1.4e6, inside9: 900e3, lps: 14,
+    sigma: 0.034, volDay: 1.5e6, ageDays: 120, pairAgeDays: 412, persistence: 0.15, markout: 0.5, traders7d: 300, usd: 0.85,
+    hooks: true, verified: false, vmul: { '24h': 0.7, '7d': 1.2, '30d': 1 }, smul: { '24h': 1.3, '7d': 1.05, '30d': 1 } },
+  { base: 'VELNA', quote: 'WETH', chain: 'ethereum', v: 3, fee: 0.003, shape: 'served', tvl: 3.6e6, inside9: 2.2e6, lps: 22,
+    sigma: 0.034, volDay: 420e3, ageDays: 380, pairAgeDays: 412, persistence: 0.2, markout: 0.45, traders7d: 200, usd: 0.85,
+    vmul: { '24h': 1.6, '7d': 0.9, '30d': 1 }, smul: { '24h': 1.3, '7d': 1.05, '30d': 1 } },
+];
+
 const SYL = ['AR', 'BO', 'CU', 'DA', 'EL', 'FI', 'GO', 'HU', 'IX', 'JA', 'KE', 'LU', 'MO', 'NI', 'OR', 'PA', 'QI', 'RU',
   'SA', 'TE', 'UL', 'VO', 'WI', 'XA', 'YO', 'ZE'];
 
@@ -288,8 +302,10 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     WETH: { sym: 'WETH', addr: hex(r, 40), dec: 18, usd: 3400 },
     USDC: { sym: 'USDC', addr: hex(r, 40), dec: 6, usd: 1 },
   };
+  quotes.ETH = { sym: 'ETH', addr: '0x' + '0'.repeat(40), dec: 18, usd: 3400 }; // native ETH (v4), the same pair as WETH
   const taken = new Set(HEROES.map((h) => h.base + '/' + h.quote));
-  const specs = [...HEROES, ...makeRandomSpecs(r, 120 - HEROES.length, taken)];
+  const addrs = {}, tokAddr = (sym, fresh) => (addrs[sym] ||= fresh); // the random draw happens either way, so later pools don't shift
+  const specs = [...HEROES, ...makeRandomSpecs(r, 120 - HEROES.length, taken), ...PAIR_EXTRAS];
   const pools = specs.map((spec) => {
     const q = quotes[spec.quote];
     const young = spec.ageDays < 30;
@@ -299,7 +315,7 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     const lpKeeps = 'lpKeeps' in spec ? spec.lpKeeps : spec.v === 3 && r() < 0.25 ? 0.75 : 1;
     const pool = {
       id: spec.v === 4 ? hex(r, 64) : hex(r, 40), chain: spec.chain, v: spec.v, pair: spec.base + '/' + spec.quote,
-      t0: { sym: spec.base, addr: hex(r, 40), dec: 18, usd: spec.usd == null ? null : sig(spec.usd, 6) },
+      t0: { sym: spec.base, addr: tokAddr(spec.base, hex(r, 40)), dec: 18, usd: spec.usd == null ? null : sig(spec.usd, 6) }, // one address per token
       t1: { ...q },
       feeTier: spec.fee, dynamicFee: !!spec.dynamicFee, lpKeeps,
       hooks: spec.hooks ? hex(r, 40) : null,
@@ -329,6 +345,32 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
   const byGem = (a, b) => (b.w['30d']?.gem?.total ?? -1) - (a.w['30d']?.gem?.total ?? -1);
   pools.sort(byGem);
   const bench = pools.find((p) => p._spec.bench);
+  // pairs, as lib/pairs.mjs publishes them: key = the two token addresses, lower first, native ETH read as WETH
+  const addrOf = (t) => (t.sym === 'ETH' ? quotes.WETH.addr : t.addr).toLowerCase();
+  const pairs = {};
+  for (const p of pools) {
+    p.pairKey = [addrOf(p.t0), addrOf(p.t1)].sort().join('-');
+    (pairs[p.pairKey] ||= { label: p.pair.replace(/\/ETH$/, '/WETH'), pools: [], best: null, w: {} }).pools.push(p.id);
+  }
+  for (const pr of Object.values(pairs)) {
+    const ps = pr.pools.map((id) => pools.find((p) => p.id === id));
+    for (const wk of WINDOWS) {
+      const ws = ps.map((p) => p.w[wk]);
+      const vols = ws.map((w) => (w && isNum(w.volUsd) ? w.volUsd : null)), tot = vols.reduce((a, v) => a + (v || 0), 0);
+      const fees = ws.map((w) => (w && isNum(w.lpFeesUsd) ? w.lpFeesUsd : null));
+      pr.w[wk] = {
+        volUsd: vols.some(isNum) ? Math.round(tot) : null, lpFeesUsd: fees.some(isNum) ? sig(fees.reduce((a, v) => a + (v || 0), 0), 6) : null,
+        unread: vols.filter((v) => v == null).length,
+        rows: ps.map((p, i) => {
+          const w = ws[i];
+          const per1k = w && isNum(w.lpFeesUsd) && isNum(w.inRangeUsd) && w.days > 0 ? sig(((w.lpFeesUsd / w.days) * 1000) / (w.inRangeUsd + 1000), 4) : null;
+          return { id: p.id, volumeShare: vols[i] != null && tot > 0 ? sig(vols[i] / tot, 4) : null, feesPer1kDay: per1k, net: w ? w.net : null };
+        }),
+      };
+    }
+    const cand = pr.w['30d'].rows.filter((r) => isNum(r.net) && ps.find((p) => p.id === r.id).verified !== false).sort((a, b) => b.net - a.net);
+    pr.best = cand.length ? cand[0].id : null;
+  }
 
   const chains = ['ethereum', 'base'].map((id, i) => ({
     id, pools: id === 'ethereum' ? 884 : 428, unread: id === 'ethereum' ? 4 : 2, block: id === 'ethereum' ? 21417733 : 22688410 + i,
@@ -354,6 +396,7 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     },
     bench: bench.id,
     pools: pools.map(({ _spec, ...p }) => p),
+    pairs,
   };
 
   const history = makeHistory(r, pools, now);
