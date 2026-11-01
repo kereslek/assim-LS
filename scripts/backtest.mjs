@@ -176,11 +176,27 @@ function metaAt(p, b) {
   return null;
 }
 
+// The window's price path, block by block (public market data): blocks with swaps, blocks whose
+// price went ≥ 5% away and came back before the block closed (sandwiches), the largest such
+// excursion, and the spread of block-closing prices.
+function pathStats(ws, sp0) {
+  let blocks = 0, spikes = 0, maxSpike = 0, lo = 0, hi = 0, prevClose = sp0;
+  for (let i = 0; i < ws.length;) {
+    let j = i, far = 0;
+    for (; j < ws.length && ws[j].block === ws[i].block; j++) far = Math.max(far, Math.abs(2 * Math.log(Number(ws[j].sqrtPriceX96) / 2 ** 96 / prevClose)));
+    const close = Number(ws[j - 1].sqrtPriceX96) / 2 ** 96, net = Math.abs(2 * Math.log(close / prevClose)), mv = 2 * Math.log(close / sp0);
+    if (far - net >= 0.05) spikes++;
+    maxSpike = Math.max(maxSpike, far - net); lo = Math.min(lo, mv); hi = Math.max(hi, mv);
+    prevClose = close; blocks++; i = j;
+  }
+  return { blocks, spikes, maxSpike, lo, hi };
+}
+
 // 4. Swaps: 31 days per pool in three pieces (last day, days 2–8, days 9–31).
 const PIECES = [[E - DAY_BLOCKS + 1, E], [E - 8 * DAY_BLOCKS + 1, E - DAY_BLOCKS], [E - 31 * DAY_BLOCKS + 1, E - 8 * DAY_BLOCKS]];
 const out = { v: 1, t: Date.now(), ticket, provisional: true, pools: Object.fromEntries(pools.map((p) => [p.id, { '24h': null, '7d': null, '30d': null }])) };
 const tally = { swaps: 0, dup: 0, piecesUnread: 0, win: Object.fromEntries(Object.keys(WINDOWS).map((w) => [w, { done: 0, partial: 0, unread: 0, why: {} }])) };
-const audits = [], ratios = [], best = {}, bench = {}, forecastGap = [];
+const audits = [], ratios = [], best = {}, bench = {}, benchPath = {}, forecastGap = [];
 for (const w of Object.keys(WINDOWS)) if (pools.length > known.length) { tally.win[w].unread += pools.length - known.length; tally.win[w].why.facts = pools.length - known.length; }
 for (const p of known) {
   if (Date.now() - T0 > TIME_BUDGET_MS) { for (const w of Object.keys(WINDOWS)) { tally.win[w].unread++; tally.win[w].why.time = (tally.win[w].why.time || 0) + 1; } continue; }
@@ -240,7 +256,7 @@ for (const p of known) {
     const b = res.backtest, top = b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0];
     if (top) { best[w] = best[w] || {}; best[w][top.id] = (best[w][top.id] || 0) + 1; }
     if (b.forecastNet != null && b.net != null) forecastGap.push(b.net - b.forecastNet);
-    if (p.id === BENCH) bench[w] = b;
+    if (p.id === BENCH) { bench[w] = b; benchPath[w] = pathStats(ws, spS); }
   }
 }
 
@@ -276,5 +292,6 @@ if (isPublic) {
     say(true, `benchmark ${w}`, `UNI/WETH 0.3% at the $${ticket} example ticket, ±${fr(b.range)} (σ ${fr(b.sigma)} a day, ${b.sigmaFrom}): net ${fr(b.net)} a year (fees ${fr(feeApr)}, loss vs holding ${fr(lvrApr)}, costs ${fr(costApr)}); forecast ${fr(b.forecastNet)}; in range ${fr(b.tir)}, ${b.reranges} re-centres, share of pool fees ${b.share == null ? '—' : (100 * b.share).toFixed(3) + '%'}; ${b.swaps} swaps; best strategy ${b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0]?.id ?? '—'}`);
   }
 } else say(true, 'benchmark', `UNI/WETH 0.3% backtested for ${Object.keys(bench).join(', ') || 'no window'} (results sealed: the ticket and range are private)`);
+for (const [w, q] of Object.entries(benchPath)) say(true, `benchmark path ${w}`, `${q.blocks} blocks with swaps; ${q.spikes} went ≥ 5% away and came back within the block (largest ${fr(q.maxSpike)}); block closes ranged ${fr(q.lo)} to +${fr(q.hi)} from the start`);
 say(how === 'sealed' ? true : null, 'output', how === 'sealed' ? 'out/data/backtest.json sealed with the lock (publishing to the data branch comes with the always-on loop)' : 'out/data/backtest.json not written: no passphrase here, and plaintext never touches the disk');
 finish(nAud && okAud < nAud ? 1 : 0);

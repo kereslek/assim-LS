@@ -160,6 +160,20 @@ test('triggers: exit+12h waits, a return in time cancels, drift re-centres early
   assert.equal(simulate(dp, ctxFor(1, 2 * 10 * MIN, { spacing: 1 }), one(0.05, 'drift75')).reranges, 0);
 });
 
+test('a spike that comes back within the same block never re-centres; one that ends the block outside does', () => {
+  const mk = (sameBlock) => {
+    const ss = path([1, 1.3, 1, 1]);
+    if (sameBlock) Object.assign(ss[2], { block: ss[1].block, logIndex: 1, t: ss[1].t }); // a sandwich: out and back in one block
+    return prepare(ss, { meta: V3, d0: 18, d1: 18, ref: 1 });
+  };
+  const ctx = ctxFor(1, 5 * 10 * MIN);
+  const spike = simulate(mk(true), ctx, one(0.05), { trace: true });
+  assert.equal(spike.reranges, 0);
+  assert.ok(spike.trace.frac[1] > 0 && spike.trace.frac[1] < 1); // the spike's path still paid fees inside the range
+  assert.equal(simulate(mk(false), ctx, one(0.05)).reranges, 2); // a block that closes outside re-centres, and again on the way back
+  assert.equal(simulate(mk(true), ctx, one(0.05, 'drift50')).reranges, 0);
+});
+
 test('missing inputs give null, never a zero result', () => {
   const prep = prepare(path([1, 1.01]), { meta: V3, d0: 18, d1: 18, ref: 1 });
   assert.equal(simulate(prep, ctxFor(1, 3 * 10 * MIN, { gasUsd: null }), one(0.05)), null);
