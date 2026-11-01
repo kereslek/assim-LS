@@ -20,6 +20,8 @@ import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 
 const FLOOR = 300_000;
 const GECKO_SAMPLE = 40;
+// Diagnostic runs can skip the slow parts: POOLS_SKIP=events,gecko,dexscreener (a full run skips nothing).
+const SKIP = new Set(String(process.env.POOLS_SKIP || '').split(',').map((x) => x.trim()).filter(Boolean));
 const RPCS = ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth', 'https://rpc.mevblocker.io', 'https://rpc.flashbots.net', 'https://eth.blockscout.com/api/eth-rpc'];
 
 const lines = [], timing = {};
@@ -131,10 +133,10 @@ const logRpc = makeRpc(RPCS, { timeout: 30000, maxRefusals: 1000 }); // range re
 const head = await rpc.call('eth_getBlockByNumber', [tag, false]);
 const nowTs = head?.timestamp ? parseInt(head.timestamp, 16) : Math.floor(Date.now() / 1000);
 const timeOf = (b) => nowTs - (block - b) * 12; // post-merge slots are 12 s (missed slots make this slightly late)
-const ev = await timed('v3 events', () => pageLogs(getJson, { base: 'https://eth.blockscout.com/api', address: C.v3Factory, fromBlock: C.v3FactoryBlock, toBlock: block, tries: 5, spacingMs: 1500 }));
+const ev = SKIP.has('events') ? { logs: [], complete: false, calls: 0, reason: 'skipped', reached: block } : await timed('v3 events', () => pageLogs(getJson, { base: 'https://eth.blockscout.com/api', address: C.v3Factory, fromBlock: C.v3FactoryBlock, toBlock: block, tries: 5, spacingMs: 1500 }));
 const created = ev.logs.map(decodePoolCreated).filter(Boolean);
 let eventsComplete = ev.complete, via = `Blockscout ${ev.calls} pages`;
-if (!ev.complete) {
+if (!ev.complete && !SKIP.has('events')) {
   const rest = await timed('v3 events rpc', () => logsAdaptive(logRpc, { address: C.v3Factory, topics: [TOPICS.poolCreated] }, ev.reached, block, { step: 9000, maxStep: 9000, minStep: 500, segments: 3, retries: 3, waitMs: 3000 }));
   if (rest) {
     const seen = new Set(created.map((e) => e.id));
@@ -194,10 +196,10 @@ if (initLogs) {
 // 10. Aggregators: DexScreener for every token, GeckoTerminal for a rotating sample of tokens that
 //     have a listed Uniswap pool ≥ $300k.
 const scoped = (p) => p.base && p.quote && inPair(p.base, p.quote);
-const ds = await timed('dexscreener', () => eachSpaced(tokens, 260, (t) => dexScreenerTokenPairs(getJson, 'ethereum', t.address)));
+const ds = SKIP.has('dexscreener') ? tokens.map(() => null) : await timed('dexscreener', () => eachSpaced(tokens, 260, (t) => dexScreenerTokenPairs(getJson, 'ethereum', t.address)));
 const gtTokens = (() => {
   const withBig = tokens.filter((t, i) => (ds[i] || []).some((p) => p.venue && p.reserveUsd >= FLOOR));
-  const day = Math.floor(Date.now() / 86400e3), n = withBig.length, k = Math.min(GECKO_SAMPLE, n);
+  const day = Math.floor(Date.now() / 86400e3), n = withBig.length, k = SKIP.has('gecko') ? 0 : Math.min(GECKO_SAMPLE, n);
   return Array.from({ length: k }, (_, j) => withBig[(day * GECKO_SAMPLE + j) % n]);
 })();
 const gt = await timed('geckoterminal', () => eachSpaced(gtTokens, 2400, (t) => geckoTokenPools(getJson, 'eth', t.address)));
@@ -262,9 +264,10 @@ for (const l of [...ds, ...gt]) for (const p of l || []) {
 for (const p of [...v3, ...v4]) { const a = agg.get(p.id); p.aggReserveUsd = a?.reserveUsd ?? null; p.aggVolumeUsd24h = a?.volumeUsd24h ?? null; }
 fs.mkdirSync('out', { recursive: true });
 const big = (x) => (typeof x === 'bigint' ? x.toString() : x);
+const symOf = new Map([...C.quotes.map((q) => [q.address, q.symbol]), ...tokens.map((t) => [t.address, t.symbol])]); // public tickers, for pair labels
 fs.writeFileSync('out/pools-ethereum.json', JSON.stringify({
   t: Date.now(), block, v3, v4,
-  tokens: [...dec].map(([address, decimals]) => ({ address, decimals, usd: usdOf.get(address) ?? null, quote: quoteSet.has(address) })),
+  tokens: [...dec].map(([address, decimals]) => ({ address, decimals, symbol: symOf.get(address) ?? null, usd: usdOf.get(address) ?? null, quote: quoteSet.has(address) })),
 }, (k, v) => big(v)));
 const ok = !unread3 && !unread4 && quotesRight;
 finish(ok && !(eventsComplete && (onlyEvents || onlyLookups)) ? 0 : 1);

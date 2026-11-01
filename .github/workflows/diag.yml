@@ -1,0 +1,45 @@
+name: diag
+# Diagnostics for the cross-checks. Public market data only: counts, ratios, block numbers, status codes.
+# parts: any of probe (price-history sources), events (v3 creation events per provider), scan (a fast
+# pool list, then the full scan). Inputs are public: never pass a private value here.
+on:
+  workflow_dispatch:
+    inputs:
+      parts:
+        description: 'probe, events, scan (comma list)'
+        default: 'probe'
+permissions:
+  contents: read
+concurrency:
+  group: diag-${{ inputs.parts }}
+  cancel-in-progress: false
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Unit tests first
+        run: node --test test/*.test.mjs
+      - name: Price-history sources
+        if: contains(inputs.parts, 'probe')
+        env:
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+        run: node scripts/diag.mjs probe
+      - name: Pool list, fast (slow parts skipped)
+        if: contains(inputs.parts, 'events') || contains(inputs.parts, 'scan')
+        env:
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+          POOLS_SKIP: ${{ contains(inputs.parts, 'scan') && 'events,gecko' || 'events,gecko,dexscreener' }}
+        run: node scripts/pools.mjs || true
+      - name: Creation events per provider
+        if: contains(inputs.parts, 'events')
+        run: node scripts/diag.mjs events
+      - name: Scan
+        if: contains(inputs.parts, 'scan') && hashFiles('out/pools-ethereum.json') != ''
+        env:
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+        run: node scripts/scan.mjs
