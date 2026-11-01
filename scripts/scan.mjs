@@ -458,7 +458,10 @@ async function writeOutputs() {
   const v4m = mapped.filter((p) => p.v === 4).map((p) => p.id), known = new Set(bc.to != null && bc.to <= block ? bc.ids : []);
   const bookEv = new Map(), bookUnread = new Set();
   for (const e of bc.to != null && bc.to <= block ? bc.ev : []) { if (!bookEv.has(e[0])) bookEv.set(e[0], []); bookEv.get(e[0]).push({ sender: e[1], tickLower: e[2], tickUpper: e[3], liquidityDelta: BigInt(e[4]), salt: e[5] }); }
-  await timed('lp book', async () => {
+  // Off unless LP_BOOK=1: a live run (1 Nov 2026) spent 9 minutes and confirmed nothing, because the
+  // empty chunks of this history need a second node to confirm them and only one node serves it.
+  const bookOn = process.env.LP_BOOK === '1';
+  if (bookOn) await timed('lp book', async () => {
     const plans = [[v4m.filter((id) => known.has(id)), (bc.to ?? V4_FROM - 1) + 1], [v4m.filter((id) => !known.has(id)), V4_FROM]];
     for (const [ids, fromB] of plans) for (let i = 0; i < ids.length; i += 50) {
       const part = ids.slice(i, i + 50);
@@ -468,12 +471,12 @@ async function writeOutputs() {
       for (const m of got.map(decodeModifyLiquidity).filter(Boolean)) { if (!bookEv.has(m.id)) bookEv.set(m.id, []); bookEv.get(m.id).push(m); }
     }
   });
-  try {
+  if (bookOn) try {
     const keep = v4m.filter((id) => !bookUnread.has(id));
     fs.mkdirSync('out/cache', { recursive: true });
     fs.writeFileSync(bookFile, JSON.stringify({ v: 1, to: block, ids: keep, ev: keep.flatMap((id) => (bookEv.get(id) || []).map((m) => [id, m.sender, m.tickLower, m.tickUpper, String(m.liquidityDelta), m.salt])) }));
   } catch { /* read again next pass */ }
-  const bookOf = new Map(mapped.filter((p) => p.v === 4).map((p) => [p.id, bookUnread.has(p.id) ? null : lpBook(bookEv.get(p.id) || [], { tick: p.s.tick, activeL: p.L })]));
+  const bookOf = new Map(mapped.filter((p) => bookOn && p.v === 4).map((p) => [p.id, bookUnread.has(p.id) ? null : lpBook(bookEv.get(p.id) || [], { tick: p.s.tick, activeL: p.L })]));
   // sell-test, v3: sell about $100 of the non-quote token through the pool in a simulated call (lib/selltest.mjs).
   // Each token's balance slot is probed once and kept in a cache; a token without one is unread.
   const slotFile = 'out/cache/balance-slots.json';
@@ -531,7 +534,7 @@ async function writeOutputs() {
       { id: 'contract-verified', label: 'both tokens\' source verified', ok: bothVerified(p) },
       ...(p.v === 3 ? [{ id: 'sell-test', label: 'a small sell goes through (≥ 95% of the quote)', ok: sellOf.get(p.id) ?? null }] : []),
       // the LP book is read for v4 pools only so far (v3 needs the position manager's history): v3 lists neither
-      ...(p.v === 4 ? [
+      ...(p.v === 4 && bookOn ? [
         { id: 'lp-book', label: 'LP book adds up', ok: bookOf.get(p.id)?.ok ?? null },
         { id: 'lp-concentration', label: 'no LP over 60% at the price', ok: bookOf.get(p.id)?.concentrated == null ? null : !bookOf.get(p.id).concentrated },
       ] : []),
