@@ -5,3 +5,5 @@ node_modules/
 /scratch/
 /plain/
 out/
+# helper agents' temporary working copies
+.claude/worktrees/
