@@ -41,8 +41,8 @@ test('(1) liquidity near the price is never parked: the crowded stable pool is s
 function stablePool({ inRange = 10e6 } = {}) {
   const Lact = 10n ** 18n, rows = [];
   let fg1 = 5n * Q;
-  for (let t = NOW - 2 * DAY; t <= NOW; t += HOUR) {
-    rows.push({ t, block: 1 + Math.round((t - NOW + 2 * DAY) / 12e3), sqrtPriceX96: 1n << 96n, tick: 0, L: Lact, fg0: 3n * Q, fg1, parked: 0 });
+  for (let t = NOW - 4 * DAY; t <= NOW; t += HOUR) {
+    rows.push({ t, block: 1 + Math.round((t - NOW + 4 * DAY) / 12e3), sqrtPriceX96: 1n << 96n, tick: 0, L: Lact, fg0: 3n * Q, fg1, parked: 0 });
     fg1 += (11375000n * Q) / Lact; // about $11.4 of LP fees an hour in a 6-decimal $1 token1: ~$273 a day
   }
   const cur = rows.at(-1);
@@ -63,7 +63,7 @@ test('(2) fee APR at the ticket is 365·F/(V+S): ~1% next to $10M in range, the 
   const want = (365 * F) / (w.inRangeUsd + CONFIG.ticket);
   assert.ok(Math.abs(w.feeApr / want - 1) < 0.02, `fee APR ${w.feeApr} vs ${want}`);
   assert.ok(w.feeApr > 0.005 && w.feeApr < 0.015, `about 1%: ${w.feeApr}`);
-  // the same identity in the longer windows (the 2-day pool is partial there)
+  // the same identity in the longer windows (the 4-day pool covers over half of 7 days)
   for (const k of ['7d']) {
     const x = windowMetrics({ window: k, series, cur, pool: POOL, config: CONFIG, chain: 'ethereum' });
     assert.ok(x && Math.abs(x.feeApr / ((365 * x.lpFeesUsd / x.days) / (x.inRangeUsd + CONFIG.ticket)) - 1) < 0.02, k);

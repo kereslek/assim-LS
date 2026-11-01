@@ -44,7 +44,7 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
   assert.equal(live.ticket, 2718, 'the sealed config reaches live.json');
   assert.equal(live.gemAt, 57);
   assert.ok(live.pools.every((p) => p.w['30d'] && p.w['30d'].days >= 29), 'the backfill gives a full 30-day window on the first pass');
-  assert.ok(live.pools.every((p) => p.w['24h'].sigma === null && p.w['24h'].feeApr === null), 'no hourly history yet: σ and fee APR blank, never 0');
+  assert.ok(live.pools.every((p) => p.w['24h'] && p.w['24h'].days >= 0.95 && p.w['24h'].lpFeesUsd != null), 'the hourly backfill covers the 24-hour window on the first pass');
   assert.ok(hist.v === 1 && Object.keys(hist.pools).length === live.pools.length && Array.isArray(hist.health));
   assert.ok(snaps.v === 1 && Object.keys(snaps.pools).length === live.pools.length);
   assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'out', 'shortlist.json'), 'utf8')).ids.length >= 1);

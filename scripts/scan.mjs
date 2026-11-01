@@ -27,7 +27,7 @@ import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { openLock } from '../lib/lock.mjs';
 import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
-import { parseStore, serializeStore, mergeStore } from '../lib/snapshots.mjs';
+import { parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
 import { allWindows, deltaFg, gemWarnings, isHooked } from '../lib/windows.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 600_000, DAY_BLOCKS = 7200, GROUP = 40;
@@ -35,6 +35,8 @@ const EXAMPLE_TICKET = 1000, HOLD_DAYS = 14, RERANGE_GAS = 630_000, MARKOUT_BLOC
 const BENCH = '0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801';
 // Parked liquidity starts beyond max(the suggested ±r, 2%) from the price: closer than that it is serving.
 const NEAR_MIN = 0.02;
+// Snapshots written before the backfill checked each batch's block time are rebuilt once.
+const SNAP_FIX = 2;
 const nearOf = (p) => Math.max(NEAR_MIN, p.score?.r ?? 0);
 const V3_SPACING = { 100: 1, 500: 10, 3000: 60, 10000: 200 };
 const RPCS = ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth', 'https://rpc.mevblocker.io', 'https://rpc.flashbots.net', 'https://eth.blockscout.com/api/eth-rpc'];
@@ -389,7 +391,8 @@ async function writeOutputs() {
   const rnd = (x, n = 6) => (isNum(x) ? Number(x.toPrecision(n)) : null);
   // the stored snapshots (restored from the data branch); one that won't open or parse is never overwritten
   let snaps = new Map(), snapsOk = true;
-  if (store) { try { const o = store.get('snapshots.json'); if (o) snaps = parseStore(o); } catch { snapsOk = false; } }
+  let rebuilt = false;
+  if (store) { try { const o = store.get('snapshots.json'); if (o && (o.fix ?? 0) >= SNAP_FIX) snaps = parseStore(o); else if (o) rebuilt = true; } catch { snapsOk = false; } }
   const sig = (m) => [...m].map(([id, x]) => `${id}:${x.h.length}:${x.h.at(-1)?.t}:${x.d.length}:${x.d.at(-1)?.t}`).sort().join('|');
   const before = sig(snaps);
   // fee growth now for every mapped pool (the 24 h check read it only for busy pools)
@@ -402,31 +405,39 @@ async function writeOutputs() {
     p.row = { t: passT, block, sqrtPriceX96: B(p.s.sqrtPriceX96), tick: p.s.tick, L: p.L, fg0: fg?.[0] ?? null, fg1: fg?.[1] ?? null, parked: isNum(p.hollow) ? p.hollow : null };
     rows.set(p.id, [p.row]);
   }
-  // backfill: a pool with under 20 daily rows gets the last 30 days at the daily blocks (archive state)
-  const need = snapsOk ? mapped.filter((p) => (snaps.get(p.id)?.d.length ?? 0) < 20) : [];
-  let backfilled = 0;
+  // backfill: a pool with under 20 daily or hourly rows gets the last 24 hours hourly and 30 days daily
+  // (archive state). Each batch carries its own block timestamp through Multicall3, and a batch whose
+  // node answered with today's state for an old block is dropped: a first version mixed such answers in,
+  // so the fee counters barely moved over "30 days" and a busy pool showed a few dollars of fees.
+  const need = snapsOk ? mapped.filter((p) => (snaps.get(p.id)?.d.length ?? 0) < 20 || (snaps.get(p.id)?.h.length ?? 0) < 20) : [];
+  let backfilled = 0, staleBatches = 0, batches = 0;
   if (need.length) {
-    const bfCalls = (p) => [stCalls(p)[1], ...fgCalls(p)];
-    const days = Array.from({ length: 30 }, (_, j) => j + 1);
-    const bf = await timed('backfill', () => mapLimit(days, 3, (d) => amc(need.flatMap(bfCalls), '0x' + (block - d * DAY_BLOCKS).toString(16))));
-    const at = new Map(mapped.map((p, i) => [p.id, i]));
-    days.forEach((d, j) => {
-      let o = 0;
-      for (const p of need) {
-        const n = 1 + fgCalls(p).length, ans = bf[j].slice(o, o + n);
+    const bfCalls = (p) => [...stCalls(p), ...fgCalls(p)]; // slot0, liquidity, fee growth
+    const backs = [...Array.from({ length: 24 }, (_, j) => (j + 1) * 300), ...Array.from({ length: 29 }, (_, j) => (j + 2) * DAY_BLOCKS)];
+    const groups = [];
+    for (let i = 0, n = 0, g = []; i < need.length; i++) { g.push(need[i]); n += bfCalls(need[i]).length; if (n >= 250 || i === need.length - 1) { groups.push(g); g = []; n = 0; } }
+    const jobs = backs.flatMap((back) => groups.map((g) => ({ back, g })));
+    const tsCall = { target: MULTICALL3, data: encodeCall('getCurrentBlockTimestamp()') };
+    const res = await timed('backfill', () => mapLimit(jobs, 3, ({ back, g }) => amc([tsCall, ...g.flatMap(bfCalls)], '0x' + (block - back).toString(16))));
+    jobs.forEach(({ back, g }, j) => {
+      batches++;
+      const ans = res[j] || [], ts = readUint(ans[0]);
+      if (ts == null || !pastBlockAnswer(ts, { nowSec, blocksBack: back })) { staleBatches++; return; } // not that block's state
+      let o = 1;
+      for (const p of g) {
+        const n = bfCalls(p).length, a = ans.slice(o, o + n);
         o += n;
-        const raw = pxDays[d]?.[at.get(p.id) + 1];
-        const s0 = p.v === 3 ? readV3Slot0(raw) : readV4Slot0(raw);
-        const fg = readFeeGrowth(p, ans.slice(1)), L = readUint(ans[0]);
+        const s0 = p.v === 3 ? readV3Slot0(a[0]) : readV4Slot0(a[0]), L = readUint(a[1]), fg = readFeeGrowth(p, a.slice(2));
         if (!s0 && !fg) continue; // not born yet, or unread: no row
-        const parked = d % 10 === 0 ? p.past?.[d / 10 - 1]?.hollow ?? null : null; // the past maps (10, 20, 30 days ago) where read
-        rows.get(p.id).push({ t: dayTs[d] * 1000, block: block - d * DAY_BLOCKS, sqrtPriceX96: s0 ? s0.sqrtPriceX96 : null, tick: s0 ? s0.tick : null, L: L ?? null, fg0: fg?.[0] ?? null, fg1: fg?.[1] ?? null, parked });
+        const d = back / DAY_BLOCKS;
+        const parked = Number.isInteger(d) && d % 10 === 0 ? p.past?.[d / 10 - 1]?.hollow ?? null : null; // the past maps (10, 20, 30 days ago) where read
+        rows.get(p.id).push({ t: Number(ts) * 1000, block: block - back, sqrtPriceX96: s0 ? s0.sqrtPriceX96 : null, tick: s0 ? s0.tick : null, L: L ?? null, fg0: fg?.[0] ?? null, fg1: fg?.[1] ?? null, parked });
         backfilled++;
       }
     });
   }
   const snaps2 = mergeStore(snapsOk ? snaps : new Map(), rows, { now: passT });
-  const changed = snapsOk && sig(snaps2) !== before;
+  const changed = snapsOk && (rebuilt || sig(snaps2) !== before);
 
   // contract-verified: both tokens' source on Etherscan (cached a week; no key or a refused call: unread)
   const vCache = makeVerifiedCache('out/cache/etherscan.json');
@@ -476,18 +487,24 @@ async function writeOutputs() {
       { id: 'contract-verified', label: 'both tokens\' source verified', ok: bothVerified(p) },
       { id: 'token-age-rank', label: `tokens ranked and trading ${config.minPairAgeDays}+ days`, ok: tokenAgeRank([tok.get(p.t0), tok.get(p.t1)].map((t) => t && { quote: !!t.quote, rank: t.rank ?? null, firstPoolAt: t.firstPoolAt ?? null }), { now: passT / 1000, minDays: config.minPairAgeDays }) },
     ];
-    const ran = checks.filter((c) => c.ok != null).length, failed = checks.filter((c) => c.ok === false).map((c) => c.label);
     const cur = { ...p.row, aboveShare: p.aboveShare ?? null, segments: seg || undefined };
-    const w = allWindows({
+    const winsWith = (cks) => allWindows({
       series: snaps2.get(p.id), cur, chain: 'ethereum', config,
       pool: { feeTier, lpKeeps: keeps, d0: t0.decimals, d1: t1.decimals, usd0: t0.usd ?? null, usd1: t1.usd ?? null, tvlUsd: p.tvl ?? p.mapUsd ?? null,
-        gasUsd, walls: p.walls ?? null, inactiveShare: p.sticky ?? null, warnings, fails: failed, checks: { ran, total: checks.length },
+        gasUsd, walls: p.walls ?? null, inactiveShare: p.sticky ?? null, warnings, fails: cks.filter((c) => c.ok === false).map((c) => c.label),
+        checks: { ran: cks.filter((c) => c.ok != null).length, total: cks.length },
         flow: (() => {
           if (unreadIds.has(p.id)) return {};
           const gemFlow = { markoutToFee: p.markout ?? null, traders7d: r ? 7 * r.txs : 0 }; // the latest day's replay, for the gem of longer windows
           return { '24h': { swaps: r ? r.swaps : 0, traders: r ? r.txs : 0, markout: p.markout ?? null }, '7d': { gemFlow }, '30d': { gemFlow } };
         })() },
     });
+    // the 24 h window's LP fees (from the fee counters) against the exact swap replay of the same day: within 10%
+    const w24 = winsWith([...checks, { id: 'window-vs-replay', ok: null }])['24h'];
+    const wr = w24?.lpFeesUsd != null && p.fees24h > 0 ? w24.lpFeesUsd / p.fees24h : null;
+    checks.push({ id: 'window-vs-replay', label: '24 h fees from the counters vs the swap replay', ok: wr == null ? null : Math.abs(wr - 1) <= 0.1 });
+    p.windowVsReplay = wr;
+    const w = winsWith(checks);
     const hist = seg ? depthHistogram(seg, p.sqrt, p.d1, p.s.tick) : null;
     const gem = w[defaultWindow]?.gem?.total ?? null;
     const series = snaps2.get(p.id);
@@ -519,9 +536,16 @@ async function writeOutputs() {
   fs.mkdirSync('out', { recursive: true });
   fs.writeFileSync('out/shortlist.json', JSON.stringify({ t: passT, ids: short }));
   const tallyCheck = (id) => { const c = out.map((x) => x.checks.find((k) => k.id === id)?.ok); return `${id} ${c.filter((v) => v === true).length} pass / ${c.filter((v) => v === false).length} fail / ${c.filter((v) => v == null).length} not run`; };
-  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank', 'contract-verified'].map(tallyCheck).join('; '));
+  say(true, 'pool checks', ['creation-events', 'fees-vs-aggregator', 'token-age-rank', 'contract-verified', 'window-vs-replay'].map(tallyCheck).join('; '));
+  const wvr = mapped.map((p) => p.windowVsReplay).filter((x) => x != null), bm = mapped.find((p) => p.id === BENCH);
+  say(wvr.length ? wvr.filter((x) => Math.abs(x - 1) <= 0.1).length / wvr.length >= 0.8 : null, 'window vs replay',
+    `24 h LP fees from the fee counters within 10% of the swap replay for ${wvr.filter((x) => Math.abs(x - 1) <= 0.1).length} of ${wvr.length} pools; median ratio ${median(wvr)?.toFixed(3) ?? '—'}`);
+  // the benchmark (UNI/WETH 0.3%, public market data): 24 h LP fees ÷ (aggregator volume × 0.3% × LP share)
+  const b24 = out.find((x) => x.id === BENCH)?.w['24h'];
+  const bRatio = b24?.lpFeesUsd != null && bm?.aggVolumeUsd24h > 0 ? b24.lpFeesUsd / (bm.aggVolumeUsd24h * 0.003 * (out.find((x) => x.id === BENCH).lpKeeps ?? 1)) : null;
+  pub(`benchmark UNI/WETH 0.3%: 24 h LP fees ÷ (aggregator 24 h volume × 0.3% × LP share) = ${bRatio == null ? 'unread' : bRatio.toFixed(3)}`);
   const nWin = (wk) => out.filter((x) => x.w[wk] != null).length;
-  say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; snapshot rows backfilled ${backfilled}`);
+  say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; snapshot rows backfilled ${backfilled} (batches answered with today's state, dropped: ${staleBatches} of ${batches})`);
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
 
   const area = (a) => lines.find((l) => l.area === a);
@@ -567,6 +591,6 @@ async function writeOutputs() {
     store.put('history.json', { v: 1, t: passT, pools: hp, health });
     histWritten = true;
   }
-  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snaps2), t: passT });
+  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snaps2), t: passT, fix: SNAP_FIX });
   say(snapsOk ? true : false, 'sealed outputs', `live.json written with ${out.length} pools; history.json ${histWritten ? 'written' : 'kept (no new hourly row)'}; snapshots ${snapsOk ? (changed ? 'updated' : 'unchanged') : 'stored copy did not open: left as it was'}`);
 }
