@@ -145,7 +145,7 @@ const AUDIT = () => {
   const inScroll = (el) => !!el.closest('.tbl-box, .heat-box, .sheet-body');
   const name = (el) => (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '')) + ' "' + (el.textContent || '').trim().slice(0, 24) + '"';
   for (const el of document.querySelectorAll('#app *, header *, footer *, #banner')) {
-    if (!vis(el) || el.closest('svg')) continue;
+    if (!vis(el) || (el.closest('svg') && el.tagName.toLowerCase() !== 'svg')) continue; // an svg's own box counts, its insides don't
     const r = el.getBoundingClientRect();
     if (!inScroll(el) && (r.right > vw + 1 || r.left < -1)) out.offRight.push(name(el));
     const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());

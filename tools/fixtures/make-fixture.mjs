@@ -26,7 +26,7 @@ export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x one
 const H = 3600e3, D = 24 * H;
 const WINDOWS = ['24h', '7d', '30d'];
 const SPAN = { '24h': 1, '7d': 7, '30d': 30 };
-const TICKET = 2000;
+const TICKET = 1000; // the owner scores every pool at $1,000
 const GEM_AT = 60;
 const CHAIN_GAS = { ethereum: 4.1, base: 0.08 };
 
@@ -371,7 +371,7 @@ function makeChecks(r, spec, pool) {
     ['fee-days', 'fees on 7/7 days', true],
     ['lp-keeps', pool.lpKeeps == null ? 'LP cut not read' : `LPs keep ${Math.round(pool.lpKeeps * 100)}%`, pool.lpKeeps == null ? null : true],
     ['concentration', 'no LP over 60%', spec.lps == null ? null : spec.lps > 1],
-    ['exit', `exit $2k at ${(0.2 + r() * 0.6).toFixed(1)}%`, true],
+    ['exit', `exit $1k at ${(0.2 + r() * 0.6).toFixed(1)}%`, true],
     ['trend', spec.bigmove ? 'big move' : 'calm trend', !spec.bigmove],
     ['gas', 'gas OK', true],
     ['hook', pool.hooks ? 'unreviewed hook' : 'no hook', !pool.hooks],
