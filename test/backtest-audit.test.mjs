@@ -15,10 +15,10 @@ const prices = Array.from({ length: 600 }, () => (x *= Math.exp((rnd() - 0.48) *
 const swaps = prices.map((P, i) => {
   const prev = i ? prices[i - 1] : 1;
   return { v: 3, in: P >= prev ? 1 : 0, amountIn: BigInt(1 + (i % 7)) * 10n ** 18n, amountOut: 1n, sqrtPriceX96: BigInt(Math.round(Math.sqrt(P) * X96)),
-    liquidity: 10n ** 22n, tick: tickOf(P), fee: null, block: 500 + i, logIndex: i % 3, t: (i + 1) * 5 * MIN };
+    liquidity: (i % 5 === 0 ? 13n : 10n) * 10n ** 21n, tick: tickOf(P), fee: null, block: 500 + i, logIndex: i % 3, t: (i + 1) * 5 * MIN }; // the book changes often: many swaps count as crossing
 });
 const END = (swaps.length + 1) * 5 * MIN;
-const ctx = { start: { t: 0, sp: 1, tick: 0 }, end: { t: END }, d0: 18, d1: 18, ref: 1, refUsd: 1, ticket: 1000, gasUsd: 3, swapRate: 0.0035, spacing: 60, points: 200 };
+const ctx = { start: { t: 0, sp: 1, tick: 0, L: 1e22 }, end: { t: END }, d0: 18, d1: 18, ref: 1, refUsd: 1, ticket: 1000, gasUsd: 3, swapRate: 0.0035, spacing: 60, points: 200 };
 const ours = { id: 'ours', sleeves: [{ w: 1, r: 0.04 }], trigger: 'exit' };
 const run = (ss, { meta = META, feeFn = swapFees, strategy = ours } = {}) => {
   const prep = prepare(ss, { meta, feeFn, d0: 18, d1: 18, ref: 1 });
@@ -101,6 +101,26 @@ test('planted fault: totals that disagree with the swaps, or a broken identity, 
   const r3 = clone(res.r);
   r3.lvrUsd = -r3.lvrUsd; r3.netUsd = r3.feesUsd + r3.lvrUsd + r3.costsUsd; // a loss booked as a gain
   assert.equal(audit({ prep: res.prep, r: r3 }).checks.identity, false);
+});
+
+test('planted fault: an annualised net that still carries the entry cost is caught', () => {
+  const res = run(swaps);
+  const r = clone(res.r);
+  r.net = ((r.netUsd / 1000) * 365) / r.days;
+  assert.equal(audit({ prep: res.prep, r }).checks.identity, false);
+  const r2 = clone(res.r);
+  r2.entryUsd = 0; // the entry left out of its own field
+  assert.equal(audit({ prep: res.prep, r: r2 }).checks.identity, false);
+});
+
+test('planted fault: a crossing swap credited by the whole fee ÷ post-swap liquidity is caught', () => {
+  const res = run(swaps), r = clone(res.r);
+  // rebuild one crossing swap's fee the old way and make the totals agree
+  const j = r.trace.idx.findIndex((i, k) => k > 0 && res.prep.act[i] !== res.prep.act[i - 1] && r.trace.frac[k] === 1);
+  assert.ok(j > 0, 'there is a crossing swap fully inside the range');
+  const i = r.trace.idx[j], oldFee = (res.prep.lpRef[i] * r.trace.L[j]) / (res.prep.act[i] + r.trace.L[j]);
+  r.feesUsd += oldFee - r.trace.fee[j]; r.netUsd += oldFee - r.trace.fee[j]; r.trace.fee[j] = oldFee;
+  assert.equal(audit({ prep: res.prep, r }).checks['per-swap'], false);
 });
 
 test('the replay is the scan method: summarize per fee setting', () => {

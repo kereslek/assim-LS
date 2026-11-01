@@ -18,10 +18,11 @@ import { dailySigma } from '../lib/flow.mjs';
 import { scorePool } from '../lib/score.mjs';
 import { runBacktest, swapRateFor, HOLD_DAYS } from '../lib/backtest-run.mjs';
 import { auditBacktest } from '../lib/backtest-audit.mjs';
+import { POSITION_TOPICS, decodePositionEvent, unchangedPositions, inRangeCandidates, v3PositionKey, feeGrowthInside, realCheck, realCheckPasses } from '../lib/backtest-real.mjs';
 import { loadConfig, DEFAULTS } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
 
-const DAY_BLOCKS = 7200, DAILY = 61, RERANGE_GAS = 630_000, MAX_SWAPS = 400_000, TOP_FALLBACK = 3, TIME_BUDGET_MS = 45 * 60e3;
+const DAY_BLOCKS = 7200, DAILY = 61, POS_DAYS = 45, RERANGE_GAS = 630_000, MAX_SWAPS = 400_000, TOP_FALLBACK = 3, TIME_BUDGET_MS = 45 * 60e3;
 const WINDOWS = { '24h': 1, '7d': 7, '30d': 30 };
 const BENCH = '0x1d42064fc4beb5f8aaf85f4617ae8b3b5b8bd801';
 const RPCS = ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org', 'https://1rpc.io/eth', 'https://rpc.mevblocker.io', 'https://rpc.flashbots.net', 'https://eth.blockscout.com/api/eth-rpc'];
@@ -192,16 +193,51 @@ function pathStats(ws, sp0) {
   return { blocks, spikes, maxSpike, lo, hi };
 }
 
+// Fee growth inside each candidate's range at the window start and end (archive state), its
+// liquidity at both ends (unchanged and above zero, or it's dropped), then the comparison.
+async function realPositions(p, cands, S, endState) {
+  const calls = p.v === 3
+    ? [{ target: p.id, data: encodeCall('slot0()') }, { target: p.id, data: encodeCall('feeGrowthGlobal0X128()') }, { target: p.id, data: encodeCall('feeGrowthGlobal1X128()') },
+      ...cands.flatMap((c) => [{ target: p.id, data: encodeCall('positions(bytes32)', [{ t: 'bytes32', v: v3PositionKey(c.owner, c.ta, c.tb) }]) },
+        { target: p.id, data: encodeCall('ticks(int24)', [{ t: 'int', v: c.ta }]) }, { target: p.id, data: encodeCall('ticks(int24)', [{ t: 'int', v: c.tb }]) }])]
+    : cands.flatMap((c) => [{ target: C.v4StateView, data: encodeCall('getPositionInfo(bytes32,address,int24,int24,bytes32)', [{ t: 'bytes32', v: p.id }, { t: 'address', v: c.owner }, { t: 'int', v: c.ta }, { t: 'int', v: c.tb }, { t: 'bytes32', v: c.salt }]) },
+      { target: C.v4StateView, data: encodeCall('getFeeGrowthInside(bytes32,int24,int24)', [{ t: 'bytes32', v: p.id }, { t: 'int', v: c.ta }, { t: 'int', v: c.tb }]) }]);
+  const [a, b] = await Promise.all([amc(calls, hex(S)), amc(calls, hex(E))]);
+  const words = (r) => (r && r.ok ? decodeWords(r.data) : null);
+  const read = (res) => {
+    if (p.v === 3) {
+      const s0 = readV3Slot0(res[0]), g0 = readUint(res[1]), g1 = readUint(res[2]);
+      if (!s0 || g0 == null || g1 == null) return null;
+      return cands.map((c, i) => {
+        const pos = words(res[3 + 3 * i]), lo = words(res[4 + 3 * i]), hi = words(res[5 + 3 * i]);
+        if (!pos?.length || !(lo?.length >= 4) || !(hi?.length >= 4)) return null;
+        return { L: pos[0], fg: feeGrowthInside({ tick: s0.tick, global: [g0, g1], outsideLower: [lo[2], lo[3]], outsideUpper: [hi[2], hi[3]], ta: c.ta, tb: c.tb }) };
+      });
+    }
+    return cands.map((c, i) => { const pos = words(res[2 * i]), fg = words(res[2 * i + 1]); return pos?.length && fg?.length >= 2 ? { L: pos[0], fg: [fg[0], fg[1]] } : null; });
+  };
+  const x = read(a), y = read(b);
+  if (!x || !y) return null;
+  const ok = cands.map((c, i) => (x[i] && y[i] && x[i].L > 0n && x[i].L === y[i].L ? { ...c, then: x[i].fg, now: y[i].fg } : null)).filter(Boolean);
+  const spE = Number(endState.sqrtPriceX96) / 2 ** 96;
+  return realCheck(ok, { P: spE * spE, d0: p.d0, d1: p.d1, ref: p.ref });
+}
+
 // 4. Swaps: 31 days per pool in three pieces (last day, days 2–8, days 9–31).
 const PIECES = [[E - DAY_BLOCKS + 1, E], [E - 8 * DAY_BLOCKS + 1, E - DAY_BLOCKS], [E - 31 * DAY_BLOCKS + 1, E - 8 * DAY_BLOCKS]];
 const out = { v: 1, t: Date.now(), ticket, provisional: true, pools: Object.fromEntries(pools.map((p) => [p.id, { '24h': null, '7d': null, '30d': null }])) };
 const tally = { swaps: 0, dup: 0, piecesUnread: 0, win: Object.fromEntries(Object.keys(WINDOWS).map((w) => [w, { done: 0, partial: 0, unread: 0, why: {} }])) };
 const audits = [], ratios = [], best = {}, bench = {}, benchPath = {}, forecastGap = [];
+const real = Object.fromEntries(Object.keys(WINDOWS).map((w) => [w, { pools: 0, pass: 0, positions: 0, within2: 0, ratios: [], unread: 0 }]));
 for (const w of Object.keys(WINDOWS)) if (pools.length > known.length) { tally.win[w].unread += pools.length - known.length; tally.win[w].why.facts = pools.length - known.length; }
 for (const p of known) {
   if (Date.now() - T0 > TIME_BUDGET_MS) { for (const w of Object.keys(WINDOWS)) { tally.win[w].unread++; tally.win[w].why.time = (tally.win[w].why.time || 0) + 1; } continue; }
   const filter = p.v === 3 ? { address: p.id, topics: [SWAP_TOPICS.v3] } : { address: C.v4PoolManager, topics: [SWAP_TOPICS.v4, p.id] };
   const got = await timed('swaps', () => Promise.all(PIECES.map(([a, b], i) => logsAdaptive(rpc, filter, a, b, { step: 2000, maxStep: 9000, segments: i === 2 ? 3 : 1, retries: 2 }))));
+  // positions' liquidity changes over 45 days, for the real-position check (v3 Mint/Burn, v4 ModifyLiquidity)
+  const posFilter = p.v === 3 ? { address: p.id, topics: [[POSITION_TOPICS.mint, POSITION_TOPICS.burn]] } : { address: C.v4PoolManager, topics: [POSITION_TOPICS.modify, p.id] };
+  const posLogs = await timed('positions', () => logsAdaptive(rpc, posFilter, E - POS_DAYS * DAY_BLOCKS + 1, E, { step: 9000, maxStep: 9000, segments: 2, retries: 2 }));
+  const posEvents = posLogs ? posLogs.map(decodePositionEvent).filter(Boolean) : null;
   tally.piecesUnread += got.filter((g) => g == null).length;
   const seen = new Set(), swaps = [];
   for (const log of got.filter(Boolean).flat()) {
@@ -224,7 +260,7 @@ for (const p of known) {
     let k = n;
     while (k > 0 && p.days[k]?.absent) k--; // a young pool starts at its first day
     if (k === 0 || !p.days[k] || p.days[k].absent) { miss(k === 0 ? 'too young' : 'start state'); continue; }
-    const partial = k < n, s0 = p.days[k], S = daily[k], start = { t: tOf(S), sqrtPriceX96: s0.sqrtPriceX96, tick: s0.tick }, end = { t: hdr[0].t };
+    const partial = k < n, s0 = p.days[k], S = daily[k], start = { t: tOf(S), sqrtPriceX96: s0.sqrtPriceX96, tick: s0.tick, L: s0.L }, end = { t: hdr[0].t };
     const ws = swaps.filter((s) => s.block > S && s.block <= E);
     // volatility from the 30 days of daily prices before the window (null for a young pool: the engine then uses the window's own)
     const pts = [];
@@ -250,10 +286,21 @@ for (const p of known) {
     if (!res.backtest) { miss(res.reason || 'inputs'); continue; }
     out.pools[p.id][w] = res.backtest;
     W.done++; if (partial) W.partial++;
-    const ctx = { start: { t: start.t, sp: spS, tick: s0.tick }, end, d0: p.d0, d1: p.d1, ref: p.ref, refUsd: p.refUsd, gasUsd, swapRate: swapRateFor(feeTier) };
+    const ctx = { start: { t: start.t, sp: spS, tick: s0.tick, L: Number(s0.L) }, end, d0: p.d0, d1: p.d1, ref: p.ref, refUsd: p.refUsd, gasUsd, swapRate: swapRateFor(feeTier), ticket };
     const a = auditBacktest(res.ours, { prep: res.prep, swaps: ws, meta: null, ctx });
     audits.push(a);
     ratios.push(...a.ratios.filter((x) => x != null));
+    // real positions that stayed in range and unchanged through this window, against the engine's credit
+    const R = real[w];
+    if (!posEvents) R.unread++;
+    else {
+      const cands = inRangeCandidates(res.prep, { start: ctx.start, end }, unchangedPositions(posEvents, S, E));
+      const rc = cands.length ? await timed('positions', () => realPositions(p, cands, S, p.days[0])) : null;
+      if (rc) {
+        res.backtest.realCheck = { positions: rc.positions, within2: rc.within2, median: rc.median };
+        R.pools++; R.positions += rc.positions; R.within2 += rc.within2; R.ratios.push(...rc.ratios); if (realCheckPasses(rc)) R.pass++;
+      }
+    }
     const b = res.backtest, top = b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0];
     if (top) { best[w] = best[w] || {}; best[w][top.id] = (best[w][top.id] || 0) + 1; }
     if (b.forecastNet != null && b.net != null) forecastGap.push(b.net - b.forecastNet);
@@ -290,12 +337,16 @@ say(tally.piecesUnread ? null : true, 'swaps', `${tally.swaps} swaps over 31 day
 for (const [w, W] of Object.entries(tally.win)) say(W.done ? true : null, `window ${w}`, `${W.done} backtests (${W.partial} partial: younger pools), ${W.unread} unread${W.unread ? ` (${Object.entries(W.why).map(([k, v]) => `${k} ×${v}`).join(', ')})` : ''}`);
 say(nAud ? okAud === nAud : null, 'audit', `${okAud} of ${nAud} backtests pass every check (pool fees vs replay, per-swap fees, sums, costs ledger, identity)${nAud - okAud ? `; failing: ${Object.entries(failedBy).map(([k, v]) => `${k} ×${v}`).join(', ')}` : ''}`);
 const within = ratios.filter((q) => Math.abs(q - 1) <= 1e-6).length;
+for (const [w, R] of Object.entries(real)) {
+  const s = [...R.ratios].sort((x, y) => x - y), med = s.length ? s[Math.floor(s.length / 2)] : null;
+  say(R.pools ? R.pass === R.pools : null, `real positions ${w}`, `${R.pools} pools had real positions in range and unchanged through the window: ${R.within2} of ${R.positions} positions' fees per unit of liquidity within 2% of the engine's credit (median ratio ${med?.toFixed(4) ?? '—'}); ${R.pass} of ${R.pools} pools pass (4 of 5 within 2%)${R.unread ? `; position events unread for ${R.unread}` : ''}`);
+}
 say(ratios.length ? within === ratios.length : null, 'fee check', `engine's pool LP fees vs the scan's replay of the same window: within 0.0001% for ${within} of ${ratios.length} pool sides; median ratio ${median(ratios)?.toFixed(6) ?? '—'}`);
 if (isPublic) say(true, 'leaders', Object.entries(best).map(([w, m]) => `${w}: ${Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ×${v}`).join(', ')}`).join(' · ') || 'none');
 if (isPublic) say(true, 'forecast', `realised minus forecast net APR at the $${ticket} example ticket: median ${fr(median(forecastGap))} over ${forecastGap.length} full windows`);
 for (const [w, b] of Object.entries(bench)) {
-  const tk = DEFAULTS.ticket, feeApr = b.feesUsd / tk * 365 / b.days, lvrApr = b.lvrUsd / tk * 365 / b.days, costApr = b.costsUsd / tk * 365 / b.days;
-  say(true, `benchmark ${w}`, `UNI/WETH 0.3% at the $${tk} example ticket, ±${fr(b.range)} (σ ${fr(b.sigma)} a day, ${b.sigmaFrom}): net ${fr(b.net)} a year (fees ${fr(feeApr)}, loss vs holding ${fr(lvrApr)}, costs ${fr(costApr)}); forecast ${fr(b.forecastNet)}; in range ${fr(b.tir)}, ${b.reranges} re-centres, share of pool fees ${b.share == null ? '—' : (100 * b.share).toFixed(3) + '%'}; ${b.swaps} swaps; best strategy ${b.strategies.filter((s) => s.net != null).sort((x, y) => y.net - x.net)[0]?.id ?? '—'}`);
+  const tk = DEFAULTS.ticket, yr = (x) => ((x / tk) * 365) / b.days;
+  say(true, `benchmark ${w}`, `UNI/WETH 0.3% at the $${tk} example ticket, ±${fr(b.range)} (σ ${fr(b.sigma)} a day, from ${b.sigmaInWindow ? 'the window itself' : 'the 30 days before'}): net ${fr(b.net)} a year before entry (fees ${fr(yr(b.feesUsd))}, loss vs holding ${fr(yr(b.lvrUsd))}, re-centres ${fr(yr(b.costsUsd - b.entryUsd))}), entry $${(-b.entryUsd).toFixed(2)}; forecast ${fr(b.forecastNet)}; in range ${fr(b.tir)}, ${b.reranges} re-centres, share of pool fees ${b.share == null ? '—' : (100 * b.share).toFixed(3) + '%'}; ${b.swaps} swaps; best strategy ${b.strategies.filter((x) => x.net != null).sort((x, y) => y.net - x.net)[0]?.id ?? '—'}`);
 }
 for (const [w, q] of Object.entries(benchPath)) say(true, `benchmark path ${w}`, `${q.blocks} blocks with swaps; ${q.spikes} went ≥ 5% away and came back within the block (largest ${fr(q.maxSpike)}); block closes ranged ${fr(q.lo)} to +${fr(q.hi)} from the start`);
 say(how === 'sealed' ? true : null, 'output', how === 'sealed' ? 'out/data/backtest.json sealed with the lock (publishing to the data branch comes with the always-on loop)' : 'out/data/backtest.json not written: no passphrase here, and plaintext never touches the disk');

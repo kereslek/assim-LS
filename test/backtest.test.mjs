@@ -2,7 +2,7 @@
 // and token1 is the $1 reference, so raw prices are human prices and values are dollars.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { prepare, simulate, pathFraction, rangeAround, amountsAt, parseTrigger, sigmaFromSwaps } from '../lib/backtest.mjs';
+import { prepare, simulate, pathFraction, rangeAround, amountsAt, parseTrigger, sigmaFromSwaps, creditPerL } from '../lib/backtest.mjs';
 import { runBacktest, strategiesFor, swapRateFor } from '../lib/backtest-run.mjs';
 import { auditBacktest } from '../lib/backtest-audit.mjs';
 import { sqrtAtTick } from '../lib/v3math.mjs';
@@ -174,6 +174,39 @@ test('a spike that comes back within the same block never re-centres; one that e
   assert.equal(simulate(mk(true), ctx, one(0.05, 'drift50')).reranges, 0);
 });
 
+test('entry cost: in the dollars, not in the annualised net', () => {
+  // a 24 h window, one entry, no re-centre: annualised net = (fees + lvr) annualised; the entry stays in netUsd
+  const ss = path(Array.from({ length: 144 }, (_, i) => 1 + 0.002 * Math.sin(i / 9)));
+  const r = simulate(prepare(ss, { meta: V3, d0: 18, d1: 18, ref: 1 }), ctxFor(1, 86400e3), one(0.05));
+  assert.equal(r.reranges, 0);
+  assert.equal(r.ledger.length, 1);
+  assert.ok(r.entryUsd < 0 && near(r.entryUsd, r.costsUsd, 1e-12)); // with no re-centre, all costs are the entry
+  assert.ok(near(r.netUsd, r.feesUsd + r.lvrUsd + r.costsUsd, 1e-12));
+  assert.ok(near(r.series.costs.at(-1), r.costsUsd, 1e-12) && near(r.series.net.at(-1), r.netUsd, 1e-12)); // the dollar series keep it
+  const steady = ((r.feesUsd + r.lvrUsd) / 1000) * 365;
+  assert.ok(near(r.net, steady, 1e-9), `${r.net} vs ${steady}`);
+  assert.ok(Math.abs((r.netUsd / 1000) * 365 - steady) > 0.5); // the old rate, entry included, is far off on one day
+});
+
+test('a swap that crosses ticks earns the price move inside the range × the LP rate, not fee ÷ post-swap liquidity', () => {
+  // made-up book: 1e21 below √P 1.01, 2e21 above; one token1-in swap from √P 1 to 1.02 crosses it
+  const L1 = 1e21, L2 = 2e21, f = 0.003, net = L1 * 0.01 + L2 * 0.01, gross = BigInt(Math.round(net / (1 - f)));
+  const sw = { v: 3, in: 1, amountIn: gross, amountOut: 1n, sqrtPriceX96: toX96(1.02), liquidity: BigInt(L2), tick: tickOf(1.02 ** 2), fee: null, block: 1001, logIndex: 0, t: 10 * MIN };
+  const prep = prepare([sw], { meta: V3, d0: 18, d1: 18, ref: 1 });
+  const win = { start: { t: 0, sp: 1, tick: 0, L: L1 }, end: { t: HOUR } };
+  const truth = 0.02 * (f / (1 - f)); // what the pool books per unit of liquidity: Σ step fee ÷ step liquidity
+  const c = creditPerL(prep, win, -600, 600);
+  assert.ok(near(c[1], truth, 1e-9 * truth) && c[0] === 0, `${c[1]} vs ${truth}`);
+  const old = (Number(gross) * f) / L2; // the old method: the whole fee ÷ the post-swap liquidity
+  assert.ok(Math.abs(old / truth - 1) > 0.2);
+  assert.equal(creditPerL(prep, win, -600, 120), null); // the price left this range: not a clean comparison
+  // the simulation credits a small position about L × the same amount
+  const r = simulate(prep, { ...ctxFor(1, HOUR), start: win.start, spacing: 1 }, one(0.5), { trace: true });
+  assert.ok(near((r.trace.fee[0] * 1e18) / (r.trace.L[0] * truth), L2 / (L2 + r.trace.L[0]), 1e-9)); // fee in $, token1 = $1 with 18 decimals
+  // without the start liquidity, the first swap can't be told apart: it counts as one stretch
+  assert.ok(near(creditPerL(prep, { ...win, start: { ...win.start, L: undefined } }, -600, 600)[1], old, 1e-9 * old));
+});
+
 test('missing inputs give null, never a zero result', () => {
   const prep = prepare(path([1, 1.01]), { meta: V3, d0: 18, d1: 18, ref: 1 });
   assert.equal(simulate(prep, ctxFor(1, 3 * 10 * MIN, { gasUsd: null }), one(0.05)), null);
@@ -219,7 +252,9 @@ test('runBacktest: the DATA.md shape, every strategy, the grid, and an audit tha
   assert.ok(auditBacktest(g, { prep, swaps: ss, meta: V3, ctx }).ok);
   // with no volatility from before the window, the window's own is used and labelled
   const own = runBacktest({ ...input, sigma: null }).backtest;
-  assert.equal(own.sigmaFrom, 'window');
+  assert.equal(own.sigmaFrom, 'pool');
+  assert.equal(own.sigmaInWindow, true);
+  assert.equal(b.sigmaInWindow, false);
   assert.ok(near(own.sigma, sigmaFromSwaps(prep, { t: 0, sp: 1 }, { t: tEnd }), 1e-12));
 });
 
