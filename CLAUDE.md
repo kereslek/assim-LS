@@ -12,6 +12,7 @@
 
 - **Usage budget.** Use at most 90% of each 5-hour usage window, then stop and carry on in the next window. This session never uses more than 50% of the weekly token budget.
   - Claude can't see the exact percentages. The session record shows only a status (allowed / warning). When it shows a warning, pause autonomous work (no self-scheduled wake-ups, no unattended runs) and ask the owner.
+- **Effort.** Most thinking (planning, analysis, design choices, reviewing results, audits' verdicts) runs at max effort in the main session. Regular work and coding go to subagents at `xhigh` or `high` effort (the Agent tool's `effort` field): `xhigh` for tricky code (on-chain decoding, crypto, the relay), `high` for routine edits, tests and docs. Each subagent gets a self-contained brief with the privacy rules.
 - **Scope.** This project is assim-LS only. Other repositories attached to a session are not part of it: don't read them, change them or bring them up.
 
 **Reference implementation:**

@@ -39,7 +39,8 @@ parameters and results log live in their private strategy doc.
 - **Granted:** `gh-pages` for the dashboard and a storage branch for sealed results. Create them when steps 6 and 7 are built.
 - **Done:** history rewritten once. The owner's personal notes left CLAUDE.md for the private strategy doc (tab "Owner notes"), and the model name left the first commit.
 - **Done:** CLAUDE.md slimmed. The long reference parts moved word for word to `docs/handout.md`.
-- **Owner to do:** Actions secrets `LOCK_PASSPHRASE`, `COINGECKO_KEY`, `ETHERSCAN_KEY`.
+- **Done (owner):** Actions secrets `LOCK_PASSPHRASE`, `COINGECKO_KEY`, `ETHERSCAN_KEY`; the `secrets` workflow checks they are present (yes/no only).
+- **Owner's yes, on a condition:** stop the weekly "LP Shape Scanner reminder" scheduled task once the dashboard is up and running.
 
 ## Rules
 
