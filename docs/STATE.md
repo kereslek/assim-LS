@@ -35,6 +35,13 @@ Paused for the owner's weekly usage cap; Run 1 resumes on its own on Sat 7 Nov a
 | Windows and loop | Part 1 done and rehearsed: `lib/snapshots.mjs`, `lib/windows.mjs`, `scripts/loop.mjs`, `loop.yml`, `watchdog.yml`, `loop/PIN` |
 | Dashboard | Built on made-up data: every section, unlock/lock, 171 browser checks, 12 planted faults caught; the Actions device run and a last screenshot pass remain |
 
+## Evening of 1 Nov (16:37 CET)
+
+- Real sealed data on the `data` branch (pools run 41314114983: 26 pass, 0 fail). The live loop (run 41317198288, `loop/PIN` = `f4a0ccf`) published its first pass at 16:35 CET.
+- First sealed backup on the `backup` branch (dated folder: data/* and lock/*).
+- Dashboard deployed by `pages.yml` (run 41320822386) at `/assim-LS/442edd62612a5a84cc58/`. The owner gave a standing yes: Claude triggers deploys itself and keeps sealed backups.
+- Next first: a live-page audit in Actions (WebKit and Pixel unlock with the secret, pass/fail only); `backup.yml` (daily, 30 days, restore rehearsal); the "$1.0K" ticket display; check the loop's 24 h health; enable the watchdog cron.
+
 ## Resume notes (in this order)
 
 1. Read pools run 41303327738 (`e9ac205`) and the backtest run after `e2c0a83`; find the last missing creation event.
