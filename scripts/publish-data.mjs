@@ -60,7 +60,7 @@ function readRemoteData(git, remote, aes) {
 }
 
 export function publishData({ repo = '.', outDir = OUT_DIR, lockPath = path.join('lock', LOCK_NAME), remote = 'origin', branch = DATA_BRANCH,
-  dryRun = false, env = process.env, say = console.log, tries = 4, now = Date.now() } = {}) {
+  dryRun = false, env = process.env, say = console.log, tries = 4, now = Date.now(), keepNewer = true } = {}) {
   assertDataBranch(branch);
   const abs = (p) => path.resolve(repo, p);
   if (!fs.existsSync(abs(lockPath))) throw new Error('missing lock: no lock.json to publish with');
@@ -84,8 +84,14 @@ export function publishData({ repo = '.', outDir = OUT_DIR, lockPath = path.join
     if (old?.lock && !sameLock(old.lock, lockFile)) throw new Error('refusing: the data branch carries a different lock');
     const entries = new Map();
     entries.set(LOCK_NAME, git(['hash-object', '-w', abs(lockPath)]));
-    for (const n of names) entries.set(n, git(['hash-object', '-w', path.join(abs(outDir), n)]));
-    let carried = 0;
+    // the newest copy of each file wins: a job that restored another job's file at its start never
+    // replaces the newer copy that job has published since (e.g. the loop and the daily backtest)
+    let carried = 0, keptNewer = 0;
+    for (const n of names) {
+      const f = old?.files.get(n), localT = JSON.parse(fs.readFileSync(path.join(abs(outDir), n), 'utf8')).t;
+      if (keepNewer && f && f.env.t > localT) { entries.set(n, f.blob); keptNewer++; continue; }
+      entries.set(n, git(['hash-object', '-w', path.join(abs(outDir), n)]));
+    }
     for (const [n, f] of old?.files || []) if (!entries.has(n)) { entries.set(n, f.blob); carried++; }
     const tree = git(['mktree'], { input: [...entries].sort(([a], [b]) => (a < b ? -1 : 1)).map(([n, b]) => `100644 blob ${b}\t${n}\n`).join('') });
     const commit = git(['commit-tree', tree, '-m', `Sealed data, pass of ${new Date(now).toISOString().slice(0, 16)}Z`]);
@@ -94,8 +100,8 @@ export function publishData({ repo = '.', outDir = OUT_DIR, lockPath = path.join
     if (pushed !== null) {
       const now2 = git(['ls-remote', '--heads', remote, `refs/heads/${DATA_BRANCH}`]).split(/\s+/)[0];
       if (now2 !== commit) throw new Error('bad push: the data branch does not point at the new commit');
-      say(`published: yes, ${entries.size} files (${carried} carried forward), one commit with no parent, attempt ${attempt}`);
-      return { dryRun: false, files: entries.size, carried, commit, attempts: attempt };
+      say(`published: yes, ${entries.size} files (${carried} carried forward${keptNewer ? `, ${keptNewer} newer on the branch kept` : ''}), one commit with no parent, attempt ${attempt}`);
+      return { dryRun: false, files: entries.size, carried, keptNewer, commit, attempts: attempt };
     }
     if (attempt < tries) sleepMs(2000 * 2 ** (attempt - 1));
   }

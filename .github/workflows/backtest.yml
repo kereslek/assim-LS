@@ -1,12 +1,13 @@
 name: backtest
-# Replays the shortlisted pools (or the UNI/WETH benchmark plus the largest pools) over 24 h, 7 days
-# and 30 days with a simulated LP position. The log prints counts, ratios and dates only.
+# Replays the current top 10 pools of the published live.json (plus the UNI/WETH benchmark) over 24 h,
+# 7 days and 30 days with a simulated LP position, then publishes the sealed backtest.json to the data
+# branch, keeping every other job's newest file. The log prints counts, ratios and dates only.
 on:
   schedule:
     - cron: '41 4 * * *'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write   # publish the sealed backtest.json to the data branch
 concurrency:
   group: backtest
   cancel-in-progress: false
@@ -21,7 +22,29 @@ jobs:
           node-version: 22
       - name: Unit tests first (a broken check never reads real data)
         run: node --test test/*.test.mjs
+      - name: Restore the sealed data (the scanner's latest live.json)
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: node scripts/publish-data.mjs --restore
+      - name: Shortlist the current top 10 (local file, never printed)
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: |
+          node --input-type=module -e "
+            import fs from 'node:fs';
+            import { openStore } from './lib/store.mjs';
+            let live = null;
+            try { live = openStore().get('live.json'); } catch { live = null; }
+            const ids = (live?.pools || []).slice(0, 10).map((p) => p.id);
+            if (live?.bench && !ids.includes(live.bench)) ids.push(live.bench);
+            if (ids.length) { fs.mkdirSync('out', { recursive: true }); fs.writeFileSync('out/shortlist.json', JSON.stringify({ t: Date.now(), ids })); }
+            console.log('shortlist from the published live.json: ' + ids.length + ' pools');"
       - name: Backtest (public market data only; results sealed with the lock)
         env:
           LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
         run: node --max-old-space-size=6144 scripts/backtest.mjs
+      - name: Publish the sealed backtest to the data branch (newest copy of every file wins)
+        if: always() && hashFiles('out/data/backtest.json') != ''
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: node scripts/publish-data.mjs
