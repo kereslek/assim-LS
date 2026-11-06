@@ -1,0 +1,45 @@
+name: live-audit
+# Audits the LIVE dashboard after each Pages deploy, daily, and on demand: waits until the newest page
+# is served, unlocks it with the real passphrase, clicks every visible control and locks it again, in
+# WebKit as an iPhone 15 and in Chromium at 1440×900.
+# PRIVACY: the unlocked page shows the owner's data. The log prints pass/fail, counts, control kinds and
+# timings only; no screenshots, no artifacts, no page text.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [pages]
+    types: [completed]
+  schedule:
+    - cron: '43 4 * * *' # daily, at an odd minute
+permissions:
+  contents: read
+concurrency:
+  group: live-audit
+  cancel-in-progress: false
+env:
+  PAGES_BRANCH: claude/ecstatic-dirac-wkrqja # the branch the pages workflow deploys from
+jobs:
+  audit:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # the commit that was just deployed, or the newest commit of the deployed branch
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || env.PAGES_BRANCH }}
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install the pinned Playwright and its browsers, outside the repo
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --silent playwright@1.63.0
+          npx playwright@1.63.0 install --with-deps webkit chromium >/dev/null
+      - name: Live audit (wait for the deploy, unlock, click everything, lock)
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: node tools/live-audit.mjs --profile all --wait 300
