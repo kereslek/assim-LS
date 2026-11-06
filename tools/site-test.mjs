@@ -42,7 +42,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,refresh,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,refresh,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -77,6 +77,7 @@ async function newPage(browser, { phone = false, width = 390, height = 860, redu
   if (BROWSER !== 'chromium') delete base.defaultBrowserType;
   const ctx = await browser.newContext({ ...base, reducedMotion });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
+  await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror ' + String(e.message).split('\n')[0].slice(0, 120)));
@@ -471,6 +472,58 @@ async function testPairs(browser) {
   }
 }
 
+// ---------- 4d. chart tools: zoom steps, the detail panel's charts, the window of one chart ----------
+async function testCharts(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const span = () => p.evaluate(() => document.querySelector('[data-chartbox="liq-best"] .chart-head').innerText.match(/±(\d+)%/)[1]);
+    const press = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
+    ok(`charts ${tag}: the liquidity chart opens at ±45%`, (await span()) === '45');
+    const geo = await p.evaluate(() => [...document.querySelectorAll('.ctools')].filter((c) => c.offsetParent).map((c) => { const z = c.querySelector('.zseg').getBoundingClientRect(), o = c.querySelector('.openwin').getBoundingClientRect(); return { gap: o.left - z.right, h: o.height, w: o.width }; }));
+    ok(`charts ${tag}: on every chart the open button stands ≥ 12 px from the zoom pair, 44×44 (${geo.length})`, geo.length >= 3 && geo.every((g) => g.gap >= 12 && g.h >= 43.5 && g.w >= 43.5), JSON.stringify(geo[0]));
+    await press('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(100);
+    const s1 = await span();
+    await press('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(100);
+    const s2 = await span();
+    ok(`charts ${tag}: + zooms in around the price (±25% then ±12%)`, s1 === '25' && s2 === '12', `${s1} ${s2}`);
+    ok(`charts ${tag}: …keeps the focus on the button for the keyboard`, (await p.evaluate(() => document.activeElement && document.activeElement.dataset.act)) === 'zoom');
+    await press('[data-act="zreset"][data-chart="liq-best"]'); await sleep(100);
+    await press('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(100);
+    ok(`charts ${tag}: reset, then − zooms out to ±90%`, (await span()) === '90');
+    // the detail panel's charts
+    await p.click('#best [data-act="detail"]');
+    await p.waitForSelector('#sheet:not([hidden])');
+    const ids = await p.$$eval('#sheet [data-act="zoom"][data-dir="1"]', (b) => b.map((x) => x.dataset.chart));
+    let bad = [];
+    for (const id of ids) {
+      const before = await p.innerText(`#sheet [data-chartbox="${id}"]`);
+      await p.evaluate((id) => document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`).click(), id); await sleep(80);
+      const after = await p.innerText(`#sheet [data-chartbox="${id}"]`);
+      await p.evaluate((id) => document.querySelector(`#sheet [data-act="openchart"][data-chart="${id}"]`).click(), id);
+      const u = await p.evaluate(() => window.__opened.slice(-1)[0]);
+      if (before === after || !u.includes('view=' + id) || !/pool=/.test(u)) bad.push(id);
+    }
+    ok(`charts ${tag}: every chart in the detail panel zooms and opens (${ids.length})`, ids.length >= 4 && bad.length === 0, bad.join(','));
+    await p.click('#sheet-close');
+    // the window of one chart: same sealed data, no passphrase while this browser keeps the key
+    const pool = await p.getAttribute('#best [data-act="detail"]', 'data-id');
+    const w2 = await t.ctx.newPage();
+    await w2.goto(url('default', `&view=liq-best&pool=${pool}&w=30d&z=3`));
+    await w2.waitForSelector('.solo-box', { timeout: 20000 });
+    const solo = await w2.evaluate(() => ({ lock: !document.querySelector('#lockscreen').hidden, all: document.querySelector('#all').offsetParent !== null, box: !!document.querySelector('.solo-box .liq'), h: document.querySelector('.solo-box .liq').getBoundingClientRect().height, lab: document.querySelector('[data-chartbox="liq-best"] .chart-head').innerText }));
+    ok(`charts ${tag}: "open" shows just that chart, large, at its zoom, without the passphrase`, !solo.lock && !solo.all && solo.box && solo.h > 250 && /±12%/.test(solo.lab), JSON.stringify(solo).slice(0, 80));
+    ok(`charts ${tag}: …no sideways scroll there`, (await w2.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0);
+    await w2.close();
+    ok(`charts ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  const fresh = await newPage(browser);
+  await fresh.page.goto(url('default', '&view=liq-best&w=30d'));
+  await fresh.page.waitForSelector('#lockscreen:not([hidden])', { timeout: 20000 });
+  ok('charts: a chart window without a stored key asks for the passphrase', await fresh.page.isVisible('#pass'));
+  await fresh.ctx.close();
+}
+
 // ---------- 4c. the refresh button ----------
 async function testRefresh(browser) {
   const t = await openUnlocked(browser, 'default', { phone: true }), p = t.page;
@@ -496,19 +549,19 @@ async function testRefresh(browser) {
 }
 
 // ---------- 5. click audit: press every control, check the DOM answered ----------
-const SIG = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '');
+const SIG = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
 async function controls(page) {
   return page.evaluate(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && el.offsetParent !== null; };
     const all = [...document.querySelectorAll('button, select, input, [tabindex="0"], a[href]')].filter(vis);
-    const sig = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '');
+    const sig = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
     return { untagged: all.filter((el) => !el.dataset.act && !el.disabled).map((el) => el.outerHTML.slice(0, 60)), sigs: [...new Set(all.filter((el) => el.dataset.act && !el.disabled).map(sig))], disabled: all.filter((el) => el.disabled).map((el) => el.textContent.trim()) };
   });
 }
 async function press(page, sig) {
   // beat scroll-settle races: a wheel event first, then bring the control into view
   return page.evaluate((sig) => {
-    const sigOf = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '');
+    const sigOf = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
     const el = [...document.querySelectorAll('[data-act]')].find((e) => sigOf(e) === sig && !e.disabled && e.getBoundingClientRect().width > 0 && e.offsetParent !== null);
     if (!el) return false;
     window.dispatchEvent(new WheelEvent('wheel'));
@@ -536,9 +589,10 @@ async function testClicks(browser) {
       if (done.has(sig) || /^(lock|retry|lock-retry|pass|unlock)$/.test(sig)) continue;
       if (sig === 'refresh') await sleep(1600); // the button ignores taps within 1.5 s of the last // lock is a danger control: tested on its own
       done.add(sig);
-      if (!(await press(p, sig))) { bad.push(sig + ' not found'); continue; }
-      const act = sig.split(':')[0];
-      const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '')) === sig && !e.disabled && e.offsetParent !== null), sig);
+      const real = sig.replace(/~2$/, ''); // "~2": the same control pressed a second time
+      if (!(await press(p, real))) { bad.push(sig + ' not found'); continue; }
+      const act = real.split(':')[0];
+      const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '') + (e.dataset.chart ? ':' + e.dataset.chart : '') + (e.dataset.dir ? ':' + e.dataset.dir : '')) === sig && !e.disabled && e.offsetParent !== null), real);
       if (act === 'lens' || act === 'chain') {
         const v = await handle.evaluate((s) => s.options[Math.min(1, s.options.length - 1)].value);
         await handle.asElement().selectOption(v);
@@ -548,11 +602,16 @@ async function testClicks(browser) {
       await sleep(act === 'jump' || act === 'bt-row' ? 1400 : act === 'play' ? 800 : 350);
       const mut = await p.evaluate(() => window.__mut);
       let good = mut > 0;
-      if (act === 'jump') good = await headingInView(p, sig.split(':')[1]);
+      if (act === 'jump') good = await headingInView(p, real.split(':')[1]);
+      if (act === 'openchart') {
+        const u = await p.evaluate(() => (window.__opened || []).slice(-1)[0] || '');
+        const want = real.split(':')[1];
+        good = new RegExp(`[?&]view=${want}(&|$)`).test(u) && /[?&]w=(24h|7d|30d)/.test(u) && /[?&]z=\d/.test(u) && (['scatter', 'health'].includes(want) || /[?&]pool=[0-9a-fx]+/.test(u));
+      }
       if (act === 'detail' || act === 'pair') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
-      if (act === 'win') good = good && (await p.getAttribute(`#winseg [data-w="${sig.split(':')[1]}"]`, 'aria-pressed')) === 'true';
+      if (act === 'win') good = good && (await p.getAttribute(`#winseg [data-w="${real.split(':')[1]}"]`, 'aria-pressed')) === 'true';
       if (act === 'sort') good = good && (await p.$$('#all thead th[aria-sort="ascending"], #all thead th[aria-sort="descending"]')).length === 1;
       if (!good) bad.push(sig);
       // put filters back so later controls see the full table
@@ -560,7 +619,9 @@ async function testClicks(browser) {
       if (act === 'search') { await handle.asElement().fill(''); await sleep(250); }
       if (act === 'play') { await sleep(200); }
       for (const s of (await controls(p)).sigs) if (!done.has(s) && !queue.includes(s)) queue.push(s);
-      if (act === 'bt-row' && !done.has('play')) queue.unshift('play', 'scrub', 'bt-close');
+      if (act === 'bt-row' && !done.has('play')) queue.unshift('play', 'scrub', 'zoom:rp:1', 'openchart:rp', 'zoom:rp-money:1', 'openchart:rp-money', 'bt-close');
+      if (act === 'zoom' && real.endsWith(':1') && !sig.endsWith('~2')) { const c = real.split(':')[1]; queue.unshift(`zreset:${c}`, `zoom:${c}:1~2`, `zoom:${c}:-1`); }
+      if (act === 'zoom') { const c = real.split(':')[1]; if (!done.has(`zreset:${c}`) && (await p.$(`[data-act="zreset"][data-chart="${c}"]`))) queue.unshift(`zreset:${c}`); }
     }
     ok(`clicks ${tag}: ${done.size} kinds of control pressed, each answered`, bad.length === 0 && done.size >= 25, bad.join(', ') + ` (${done.size} kinds)`);
     ok(`clicks ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
@@ -596,7 +657,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, refresh: testRefresh, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, refresh: testRefresh, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;
