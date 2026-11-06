@@ -28,6 +28,16 @@ const pw = require('playwright');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const LOCALDBG = process.env.LA_DEBUG === '1' && /^http:\/\/127\.0\.0\.1[:/]/.test(PAGE_URL); // local fixture runs only
 const errName = (e) => (LOCALDBG && console.error(e), 0) || String((e && e.name) || 'Error').replace(/[^A-Za-z]/g, '').slice(0, 24) || 'Error';
+// where a page error was thrown: the top stack frame's function name and line in the page's own code
+// (public code positions, never the message, which can carry page text)
+const whereIn = (e) => {
+  const st = String((e && e.stack) || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  for (const l of st) {
+    const m = /^at (?:async )?([A-Za-z0-9_$.<>]*) ?\(?.*?:(\d+):\d+\)?$/.exec(l) || /^([A-Za-z0-9_$.<>]*)@.*?:(\d+):\d+$/.exec(l);
+    if (m) return ` in ${(m[1] || 'anonymous').replace(/[^A-Za-z0-9_$.]/g, '').slice(0, 40) || 'anonymous'}:${m[2]}`;
+  }
+  return '';
+};
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const buildOf = (html) => { const m = /const BUILD = '([^']*)'/.exec(html); return m ? m[1] : null; };
 const bust = (u) => { const x = new URL(u); x.searchParams.set('la', String(Date.now())); return x.href; };
@@ -167,7 +177,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     let newPages = 0; // a page opened by the dashboard itself (open-in-window): counted, then closed
     ctx.on('page', (p) => { if (p !== page) { newPages++; p.close().catch(() => {}); } });
     const errs = { page: 0, console: 0, failedLoads: 0, kinds: {} }; // page errors by class name only
-    page.on('pageerror', (e) => { errs.page++; const k = errName(e); errs.kinds[k] = (errs.kinds[k] || 0) + 1; });
+    page.on('pageerror', (e) => { errs.page++; const k = errName(e) + whereIn(e); errs.kinds[k] = (errs.kinds[k] || 0) + 1; });
     page.on('console', (m) => { if (m.type() === 'error') { if (/Failed to load resource/.test(m.text())) errs.failedLoads++; else errs.console++; } });
     const errTotal = () => errs.page + errs.console;
 
