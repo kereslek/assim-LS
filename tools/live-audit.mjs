@@ -82,8 +82,7 @@ const SNAP = () => {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
   let sc = 0;
   for (const el of document.querySelectorAll('body *')) if (el.scrollTop || el.scrollLeft) sc += el.scrollTop * 7 + el.scrollLeft;
-  const a = document.activeElement;
-  return [h, s.length, Math.round(scrollX), Math.round(scrollY), sc, window.__laOpen, a ? a.tagName + (a.id || '') : ''].join('|');
+  return [h, s.length, Math.round(scrollX), Math.round(scrollY), sc, window.__laOpen].join('|'); // focus alone is not a change
 };
 // enumerate the clickable controls of the top layer; mark each with data-la-i for the click
 const ENUM = () => {
@@ -147,6 +146,12 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     browser = await pw[browserType].launch();
     const ctx = await browser.newContext({ ...ctxOpts, serviceWorkers: 'block' });
     await ctx.addInitScript(INIT);
+    // --plant (local fixture runs only): planted faults the audit must catch
+    if (args.includes('--plant') && /^http:\/\/127\.0\.0\.1[:/]/.test(PAGE_URL)) await ctx.addInitScript(() => {
+      document.addEventListener('click', (e) => { if (e.target.closest('[data-act="sort"]')) setTimeout(() => { throw new Error('planted'); }); }, true);
+      document.addEventListener('click', (e) => { if (e.target.closest('[data-act="more"]')) e.stopImmediatePropagation(); }, true);
+      addEventListener('load', () => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Open in a window'); b.textContent = 'open'; document.querySelector('footer').append(b); });
+    });
     const page = await ctx.newPage();
     let newPages = 0; // a page opened by the dashboard itself (open-in-window): counted, then closed
     ctx.on('page', (p) => { if (p !== page) { newPages++; p.close().catch(() => {}); } });
@@ -222,9 +227,11 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       visited.add(next.sig);
       perKind[next.kind] = (perKind[next.kind] || 0) + 1;
       counts.kinds[next.kind] = (counts.kinds[next.kind] || 0) + 1;
+      const target = page.locator(`[data-la-i="${next.i}"]`);
+      try { await target.scrollIntoViewIfNeeded({ timeout: 3000 }); await sleep(150); } catch (e) { /* the click below reports it */ }
       const before = await page.evaluate(SNAP), e0 = errTotal(), np0 = newPages, open0 = await page.evaluate(() => window.__laOpen);
       try {
-        await page.locator(`[data-la-i="${next.i}"]`).click({ timeout: 5000 });
+        await target.click({ timeout: 5000 });
         counts.clicked++;
       } catch (e) { failAs(next.kind, 'not clickable'); continue; }
       await sleep(next.kind === 'refresh' ? 2500 : 450);
