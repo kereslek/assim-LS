@@ -30,7 +30,7 @@ const TICKET = 1000; // the owner scores every pool at $1,000
 const GEM_AT = 60;
 const DEFAULT_WINDOW = '24h'; // the owner's default view
 // the 30-day daily story of four heroes; every other pool gets a quiet random one
-const PATTERN = { VELNA: 'steady', KOVA: 'bursty', NUMA: 'emerging', BOJA: 'one-off' };
+const PATTERN = { VELNA: 'steady', KOVA: 'bursty', NUMA: 'emerging', BOJA: 'one-off', ORVO: 'zero' }; // zero: not a dollar of fees in 30 days
 const CHAIN_GAS = { ethereum: 4.1, base: 0.08 };
 
 // ---------- seeded randomness ----------
@@ -419,6 +419,7 @@ function addDaily(r, p, now) {
   const spike = Math.floor(between(r, 6, 26));
   p.daily = base == null ? [] : Array.from({ length: Math.max(0, days) }, (_, i) => {
     const x = i / 29;
+    if (kind === 'zero') return { t: Math.floor(now / D) * D - (days - 1 - i) * D, feesPer1k: 0, net: w && isNum(w.net) ? sig(w.net, 4) : null };
     let m = kind === 'emerging' ? 0.25 + 1.6 * x * x : kind === 'fading' ? 1.6 - 1.3 * x : 1;
     if ((kind === 'bursty' || kind === 'one-off') && i === spike) m = kind === 'one-off' ? 14 : 8;
     else if (kind === 'bursty' || kind === 'one-off') m = 0.5;
@@ -427,7 +428,7 @@ function addDaily(r, p, now) {
   });
   const fees = p.daily.map((d) => d.feesPer1k).sort((a, b) => a - b);
   const median = fees.length ? fees[Math.floor(fees.length / 2)] : null, max = fees.length ? fees[fees.length - 1] : null;
-  p.pattern = !fees.length ? null : kind === 'one-off' ? 'bursty' : kind;
+  p.pattern = !fees.length || kind === 'zero' ? null : kind === 'one-off' ? 'bursty' : kind;
   p.burst = !fees.length ? null : { maxDay: max, medianDay: median, burstDays: p.daily.filter((d) => d.feesPer1k > 3 * median).length, oneTrader: sig(kind === 'one-off' ? 0.92 : between(r, 0.05, 0.3), 3) };
   for (const wk of WINDOWS) {
     const g = p.w[wk] && p.w[wk].gem;

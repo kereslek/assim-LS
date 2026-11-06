@@ -42,7 +42,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,refresh,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,rows,refresh,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -320,6 +320,7 @@ async function testStates(browser) {
   ok('states: no gems → an honest empty best find', /No gem in the/.test(await t.page.innerText('#best')));
   await snap(t.page, 'state-nogems');
   ok('states: no gems → no backtests yet', /No backtests/.test(await t.page.innerText('#bt')));
+  ok('states: the backtest badge names the 3-day gate', /PROVISIONAL UNTIL THE 3-DAY GATE/.test(await t.page.innerText('#bt')));
   ok('states: no gems → no NaN', noJunk(await bodyText(t.page)));
   ok('states: no page errors (nogems)', t.errors.length === 0, t.errors[0]);
   await t.ctx.close();
@@ -458,15 +459,13 @@ async function testPairs(browser) {
     await setWin(p, '30d');
     await p.fill('#f-q', 'VELNA');
     await sleep(300);
-    await p.click('#all tbody .pairbtn');
+    await p.click('#all tbody tr.row td:nth-child(3)');
     await p.waitForSelector('#sheet:not([hidden])');
-    ok(`pairs ${tag}: the table's pair name opens the same view`, (await p.textContent('#sheet-title')) === 'VELNA/WETH' && (await p.$$('#sheet tr[data-act="pair-row"]')).length === 4);
+    await p.click('#sheet-pair');
+    await sleep(150);
+    ok(`pairs ${tag}: a pool's detail links to its pair view`, (await p.textContent('#sheet-title')) === 'VELNA/WETH' && (await p.$$('#sheet tr[data-act="pair-row"]')).length === 4);
     await p.click('#sheet-close');
     await p.fill('#f-q', '');
-    await p.click('#next .pairbtn');
-    await p.waitForSelector('#sheet:not([hidden])');
-    ok(`pairs ${tag}: next best's pair name opens a pair view`, (await p.$$('#sheet tr[data-act="pair-row"]')).length >= 1);
-    await p.click('#sheet-close');
     ok(`pairs ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
@@ -522,6 +521,71 @@ async function testCharts(browser) {
   await fresh.page.waitForSelector('#lockscreen:not([hidden])', { timeout: 20000 });
   ok('charts: a chart window without a stored key asks for the passphrase', await fresh.page.isVisible('#pass'));
   await fresh.ctx.close();
+}
+
+// ---------- 4e. every way into a pool lands on its liquidity shape ----------
+async function testRows(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const shapeIn = (sel) => p.evaluate((sel) => { const e = document.querySelector(sel); if (!e) return false; const r = e.getBoundingClientRect(); return r.height > 40 && r.top >= -2 && r.top < innerHeight - 60; }, sel);
+    const tap = async (sel) => {
+      await p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector(sel).scrollIntoView({ block: 'center' }); }, sel);
+      const b = await p.locator(sel).first().boundingBox();
+      await p.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    };
+    const close = async () => { if (await p.isVisible('#sheet')) { await p.click('#sheet-close'); await sleep(100); } };
+    const into = [];
+    for (const [name, sel] of [['a table row, by its name', '#all tbody tr.row td:nth-child(1)'], ['by its gem', '#all tbody tr.row td:nth-child(2)'],
+      ['by a number', '#all tbody tr.row td:nth-child(4)'], ['by a tag', '#all tbody tr.row .tag'], ['a next-best row', '#next .nb-row'],
+      ['a new-since row', '#ns-body .ns-row'], ['the bench tile', '#bench'], ['full breakdown', '#best [data-act="detail"]']]) {
+      await tap(sel);
+      await sleep(400);
+      const good = (await p.isVisible('#sheet')) && (await shapeIn('#sheet [data-chartbox="liq-detail"]'))
+        && (await p.evaluate(() => document.querySelector('#sheet-body').firstElementChild.dataset.chartbox)) === 'liq-detail';
+      into.push([name, good]);
+      await close();
+    }
+    const missed = into.filter((x) => !x[1]).map((x) => x[0]);
+    ok(`rows ${tag}: every way into a pool opens it on its shape within 400 ms (${into.length})`, missed.length === 0, missed.join(', '));
+    await tap('#best [role="tab"]:nth-child(2)');
+    await sleep(400);
+    ok(`rows ${tag}: a best-find tab lands on the card's shape`, await shapeIn('[data-chartbox="liq-best"] .liq'));
+    await tap('#bt-lead tr.row td:nth-child(1)');
+    await sleep(1400);
+    ok(`rows ${tag}: a backtest row opens its replay on the pool's shape`, await shapeIn('#rp-shape .liq'));
+    await p.click('#bt-replay [data-act="bt-close"]');
+    // a swipe across a row scrolls the table; it doesn't open the pool
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#all tbody tr.row').scrollIntoView({ block: 'center' }); });
+    const c2 = await p.locator('#all tbody tr.row td:nth-child(3)').first().boundingBox();
+    await p.mouse.move(c2.x + 20, c2.y + c2.height / 2); await p.mouse.down(); await p.mouse.move(c2.x + 60, c2.y + c2.height / 2, { steps: 4 }); await p.mouse.up();
+    await sleep(300);
+    ok(`rows ${tag}: a swipe (10 px or more) is not a tap`, !(await p.isVisible('#sheet')));
+    const c3 = await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); getSelection().removeAllRanges(); document.querySelector('#all-box').scrollLeft = 0; const td = document.querySelector('#all tbody tr.row td:nth-child(2)'); td.scrollIntoView({ block: 'center', inline: 'nearest' }); const r = td.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; });
+    await p.mouse.move(c3.x + 10, c3.y + c3.height / 2); await p.mouse.down(); await p.mouse.move(c3.x + 14, c3.y + c3.height / 2); await p.mouse.up();
+    await sleep(300);
+    ok(`rows ${tag}: a tap that wobbles under 10 px still opens the pool`, await p.isVisible('#sheet'));
+    await close();
+    // a pool with no fees in 30 days opens like any other (it used to throw)
+    await p.fill('#f-q', 'ORVO');
+    await sleep(300);
+    await tap('#all tbody tr.row td:nth-child(2)');
+    await sleep(400);
+    ok(`rows ${tag}: a pool with no fees in 30 days opens and says so`, (await p.isVisible('#sheet')) && /no fees in \d+ days/i.test(await p.innerText('#sheet .daily')));
+    await close();
+    await p.fill('#f-q', '');
+    ok(`rows ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  const r = await openUnlocked(browser, 'default', { phone: true, reducedMotion: 'reduce' });
+  await r.page.click('#best [data-act="detail"]');
+  await sleep(50);
+  ok('rows: reduced motion runs no animation', (await r.page.evaluate(() => document.getAnimations().length)) === 0);
+  await r.ctx.close();
+  const m = await openUnlocked(browser, 'default', { phone: true });
+  await m.page.click('#best [data-act="detail"]');
+  await sleep(30);
+  ok('rows: otherwise the panel slides in', (await m.page.evaluate(() => document.getAnimations().length)) > 0);
+  await m.ctx.close();
 }
 
 // ---------- 4c. the refresh button ----------
@@ -619,7 +683,7 @@ async function testClicks(browser) {
       if (act === 'search') { await handle.asElement().fill(''); await sleep(250); }
       if (act === 'play') { await sleep(200); }
       for (const s of (await controls(p)).sigs) if (!done.has(s) && !queue.includes(s)) queue.push(s);
-      if (act === 'bt-row' && !done.has('play')) queue.unshift('play', 'scrub', 'zoom:rp:1', 'openchart:rp', 'zoom:rp-money:1', 'openchart:rp-money', 'bt-close');
+      if (act === 'bt-row' && !done.has('play')) queue.unshift('play', 'scrub', 'zoom:liq-replay:-1', 'zoom:liq-replay:1', 'openchart:liq-replay', 'zoom:rp:1', 'openchart:rp', 'zoom:rp-money:1', 'openchart:rp-money', 'bt-close');
       if (act === 'zoom' && real.endsWith(':1') && !sig.endsWith('~2')) { const c = real.split(':')[1]; queue.unshift(`zreset:${c}`, `zoom:${c}:1~2`, `zoom:${c}:-1`); }
       if (act === 'zoom') { const c = real.split(':')[1]; if (!done.has(`zreset:${c}`) && (await p.$(`[data-act="zreset"][data-chart="${c}"]`))) queue.unshift(`zreset:${c}`); }
     }
@@ -657,7 +721,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, refresh: testRefresh, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, rows: testRows, refresh: testRefresh, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;

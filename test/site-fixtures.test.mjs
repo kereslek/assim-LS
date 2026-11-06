@@ -66,6 +66,7 @@ test('the cases the page must handle are all present', () => {
   assert.equal(pat('NUMA').pattern, 'emerging');
   assert.ok(pat('BOJA').burst.oneTrader >= 0.5 && pat('BOJA').w['30d'].gem.tags.includes('one-off'), 'a one-off pool');
   for (const p of pools) for (const d of p.daily) assert.ok(isNum(d.t) && d.feesPer1k >= 0);
+  assert.ok(pools.some((p) => p.daily.length >= 20 && p.daily.every((d) => d.feesPer1k === 0)), 'a pool with no fees in 30 days');
   assert.ok(['contract-verified', 'sell-test', 'token-age-rank', 'verified'].every((id) => pools[0].checks.some((c) => c.id === id)), 'the four safety checks');
   const velna = pools.filter((p) => p.t0.sym === 'VELNA' && ['WETH', 'ETH'].includes(p.t1.sym));
   const pr = live.pairs[velna[0].pairKey];

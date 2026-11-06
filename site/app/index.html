@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-7S8plLzvIkXTkD+QyJVEdc6NMLMHdGI05VeVsMqId7E='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4Vb4aaZUkHvrCJltoMV31FcLwaDfe0aCOP1qzhO4Qgc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -368,10 +368,19 @@ footer .btn{font-family:var(--sans)}
   .seg{flex:1 1 100%}
   .seg button{flex:1 1 0}
   .nb-row svg{width:52px}
+  .best-r{order:-1}
   .strip>div:first-child{grid-column:span 2}
 }
 .swipe{margin-top:6px;font-size:12px;color:var(--muted)}
 @media (min-width:1100px){.swipe{display:none}}
+/* motion: the panel slides up, bars grow from the baseline, switched numbers cross-fade (no layout change) */
+@keyframes sheetIn{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.sheet:not([hidden]) .sheet-card{animation:sheetIn .22s ease-out}
+.sheet:not([hidden]) .scrim{animation:fadeIn .22s ease-out}
+.liq svg path,.daily svg rect{transform-box:fill-box;transform-origin:50% 100%;animation:grow .25s ease-out}
+.xfade{animation:fadeIn .2s ease-out}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -447,7 +456,7 @@ footer .btn{font-family:var(--sans)}
   </section>
 
   <section id="bt" class="card" aria-labelledby="bt-h">
-    <div class="sec-head"><h2 id="bt-h">Backtest</h2><span class="tag amber" id="bt-prov">PROVISIONAL UNTIL THE 14-DAY GATE</span></div>
+    <div class="sec-head"><h2 id="bt-h">Backtest</h2><span class="tag amber" id="bt-prov">PROVISIONAL UNTIL THE 3-DAY GATE</span></div>
     <p class="sub" id="bt-ctx"></p>
     <div class="bt-grid">
       <div id="bt-lead"></div>
@@ -456,6 +465,7 @@ footer .btn{font-family:var(--sans)}
           <div><h3 id="rp-h">Replay</h3><div class="lbl" id="rp-ctx" style="margin-top:3px"></div></div>
           <button type="button" class="btn" data-act="bt-close">Close replay</button>
         </div>
+        <div id="rp-shape"></div>
         <div class="strip" id="rp-strip"></div>
         <div class="pane chartbox" data-chartbox="rp">
           <div class="pane-title"><span class="lbl" id="rp-pl">Price · log scale</span><span id="rp-tools1"></span>
@@ -497,7 +507,7 @@ footer .btn{font-family:var(--sans)}
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
     <div class="sheet-head">
       <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><h2 id="sheet-title">—</h2><div class="lbl" id="sheet-meta" style="margin-top:3px"></div>
-        <div class="seg winsel" role="group" aria-label="Time window" id="sheet-win" style="margin-top:8px"><button type="button" data-act="win" data-w="24h" aria-pressed="false">24H</button><button type="button" data-act="win" data-w="7d" aria-pressed="false">7D</button><button type="button" data-act="win" data-w="30d" aria-pressed="true">30D</button></div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px"><div class="seg winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false">24H</button><button type="button" data-act="win" data-w="7d" aria-pressed="false">7D</button><button type="button" data-act="win" data-w="30d" aria-pressed="true">30D</button></div><button type="button" class="btn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button></div></div>
       <button type="button" class="btn" id="sheet-close" data-act="close-detail">Close</button>
     </div>
     <div class="sheet-body" id="sheet-body"></div>
@@ -1050,11 +1060,13 @@ function tabTags(p) {
   return (p.verified === false ? '<span class="tag bad">UNVERIFIED</span>' : p.verified === null ? '<span class="tag amber">NOT CHECKED</span>' : '')
     + (p.hooks ? '<span class="tag amber">HOOK</span>' : '') + (p.young ? '<span class="tag amber">YOUNG</span>' : '');
 }
+function xfade(...els) { if (reduced()) return; for (const el of els) if (el) { el.classList.remove('xfade'); void el.offsetWidth; el.classList.add('xfade'); } }
 function setBestSel(id, focus) {
   S.bestSel = id;
   store.set('lps.best', id);
   const row = $('#best .tabs'), left = row ? row.scrollLeft : 0;
   renderBest();
+  xfade($('#best .best-head'), $('#best .best-body'), $('#best .checks'));
   const row2 = $('#best .tabs');
   if (row2) {
     row2.scrollLeft = left;
@@ -1131,12 +1143,13 @@ function dailyStrip(p, w, id = 'daily-best') {
   const v = d.map((x) => (isNum(x.feesPer1k) && x.feesPer1k >= 0 ? x.feesPer1k : null));
   const warn = oneOff(p, w) ? `<p class="oneoff">One-off: a single trader paid most of the top day’s fees. Don’t count on it again.</p>` : '';
   if (!v.some(isNum)) return `<div class="daily"><span class="lbl">Fees per $1,000 · daily</span><p class="sub">${DASH} not read yet</p>${warn}</div>`;
-  const sorted = v.filter(isNum).sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)], mx = sorted[sorted.length - 1] || 1;
-  const iMax = v.indexOf(mx), Wd = 300, Ht = 44, bw = Wd / v.length;
+  const sorted = v.filter(isNum).sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)], top = sorted[sorted.length - 1];
+  const mx = top > 0 ? top : 1; // scale only: an all-zero month still draws its baseline
+  const iMax = top > 0 ? v.indexOf(top) : -1, Wd = 300, Ht = 44, bw = Wd / v.length;
   let s = `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" role="img" aria-label="Fees per 1,000 dollars, one bar per day; the median is marked">`;
   v.forEach((x, i) => { if (isNum(x)) s += `<rect x="${(i * bw + 0.4).toFixed(1)}" y="${(Ht - (x / mx) * (Ht - 2)).toFixed(1)}" width="${Math.max(0.6, bw - 0.8).toFixed(1)}" height="${((x / mx) * (Ht - 2)).toFixed(1)}" fill="${i === iMax ? '#E8B84A' : '#16C784'}"/>`; });
   s += `<line class="median" x1="0" x2="${Wd}" y1="${(Ht - (med / mx) * (Ht - 2)).toFixed(1)}" y2="${(Ht - (med / mx) * (Ht - 2)).toFixed(1)}" stroke="#E6EDF3" stroke-dasharray="3 2" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>`;
-  return `<div class="daily chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">Fees per $1,000 · ${v.length} days</span><span class="lbl">median $${med.toFixed(2)} · max $${mx.toFixed(2)} on ${dm(d[iMax].t)}</span>${ztools(id, p.id)}</div>${s}${warn}</div>`;
+  return `<div class="daily chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">Fees per $1,000 · ${v.length} days</span><span class="lbl">${iMax >= 0 ? `median $${med.toFixed(2)} · max $${top.toFixed(2)} on ${dm(d[iMax].t)}` : `no fees in ${v.length} days`}</span>${ztools(id, p.id)}</div>${s}${warn}</div>`;
 }
 
 // ---------- chart zoom and "open in a new window" ----------
@@ -1192,7 +1205,7 @@ function soloSetup() {
   const z = Number(QP.get('z'));
   if (isNum(z)) (S.zoom ||= {})[SOLO] = z;
   if (SOLO_POOL && (SOLO === 'liq-best' || SOLO === 'daily-best')) { S.bestSel = SOLO_POOL; S.bestExtra = SOLO_POOL; }
-  if (SOLO_POOL && (SOLO === 'rp' || SOLO === 'rp-money' || SOLO === 'lab')) S.replay = SOLO_POOL;
+  if (SOLO_POOL && ['rp', 'rp-money', 'lab', 'liq-replay'].includes(SOLO)) S.replay = SOLO_POOL;
 }
 function isolate() {
   if (SOLO_POOL && (SOLO.endsWith('-detail') || SOLO.startsWith('d-')) && S.detail !== SOLO_POOL) openDetail(SOLO_POOL);
@@ -1228,8 +1241,8 @@ function renderNext() {
   const watch = ranked.filter((p) => !isGem(p, wk)).length;
   const rows = ranked.map((p) => {
     const w = W(p, wk);
-    return `<div class="nb-row" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<button type="button" class="pairbtn nb-main" data-act="pair" data-key="${esc(pairKey(p))}"><span class="pn">${esc(p.pair)}</span>`
-      + `<span class="nb-meta"><span class="lbl">${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></button>${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
+    return `<div class="nb-row" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<span class="nb-main"><span class="pn">${esc(p.pair)}</span>`
+      + `<span class="nb-meta"><span class="lbl">${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
   }).join('');
   $('#next').innerHTML = `<div class="sec-head"><h2 id="next-h">Next best</h2><span class="sub" style="margin:0">${int(gems)} gem${gems === 1 ? '' : 's'} ≥ ${gemAt()} · ${int(watch)} on watch · ${WIN_WORD[wk]} net at ${usdFull(L.ticket)}</span></div>`
     + (rows || `<p class="empty" style="margin:0 12px 12px">No other scored pool in the ${WIN_WORD[wk]} window.</p>`)
@@ -1287,7 +1300,7 @@ function renderTable() {
     return `<th aria-sort="${on ? (S.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="lbl" data-act="sort" data-k="${c.k}">${esc(c.h).replace('σ', '<span style="text-transform:none">σ</span>')}${on ? (S.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
   }).join('') + '</tr>';
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td><button type="button" class="pairbtn" data-act="pair" data-key="${esc(pairKey(p))}"><span class="pn2">${esc(p.pair)}</span><span class="pm">${metaTxt(p)}</span><span class="tags">${tagsHtml(p, wk)}</span></button></td>`
+    + `<td><span class="pn2">${esc(p.pair)}</span><span class="pm">${metaTxt(p)}</span><span class="tags">${tagsHtml(p, wk)}</span></td>`
     + `<td>${gemPill(p, wk)}</td>`
     + COLS.slice(2).map((c) => { const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
@@ -1454,6 +1467,7 @@ function renderReplay(row) {
     + `<div><span class="lbl">Fee share</span><span class="v">${pct(b.share)}</span><span class="s">of pool fees</span></div>`;
   // price pane, log scale
   $('#rp-tools1').outerHTML = `<span id="rp-tools1">${ztools('rp', row.id)}</span>`;
+  $('#rp-shape').innerHTML = p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · ±${Math.round(LIQ_SPANS[zget('liq-replay')] * 100)}%</span>${ztools('liq-replay', row.id)}</div>${liqChart(p, W(p), LIQ_SPANS[zget('liq-replay')])}</div>` : '';
   $('#rp-tools2').outerHTML = `<span id="rp-tools2">${ztools('rp-money', row.id)}</span>`;
   const i0 = Math.min(zstart('rp', n), cut - 1); // zoomed in: the latest part of the window, up to the scrubber
   const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58, MR = 78, pw = Wd - ML - MR, X = (i) => ML + ((i - i0) / (n - i0)) * pw;
@@ -1668,6 +1682,7 @@ function renderPair() {
   const best = sent || verifiedBest;
   const name = pairName(S.pair);
   $('#sheet-kicker').textContent = `PAIR VIEW · ${WIN_LABEL[wk]}`;
+  $('#sheet-pair').hidden = true;
   $('#sheet-title').textContent = name;
   $('#sheet-meta').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${[...new Set(pools.map((p) => chainLong(p.chain)))].join(' + ')} · ${usd(totVol)} ${WIN_WORD[wk]} volume`;
   const label = (p) => `${feeTxt(p.feeTier)} · v${esc(p.v)} · ${chainShort(p.chain)}${p.t1 && p.t1.sym === 'ETH' ? ' · ETH' : ''}`;
@@ -1730,6 +1745,7 @@ function renderDetail() {
   $('#sheet-kicker').textContent = `POOL DETAIL · ${WIN_LABEL[wk]}${p.id === L.bench ? ' · BENCHMARK' : ''}`;
   $('#sheet-title').textContent = p.pair;
   $('#sheet-meta').textContent = `${feeTxt(p.feeTier)} · ${chainLong(p.chain)} · UNISWAP V${p.v}`;
+  $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p);
   const rowsDef = [
     ['Days covered', (x) => (isNum(x.days) ? +x.days.toFixed(1) + (x.partial ? ' (partial)' : '') : DASH)],
     ['Volume', (x) => usd(x.volUsd)], ['LP fees', (x) => usd(x.lpFeesUsd)], ['Protocol fees', (x) => usd(x.protocolFeesUsd)],
@@ -1760,7 +1776,8 @@ function renderDetail() {
     ['LPs at the price', int(s2.lpsAtPrice)], ['Walls', `below ${s2.walls && isNum(s2.walls.below) ? rangeTxt(Math.abs(s2.walls.below)).replace('±', MINUS) : DASH} · above ${s2.walls && isNum(s2.walls.above) ? rangeTxt(s2.walls.above).replace('±', '+') : DASH}`],
     ['Token 0', tok(p.t0)], ['Token 1', tok(p.t1)],
   ];
-  $('#sheet-body').innerHTML = `<div class="best-head"><div class="grow"><div class="tags">${tagsHtml(p, wk)}</div>`
+  $('#sheet-body').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · log · ±${Math.round(LIQ_SPANS[zget('liq-detail')] * 100)}%</span>${ztools('liq-detail', p.id)}</div>${liqChart(p, w, LIQ_SPANS[zget('liq-detail')])}</div>` // the shape first
+    + `<div class="best-head"><div class="grow"><div class="tags">${tagsHtml(p, wk)}</div>`
     + `<p class="sentence" style="margin-top:8px">${w ? `${WIN_WORD[wk]} net APR <b class="${w.net < 0 ? 'neg' : ''}">${pct(w.net)}</b> at ${usdFull(L.ticket)} · fees ${pct(w.feeApr)} · LVR ${pct(w.lvr)}.` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + (w ? `<div class="dsec"><span class="lbl">Breakdown · ${WIN_LABEL[wk]}</span>${breakdown(w)}</div>` : '')
     + `<div class="dsec"><span class="lbl">Every window</span>${wt}</div>`
@@ -1770,7 +1787,6 @@ function renderDetail() {
     + (w && Array.isArray(w.lenses) && w.lenses.length ? `<div class="dsec"><span class="lbl">Lenses</span><div class="tags">${w.lenses.map((l) => `<span class="tag">${esc(LENS_NAME[l] || l)}</span>`).join('')}</div></div>` : '')
     + `<div class="minis">${miniLine(w && w.spark && w.spark.px, `Price · ${WIN_LABEL[wk]} · log`, true, 'd-px', p.id)}${miniBars(w && w.spark && w.spark.fees, `LP fees · ${WIN_LABEL[wk]}`, 'd-fees', p.id)}`
     + (hist && Array.isArray(hist.d) ? miniBars(hist.d.map((r) => r[2]), `LP fees per day · ${zslice(hist.d, 'd-day').length} d`, 'd-day', p.id) : '') + '</div>'
-    + `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · log · ±${Math.round(LIQ_SPANS[zget('liq-detail')] * 100)}%</span>${ztools('liq-detail', p.id)}</div>${liqChart(p, w, LIQ_SPANS[zget('liq-detail')])}</div>`
     + `<div class="dsec"><span class="lbl">Checks</span>${checksLine(p).replace('class="checks"', 'class="checks" style="margin:0;border:0;padding:0"')}</div>`
     + `<div class="dsec"><span class="lbl">Pool facts</span><dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl></div>`;
 }
@@ -1800,8 +1816,14 @@ function setWin(wk) {
   S.win = wk; S.cut = null; S.bestExtra = null; stopPlay();
   store.set('lps.win', wk);
   renderAll();
+  xfade($('#glance'), $('#best .best-head'), $('#best .best-body'), $('#next'), $('#all tbody'));
 }
+let down = null, moved = false;
+document.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; moved = false; }, { passive: true });
+document.addEventListener('pointermove', (e) => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) >= 10) moved = true; }, { passive: true });
 document.addEventListener('click', (e) => {
+  if (moved) { moved = false; down = null; if (e.target.closest('tr[data-act], [role="button"][data-act], .ns-row, button.tile')) return; } // a swipe, not a tap
+  down = null;
   if (e.target.closest('[data-scrim]')) { closeDetail(); return; }
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
