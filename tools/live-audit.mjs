@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -49,12 +50,22 @@ function recorder(tag) {
 
 // ---------- 1. wait for the latest deploy to be live ----------
 async function waitDeploy(R) {
-  const local = fs.readFileSync(path.join(ROOT, 'site', 'app', 'index.html'), 'utf8');
-  const want = buildOf(local), wantSha = sha(local);
+  // the target is the newest page on the deployed branch, re-read on every try: a push that lands while
+  // we wait moves the target (PAGES_BRANCH set in Actions); without it, the checked-out page
+  const latest = () => {
+    if (process.env.PAGES_BRANCH) {
+      try {
+        execFileSync('git', ['fetch', '-q', '--depth=1', 'origin', process.env.PAGES_BRANCH], { cwd: ROOT, stdio: 'ignore', timeout: 60000 });
+        return execFileSync('git', ['show', 'FETCH_HEAD:site/app/index.html'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20 });
+      } catch (e) { /* fall back to the checkout */ }
+    }
+    return fs.readFileSync(path.join(ROOT, 'site', 'app', 'index.html'), 'utf8');
+  };
   const t0 = Date.now();
-  let build = false, bytes = false, tries = 0;
+  let build = false, bytes = false, tries = 0, want = null, wantSha = null;
   while (true) {
     tries++;
+    const local = latest(); want = buildOf(local); wantSha = sha(local);
     try {
       const r = await fetch(bust(PAGE_URL), { cache: 'no-store', headers: { 'cache-control': 'no-cache' } });
       if (r.ok) { const html = await r.text(); build = !!want && buildOf(html) === want; bytes = sha(html) === wantSha; }
@@ -155,8 +166,8 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     const page = await ctx.newPage();
     let newPages = 0; // a page opened by the dashboard itself (open-in-window): counted, then closed
     ctx.on('page', (p) => { if (p !== page) { newPages++; p.close().catch(() => {}); } });
-    const errs = { page: 0, console: 0, failedLoads: 0 };
-    page.on('pageerror', () => { errs.page++; });
+    const errs = { page: 0, console: 0, failedLoads: 0, kinds: {} }; // page errors by class name only
+    page.on('pageerror', (e) => { errs.page++; const k = errName(e); errs.kinds[k] = (errs.kinds[k] || 0) + 1; });
     page.on('console', (m) => { if (m.type() === 'error') { if (/Failed to load resource/.test(m.text())) errs.failedLoads++; else errs.console++; } });
     const errTotal = () => errs.page + errs.console;
 
@@ -274,7 +285,8 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       R.ok('lock: after a reload the device asks again', asks);
     }
     T.lock = secs(t);
-    console.log(`[${tag}] errors: ${errs.page} page, ${errs.console} console, ${errs.failedLoads} failed loads (info)`);
+    const ek = Object.entries(errs.kinds).map(([k, n]) => `${k} ×${n}`).join(', ');
+    console.log(`[${tag}] errors: ${errs.page} page${ek ? ' (' + ek + ')' : ''}, ${errs.console} console, ${errs.failedLoads} failed loads (info)`);
     R.ok('errors: no page errors', errs.page === 0);
     R.ok('errors: no console errors', errs.console === 0);
   } catch (e) {
