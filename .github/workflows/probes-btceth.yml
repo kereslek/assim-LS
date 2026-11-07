@@ -1,0 +1,27 @@
+name: probes-btceth
+# One-off discovery: BTC/ETH pools on Base, Ethereum and BNB Chain (fee kept by LPs, value within ±1%
+# and ±9%, fee APR), the BTC/ETH ratio's volatility and LVR, and LP leads on Base and PancakeSwap.
+# Public market data only: pools, tickers, TVL, volume, fees, counts and ratios. The results land in
+# the job summary and as notices (read back through the check run's annotations).
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: probes-btceth
+  cancel-in-progress: true
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Unit tests first (the maths this probe uses)
+        run: node --test test/maps.test.mjs test/shape.test.mjs test/v3math.test.mjs test/multicall.test.mjs test/economics.test.mjs test/flow.test.mjs test/pools.test.mjs
+      - name: BTC/ETH discovery (public market data only)
+        env:
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+        run: node scripts/probe-btceth.mjs
