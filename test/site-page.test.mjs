@@ -7,7 +7,8 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { newLockFile, unlock, seal, open } from '../lib/lock.mjs';
 
-const html = fs.readFileSync(new URL('../site/app/index.html', import.meta.url), 'utf8');
+// SITE_PAGE: a candidate page (relative to the repo) checked before it deploys; the deployed page otherwise
+const html = fs.readFileSync(new URL('../' + (process.env.SITE_PAGE || 'site/app/index.html'), import.meta.url), 'utf8');
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
 const csp = (html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/) || [])[1] || '';
 

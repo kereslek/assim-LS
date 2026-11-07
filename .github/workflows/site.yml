@@ -1,10 +1,25 @@
 name: site
 # The dashboard's browser tests on made-up, sealed fixtures: WebKit as an iPhone 15 and Chromium as a
 # Pixel 7, each also at laptop widths. Logs show pass/fail, counts and timings only.
+# A dispatch can test a candidate page before it deploys: put it under tools/candidate/ (that path never triggers
+# the pages workflow) and pass its path as `page`.
 on:
   push:
     paths: ['site/**', 'tools/fixtures/**', 'tools/site-test.mjs', 'test/site*.test.mjs', 'lib/lock.mjs', '.github/workflows/site.yml']
   workflow_dispatch:
+    inputs:
+      page:
+        description: 'Test this page instead of site/app/index.html: a candidate under tools/candidate/'
+        required: false
+        default: ''
+      only:
+        description: 'Run only these test groups (comma list, e.g. pan,touch,top); empty = all'
+        required: false
+        default: ''
+      probe:
+        description: 'Also run this probe script under tools/candidate/ first (timings and event counts only)'
+        required: false
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -27,7 +42,21 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Check the dispatch inputs
+        env:
+          PAGE: ${{ inputs.page }}
+          ONLY: ${{ inputs.only }}
+          PROBE: ${{ inputs.probe }}
+        run: |
+          set -eu
+          if [ -n "$PAGE" ] && ! printf '%s' "$PAGE" | grep -Eq '^tools/candidate/[A-Za-z0-9._-]+\.html$'; then echo "page must be a .html file under tools/candidate/"; exit 1; fi
+          if [ -n "$PAGE" ] && [ ! -f "$PAGE" ]; then echo "no such page"; exit 1; fi
+          if [ -n "$ONLY" ] && ! printf '%s' "$ONLY" | grep -Eq '^[a-z0-9,]+$'; then echo "only must be a comma list of group names"; exit 1; fi
+          if [ -n "$PROBE" ] && ! printf '%s' "$PROBE" | grep -Eq '^tools/candidate/[A-Za-z0-9._-]+\.mjs$'; then echo "probe must be a .mjs file under tools/candidate/"; exit 1; fi
+          echo "page: ${PAGE:-site/app/index.html}"
       - name: Page and fixture checks first (no browser)
+        env:
+          SITE_PAGE: ${{ inputs.page }}
         run: node --test test/site*.test.mjs
       - name: Install the pinned Playwright and its browser, outside the repo
         run: |
@@ -35,7 +64,16 @@ jobs:
           npm init -y >/dev/null
           npm install --no-audit --no-fund --silent playwright@1.63.0
           npx playwright@1.63.0 install --with-deps ${{ matrix.browser }} >/dev/null
+      - name: Probe (candidate, timings and event counts only)
+        if: inputs.probe != ''
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+          PAGE: ${{ inputs.page }}
+          PROBE: ${{ inputs.probe }}
+        run: node "$PROBE" --browser ${{ matrix.browser }} --device "${{ matrix.device }}" ${PAGE:+--page "$PAGE"}
       - name: Browser tests (${{ matrix.browser }} as ${{ matrix.device }})
         env:
           NODE_PATH: ${{ runner.temp }}/pw/node_modules
-        run: node tools/site-test.mjs --browser ${{ matrix.browser }} --device "${{ matrix.device }}"
+          PAGE: ${{ inputs.page }}
+          ONLY: ${{ inputs.only }}
+        run: node tools/site-test.mjs --browser ${{ matrix.browser }} --device "${{ matrix.device }}" ${PAGE:+--page "$PAGE"} ${ONLY:+--only "$ONLY"}
