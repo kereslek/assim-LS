@@ -71,7 +71,8 @@ async function waitDeploy(R) {
         return execFileSync('git', ['show', 'FETCH_HEAD:site/app/index.html'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20 });
       } catch (e) { /* fall back to the checkout */ }
     }
-    return fs.readFileSync(path.join(ROOT, 'site', 'app', 'index.html'), 'utf8');
+    // LA_PAGE_FILE: a candidate page served from a local fixture server (tools/serve-fixtures.mjs), before it deploys
+    return fs.readFileSync(process.env.LA_PAGE_FILE ? path.resolve(ROOT, process.env.LA_PAGE_FILE) : path.join(ROOT, 'site', 'app', 'index.html'), 'utf8');
   };
   const t0 = Date.now();
   let build = false, bytes = false, tries = 0, want = null, wantSha = null;
@@ -368,7 +369,19 @@ async function part3(page, run, skip) {
   const fingers = (pts, o = {}) => page.evaluate(FINGERS, { pts, ...o });
   const box = (id, root = '') => page.evaluate(HOST_BOX, { id, root });
   const press = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel); if (!b || b.disabled) return false; window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
-  const settle = async (id) => { let a = await view(id); for (let k = 0; k < 20; k++) { await sleep(150); const b = await view(id); if (b === a) return b; a = b; } return a; };
+  // a chart's view once at rest: the same over 3 drawn frames and 200 ms (a slow WebKit draws a frame every 100–260 ms)
+  const settle = (id) => page.evaluate(async (id) => {
+    const rd = () => { const h = document.querySelector(`[data-pz="${id}"]`); return h ? h.dataset.view : null; };
+    const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    let a = (await frame(), rd()), same = 0, since = performance.now();
+    for (const t0 = performance.now(); performance.now() - t0 < 4000;) {
+      await frame(); await new Promise((r) => setTimeout(r, 25));
+      const b = rd();
+      if (b !== a) { a = b; same = 0; since = performance.now(); } else if (++same >= 3 && performance.now() - since >= 200) break;
+    }
+    return a;
+  }, id);
+  const rest = () => page.evaluate(REST);
   const tas = await page.$$eval('.pz', (hs) => hs.map((h) => [h.classList.contains('pz-xy'), getComputedStyle(h).touchAction]));
   if (tas.length) run('part 3: every chart surface takes sideways drags and pinches, vertical swipes stay the page\'s', tas.every(([xy, ta]) => ta === (xy ? 'none' : 'pan-y')));
   else skip();
@@ -414,18 +427,19 @@ async function part3(page, run, skip) {
   } else skip();
   // the bar on top: slim; away going down, back going up
   const bar = () => page.evaluate(() => { const b = document.querySelector('#top'), r = b.getBoundingClientRect(); return { h: r.height, hid: b.classList.contains('hid'), bottom: r.bottom, top: r.top, strip: document.querySelector('#mstrip').getBoundingClientRect().bottom }; });
-  await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(300);
+  // each read waits for the scroll's frame and the bar's slide to end (fixed sleeps were too short for WebKit on CI)
+  await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(300); await rest();
   const h0 = await bar();
-  await page.evaluate(() => scrollTo(0, 1100)); await sleep(450);
+  await page.evaluate(() => scrollTo(0, 1100)); await sleep(150); await rest();
   const h1 = await bar();
-  await page.evaluate(() => scrollBy(0, -140)); await sleep(450);
+  await page.evaluate(() => scrollBy(0, -140)); await sleep(150); await rest();
   const h2 = await bar();
   run('part 3: the bar on top is one slim row (≤ 52 px)', h0.h >= 44 && h0.h <= 52 && !h0.hid);
   run('part 3: scrolling down slides it away and the market strip scrolls off; scrolling up brings the bar back', h1.hid && h1.bottom <= 0 && h1.strip < 0 && !h2.hid && Math.abs(h2.top) <= 1);
   await page.evaluate(() => scrollTo(0, 0)); await sleep(300);
   // an explainable word: a short note inside the screen, closed by Esc
   if (await press('#best [data-act="term"]')) {
-    await sleep(200);
+    await sleep(200); await rest();
     const pop = await page.evaluate(() => { const e = document.querySelector('#pop'), r = e.getBoundingClientRect(), bb = document.querySelector('#top').classList.contains('hid') ? 0 : document.querySelector('#top').getBoundingClientRect().bottom; return { on: !e.hidden, gl: ((e.querySelector('.gl') || {}).textContent || '').length, inside: r.left >= 0 && r.right <= document.documentElement.clientWidth && r.top >= bb - 1 && r.bottom <= innerHeight + 1 }; });
     await page.keyboard.press('Escape'); await sleep(200);
     run('part 3: a tap on an explainable word opens a short note inside the screen, below the bar; Esc closes it', pop.on && pop.gl >= 25 && pop.inside && !(await page.isVisible('#pop')));
@@ -435,10 +449,10 @@ async function part3(page, run, skip) {
     await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
     const long = await page.evaluate(() => { const b = document.querySelector('#sheet-body'); return b.scrollHeight - b.clientHeight > 400; });
     if (long) {
-      for (const y of [80, 220, 420]) { await page.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(130); }
-      await sleep(350);
+      for (const y of [80, 220, 420]) { await page.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(130); await rest(); }
+      await sleep(350); await rest();
       const f1 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
-      await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(450);
+      await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(450); await rest();
       const f2 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
       run('part 3: the panel\'s top folds while its content scrolls down and opens at the top', f1 && !f2);
     } else skip();

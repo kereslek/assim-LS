@@ -20,6 +20,10 @@ on:
         description: 'Also run this probe script under tools/candidate/ first (timings and event counts only)'
         required: false
         default: ''
+      audit:
+        description: 'yes = also run the live audit''s whole walk on made-up fixtures (WebKit: iPhone 15, Chromium: laptop)'
+        required: false
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -71,6 +75,18 @@ jobs:
           PAGE: ${{ inputs.page }}
           PROBE: ${{ inputs.probe }}
         run: node "$PROBE" --browser ${{ matrix.browser }} --device "${{ matrix.device }}" ${PAGE:+--page "$PAGE"}
+      - name: Live audit on made-up fixtures (the deployed page's walk, before a deploy)
+        if: inputs.audit == 'yes'
+        env:
+          NODE_PATH: ${{ runner.temp }}/pw/node_modules
+          PAGE: ${{ inputs.page }}
+          LA_PAGE_FILE: ${{ inputs.page }}
+          LOCK_PASSPHRASE: made-up fixture passphrase # the fixtures' own, public in tools/fixtures/make-fixture.mjs
+          PROFILE: ${{ matrix.browser == 'webkit' && 'phone' || 'laptop' }}
+        run: |
+          node tools/serve-fixtures.mjs ${PAGE:+--page "$PAGE"} --port 8731 > "$RUNNER_TEMP/serve.url" &
+          for i in $(seq 1 50); do [ -s "$RUNNER_TEMP/serve.url" ] && break; sleep 0.2; done
+          node tools/live-audit.mjs --profile "$PROFILE" --url "$(cat "$RUNNER_TEMP/serve.url")" --wait 5
       - name: Browser tests (${{ matrix.browser }} as ${{ matrix.device }})
         env:
           NODE_PATH: ${{ runner.temp }}/pw/node_modules
