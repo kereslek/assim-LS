@@ -15,7 +15,8 @@ parameters and results log live in their private strategy doc.
   - `leak` (weekly) and `prune` (daily, runs older than 7 days). A new Actions secret needs one line in `leak.yml`.
   - `backtest`: daily at 04:41 UTC; seals `backtest.json`.
   - `site`: the dashboard's tests in Actions (WebKit as an iPhone 15, Chromium as a Pixel 7) on made-up data.
-  - `loop` and `watchdog`: the always-on loop; rehearsed, not live yet (`LIVE_PASS` unset, watchdog cron commented out).
+  - `loop` and `watchdog`: the always-on loop, live; the watchdog runs every 10 minutes (:07, :17, ...) and starts the loop only when none is queued or running and `live.json` is over 20 minutes old.
+  - `backup`: daily at 03:17 UTC; sealed, dated copies of the `data` branch and `lock/` on the `backup` branch (`scripts/backup.mjs`), 30 days kept, unsealed files refused, then a restore rehearsal (no decryption).
 - **Lock:** `lock/lock.json` (salt, rounds, check), `lock/inbox.json` (public key), `lock/config.sealed.json` (the owner's settings, sealed). `scripts/seal-input.mjs` seals new private inputs.
 - **Data contract:** `docs/DATA.md`.
 - **Dashboard:** `site/app/index.html` (single file); fixtures in `tools/fixtures/`, browser tests in `tools/site-test.mjs` (after editing the page's script, run `node tools/site-test.mjs --fix-csp`).

@@ -1,0 +1,72 @@
+name: backup
+# Sealed, dated copies of the published data, kept apart from the `data` branch that every pass overwrites.
+# Copies the data branch's *.json and the repo's lock/*.json into <YYYY-MM-DDTHHMMZ>/ (data files) and
+# <stamp>/lock/ on the `backup` branch, refusing if any data file other than lock.json and inbox.json is
+# not a sealed envelope. Keeps 30 days: older dated folders are deleted in the same commit. Normal pushes
+# only (the branch keeps its history). Then a restore rehearsal on the newest folder as pushed: envelopes
+# parse, t is sane, the lock files equal the repo's. Nothing is ever decrypted: no secret is used here.
+# Public log: dates, counts and pass/fail only.
+on:
+  schedule:
+    - cron: '17 3 * * *'   # daily 03:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: write   # push to the backup branch
+concurrency:
+  group: backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the scripts and the lock files
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Backup tests first (planted faults: an unsealed file must be refused)
+        run: node --test test/backup.test.mjs
+      - name: Check out the data branch (as published)
+        uses: actions/checkout@v5
+        with:
+          ref: data
+          path: data-branch
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Check out the backup branch
+        uses: actions/checkout@v5
+        with:
+          ref: backup
+          path: backup-branch
+          fetch-depth: 1
+      - name: Back up, check the seals, keep 30 days, push
+        run: |
+          set -euo pipefail
+          cd backup-branch
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            stamp=$(date -u +%Y-%m-%dT%H%MZ)
+            node ../scripts/backup.mjs make --data ../data-branch --lock ../lock --out . --stamp "$stamp" --keep-days 30
+            git add -A
+            git commit -q -m "Backup $stamp (sealed, automated)"
+            if git push -q origin HEAD:backup; then echo "pushed: yes (attempt $attempt)"; exit 0; fi
+            echo "pushed: no (attempt $attempt); starting again from the newest backup branch"
+            git fetch -q --depth=1 origin backup
+            git reset -q --hard FETCH_HEAD
+            sleep $((attempt * 15))
+          done
+          echo 'pushed: no'
+          exit 1
+      - name: Check out the backup branch as pushed
+        uses: actions/checkout@v5
+        with:
+          ref: backup
+          path: restore
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Restore rehearsal (never decrypts; pass/fail and counts only)
+        run: node scripts/backup.mjs rehearse --backups restore --lock lock --max-age-h 2
