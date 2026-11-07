@@ -406,6 +406,8 @@ test('full-range layer: what spans ±5 log counts; one-sided width, gaps and low
   // the price near the bottom tick: the band is clipped at the usable edge, the full range still found
   const low = MIN_TICK + 2000;
   assert.equal(layerOf([{ lo: -887220, hi: 887220, L: 2n }], low).L, 2n);
+  // ... and the band always holds the price: liquidity only far above it is no layer
+  assert.equal(layerOf([{ lo: MIN_TICK + 30000, hi: 887220, L: 2n }], low).L, 0n);
   // nothing at all
   assert.equal(fullRangeLayer([], 0).L, 0n);
   assert.equal(fullRangeLayer(liquidityMap(poolFrom([{ lo: -887220, hi: 887220, L: 2n }], 0)).segments, 0, { wide: null }).L, 0n);
