@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Cwc1EuZWG8xR55AlwBE+a7daFjKiw/SlLtAmuYwTaYc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iEza6474Pogfe1djGvSISqe37aRAIB/g/lamjCgqApY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -386,6 +386,7 @@ tr.sel td{background:rgba(22,199,132,.08)}
 .sheet-head{display:flex;align-items:flex-start;gap:12px;padding:12px max(16px,env(safe-area-inset-right)) 12px 16px;border-bottom:1px solid var(--line);background:var(--head)}
 .sheet-head .grow{flex:1 1 auto;min-width:0}
 .sheet-head h2{font:700 18px/1.25 var(--sans);overflow-wrap:anywhere;margin-top:3px}
+.sheet-ctl{display:flex;flex-wrap:wrap;gap:0 14px;align-items:center;margin-top:2px}
 .sheet-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:14px max(16px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) 16px;display:grid;gap:14px;align-content:start;-webkit-overflow-scrolling:touch}
 /* on a phone the panel is a sheet: a grab handle on top, swipe it down (or the content, once scrolled to the top) to close */
 .grab{display:none;flex:none;justify-content:center;align-items:center;height:20px;background:var(--head);touch-action:none;cursor:grab}
@@ -427,6 +428,208 @@ footer .btn{font-family:var(--sans)}
 }
 .swipe{margin-top:6px;font-size:12px;color:var(--muted)}
 @media (min-width:1100px){.swipe{display:none}}
+
+/* small window pills: about 22 px to the eye, a 44 px tap area around each */
+.seg.pills{border:0;border-radius:0;background:transparent;overflow:visible}
+.seg.pills button{min-width:0;min-height:44px;padding:0;border:0;background:transparent;display:inline-flex;align-items:center}
+.seg.pills button+button{border-left:0}
+.seg.pills button>span{display:block;padding:5px 9px;border:1px solid var(--line2);background:var(--surface);font:600 10.5px/1 var(--mono);letter-spacing:.06em;color:var(--fg2);transition:background .15s ease,color .15s ease}
+.seg.pills button+button>span{margin-left:-1px}
+.seg.pills button:first-child>span{border-radius:999px 0 0 999px;padding-left:11px}
+.seg.pills button:last-child>span{border-radius:0 999px 999px 0;padding-right:11px}
+.seg.pills button[aria-pressed="true"]{background:transparent}
+.seg.pills button[aria-pressed="true"]>span{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);position:relative}
+.seg.pills button:disabled>span{color:var(--faint);border-style:dashed}
+.seg.pills button:focus-visible{outline:none}
+.seg.pills button:focus-visible>span{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:520px){.seg.pills{flex:none}.seg.pills button{flex:none}}
+
+/* top strip: gas, three prices, the next pass; tiny and quiet */
+.mstrip{flex:1 1 100%;order:-1;display:flex;align-items:center;gap:4px 16px;margin:-2px 0 0;padding:0 0 9px;border-bottom:1px solid var(--line);font:500 10.5px/1.2 var(--mono);color:var(--fg2);font-variant-numeric:tabular-nums;min-width:0}
+.mstrip .mpx{display:flex;align-items:center;gap:4px 14px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.mstrip .mpx::-webkit-scrollbar{display:none}
+.mstrip .px{white-space:nowrap;display:inline-flex;align-items:baseline;gap:5px}
+.mstrip .px b{font-weight:700;color:var(--muted);letter-spacing:.06em}
+.mstrip .px .v{color:var(--fg)}
+.mstrip .up{color:var(--pos);font-style:normal}.mstrip .dn{color:var(--neg);font-style:normal}.mstrip .na{color:var(--muted);font-style:normal}
+.mstrip .mt{margin-left:auto;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--muted)}
+.mstrip .mt .v{color:var(--fg2)}
+.mstrip .mt.late .v{color:var(--warn)}
+.cd{width:12px;height:12px;flex:none;display:block;transform:rotate(-90deg)}
+.cd circle{fill:none;stroke-width:2.4}
+.cd .tr{stroke:var(--line3)}
+.cd .fl{stroke:var(--accent);stroke-dasharray:28.27;stroke-linecap:round;animation:cd linear forwards}
+@keyframes cd{from{stroke-dashoffset:var(--cd0,0)}to{stroke-dashoffset:28.27}}
+.gas{margin:-10px 0;min-height:44px;padding:0 6px 0 0;border:0;background:transparent;color:var(--fg);display:inline-flex;align-items:center;gap:6px;font:inherit;cursor:pointer;white-space:nowrap}
+.gas svg{width:24px;height:14px;flex:none;display:block}
+.gas .u{color:var(--muted)}
+.gas .gb{padding:1px 5px;border-radius:999px;border:1px solid currentColor;font-size:10px;letter-spacing:.04em}
+.gas .gv{font-weight:700}
+.g-cheap{--gc:var(--accent)}.g-normal{--gc:#6EA9FF}.g-busy{--gc:var(--warn)}.g-expensive{--gc:var(--bad)}.g-none{--gc:var(--faint)}
+.gas .gb{color:var(--gc)}
+@media (max-width:699px){ /* a phone: the three prices across the top, gas and the next pass under them */
+  .mstrip{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto 20px;column-gap:10px;row-gap:6px;padding-bottom:8px}
+  .mstrip .mpx{grid-column:1/3;grid-row:1;justify-content:space-between;gap:4px 10px}
+  .mstrip .px{gap:4px}
+  .mstrip .gas{grid-row:2;grid-column:1;margin:-12px 0}
+  .mstrip .mt{grid-row:2;grid-column:2;margin-left:0;justify-content:flex-end}
+}
+@media (max-width:400px){.mstrip .gas .gb,.mstrip .w{display:none}}
+@media (min-width:700px) and (max-width:959px){.mstrip{gap:4px 12px}.mstrip .w{display:none}.mstrip .mpx{gap:4px 10px}}
+@media (max-width:520px){
+  #mstrip:not([hidden]) ~ .hdr-right .ftm{display:none} /* the strip already says "updated hh:mm" */
+  .hdr-right .sl-t{display:none}
+  .hdr-right{gap:6px;justify-content:flex-start}
+  .hdr-right #refresh{margin-left:auto}
+  .seg.pills button>span{padding-left:8px;padding-right:8px}
+}
+@media (max-width:400px){.hdr-right .badge.sealed{display:none}} /* the footer and the lock screen say it too */
+
+/* pop-up notes: why a pool stands out, the gas range */
+.pop{position:fixed;z-index:70;max-width:min(320px,calc(100vw - 24px));padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:rgba(17,23,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2)}
+.pop b{color:var(--fg);font-weight:600}
+.pop .lbl{display:block;margin-bottom:6px}
+.pop .why-row{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:start;padding:3px 0}
+.pop .why-row svg{margin-top:2px}
+.pop p+p{margin-top:5px}
+@keyframes popIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.pop:not([hidden]){animation:popIn .14s ease-out}
+
+/* why it's interesting: small pictograms */
+.wi{width:14px;height:14px;flex:none;display:block}
+.wi.g{color:var(--accent)}.wi.a{color:var(--warn)}.wi.r{color:var(--bad)}
+.whyb{min-height:44px;padding:0 4px;border:0;background:transparent;display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--fg2);font:600 10px/1 var(--mono)}
+.whyb:hover .wi{transform:scale(1.15)}
+.whyb .more{color:var(--muted)}
+td.why,th.why{text-align:left}
+td.why{padding-top:0;padding-bottom:0}
+.why-key{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin-top:6px}
+.linkbtn{min-height:44px;padding:0;border:0;background:transparent;color:var(--accent);font:500 12px/1.3 var(--sans);cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;display:inline-flex;align-items:center;gap:6px}
+.why-icons{display:inline-flex;gap:5px;align-items:center}
+.why-legend{display:grid;gap:6px 18px;grid-template-columns:minmax(0,1fr);margin:2px 0 6px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);font-size:12px;color:var(--fg2)}
+@media (min-width:760px){.why-legend{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1200px){.why-legend{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.why-legend>div{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:start}
+.why-legend svg{margin-top:2px}
+.why-legend b{color:var(--fg);font-weight:600}
+
+/* the new dot and the star */
+.newdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#22D3EE;box-shadow:0 0 0 3px rgba(34,211,238,.18);vertical-align:1px;margin-right:5px;flex:none}
+.star{width:30px;min-width:30px;min-height:44px;padding:0;border:0;background:transparent;color:var(--faint);display:inline-grid;place-items:center;cursor:pointer;flex:none}
+.star svg{width:16px;height:16px;display:block;transition:transform .15s ease}
+.star:hover{color:var(--fg2)}
+.star.on{color:var(--gold)}
+.star.pop svg{animation:starPop .32s ease-out}
+@keyframes starPop{0%{transform:scale(1)}45%{transform:scale(1.45)}100%{transform:scale(1)}}
+.tbl{min-width:0}
+td.pool{min-width:150px;max-width:230px}
+@media (max-width:400px){td.pool .tag{white-space:normal}td.pool{min-width:112px!important}}
+@media (max-width:520px){
+  td.pool{min-width:118px;max-width:150px;padding-left:0}
+  .tbl th button{padding:4px 6px}
+  .tbl td{padding-left:6px;padding-right:6px}
+}
+.pcell{display:flex;align-items:flex-start;gap:2px}
+.pcell .pcm{min-width:0;flex:1 1 auto;padding-top:5px}
+td.pool{padding-left:2px}
+.best-head .star,.sheet-head .star{margin:-8px 0 -8px -6px}
+.ttl{display:flex;align-items:center;gap:4px;min-width:0}
+
+/* mini cards: favourites and similar pools */
+.mc-wrap{position:relative;min-width:0}
+.mc-track{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-inline:2px;padding:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.mc-track::-webkit-scrollbar{display:none}
+.mc-wrap::before,.mc-wrap::after{content:"";position:absolute;top:0;bottom:0;width:28px;z-index:2;pointer-events:none;opacity:0;transition:opacity .18s ease}
+.mc-wrap::before{left:0;background:linear-gradient(90deg,var(--mcf,var(--surface)),transparent)}
+.mc-wrap::after{right:0;background:linear-gradient(270deg,var(--mcf,var(--surface)),transparent)}
+.mc-wrap.fl::before,.mc-wrap.fr::after{opacity:1}
+.mc{position:relative;flex:none;width:138px;scroll-snap-align:start;border:1px solid var(--line2);border-radius:10px;background:var(--raised);padding:0 9px 8px;display:flex;flex-direction:column;min-width:0;transition:border-color .15s ease,transform .15s ease}
+.mc:hover{border-color:var(--line3)}
+.mc.self{border-color:var(--accent);box-shadow:inset 0 0 0 1px rgba(22,199,132,.35)}
+.mc.uv{border-style:dashed}
+.mc-cover{position:absolute;inset:0;z-index:0;min-height:44px;width:100%;padding:0;border:0;border-radius:10px;background:transparent;cursor:pointer}
+.mc-name{position:relative;z-index:1;align-self:stretch;min-height:44px;margin:0 -9px;padding:7px 9px 5px;border:0;background:transparent;color:var(--fg);text-align:left;cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:2px;font:inherit;min-width:0}
+.mc-name .n{font:600 12px/1.25 var(--sans);overflow-wrap:anywhere}
+a.mc-name .n,button.mc-name .n{text-decoration:underline dotted rgba(22,199,132,.6);text-underline-offset:3px}
+.mc-name .m{font:500 10px/1.3 var(--mono);color:var(--muted);letter-spacing:.03em}
+div.mc-name{cursor:inherit;pointer-events:none}
+.mc-v{position:relative;z-index:0;pointer-events:none;display:flex;align-items:baseline;gap:5px;flex-wrap:wrap;min-width:0}
+.mc-v .v{font:700 15px/1.2 var(--mono);font-variant-numeric:tabular-nums;color:var(--fg)}
+.mc-v .v.gold{color:var(--gold)}
+.mc-v .k{font:500 10px/1.2 var(--mono);color:var(--muted)}
+.mc-rel{position:relative;z-index:0;pointer-events:none;margin-top:4px;font:600 10px/1.2 var(--mono);letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+.mc-rel.g0{color:var(--accent)}.mc-rel.uv{color:var(--bad)}
+.mc .star{position:absolute;top:0;right:0;z-index:2;width:34px;min-width:34px}
+.mc.fav .mc-name{position:static}
+.mc.fav .mc-name::after{content:"";position:absolute;inset:0;z-index:1;border-radius:10px}
+.mc.fav{cursor:pointer}
+.mc.end{width:96px;align-items:center;justify-content:center;text-align:center;padding:8px;border-style:dashed;background:transparent;color:var(--accent);font:600 12px/1.3 var(--sans);cursor:pointer;min-height:44px}
+.mc.end .big{font:700 18px/1.1 var(--mono);display:block}
+.mc-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 10px;margin-bottom:6px;min-height:16px}
+.mdots{display:inline-flex;align-items:center;gap:7px}
+.mdots i{width:6px;height:6px;border-radius:50%;background:var(--line3);display:block;transition:background .2s ease,transform .2s ease}
+.mdots i.on{background:var(--accent);transform:scale(1.25)}
+.mc-nav{position:absolute;top:50%;z-index:3;width:30px;height:44px;margin-top:-22px;padding:0;border:1px solid var(--line3);border-radius:8px;background:rgba(17,23,30,.92);color:var(--accent);display:none;place-items:center;cursor:pointer}
+.mc-nav svg{width:12px;height:12px;display:block}
+.mc-nav.l{left:-4px}.mc-nav.r{right:-4px}
+@media (hover:hover) and (pointer:fine){.mc-wrap.fl>.mc-nav.l,.mc-wrap.fr>.mc-nav.r{display:grid}}
+@keyframes mcIn{from{opacity:0;transform:translateX(18px) scale(.97)}to{opacity:1;transform:none}}
+.mc-track.enter>.mc{animation:mcIn .34s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0) * 40ms)}
+.sim{margin-top:10px;--mcf:var(--head)}
+.sim .mc{background:var(--surface)}
+.sim-list{margin-top:8px;max-height:min(38vh,320px);overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.sim-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:44px;padding:5px 10px;border:0;border-top:1px solid var(--grid);background:transparent;color:var(--fg);text-align:left;cursor:pointer;font:inherit}
+.sim-row:first-child{border-top:0}
+.sim-row:hover{background:var(--raised)}
+.sim-row .n{font:600 12px/1.3 var(--sans);overflow-wrap:anywhere}
+.sim-row .m{grid-column:1;font:500 10px/1.3 var(--mono);color:var(--muted)}
+.sim-row .v{grid-row:1/3;grid-column:2;font:700 13px/1.2 var(--mono);text-align:right}
+.sim-row.self{background:rgba(22,199,132,.08)}
+.fav .mc-wrap{margin-top:8px}
+.fav .empty{margin-top:8px;display:flex;gap:10px;align-items:flex-start}
+.fav .empty svg{width:18px;height:18px;flex:none;color:var(--gold);margin-top:1px}
+.devnote{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)}
+.devnote svg{width:12px;height:12px;flex:none}
+
+/* smart search */
+.filters .fld{display:flex;flex-direction:column;gap:3px;min-width:0;flex:2 1 200px;position:relative}
+.qin{position:relative}
+.qin input{position:relative;z-index:1;background:transparent!important;-webkit-appearance:none;appearance:none}
+.qin::before{content:"";position:absolute;inset:0;border-radius:8px;background:var(--raised)}
+.qhint{position:absolute;left:11px;right:11px;top:0;bottom:0;z-index:0;display:flex;align-items:center;font-size:13px;white-space:pre;overflow:hidden;pointer-events:none;color:var(--muted)}
+.qhint .t{visibility:hidden}
+.qlist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;margin:0;padding:4px 0;list-style:none;border:1px solid var(--line3);border-radius:10px;background:rgba(12,16,21,.98);box-shadow:0 14px 30px rgba(0,0,0,.55);max-height:min(60vh,380px);overflow-y:auto}
+.qopt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;min-height:44px;padding:4px 12px;cursor:pointer;font-size:13px;color:var(--fg2)}
+.qopt .qk{font:600 10px/1 var(--mono);letter-spacing:.06em;color:var(--muted);min-width:36px}
+.qopt .qt{min-width:0;overflow-wrap:anywhere;color:var(--fg)}
+.qopt .qt b{color:var(--accent);font-weight:700}
+.qopt .qm{font:500 10px/1.2 var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+.qopt[aria-selected="true"],.qopt:hover{background:var(--raised)}
+.qopt[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--accent)}
+
+/* backtest highlights: the chosen line stays, the rest step back */
+button.strat{width:100%;min-height:44px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:opacity .15s ease,background .15s ease}
+button.strat:hover{background:var(--raised)}
+button.strat[aria-pressed="true"]{background:rgba(22,199,132,.08);box-shadow:inset 3px 0 0 var(--accent)}
+.lab-legend.hl button.strat[aria-pressed="false"]{opacity:.45}
+.heat button.cell{min-height:44px;border:0;cursor:pointer;font:500 12px/1 var(--mono);transition:box-shadow .15s ease,opacity .15s ease}
+.heat button.cell[aria-pressed="true"]{box-shadow:0 0 0 2px var(--fg) inset}
+.heat.sel button.cell[aria-pressed="false"]{opacity:.55}
+.heat-detail{margin-top:6px;padding:7px 10px;border-left:3px solid var(--accent);background:rgba(22,199,132,.06);font-size:12px;color:var(--fg2)}
+.heat-detail b{color:var(--fg)}
+.lg-btn{min-height:44px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:var(--fg2);font:500 12px/1 var(--sans);display:inline-flex;align-items:center;gap:6px;cursor:pointer;transition:opacity .15s ease,background .15s ease}
+.lg-btn:hover{background:var(--raised)}
+.lg-btn[aria-pressed="true"]{background:rgba(22,199,132,.1);color:var(--fg)}
+.legend.hl .lg-btn[aria-pressed="false"]{opacity:.45}
+svg .hit{cursor:pointer}
+
+/* explorer links and the lock note */
+a.ext{color:var(--accent);text-decoration:underline dotted;text-underline-offset:3px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+a.ext svg{width:10px;height:10px;flex:none}
+.facts .links{display:flex;flex-wrap:wrap;gap:2px 12px}
+.lockgrp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:560px}
+.lock-note{flex:1 1 220px;font:400 12px/1.45 var(--sans);color:var(--muted)}
+@media (min-width:1000px){main{grid-template-areas:"glance glance" "best fav" "best side" "next side" "all all" "bt bt"}#fav{grid-area:fav}}
 /* motion: the panel slides up, bars grow from the baseline, switched numbers cross-fade (no layout change) */
 @keyframes sheetIn{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -441,6 +644,11 @@ footer .btn{font-family:var(--sans)}
 <body>
 <div id="ribbon" class="ribbon" role="note" hidden>MOCKUP · MADE-UP NUMBERS</div>
 <header class="top">
+  <div class="mstrip" id="mstrip" aria-label="Market and scanner timing" hidden>
+    <button type="button" class="gas g-none" id="gas" data-act="gas" aria-haspopup="true" aria-expanded="false" aria-label="Ethereum gas">—</button>
+    <span class="mpx" id="mpx"></span>
+    <span class="mt" id="mt"></span>
+  </div>
   <div class="brand">
     <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="6" width="3.5" height="16" rx="1" fill="#4B5563"/><rect x="5.5" y="12" width="3.5" height="10" rx="1" fill="#4B5563"/><rect x="10" y="18" width="3.5" height="4" rx="1" fill="#16C784"/><rect x="14.5" y="11" width="3.5" height="11" rx="1" fill="#4B5563"/><rect x="19" y="4" width="3.5" height="18" rx="1" fill="#4B5563"/></svg>
     <div>
@@ -451,9 +659,9 @@ footer .btn{font-family:var(--sans)}
   <div class="hdr-right">
     <span class="badge" id="fresh" role="status"><span class="dot"></span><span id="fresh-t">NO DATA YET</span></span>
     <button type="button" class="iconbtn" id="refresh" data-act="refresh" aria-label="Refresh" title="Refresh now" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.2 2.6v3.4h-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-    <span class="badge" title="Every data file is sealed with AES-256-GCM"><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="6.5" rx="1.5" fill="#AAB4C0"/><path d="M3 5V3.6a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="#AAB4C0" stroke-width="1.4"/></svg>SEALED</span>
-    <div class="seg" role="group" aria-label="Time window" id="winseg" hidden>
-      <button type="button" data-act="win" data-w="24h" aria-pressed="false">24H</button><button type="button" data-act="win" data-w="7d" aria-pressed="false">7D</button><button type="button" data-act="win" data-w="30d" aria-pressed="true">30D</button>
+    <span class="badge sealed" title="Every data file is sealed with AES-256-GCM"><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="6.5" rx="1.5" fill="#AAB4C0"/><path d="M3 5V3.6a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="#AAB4C0" stroke-width="1.4"/></svg><span class="sl-t">SEALED</span></span>
+    <div class="seg pills" role="group" aria-label="Time window" id="winseg" hidden>
+      <button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button>
     </div>
     <span class="lbl" id="refresh-msg" role="status" aria-live="polite" hidden></span>
   </div>
@@ -494,6 +702,12 @@ footer .btn{font-family:var(--sans)}
     <button type="button" class="tile" id="bench" data-act="detail"></button>
   </section>
 
+  <section id="fav" class="card fav" aria-labelledby="fav-h">
+    <div class="sec-head"><h2 id="fav-h" tabindex="-1">★ Favourites</h2><span class="lbl" id="fav-count"></span></div>
+    <div id="fav-body"></div>
+    <p class="devnote"><svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1.5" y="2" width="9" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4 10.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>Saved in this browser, on this device only. The page has no server, so it can’t recognise you (or your IP): stars don’t follow you to other devices.</p>
+  </section>
+
   <section id="best" class="card best" aria-labelledby="best-h"></section>
   <section id="next" class="card list" aria-labelledby="next-h"></section>
 
@@ -502,10 +716,15 @@ footer .btn{font-family:var(--sans)}
     <div class="filters">
       <label><span class="lbl">Lens</span><select id="f-lens" data-act="lens"><option value="all">All lenses</option></select></label>
       <label><span class="lbl">Chain</span><select id="f-chain" data-act="chain"><option value="all">All chains</option></select></label>
-      <label class="q"><span class="lbl">Search</span><input id="f-q" type="search" data-act="search" placeholder="Pair, e.g. VELNA" autocomplete="off" spellcheck="false"></label>
+      <div class="fld q"><span class="lbl" id="f-q-l">Search</span>
+        <div class="qin"><span class="qhint" id="q-hint" aria-hidden="true"></span><input id="f-q" type="search" data-act="search" role="combobox" aria-autocomplete="both" aria-expanded="false" aria-controls="q-list" aria-labelledby="f-q-l" placeholder="Pair, token or pool id" autocomplete="off" spellcheck="false" enterkeyhint="search">
+          <ul class="qlist" id="q-list" role="listbox" aria-label="Suggestions" hidden></ul></div>
+      </div>
     </div>
+    <div class="why-key"><button type="button" class="linkbtn" id="why-tog" data-act="legend" aria-expanded="false" aria-controls="why-legend">What the “Why” icons mean</button></div>
+    <div class="why-legend" id="why-legend" hidden></div>
     <div class="tbl-box" id="all-box"><table class="tbl" id="all-tbl"><thead></thead><tbody></tbody></table></div>
-    <p class="swipe">Swipe the table sideways for more columns; tap a row for its full breakdown.</p>
+    <p class="swipe">Swipe the table sideways for more columns; tap a row for its full breakdown, ☆ to keep it.</p>
     <div id="all-more"></div>
   </section>
 
@@ -534,6 +753,7 @@ footer .btn{font-family:var(--sans)}
         <div class="pane chartbox" data-chartbox="rp-money">
           <div class="pane-title"><span class="lbl">Cumulative $ vs holding</span><span id="rp-tools2"></span></div>
           <div class="chart" id="rp-money"></div>
+          <div class="legend" id="rp-mleg" role="group" aria-label="Highlight one line on the chart"></div>
           <p class="caption" id="rp-eq"></p>
           <p class="caption" id="rp-real"></p>
         </div>
@@ -561,8 +781,9 @@ footer .btn{font-family:var(--sans)}
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
     <div class="grab" aria-hidden="true" title="Swipe down to close"><i></i></div>
     <div class="sheet-head">
-      <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><h2 id="sheet-title">—</h2><div class="lbl" id="sheet-meta" style="margin-top:3px"></div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px"><div class="seg winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false">24H</button><button type="button" data-act="win" data-w="7d" aria-pressed="false">7D</button><button type="button" data-act="win" data-w="30d" aria-pressed="true">30D</button></div><button type="button" class="btn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button></div></div>
+      <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><div class="ttl"><h2 id="sheet-title">—</h2><span id="sheet-star"></span></div><div class="lbl" id="sheet-meta" style="margin-top:3px"></div>
+        <div class="sheet-ctl"><div class="seg pills winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button></div><button type="button" class="linkbtn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button></div>
+        <div class="sim" id="sim" hidden></div></div>
       <button type="button" class="btn" id="sheet-close" data-act="close-detail">Close</button>
     </div>
     <div class="sheet-body" id="sheet-body"></div>
@@ -572,14 +793,16 @@ footer .btn{font-family:var(--sans)}
 <footer>
   <span id="foot-l">build — · data sealed (AES-256-GCM) · times Europe/Budapest</span>
   <span id="foot-r"></span>
-  <button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden>Lock this device</button>
+  <div class="lockgrp"><button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden aria-describedby="lock-note">Lock this device</button>
+  <span class="lock-note" id="lock-note" hidden>Forgets the saved key on this device: the passphrase is needed next time. The data stays sealed either way.</span></div>
 </footer>
+<div class="pop" id="pop" role="tooltip" hidden></div>
 <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.2.2';
+const BUILD = 'v0.3.0';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -671,6 +894,7 @@ const S = {
   win: null, failing: null, busy: false, peekT: null, prevVisit: undefined, touched: false,
   sort: { k: 'gem', dir: -1 }, filt: { lens: 'all', chain: 'all', q: '' }, showAll: false,
   detail: null, opener: null, replay: null, cut: null, playing: false, raf: 0,
+  seenPrev: undefined, popFor: null, simM: null, simFor: null, simOpen: false, hl: null, labRow: null,
 };
 const W = (p, wk = S.win) => (p && p.w && p.w[wk]) || null;
 const gemOf = (p, wk = S.win) => { const w = W(p, wk); return w && w.gem && isNum(w.gem.total) ? w.gem.total : null; };
@@ -681,17 +905,17 @@ const poolById = (id) => (S.live && S.live.pools.find((p) => p.id === id)) || nu
 const ageDays = (p) => (isNum(p.createdAt) ? (S.live.t - p.createdAt) / D : null);
 const quoteSym = (p) => (p.t1 && p.t1.sym) || 'the quote token';
 
-function tagsHtml(p, wk = S.win) {
+function tagsHtml(p, wk = S.win, slim = false) {
   const t = [];
   if (p.verified === false) t.push('<span class="tag bad" title="Its swaps can’t be checked against its fee counters: never a gem">UNVERIFIED</span>');
   if (p.verified === null) t.push('<span class="tag amber" title="Fee check not run yet (too few swaps, or unread)">NOT CHECKED</span>');
-  if (p.young) t.push('<span class="tag amber">YOUNG POOL</span>');
+  if (p.young && !slim) t.push('<span class="tag amber">YOUNG POOL</span>');
   const gt = (W(p, wk) && W(p, wk).gem && Array.isArray(W(p, wk).gem.tags)) ? W(p, wk).gem.tags : [];
-  if (gt.includes('unchecked')) t.push('<span class="tag amber" title="A safety check didn’t run: the gem is capped at 40">UNCHECKED</span>');
-  if (gt.includes('unconfirmed')) t.push('<span class="tag amber">UNCONFIRMED</span>');
-  if (gt.includes('one-off')) t.push('<span class="tag amber">ONE-OFF</span>');
+  if (gt.includes('unchecked') && !(slim && p.verified === null)) t.push('<span class="tag amber" title="A safety check didn’t run: the gem is capped at 40">UNCHECKED</span>');
+  if (gt.includes('unconfirmed') && !slim) t.push('<span class="tag amber">UNCONFIRMED</span>');
+  if (gt.includes('one-off') && !slim) t.push('<span class="tag amber">ONE-OFF</span>');
   if (p.hooks) t.push('<span class="tag amber">HOOK</span>');
-  if (p.offMarket) t.push('<span class="tag amber">OFF MARKET</span>');
+  if (p.offMarket && !slim) t.push('<span class="tag amber">OFF MARKET</span>');
   const w = W(p, wk);
   if (w && w.partial) t.push(`<span class="tag info">${esc(Math.round(w.days * 10) / 10)} OF ${WIN_DAYS[wk]} D</span>`);
   if (!w) t.push(`<span class="tag info">NO ${WIN_LABEL[wk]} DATA</span>`);
@@ -855,7 +1079,7 @@ async function manualRefresh() {
 
 // ---------- unlock / lock ----------
 function lockMsg(t, err) { const m = $('#lock-msg'); m.textContent = t || ''; m.className = 'lock-msg' + (err ? ' err' : ''); }
-function showLock() { $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
+function showLock() { popClose(); $('#mstrip').hidden = true; $('#lock-note').hidden = true; $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
 async function onUnlock(ev) {
   ev.preventDefault();
   const input = $('#pass'), btn = $('#unlock-btn'), pass = input.value;
@@ -881,7 +1105,7 @@ async function onUnlock(ev) {
 }
 async function unlocked() {
   $('#lockscreen').hidden = true;
-  $('#lockbtn').hidden = false;
+  $('#lockbtn').hidden = false; $('#lock-note').hidden = false;
   await refresh();
   startTimer();
 }
@@ -890,6 +1114,7 @@ async function lockDevice() {
   stopTimer(); stopPlay();
   closeDetail();
   S.key = null; S.live = S.hist = S.bt = null; S.t = {}; S.missing = {}; S.failing = null; S.rendered = false; S.replay = null;
+  S.seenPrev = undefined; S.hl = null; S.labRow = null; clearTimeout(nextTimer); Q.open = false; Q.items = [];
   await idbDel('main');
   $('#app').innerHTML = APP_TEMPLATE;
   $('#ribbon').hidden = true; $('#loaderr').hidden = true;
@@ -929,11 +1154,14 @@ function renderFresh() {
   const age = Math.max(0, Date.now() - t), min = age / 6e4;
   let cls, txt;
   const failing = S.failing && S.live; // showing an older pass because the newest couldn't be read
-  if (failing) { cls = 'stale'; txt = `STALE · ${hm(t)} · ${min < 60 ? 'REFRESH FAILED' : ageTxt(age) + ' old'}`; }
-  else if (min < 15) { cls = 'fresh'; txt = `FRESH · ${hm(t)} · ${min < 1 ? 'JUST NOW' : Math.floor(min) + ' MIN AGO'}`; }
-  else if (min < 60) { cls = 'late'; txt = `LATE · ${hm(t)} · ${Math.floor(min)} MIN AGO`; }
-  else { cls = 'stale'; txt = `STALE · ${hm(t)} · ${ageTxt(age)} old`; }
-  el.className = 'badge ' + cls; tx.textContent = txt; el.title = 'Scanner pass ' + full(t);
+  const at = `<span class="ftm"> · ${hm(t)}</span> · `;
+  if (failing) { cls = 'stale'; txt = `STALE${at}${min < 60 ? 'REFRESH FAILED' : ageTxt(age) + ' old'}`; }
+  else if (min < 15) { cls = 'fresh'; txt = `FRESH${at}${min < 1 ? 'JUST NOW' : Math.floor(min) + ' MIN AGO'}`; }
+  else if (min < 60) { cls = 'late'; txt = `LATE${at}${Math.floor(min)} MIN AGO`; }
+  else { cls = 'stale'; txt = `STALE${at}${ageTxt(age)} old`; }
+  if (el.className !== 'badge ' + cls) el.className = 'badge ' + cls;
+  if (tx.innerHTML !== txt) tx.innerHTML = txt;
+  el.title = 'Scanner pass ' + full(t);
 }
 function renderBanner() {
   const b = $('#banner');
@@ -950,7 +1178,7 @@ function ensureWin() {
   if (!ok.includes(S.win)) S.win = ok.includes(S.live.defaultWindow) ? S.live.defaultWindow : ok.includes('30d') ? '30d' : ok[0] || '30d';
   for (const b of $$('#winseg button, #sheet-win button')) { b.setAttribute('aria-pressed', String(b.dataset.w === S.win)); b.disabled = !ok.includes(b.dataset.w); }
 }
-const PANELS = [['glance', renderGlance], ['best', renderBest], ['next', renderNext], ['all', renderTable], ['bt', renderBt], ['health', renderHealth]];
+const PANELS = [['strip', renderStrip], ['glance', renderGlance], ['fav', renderFav], ['best', renderBest], ['next', renderNext], ['all', renderTable], ['bt', renderBt], ['health', renderHealth]];
 function renderAll() {
   if (!S.live) return;
   if (S.prevVisit === undefined) { // "since you last looked" is fixed for this page's life
@@ -958,6 +1186,7 @@ function renderAll() {
     S.prevVisit = isNum(v) && v > 0 ? v : null;
   }
   if (!SOLO) store.set('lps.lastVisit', String(Date.now())); // a chart window is not a visit
+  seenSetup();
   if (SOLO && !S.soloReady) { soloSetup(); S.soloReady = true; }
   ensureWin();
   $('#winseg').hidden = false; $('#refresh').hidden = false;
@@ -978,8 +1207,12 @@ function renderAll() {
   if (S.pair) renderPair();
   if (SOLO) isolate();
   S.rendered = true;
+  seenSave(); armNext();
+  if (!$('#why-legend').innerHTML) $('#why-legend').innerHTML = whyLegend();
+  if (store.get('lps.legend') === '1') { $('#why-legend').hidden = false; $('#why-tog').setAttribute('aria-expanded', 'true'); }
+  if (document.activeElement === $('#f-q')) qUpdate();
   if (!S.touched) scrollTo(0, 0);
-  stickyAll();
+  stickyAll(); mcEdgesAll(); popPlace();
   onScroll();
 }
 
@@ -1236,7 +1469,7 @@ function renderBest() {
   const daysTxt = w.partial ? `${+w.days.toFixed(1)}-day` : WIN_WORD[wk];
   el.innerHTML = `<div class="lbl acc">TOP ${list.length} · ${WIN_LABEL[wk]} · TAP A POOL</div>${tabs}<div class="best-head"><div class="grow">`
     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
-    + `<h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>`
+    + `<div class="ttl"><h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
     + `<div class="lbl best-meta">${feeTxt(p.feeTier)} · ${chainLong(p.chain)} · UNISWAP V${esc(p.v)} · ${rangeTxt(w.range)}</div>`
     + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + `<div class="best-body"><div class="best-l">`
@@ -1634,28 +1867,32 @@ function renderNext() {
 }
 
 // ---------- all pools ----------
+// fewer, better columns: on a phone the pool, its gem, its net APR and why it stands out show without a sideways scroll
 const COLS = [
   { k: 'pair', h: 'Pool', v: (p) => String(p.pair || '').toLowerCase() },
-  { k: 'gem', h: 'Gem', v: (p, w) => (p.verified === false ? null : w && w.gem ? w.gem.total : null) },
-  { k: 'net', h: 'Net APR', v: (p, w) => w && w.net, f: (x) => pct(x) },
-  { k: 'feeApr', h: 'Fee APR', v: (p, w) => w && w.feeApr, f: (x) => pct(x) },
-  { k: 'lvr', h: 'LVR', v: (p, w) => w && w.lvr, f: (x) => pct(x) },
-  { k: 'edge', h: 'Edge', v: (p, w) => w && w.edge, f: times },
-  { k: 'aggApr', h: 'Agg APR', v: (p, w) => w && w.aggApr, f: (x) => pct(x) },
-  { k: 'tvl', h: 'TVL', v: (p) => p.tvlUsd, f: (x) => usd(x) },
-  { k: 'room', h: 'Room', v: (p, w) => w && w.inRangeUsd, f: (x) => usd(x) },
-  { k: 'parked', h: 'Parked', v: (p) => p.shape && p.shape.parked, f: (x) => pct(x) },
-  { k: 'vol', h: 'Volume', v: (p, w) => w && w.volUsd, f: (x) => usd(x) },
-  { k: 'sigma', h: 'σ / day', v: (p, w) => w && w.sigma, f: (x) => pct(x, { dp: 1 }) },
-  { k: 'range', h: 'Range', v: (p, w) => w && w.range, f: rangeTxt },
-  { k: 'age', h: 'Age', v: (p) => ageDays(p), f: (x) => (isNum(x) ? (x < 1 ? '<1 d' : Math.round(x) + ' d') : DASH) },
+  { k: 'gem', h: 'Gem', t: 'Gem now, 0–100: 60 or more is a gem', v: (p, w) => (p.verified === false ? null : w && w.gem ? w.gem.total : null) },
+  { k: 'net', h: 'Net APR', t: 'Yearly return at the ticket after LVR, re-centre swaps and gas', v: (p, w) => w && w.net, f: (x) => pct(x) },
+  { k: 'why', h: 'Why', t: 'Why it stands out: tap the icons', v: (p, w) => whyKeys(p, w).length || null },
+  { k: 'vol', h: 'Vol / day', t: 'Trading volume per day in this window', v: (p, w) => (w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : null), f: (x) => usd(x) },
+  { k: 'tvl', h: 'TVL', t: 'Value in the pool', v: (p) => p.tvlUsd, f: (x) => usd(x) },
+  { k: 'room', h: 'Room', t: 'Value already inside the suggested range: what a new position shares the fees with', v: (p, w) => w && w.inRangeUsd, f: (x) => usd(x) },
+  { k: 'feeApr', h: 'Fee APR', t: 'Fees alone, inside the suggested range', v: (p, w) => w && w.feeApr, f: (x) => pct(x) },
+  { k: 'edge', h: 'Edge', t: 'Fees ÷ LVR: above 1× the fees outrun the arbitrage loss', v: (p, w) => w && w.edge, f: times },
+  { k: 'sigma', h: 'σ / day', t: 'Daily volatility', v: (p, w) => w && w.sigma, f: (x) => pct(x, { dp: 1 }) },
+  { k: 'age', h: 'Age', t: 'Days since the pool was created', v: (p) => ageDays(p), f: (x) => (isNum(x) ? (x < 1 ? '<1 d' : Math.round(x) + ' d') : DASH) },
 ];
+// a search matches the pair as shown, the pair with native ETH read as WETH, or the start of a pool id
+function qMatch(p, q) {
+  if (String(p.pair || '').toLowerCase().includes(q) || symsN(p).join('/').toLowerCase().includes(q)) return true;
+  return q.length >= 5 && /^0x[0-9a-f]+$/.test(q) && String(p.id).toLowerCase().startsWith(q);
+}
 function filtered() {
   const wk = S.win, q = S.filt.q.trim().toLowerCase();
   return S.live.pools.filter((p) => {
     if (S.filt.chain !== 'all' && p.chain !== S.filt.chain) return false;
-    if (S.filt.lens !== 'all') { const w = W(p, wk); if (!w || !Array.isArray(w.lenses) || !w.lenses.includes(S.filt.lens)) return false; }
-    if (q && !String(p.pair || '').toLowerCase().includes(q)) return false;
+    if (S.filt.lens === 'fav') { if (!isFav(p.id)) return false; }
+    else if (S.filt.lens !== 'all') { const w = W(p, wk); if (!w || !Array.isArray(w.lenses) || !w.lenses.includes(S.filt.lens)) return false; }
+    if (q && !qMatch(p, q)) return false;
     return true;
   });
 }
@@ -1665,7 +1902,7 @@ function renderTable() {
   const lensCount = {};
   for (const p of L.pools) { const w = W(p, wk); for (const l of (w && w.lenses) || []) lensCount[l] = (lensCount[l] || 0) + 1; }
   const lensSel = $('#f-lens'), chainSel = $('#f-chain');
-  lensSel.innerHTML = `<option value="all">All lenses</option>` + Object.keys(LENS_NAME).map((k) => `<option value="${k}">${LENS_NAME[k]} (${lensCount[k] || 0})</option>`).join('');
+  lensSel.innerHTML = `<option value="all">All lenses</option><option value="fav">★ Favourites (${L.pools.filter((p) => isFav(p.id)).length})</option>` + Object.keys(LENS_NAME).map((k) => `<option value="${k}">${LENS_NAME[k]} (${lensCount[k] || 0})</option>`).join('');
   lensSel.value = S.filt.lens;
   const chains = [...new Set(L.pools.map((p) => p.chain))].filter(Boolean);
   chainSel.innerHTML = `<option value="all">All chains</option>` + chains.map((c) => `<option value="${esc(c)}">${esc(c.charAt(0).toUpperCase() + c.slice(1))} (${L.pools.filter((p) => p.chain === c).length})</option>`).join('');
@@ -1681,19 +1918,21 @@ function renderTable() {
   const shown = S.showAll ? rows : rows.slice(0, PAGE);
   $('#all-tbl thead').innerHTML = '<tr>' + COLS.map((c) => {
     const on = c.k === S.sort.k;
-    return `<th aria-sort="${on ? (S.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="lbl" data-act="sort" data-k="${c.k}">${esc(c.h).replace('σ', '<span style="text-transform:none">σ</span>')}${on ? (S.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
+    return `<th aria-sort="${on ? (S.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"${c.k === 'why' ? ' class="why"' : ''}><button type="button" class="lbl" data-act="sort" data-k="${c.k}"${c.t ? ` title="${esc(c.t)}"` : ''}>${esc(c.h).replace('σ', '<span style="text-transform:none">σ</span>')}${on ? (S.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
   }).join('') + '</tr>';
+  const fresh = L.pools.filter(isNew).length;
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td><span class="pn2">${esc(p.pair)}</span><span class="pm">${metaTxt(p)}</span><span class="tags">${tagsHtml(p, wk)}</span></td>`
+    + `<td class="pool"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${feeTxt(p.feeTier)} · ${chainShort(p.chain)} v${esc(p.v)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
-    + COLS.slice(2).map((c) => { const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
+    + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
-  $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== L.pools.length ? ' (' + L.pools.length + ' IN ALL)' : ''}`;
+  $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== L.pools.length ? ' (' + L.pools.length + ' IN ALL)' : ''}${fresh ? ` · ${fresh} NEW` : ''}`;
   $('#all-more').innerHTML = rows.length > shown.length ? `<button type="button" class="btn more" data-act="more">Show all ${int(rows.length)}</button>` : '';
   stickyHead($('#all-box'));
 }
 function setSort(k) {
   if (S.sort.k === k) S.sort.dir = -S.sort.dir; else S.sort = { k, dir: k === 'pair' || k === 'age' ? 1 : -1 };
+  popClose();
   renderTable();
   const b = $(`#all-tbl th button[data-k="${k}"]`);
   if (b) b.focus({ preventScroll: true });
@@ -1845,8 +2084,14 @@ function drawScatter(rows) {
   pzKeep('scatter');
   pzMount(box, 'scatter', 'pz-sc');
 }
+function putHtml(id, html, outer) {
+  const el = document.getElementById(id);
+  if (!el || el.__h === html) return;
+  if (outer) { el.outerHTML = html; const n = document.getElementById(id); if (n) n.__h = html; } else { el.innerHTML = html; el.__h = html; }
+}
 function recentres(s) { const out = []; for (let i = 1; i < s.lo.length; i++) if (isNum(s.lo[i]) && isNum(s.lo[i - 1]) && s.lo[i] !== s.lo[i - 1]) out.push(i); return out; }
 function renderReplay(row) {
+  hlFor(row);
   const b = row.b, s = b.series, n = s.t.length - 1, p = row.p;
   const cut = Math.max(1, Math.min(n, S.cut == null ? n : S.cut));
   const sc = $('#rp-scrub');
@@ -1869,9 +2114,10 @@ function renderReplay(row) {
     + `<div><span class="lbl">Re-ranges</span><span class="v">${re.length}</span><span class="s">${usd(s.costs[cut])} swap + gas</span></div>`
     + `<div><span class="lbl">Fee share</span><span class="v">${pct(b.share)}</span><span class="s">of pool fees</span></div>`;
   // price pane, log scale
-  $('#rp-tools1').outerHTML = `<span id="rp-tools1">${ztools('rp', row.id)}</span>`;
-  $('#rp-shape').innerHTML = p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · ±${Math.round(LIQ_SPANS[zget('liq-replay')] * 100)}%</span>${ztools('liq-replay', row.id)}</div>${liqChart(p, W(p), 'liq-replay')}</div>` : '';
-  $('#rp-tools2').outerHTML = `<span id="rp-tools2">${ztools('rp-money', row.id)}</span>`;
+  // rewritten only when their markup changes: while the replay plays, its buttons stay put (a press mid-play lands)
+  putHtml('rp-tools1', `<span id="rp-tools1">${ztools('rp', row.id)}</span>`, true);
+  putHtml('rp-shape', p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · ±${Math.round(LIQ_SPANS[zget('liq-replay')] * 100)}%</span>${ztools('liq-replay', row.id)}</div>${liqChart(p, W(p), 'liq-replay')}</div>` : '');
+  putHtml('rp-tools2', `<span id="rp-tools2">${ztools('rp-money', row.id)}</span>`, true);
   // the price pane (log scale) and the money pane (one $ axis) each drag along the window on their own
   const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58, MR = 78, inset = [+((ML / Wd) * 100).toFixed(2), +((MR / Wd) * 100).toFixed(2)];
   const tw = { plot: [ML / Wd, MR / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier' };
@@ -1879,6 +2125,10 @@ function renderReplay(row) {
   pzMount(pbox, 'rp', 'pz-line', inset);
   const P2 = pzTime('rp-money', row.id, n, { ...tw, inner: () => rpMoney(row, P2, Wd, ML, MR, cut, span) });
   pzMount($('#rp-money'), 'rp-money', 'pz-line', inset);
+  const mh = hlFor(row).money;
+  $('#rp-mleg').className = 'legend' + (mh ? ' hl' : '');
+  putHtml('rp-mleg', [['fees', '#8CF0B0', 'Fees'], ['lvr', '#E2664C', 'LVR'], ['costs', '#D39A2C', 'Costs'], ['net', '#16C784', 'Net']].map(([k, c, t]) => `<button type="button" class="lg-btn" data-act="hl" data-g="money" data-s="${k}" aria-pressed="${mh === k}" title="${mh === k ? 'Tap again to show every line' : 'Highlight this line'}"><svg width="16" height="8" aria-hidden="true"><line x1="0" y1="4" x2="16" y2="4" stroke="${c}" stroke-width="${k === 'net' ? 3 : 2}"${k === 'costs' ? ' stroke-dasharray="1.5 2.5"' : ''}/></svg>${t}</button>`).join('')
+    + '<span><svg width="16" height="8" aria-hidden="true"><line x1="0" y1="4" x2="16" y2="4" stroke="#8B96A3" stroke-width="1.3" stroke-dasharray="5 4"/></svg>Holding ($0)</span>');
   $('#rp-eq').innerHTML = `Lines end at the summary: fees <b>${usd(s.fees[cut])}</b> ${MINUS} LVR <b>${usd(Math.abs(s.lvr[cut]))}</b> ${MINUS} costs <b>${usd(Math.abs(s.costs[cut]))}</b> = net <b>${usd(net, { sign: true })}</b>.`;
   $('#rp-when').textContent = `${dm(s.t[cut])} ${hm(s.t[cut])} · day ${days.toFixed(1)}`;
   const rc = b.realCheck;
@@ -1950,26 +2200,31 @@ function rpMoney(row, P, Wd, ML, MR, cut, span) {
   if (area) m += `<path d="${area}L${X(k1).toFixed(1)} ${Y2(0).toFixed(1)}L${X(j0).toFixed(1)} ${Y2(0).toFixed(1)}Z" fill="#16C784" fill-opacity=".08"/>`;
   const end = cut >= a - 1e-9 && cut <= b + 1e-9; // the summary labels sit at the scrubber, when it is in view
   const labs = [{ y: Y2(0) + 3.5, t: 'HOLD $0', c: 't-mut' }], dots = [];
+  const hl = S.hl && S.hl.money, hits = [];
   for (const [k, col, wd, cls, name, dash] of ser) {
-    m += `<path d="${path(s[k], X, Y2, k1, j0)}" fill="none" stroke="${col}" stroke-width="${wd}" stroke-linejoin="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+    const d = path(s[k], X, Y2, k1, j0), on = k === hl;
+    m += `<path class="ln" data-s="${k}" d="${d}" fill="none" stroke="${col}" stroke-width="${wd + (on ? 1 : 0)}" stroke-linejoin="round"${dash ? ` stroke-dasharray="${dash}"` : ''}${hl && !on ? ' stroke-opacity="0.18"' : ''}/>`;
+    if (d) hits.push(`<path class="hit" data-act="hl" data-g="money" data-s="${k}" d="${d}" fill="none" stroke="transparent" stroke-width="12"/>`);
     if (end && isNum(s[k][cut])) { dots.push(`<circle cx="${X(cut).toFixed(1)}" cy="${Y2(s[k][cut]).toFixed(1)}" r="${k === 'net' ? 3.5 : 2.5}" fill="${col}"/>`); labs.push({ y: Y2(s[k][cut]) + 3.5, t: name + ' ' + usd(s[k][cut], { sign: true }), c: cls }); }
   }
-  m += '</g>' + dots.join('');
+  m += hits.join('') + '</g>' + dots.join('');
   if (end) for (const l of spread(labs, 12, T2 + 4, H2 - B2 + 4)) m += `<text x="${(X(cut) + 7).toFixed(1)}" y="${l.y.toFixed(1)}" class="${l.c}">${esc(l.t)}</text>`;
   m += `<line class="axisl" x1="${ML}" x2="${ML + pw}" y1="${T2 + qh}" y2="${T2 + qh}"/>`;
   for (const i of dateTicksIn(s.t, Math.max(2, Math.floor(pw / 90)), a, b)) m += `<text x="${clamp(X(i), ML + 12, Wd - 24).toFixed(1)}" y="${H2 - 5}" text-anchor="middle">${tLabel(s.t[i], span)}</text>`;
   return m + '</svg>';
 }
 function renderLab(row) {
-  const lab = $('#bt-lab'), b = row.b, p = row.p, n = b.series.t.length - 1;
+  const lab = $('#bt-lab'), b = row.b, p = row.p, n = b.series.t.length - 1, hl = hlFor(row);
+  S.labRow = row;
   const strats = (Array.isArray(b.strategies) ? b.strategies : []).filter((x) => x && Array.isArray(x.series));
   const order = strats.slice().sort((a, c) => (c.netUsd ?? -Infinity) - (a.netUsd ?? -Infinity));
   const name = p ? p.pair : row.id;
   let h = `<div class="sub-head"><div><h3 id="lab-h">Strategy lab · ${esc(name)}</h3><div class="lbl" style="margin-top:3px">${p ? metaTxt(p) : DASH} · ${dm(b.series.t[0])} → ${dm(b.series.t[n])} · ${usdFull(S.bt.ticket)} each${row.id === S.replay ? '' : ' · tap a row above for another pool'}</div></div></div>`;
   h += `<div class="lab"><div class="pane lab-chart chartbox" data-chartbox="lab"><div class="pane-title"><span class="lbl">Cumulative net $ vs holding, by strategy</span>${ztools('lab', row.id)}</div><div class="chart" id="lab-lines"></div></div>`;
-  h += `<div class="pane lab-legend"><div class="strat-h lbl"><span></span><span>Strategy</span><span style="text-align:right">Net APR</span><span style="text-align:right">Re-rng · net</span></div>`
-    + order.map((st) => `<div class="strat${st.id === 'ours' ? ' ours' : ''}"><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" stroke="${SCOL[st.id] || 'var(--s6)'}" stroke-width="${st.id === 'ours' ? 3 : 2}"/></svg><span class="nm">${esc(st.name || st.id)}</span>`
-      + `<span class="ap${st.net < 0 ? ' neg' : ''}">${pct(st.net, { sign: true })}</span><span class="rr">${int(st.reranges)} · ${usd(st.netUsd, { sign: true })}</span></div>`).join('')
+  if (hl.lab && !strats.some((x) => x.id === hl.lab)) hl.lab = null;
+  h += `<div class="pane lab-legend${hl.lab ? ' hl' : ''}" role="group" aria-label="Highlight one strategy on the chart"><div class="strat-h lbl"><span></span><span>Strategy · tap to highlight</span><span style="text-align:right">Net APR</span><span style="text-align:right">Re-rng · net</span></div>`
+    + order.map((st) => `<button type="button" class="strat${st.id === 'ours' ? ' ours' : ''}" data-act="hl" data-g="lab" data-s="${esc(st.id)}" aria-pressed="${hl.lab === st.id}" title="${hl.lab === st.id ? 'Tap again to show every line' : 'Highlight this line on the chart'}"><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" stroke="${SCOL[st.id] || 'var(--s6)'}" stroke-width="${st.id === 'ours' ? 3 : 2}"/></svg><span class="nm">${esc(st.name || st.id)}</span>`
+      + `<span class="ap${st.net < 0 ? ' neg' : ''}">${pct(st.net, { sign: true })}</span><span class="rr">${int(st.reranges)} · ${usd(st.netUsd, { sign: true })}</span></button>`).join('')
     + `<div class="strat"><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" stroke="#8B96A3" stroke-width="1.4" stroke-dasharray="3 2"/></svg><span class="nm muted">Hold the starting tokens (baseline)</span><span class="ap muted">0%</span><span class="rr">0 · $0</span></div>`;
   const rv = b.revert || {};
   h += `<p class="caption" style="margin-top:8px">${isNum(rv.net) ? `Revert’s backtest of the same range: <b>${pct(rv.net, { sign: true })}</b>, ${rv.within10 === true ? 'within 10 pts of ours' : rv.within10 === false ? 'more than 10 pts from ours' : 'gap not read'}.` : `Revert’s backtest of the same range: not compared, it has no public API (${DASH}).`}</p></div>`;
@@ -1982,6 +2237,7 @@ function renderLab(row) {
     span = span || 1;
     gr.net.forEach((row2, i) => (row2 || []).forEach((v, j) => { if (isNum(v) && v > best.v) best = { v, i, j }; }));
     const oi = gr.widths.findIndex((wd) => isNum(b.range) && Math.abs(wd - b.range) < 1e-9), oj = gr.triggers.indexOf(b.trigger || 'exit');
+    if (hl.cell && !(gr.net[+hl.cell.split(',')[0]] && hl.cell.split(',')[1] < gr.triggers.length)) { hl.cell = null; hl.cellOurs = false; }
     let hh = `<div></div>` + gr.triggers.map((t) => `<div class="hh lbl">${esc(TRIG[t] || t).replace(' ', '<br>')}</div>`).join('');
     gr.net.forEach((row2, i) => {
       hh += `<div class="rh lbl">${rangeTxt(gr.widths[i])}</div>`;
@@ -1990,15 +2246,23 @@ function renderLab(row) {
         let bg = 'var(--raised)', ink = '';
         if (isNum(v)) {
           const a = Math.min(1, Math.abs(v) / span);
-          if (v >= 0) { bg = `rgba(22,199,132,${(0.1 + a * 0.75).toFixed(2)})`; if (a >= 0.75) ink = ';color:#03140C;font-weight:700'; } // dark ink only on bright cells else bg = `rgba(226,102,76,${(0.14 + a * 0.6).toFixed(2)})`;
+          if (v >= 0) { bg = `rgba(22,199,132,${(0.1 + a * 0.75).toFixed(2)})`; if (a >= 0.75) ink = ';color:#03140C;font-weight:700'; } // dark ink only on bright cells
+          else bg = `rgba(226,102,76,${(0.14 + a * 0.6).toFixed(2)})`; // a loss to holding is red (this else once sat inside the comment above)
         }
-        hh += `<div class="cell${i === oi && j === oj ? ' ours' : ''}${i === best.i && j === best.j ? ' best' : ''}" style="background:${bg}${ink}">${isNum(v) ? (v < 0 ? MINUS : '') + Math.abs(v * 100).toFixed(0) : DASH}</div>`;
+        const me = i === oi && j === oj, on = hl.cell === i + ',' + j;
+        hh += `<button type="button" class="cell${me ? ' ours' : ''}${i === best.i && j === best.j ? ' best' : ''}" data-act="cell" data-i="${i}" data-j="${j}"${me ? ' data-ours="1"' : ''} aria-pressed="${on}" aria-label="${rangeTxt(gr.widths[i])}, ${esc((TRIG[t] || t).toLowerCase())}: ${pct(v, { sign: true })} net APR${me ? ' (ours)' : ''}" style="background:${bg}${ink}">${isNum(v) ? (v < 0 ? MINUS : '') + Math.abs(v * 100).toFixed(0) : DASH}</button>`;
       });
     });
     const ours = oi >= 0 && oj >= 0 && gr.net[oi] ? gr.net[oi][oj] : null;
-    h += `<div class="pane lab-heat"><div class="pane-title"><span class="lbl">Range width × re-centre trigger → net APR %</span></div><div class="heat-box"><div class="heat">${hh}</div></div>`
+    let det = '';
+    if (hl.cell) {
+      const [ci, cj] = hl.cell.split(',').map(Number), cv = gr.net[ci] ? gr.net[ci][cj] : null, mine = ci === oi && cj === oj;
+      det = `<p class="heat-detail" aria-live="polite"><b>${rangeTxt(gr.widths[ci])} · ${esc((TRIG[gr.triggers[cj]] || gr.triggers[cj]).toLowerCase())}</b> → <b>${pct(cv, { sign: true })}</b> net APR`
+        + (mine ? ': this is ours, highlighted on the chart.' : `${isNum(cv) && isNum(ours) ? `, ${pts(cv - ours)} vs ours` : ''}. No strategy line runs these settings, so the chart stays as it is.`) + ' Tap the tile again to let go.</p>';
+    }
+    h += `<div class="pane lab-heat"><div class="pane-title"><span class="lbl">Range width × re-centre trigger → net APR % · tap a tile</span></div><div class="heat-box"><div class="heat${hl.cell ? ' sel' : ''}">${hh}</div></div>`
       + `<div class="heat-key lbl"><span><i class="sw" style="background:rgba(226,102,76,.6)"></i>loses to holding</span><span><i class="sw" style="background:rgba(22,199,132,.22)"></i>small gain</span><span><i class="sw" style="background:rgba(22,199,132,.7)"></i>large gain</span><span><i class="sw" style="outline:2px solid var(--accent);outline-offset:-2px"></i>ours</span><span><i class="sw" style="background:linear-gradient(225deg,var(--fg) 0 35%,transparent 35%)"></i>best</span></div>`
-      + `<p class="caption">Ours (${rangeTxt(b.range)}, ${esc((TRIG[b.trigger] || b.trigger || DASH).toLowerCase())}) makes <b>${pct(ours, { sign: true })}</b>; the best cell (${best.i >= 0 ? rangeTxt(gr.widths[best.i]) + ', ' + esc((TRIG[gr.triggers[best.j]] || gr.triggers[best.j]).toLowerCase()) : DASH}) makes <b>${pct(best.i >= 0 ? best.v : null, { sign: true })}</b>.</p></div>`;
+      + det + `<p class="caption">Ours (${rangeTxt(b.range)}, ${esc((TRIG[b.trigger] || b.trigger || DASH).toLowerCase())}) makes <b>${pct(ours, { sign: true })}</b>; the best cell (${best.i >= 0 ? rangeTxt(gr.widths[best.i]) + ', ' + esc((TRIG[gr.triggers[best.j]] || gr.triggers[best.j]).toLowerCase()) : DASH}) makes <b>${pct(best.i >= 0 ? best.v : null, { sign: true })}</b>.</p></div>`;
   } else h += `<div class="pane lab-heat"><p class="empty">Width × trigger grid not in this pass (${DASH}).</p></div>`;
   lab.innerHTML = h + '</div>';
   // lines
@@ -2016,13 +2280,17 @@ function labLines(row, strats, P, Wd, L, R) {
   let s = `<svg viewBox="0 0 ${Wd} ${Ht}" role="img" aria-label="Cumulative net dollars versus holding for each strategy"><defs><clipPath id="lab-clip"><rect x="${L}" y="0" width="${pw}" height="${Ht}"/></clipPath></defs>`;
   for (const v of yt) s += `<line class="gridl" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${v === 0 ? '$0' : usd(v, { sign: true })}</text>`;
   s += `<line x1="${L}" x2="${L + pw}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8B96A3" stroke-width="1.3" stroke-dasharray="5 4"/><g clip-path="url(#lab-clip)">${svgEnds(X, a, z, n, T, T + ph)}`;
-  for (const st of strats.slice().reverse()) {
-    const col = SCOL[st.id] || 'var(--s6)', ours = st.id === 'ours', last = Math.min(n, st.series.length - 1);
-    s += `<path d="${path(st.series, X, Y, Math.min(last, j1), j0)}" fill="none" stroke="${col}" stroke-width="${ours ? 2.8 : 1.5}" stroke-linejoin="round"/>`;
+  const hl = S.hl && S.hl.lab && strats.some((x) => x.id === S.hl.lab) ? S.hl.lab : null, hits = [];
+  const draw = strats.slice().reverse().sort((x, y) => (x.id === hl) - (y.id === hl)); // the highlighted line on top
+  for (const st of draw) {
+    const col = SCOL[st.id] || 'var(--s6)', ours = st.id === 'ours', last = Math.min(n, st.series.length - 1), on = st.id === hl, dim = hl && !on ? ' stroke-opacity="0.18" fill-opacity="0.18"' : '';
+    const d = path(st.series, X, Y, Math.min(last, j1), j0);
+    s += `<path class="ln" data-s="${esc(st.id)}" d="${d}" fill="none" stroke="${col}" stroke-width="${(ours ? 2.8 : 1.5) + (on ? 1 : 0)}" stroke-linejoin="round"${dim}/>`;
     const e = st.series[last];
-    if (isNum(e) && last >= a - 1e-9 && last <= z + 1e-9) s += `<circle cx="${X(last).toFixed(1)}" cy="${Y(e).toFixed(1)}" r="${ours ? 3.5 : 2.5}" fill="${col}"/>`;
+    if (isNum(e) && last >= a - 1e-9 && last <= z + 1e-9) s += `<circle cx="${X(last).toFixed(1)}" cy="${Y(e).toFixed(1)}" r="${ours || on ? 3.5 : 2.5}" fill="${col}"${dim}/>`;
+    if (d) hits.push(`<path class="hit" data-act="hl" data-g="lab" data-s="${esc(st.id)}" d="${d}" fill="none" stroke="transparent" stroke-width="12"/>`);
   }
-  s += `</g><line class="axisl" x1="${L}" x2="${L + pw}" y1="${T + ph}" y2="${T + ph}"/>`;
+  s += hits.join('') + `</g><line class="axisl" x1="${L}" x2="${L + pw}" y1="${T + ph}" y2="${T + ph}"/>`;
   for (const i of dateTicksIn(b.series.t, Math.max(2, Math.floor(pw / 90)), a, z)) s += `<text x="${clamp(X(i), L + 12, Wd - 24).toFixed(1)}" y="${Ht - 5}" text-anchor="middle">${tLabel(b.series.t[i], b.series.t[n] - b.series.t[0])}</text>`;
   return s + '</svg>';
 }
@@ -2121,7 +2389,7 @@ function renderPair() {
   const best = sent || verifiedBest;
   const name = pairName(S.pair);
   $('#sheet-kicker').textContent = `PAIR VIEW · ${WIN_LABEL[wk]}`;
-  $('#sheet-pair').hidden = true;
+  $('#sheet-pair').hidden = true; $('#sheet-star').innerHTML = ''; renderSim(null);
   $('#sheet-title').textContent = name;
   $('#sheet-meta').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${[...new Set(pools.map((p) => chainLong(p.chain)))].join(' + ')} · ${usd(totVol)} ${WIN_WORD[wk]} volume`;
   const label = (p) => `${feeTxt(p.feeTier)} · v${esc(p.v)} · ${chainShort(p.chain)}${p.t1 && p.t1.sym === 'ETH' ? ' · ETH' : ''}`;
@@ -2146,7 +2414,9 @@ function pairRowToCard(id) {
 }
 function openDetail(id, opener) {
   if (!poolById(id)) return;
-  S.detail = id; S.pair = null; S.opener = opener || null;
+  popClose(); qClose();
+  if ($('#sheet').hidden || !S.opener) S.opener = opener || null; // moving between pools inside the sheet: focus later returns to where it started
+  S.detail = id; S.pair = null;
   renderDetail();
   showSheet();
 }
@@ -2161,7 +2431,9 @@ function showSheet() {
 }
 function closeDetail() {
   if ($('#sheet').hidden) return;
+  popClose();
   $('#sheet').hidden = true;
+  S.simFor = null;
   sheetReset();
   document.documentElement.classList.remove('modal-open');
   S.detail = null; S.pair = null;
@@ -2209,8 +2481,10 @@ function renderDetail() {
   const L = S.live, wk = S.win, w = W(p, wk);
   $('#sheet-kicker').textContent = `POOL DETAIL · ${WIN_LABEL[wk]}${p.id === L.bench ? ' · BENCHMARK' : ''}`;
   $('#sheet-title').textContent = p.pair;
+  $('#sheet-star').innerHTML = starBtn(p);
   $('#sheet-meta').textContent = `${feeTxt(p.feeTier)} · ${chainLong(p.chain)} · UNISWAP V${p.v}`;
   $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p);
+  renderSim(p);
   const rowsDef = [
     ['Days covered', (x) => (isNum(x.days) ? +x.days.toFixed(1) + (x.partial ? ' (partial)' : '') : DASH)],
     ['Volume', (x) => usd(x.volUsd)], ['LP fees', (x) => usd(x.lpFeesUsd)], ['Protocol fees', (x) => usd(x.protocolFeesUsd)],
@@ -2229,10 +2503,10 @@ function renderDetail() {
     .map(([n2, v, mx]) => `<span>${n2}</span><span class="track"><i style="width:${isNum(v) ? Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0) : 0}%"></i></span><span class="mono">${isNum(v) ? v : DASH}/${mx}</span>`).join('') : '';
   const hist = S.hist && S.hist.pools && S.hist.pools[p.id];
   const s2 = p.shape || {};
-  const tok = (t) => (t ? `${esc(t.sym)} · ${isNum(t.usd) ? '$' + px(t.usd) : DASH} · ${esc(t.addr || DASH)}` : DASH);
+  const tok = (t) => (t ? `${esc(t.sym)} · ${isNum(t.usd) ? '$' + px(t.usd) : DASH} · ${addrLink(p.chain, t.addr, 'token', 'Token ' + t.sym)}` : DASH);
   const facts = [
-    ['Pool id', esc(p.id)], ['Fee check', p.verified === true ? 'swaps match the fee counters' : p.verified === false ? 'unverified: never a gem' : 'not checked yet'],
-    ['Fee tier', feeTxt(p.feeTier) + (p.dynamicFee ? ' · dynamic' : '')], ['LPs keep', pct(p.lpKeeps)], ['Hook', p.hooks ? esc(p.hooks) : 'none'],
+    ['Pool id', poolLinks(p)], ['Fee check', p.verified === true ? 'swaps match the fee counters' : p.verified === false ? 'unverified: never a gem' : 'not checked yet'],
+    ['Fee tier', feeTxt(p.feeTier) + (p.dynamicFee ? ' · dynamic' : '')], ['LPs keep', pct(p.lpKeeps)], ['Hook', p.hooks ? addrLink(p.chain, p.hooks, 'address', 'Hook contract') : 'none'],
     ['Created', isNum(p.createdAt) ? dm(p.createdAt) + ' ' + new Date(p.createdAt).getUTCFullYear() + ' · ' + Math.round(ageDays(p)) + ' d old' : DASH],
     ['Pair age', isNum(p.pairAgeDays) ? int(p.pairAgeDays) + ' d' : DASH], ['First seen', full(p.firstSeen)],
     ['TVL · map · aggregator', `${usd(p.tvlUsd)} · ${usd(p.mapUsd)} · ${usd(p.aggUsd)}`],
@@ -2362,8 +2636,9 @@ function sheetRelease(v) { // v: px per ms, downwards positive
 sheetCard.addEventListener('touchstart', (e) => {
   SW.on = false;
   if (e.touches.length !== 1 || !phoneSheet() || e.target.closest('input, select, textarea')) return;
-  const head = !!e.target.closest('.grab, .sheet-head');
+  const head = !!e.target.closest('.grab, .sheet-head'), list = e.target.closest('.sim-list');
   if (!head && sheetBody.scrollTop > 0) return;
+  if (list && list.scrollTop > 0) return; // the similar-pools list scrolls back up first
   const t = e.touches[0];
   Object.assign(SW, { on: true, drag: false, x0: t.clientX, y0: t.clientY, off: 0, s: [[t.clientY, e.timeStamp]] });
 }, { passive: true });
@@ -2400,6 +2675,429 @@ const sheetMouseEnd = (e) => { if (SW.mouse !== e.pointerId) return; SW.mouse = 
 sheetCard.addEventListener('pointerup', sheetMouseEnd);
 sheetCard.addEventListener('pointercancel', sheetMouseEnd);
 
+// ---------- this browser only: favourites and the pools already seen (localStorage; the page has no server) ----------
+const jget = (k, d) => { try { const v = JSON.parse(store.get(k)); return v == null ? d : v; } catch (e) { return d; } };
+const ID_RE = /^0x[0-9a-f]{4,64}$/i;
+let FAVS = null;
+const favs = () => { if (!FAVS) { const a = jget('lps.fav', []); FAVS = new Set(Array.isArray(a) ? a.filter((x) => typeof x === 'string' && ID_RE.test(x)) : []); } return FAVS; };
+const isFav = (id) => favs().has(id);
+const STAR_SVG = (on) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.7l1.9 4.05 4.4.55-3.25 3.05.85 4.4L8 11.55l-3.9 2.2.85-4.4L1.7 6.3l4.4-.55z" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+const starLabel = (p, on) => `${on ? 'Remove' : 'Add'} ${p.pair} ${on ? 'from' : 'to'} favourites`;
+const starTitle = (on) => (on ? 'In your favourites on this device: tap to remove' : 'Add to favourites (kept on this device)');
+function starBtn(p, cls = '') {
+  const on = isFav(p.id);
+  return `<button type="button" class="star${cls ? ' ' + cls : ''}${on ? ' on' : ''}" data-act="fav" data-id="${esc(p.id)}" aria-pressed="${on}" aria-label="${esc(starLabel(p, on))}" title="${starTitle(on)}">${STAR_SVG(on)}</button>`;
+}
+function toggleFav(id, el) {
+  const p = poolById(id);
+  if (!p) return;
+  const s = favs(), on = !s.has(id);
+  if (on) s.add(id); else s.delete(id);
+  store.set('lps.fav', JSON.stringify([...s]));
+  for (const b of $$('.star[data-act="fav"]')) {
+    if (b.dataset.id !== id) continue;
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', starLabel(p, on)); b.title = starTitle(on); b.innerHTML = STAR_SVG(on);
+    b.classList.remove('pop'); if (on && !reduced()) { void b.offsetWidth; b.classList.add('pop'); }
+  }
+  const inFav = !!(el && el.closest('#fav'));
+  renderFav();
+  const fo = $('#f-lens option[value="fav"]');
+  if (fo) fo.textContent = `★ Favourites (${S.live.pools.filter((x) => isFav(x.id)).length})`;
+  if (inFav) { const n = $('#fav .star') || $('#fav-h'); if (n) n.focus({ preventScroll: true }); } // the card went: the keyboard stays in the section
+}
+
+// pools seen at the last page load: those not among them carry a small "new" dot (a first visit marks nothing)
+const seenKey = (id) => String(id).slice(0, 18).toLowerCase();
+function seenSetup() {
+  if (S.seenPrev !== undefined) return;
+  const a = jget('lps.seen', null);
+  S.seenPrev = Array.isArray(a) ? new Set(a.filter((x) => typeof x === 'string')) : null;
+}
+const isNew = (p) => !!S.seenPrev && !S.seenPrev.has(seenKey(p.id));
+function seenSave() { if (!SOLO && S.live) store.set('lps.seen', JSON.stringify(S.live.pools.map((p) => seenKey(p.id)))); }
+
+// ---------- a small pop-up note next to the control that opened it (why a pool stands out, the gas range) ----------
+function popOpen(anchor, html) {
+  const pop = $('#pop');
+  if (S.popFor === anchor && !pop.hidden) { popClose(); return; }
+  popClose();
+  pop.innerHTML = html; pop.hidden = false; S.popFor = anchor;
+  anchor.setAttribute('aria-expanded', 'true');
+  popPlace();
+}
+function popPlace() {
+  const pop = $('#pop'), a = S.popFor;
+  if (!a || pop.hidden) return;
+  const r = a.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, vw = document.documentElement.clientWidth;
+  if (!a.isConnected || r.bottom < 0 || r.top > innerHeight || (r.width === 0 && r.height === 0)) { popClose(); return; }
+  let y = r.bottom + 4;
+  if (y + h > innerHeight - 8 && r.top - h - 4 > 8) y = r.top - h - 4;
+  pop.style.left = clamp(r.left + r.width / 2 - w / 2, 12, Math.max(12, vw - w - 12)) + 'px';
+  pop.style.top = Math.max(8, y) + 'px';
+}
+function popClose() {
+  const pop = $('#pop');
+  if (!pop || pop.hidden) return;
+  pop.hidden = true; pop.innerHTML = '';
+  if (S.popFor) S.popFor.setAttribute('aria-expanded', 'false');
+  S.popFor = null;
+}
+
+// ---------- why a pool is interesting: small pictograms built from its lenses, shape, age, market and fee pattern ----------
+// [colour, name, one friendly line, icon]; g = a good sign, a = worth a look, r = a warning. Listed by priority.
+const WI = {
+  toxic: ['r', 'Toxic flow', 'Traders here tend to know where the price is going: right after their swaps the price moves against LPs, so fees don’t cover the loss (markout ÷ fee high).', '<path d="M7 1.8 12.8 12H1.2z"/><path d="M7 5.6v3M7 10.2v.2" stroke-width="1.6"/>'],
+  stranded: ['g', 'Stranded', 'Most of the money sits far from the price, so the few LPs right at it share the fees.', '<path d="M2 12.5V7.5M4.2 12.5V5M9.8 12.5V5M12 12.5V7.5" stroke-width="1.7"/><path d="M7 2.5v10" stroke-dasharray="1.4 1.6"/>'],
+  'one-sided': ['g', 'One-sided', 'The parked money sits on one side of the price only.', '<path d="M8.6 12.5V6M10.8 12.5V3.5M13 12.5V7" stroke-width="1.7"/><path d="M5.5 2.5v10" stroke-dasharray="1.4 1.6"/>'],
+  fresh: ['g', 'Fresh pool', 'A new pool (under 30 days) for an older pair: often thin and well paid.', '<path d="M7 1.6 8.3 5.7 12.4 7 8.3 8.3 7 12.4 5.7 8.3 1.6 7 5.7 5.7z"/>'],
+  emerging: ['g', 'Rising fees', 'Fees have grown day after day.', '<path d="M1.5 11 5.3 7.2l2.4 2.4 4.8-5.1"/><path d="M9.2 4.5h3.3v3.3"/>'],
+  bigmove: ['a', 'After a big move', 'The price just moved a lot; LPs may not have followed it yet.', '<path d="M8.2 1.5 3.2 8h3.6l-1 4.5L11 6H7.3z"/>'],
+  calm: ['g', 'Calm pair', 'The price barely moves, so little is lost to arbitrage.', '<path d="M1.5 7.5c1.4-1.3 2.6-1.3 4 0s2.6 1.3 4 0 2.1-1.3 3 0"/>'],
+  oneoff: ['a', 'One-off', 'One trader paid most of the best day’s fees: don’t count on it again.', '<circle cx="7" cy="7" r="5.3"/><path d="M6.1 5.2 7.4 4.4v5.4" stroke-width="1.5"/>'],
+  steady: ['g', 'Steady fees', 'Fees arrive day after day, not in one burst.', '<path d="M2.5 12.5v-5M5.5 12.5v-5M8.5 12.5v-5M11.5 12.5v-5" stroke-width="1.8"/>'],
+  bursty: ['a', 'Bursty fees', 'Fees come in spikes; quiet days sit between them.', '<path d="M2.5 12.5v-1.5M5.5 12.5V2.5M8.5 12.5v-2M11.5 12.5v-4.5" stroke-width="1.8"/>'],
+  fading: ['a', 'Fading fees', 'Fees have been falling.', '<path d="M1.5 3.5 5.3 7.3l2.4-2.4 4.8 5.1"/><path d="M12.5 6.6v3.4H9.2"/>'],
+  young: ['a', 'Young pool', 'Under 30 days old: little history to trust yet.', '<path d="M7 12.5V7.2"/><path d="M7 7.2C7 4.6 5 3 2.3 3c0 2.6 2 4.2 4.7 4.2zM7 8.4c0-2.2 1.6-3.7 4.4-3.7 0 2.2-1.6 3.7-4.4 3.7z"/>'],
+  offmarket: ['a', 'Off market', 'Its price is away from the market price: check before trusting the numbers.', '<path d="M2.5 5.2h9M2.5 8.8h9"/><path d="M9.6 2.3 4.4 11.7" stroke-width="1.5"/>'],
+};
+const wiSvg = (k) => `<svg class="wi ${WI[k][0]}" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${WI[k][3]}</svg>`;
+function whyKeys(p, w) {
+  const lz = w && Array.isArray(w.lenses) ? w.lenses : [], tag = p.shape && p.shape.tag, k = new Set();
+  if (lz.includes('toxic')) k.add('toxic');
+  if (lz.includes('stranded') || tag === 'stranded') k.add('stranded');
+  if (lz.includes('one-sided') || tag === 'one-sided') k.add('one-sided');
+  if (lz.includes('fresh')) k.add('fresh');
+  if (p.pattern === 'emerging') k.add('emerging');
+  if (lz.includes('bigmove')) k.add('bigmove');
+  if (lz.includes('calm')) k.add('calm');
+  if (oneOff(p, w)) k.add('oneoff');
+  if (p.pattern === 'steady') k.add('steady');
+  if (p.pattern === 'bursty' && !k.has('oneoff')) k.add('bursty');
+  if (p.pattern === 'fading') k.add('fading');
+  if (p.young && !k.has('fresh')) k.add('young');
+  if (p.offMarket) k.add('offmarket');
+  return Object.keys(WI).filter((x) => k.has(x));
+}
+function whyCell(p, w) {
+  const ks = whyKeys(p, w);
+  if (!ks.length) return `<span class="muted">${DASH}</span>`;
+  const names = ks.map((k) => WI[k][1]), shown = ks.slice(0, 3);
+  return `<button type="button" class="whyb" data-act="why" data-id="${esc(p.id)}" aria-haspopup="true" aria-expanded="false" aria-label="Why it stands out: ${esc(names.join(', '))}" title="${esc(names.join(' · '))}"><span class="why-icons">${shown.map(wiSvg).join('')}</span>${ks.length > 3 ? `<span class="more">+${ks.length - 3}</span>` : ''}</button>`;
+}
+const whyPop = (p) => `<span class="lbl">Why ${esc(p.pair)} stands out · ${WIN_LABEL[S.win]}</span>` + whyKeys(p, W(p)).map((k) => `<div class="why-row">${wiSvg(k)}<span><b>${WI[k][1]}.</b> ${WI[k][2]}</span></div>`).join('');
+const whyLegend = () => Object.keys(WI).map((k) => `<div>${wiSvg(k)}<span><b>${WI[k][1]}</b>: ${WI[k][2]}</span></div>`).join('');
+
+// ---------- the top strip: Ethereum gas against its own range, three prices, the next pass (all from live.json) ----------
+const GAS_BANDS = ['cheap', 'normal', 'busy', 'expensive'];
+const gwei = (x) => (isNum(x) && x > 0 ? (x >= 99.5 ? String(Math.round(x)) : x.toPrecision(2)) : DASH); // 2 significant digits: 0.042, 0.40, 12
+function gasArc(g) {
+  let f = null;
+  if (isNum(g.gwei) && g.gwei > 0 && isNum(g.p10) && isNum(g.p90) && g.p10 > 0 && g.p90 > g.p10) f = clamp(Math.log(g.gwei / g.p10) / Math.log(g.p90 / g.p10), 0, 1);
+  else if (GAS_BANDS.includes(g.band)) f = { cheap: 0.15, normal: 0.45, busy: 0.75, expensive: 0.95 }[g.band];
+  const a = Math.PI * (f == null ? 0 : f), x = (12 - 10 * Math.cos(a)).toFixed(2), y = (13 - 10 * Math.sin(a)).toFixed(2);
+  return `<svg viewBox="0 -1 24 16" aria-hidden="true"><path d="M2 13A10 10 0 0 1 22 13" fill="none" style="stroke:var(--line3)" stroke-width="2.6" stroke-linecap="round"/>`
+    + (f != null && f > 0.02 ? `<path d="M2 13A10 10 0 0 1 ${x} ${y}" fill="none" style="stroke:var(--gc)" stroke-width="2.6" stroke-linecap="round"/>` : '')
+    + (f != null ? `<circle cx="${x}" cy="${y}" r="2.1" style="fill:var(--fg)"/>` : '') + '</svg>';
+}
+function gasBasis(g) {
+  return g.basis === 'history' ? `the last ${isNum(g.histDays) ? +g.histDays.toFixed(1) : DASH} days of hourly readings`
+    : g.basis === 'blocks' ? 'the last ~1,024 blocks (about 3.4 hours)' : null;
+}
+function gasPop() {
+  const g = (S.live && S.live.market && S.live.market.gas) || {}, band = GAS_BANDS.includes(g.band) ? g.band : null, basis = gasBasis(g);
+  return `<span class="lbl">Ethereum gas · next block</span><p><b>${gwei(g.gwei)} gwei</b>${band ? ' · ' + band : ''}</p>`
+    + `<p>Typical: p10 <b>${gwei(g.p10)}</b> · median <b>${gwei(g.p50)}</b> · p90 <b>${gwei(g.p90)}</b> gwei</p>`
+    + `<p>${basis ? 'Compared with ' + basis + ': cheap below p25, normal to p60, busy to p90, expensive above.' : 'Not enough history yet to call it cheap or busy.'}</p>`;
+}
+function mkt(x) { if (!isNum(x) || x <= 0) return DASH; return x >= 1e4 ? '$' + (x / 1e3).toFixed(1) + 'K' : x >= 1000 ? '$' + Math.round(x).toLocaleString('en-US') : x >= 100 ? '$' + Math.round(x) : '$' + x.toFixed(2); }
+function pxChip(c, q0) {
+  const q = q0 || {}, ch = isNum(q.ch24) ? q.ch24 : null, dir = ch == null ? 'na' : ch > 0 ? 'up' : ch < 0 ? 'dn' : 'na';
+  const src = q.src === 'defillama' ? ' · DefiLlama' : q.src === 'coingecko' ? ' · CoinGecko' : '';
+  const ttl = `${c} ${isNum(q.usd) ? '$' + q.usd.toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'not read'} · 24 h ${ch == null ? 'not read' : pct(ch, { sign: true, dp: 2 })}${src}`;
+  return `<span class="px" data-c="${c}" title="${esc(ttl)}"><b>${c}</b><span class="v">${mkt(q.usd)}</span><i class="${dir}">${ch == null ? DASH : (ch > 0 ? '▲' : ch < 0 ? '▼' : '') + pct(Math.abs(ch), { dp: 1 })}</i></span>`;
+}
+function renderStrip() {
+  const el = $('#mstrip');
+  if (!S.live) { el.hidden = true; return; }
+  el.hidden = false;
+  const m = S.live.market || null, g = (m && m.gas) || {}, band = GAS_BANDS.includes(g.band) ? g.band : null, b = $('#gas');
+  b.className = 'gas g-' + (band || 'none');
+  b.innerHTML = gasArc(g) + `<span><span class="gv">${gwei(g.gwei)}</span> <span class="u">gwei</span></span>` + (band ? `<span class="gb">${band}</span>` : '');
+  b.setAttribute('aria-label', `Ethereum gas ${isNum(g.gwei) && g.gwei > 0 ? gwei(g.gwei) + ' gwei' : 'not read'}${band ? ', ' + band : ''}: show its usual range`);
+  const basis = gasBasis(g);
+  b.title = `Gas ${gwei(g.gwei)} gwei${band ? ' · ' + band : ''}\np10 ${gwei(g.p10)} · p50 ${gwei(g.p50)} · p90 ${gwei(g.p90)} gwei${basis ? '\nvs ' + basis : ''}`;
+  const pxs = (m && m.px) || {};
+  $('#mpx').innerHTML = ['ETH', 'BTC', 'SOL'].map((c) => pxChip(c, pxs[c])).join('');
+  renderStripTime(true);
+}
+// "next pass in 4 min": minute steps (a quiet page), and a small ring that empties until then (a CSS animation)
+function renderStripTime(force) {
+  const el = $('#mt');
+  if (!el || !S.live) return;
+  const L = S.live, n = L.next, now = Date.now(), m = isNum(n) ? (n - now) / 6e4 : null;
+  const txt = m == null ? DASH : m > 1 ? `in ${Math.ceil(m)} min` : m > 0 ? 'in <1 min' : m > -5 ? 'due now' : 'overdue';
+  const key = txt + '|' + L.t;
+  if (!force && el.dataset.k === key) return;
+  el.dataset.k = key;
+  const C = 28.27, f = isNum(n) && n > L.t && m > 0 ? clamp((n - now) / (n - L.t), 0, 1) : 0, off = (C * (1 - f)).toFixed(2);
+  el.className = 'mt' + (m != null && m <= -5 ? ' late' : '');
+  el.innerHTML = `<svg class="cd" viewBox="0 0 12 12" aria-hidden="true"><circle class="tr" cx="6" cy="6" r="4.5"/>${f > 0 ? `<circle class="fl" cx="6" cy="6" r="4.5" style="--cd0:${off};stroke-dashoffset:${off};animation-duration:${Math.round(n - now)}ms"/>` : ''}</svg>`
+    + `<span>next<span class="w"> pass</span> <span class="v">${txt}</span></span><span>· updated <span class="v">${hm(L.t)}</span><span class="w"> ${TZ_NAME}</span></span>`;
+  el.title = `Scanner pass ${full(L.t)}; the next one is expected ${isNum(n) ? full(n) : '(not known)'}. The page looks for new data every minute.`;
+}
+let nextTimer = 0;
+function armNext() { // pick the next pass up soon after it lands, besides the one-minute check
+  clearTimeout(nextTimer);
+  const n = S.live && S.live.next, d = isNum(n) ? n - Date.now() + 20e3 : -1;
+  if (d > 0 && d < 3 * H) nextTimer = setTimeout(() => refresh(), d);
+}
+
+// ---------- mini cards: the favourites strip and the similar-pools strip share them ----------
+const SIM_M = [
+  ['net APR', (p, w) => w && w.net, (x) => pct(x)],
+  ['volume / day', (p, w) => (w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : null), (x) => usd(x)],
+  ['gem', (p) => (p.verified === false ? null : gemOf(p)), (x) => (isNum(x) ? String(x) : DASH)],
+  ['TVL', (p) => p.tvlUsd, (x) => usd(x)],
+];
+const REL = ['same pair', 'tier + token', 'same tier', 'shared token'];
+const SIM_N = 8;
+const simM = () => { const i = S.simM != null ? S.simM : Number(store.get('lps.simm') || 0); return Number.isInteger(i) && i >= 0 && i < SIM_M.length ? i : 0; };
+function mcVal(p, mi) {
+  const [k, get, fmt] = SIM_M[mi], v = get(p, W(p));
+  const cls = mi === 0 && isNum(v) && v < 0 ? ' neg' : mi === 2 && isGem(p) ? ' gold' : '';
+  return `<span class="v${cls}">${fmt(v)}</span><span class="k">${k}</span>`;
+}
+const mcMeta = (p) => `${feeTxt(p.feeTier)} · ${chainShort(p.chain)} v${esc(p.v)}`;
+function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } = {}) {
+  const uv = p.verified === false, meta = mcMeta(p);
+  const name = self ? `<div class="mc-name"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></div>`
+    : `<button type="button" class="mc-name" data-act="detail" data-id="${esc(p.id)}" title="Open ${esc(p.pair)}, shape first"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></button>`;
+  // similar: the card's body cycles the figure; a favourite: the name's link reaches over the whole card (one control)
+  const cover = mode === 'sim' ? `<button type="button" class="mc-cover" data-act="sim-cycle" aria-label="Show the next figure on every card (now ${SIM_M[mi][0]})"></button>` : '';
+  const foot = mode === 'sim' ? `<span class="mc-rel${self ? ' g0' : uv ? ' uv' : rel === 0 ? ' g0' : ''}">${self ? 'this pool' : uv ? 'unverified' : REL[rel] || ''}</span>`
+    : `<span class="mc-rel"><span class="why-icons">${whyKeys(p, W(p)).slice(0, 4).map(wiSvg).join('') || DASH}</span></span>`;
+  return `<div class="mc${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i}">${cover}${name}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}</div>`;
+}
+const NAV = (d) => `<button type="button" class="mc-nav ${d < 0 ? 'l' : 'r'}" data-act="mc-scroll" data-dir="${d}" tabindex="-1" aria-label="Scroll the cards ${d < 0 ? 'back' : 'on'}">${CHEV(d)}</button>`;
+const mcStrip = (id, cards, enter) => `<div class="mc-wrap">${NAV(-1)}<div class="mc-track${enter ? ' enter' : ''}" id="${id}">${cards}</div>${NAV(1)}</div>`;
+function mcEdges(track) { // soft fades (and laptop arrows) only where more cards lie that way
+  const w = track && track.parentElement;
+  if (!w) return;
+  const l = track.scrollLeft > 2, r = track.scrollLeft < track.scrollWidth - track.clientWidth - 2;
+  if (w.classList.contains('fl') !== l) w.classList.toggle('fl', l);
+  if (w.classList.contains('fr') !== r) w.classList.toggle('fr', r);
+}
+const mcEdgesAll = () => { for (const t of $$('.mc-track')) mcEdges(t); };
+function mcScroll(el) {
+  const t = el.parentElement.querySelector('.mc-track');
+  if (t) t.scrollBy({ left: Number(el.dataset.dir) * Math.max(140, t.clientWidth * 0.8), behavior: reduced() ? 'auto' : 'smooth' });
+}
+
+// ---------- favourites: a strip of starred pools, near the top ----------
+function renderFav() {
+  const el = $('#fav'), ids = [...favs()].reverse(), pools = ids.map(poolById).filter(Boolean), gone = ids.length - pools.length;
+  $('#fav-count').textContent = pools.length ? `${pools.length} STARRED${gone ? ` · ${gone} NOT IN THIS PASS` : ''} · ${WIN_LABEL[S.win]}` : gone ? `${gone} NOT IN THIS PASS` : '';
+  const body = $('#fav-body'), old = body.querySelector('.mc-track'), keep = old ? old.scrollLeft : 0;
+  body.innerHTML = pools.length ? mcStrip('fav-track', pools.map((p, i) => miniCard(p, { mode: 'fav', i })).join(''), false)
+    : `<div class="empty">${STAR_SVG(false)}<span>No favourites yet. Tap the ☆ next to any pool (in All pools, on the best find or in a pool’s detail) and it shows up here.</span></div>`;
+  const t = body.querySelector('.mc-track');
+  if (t) { t.scrollLeft = keep; mcEdges(t); }
+  el.classList.toggle('none', !pools.length);
+}
+
+// ---------- similar pools: a strip under the pool's header, this pool first ----------
+// the same pair (another fee tier, chain or version), then the same tier with a shared token, then the same tier, then a
+// shared token only; higher volume first within each group; unverified pools last; native ETH counts as WETH
+const symsN = (p) => pairSyms(p).map(symN);
+const samePair = (a, b) => pairKey(a) === pairKey(b) || symsN(a).slice().sort().join('/') === symsN(b).slice().sort().join('/');
+function similar(p, wk = S.win) {
+  const mine = new Set(symsN(p)), out = [];
+  for (const q of S.live.pools) {
+    if (q.id === p.id) continue;
+    const pair = samePair(p, q), tier = q.feeTier === p.feeTier, share = symsN(q).some((t) => mine.has(t));
+    const g = pair ? 0 : tier && share ? 1 : tier ? 2 : share ? 3 : -1;
+    if (g < 0) continue;
+    const w = W(q, wk);
+    out.push({ q, g, v: w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : -1 });
+  }
+  return out.sort((a, b) => ((a.q.verified === false) - (b.q.verified === false)) || (a.g - b.g) || (b.v - a.v));
+}
+function simRow(p, rel, mi, self) {
+  return `<button type="button" class="sim-row${self ? ' self' : ''}" data-act="detail" data-id="${esc(p.id)}"${self ? ' aria-current="true"' : ''}><span class="n">${esc(p.pair)}</span><span class="m">${mcMeta(p)} · ${self ? 'this pool' : p.verified === false ? 'unverified' : REL[rel]}</span><span class="v">${mcVal(p, mi).replace(/<span class="k">.*$/, '')}</span></button>`;
+}
+function renderSim(p) {
+  const el = $('#sim');
+  if (!p) { el.hidden = true; el.innerHTML = ''; S.simFor = null; return; }
+  const all = similar(p), mi = simM(), fresh = S.simFor !== p.id;
+  if (fresh) S.simOpen = false;
+  const old = el.querySelector('.mc-track'), keep = !fresh && old ? old.scrollLeft : 0;
+  S.simFor = p.id;
+  if (!all.length) { el.hidden = true; el.innerHTML = ''; return; }
+  const cards = [miniCard(p, { self: true, mi, i: 0 }), ...all.slice(0, SIM_N).map((x, i) => miniCard(x.q, { rel: x.g, mi, i: i + 1 }))];
+  if (all.length > SIM_N) cards.push(`<button type="button" class="mc end" data-act="sim-all" aria-expanded="${!!S.simOpen}" aria-controls="sim-list" style="--i:${cards.length}"><span class="big">${all.length}</span>${S.simOpen ? 'hide the list' : 'see all'}</button>`);
+  el.hidden = false;
+  el.innerHTML = `<div class="mc-head"><span class="lbl">Similar pools · ${all.length}</span><span class="lbl" id="sim-m" aria-live="polite">${SIM_M[mi][0]} <span class="mdots">${SIM_M.map((_, j) => `<i${j === mi ? ' class="on"' : ''}></i>`).join('')}</span></span></div>`
+    + mcStrip('sim-track', cards.join(''), fresh && !reduced())
+    + `<div class="sim-list" id="sim-list"${S.simOpen ? '' : ' hidden'}>${S.simOpen ? [simRow(p, 0, mi, true), ...all.map((x) => simRow(x.q, x.g, mi, false))].join('') : ''}</div>`;
+  const t = el.querySelector('.mc-track');
+  t.scrollLeft = keep; mcEdges(t);
+}
+function simCycle() {
+  const mi = (simM() + 1) % SIM_M.length;
+  S.simM = mi; store.set('lps.simm', String(mi));
+  for (const c of $$('#sim .mc[data-id]')) {
+    const p = poolById(c.dataset.id), v = c.querySelector('.mc-v'), cov = c.querySelector('.mc-cover');
+    if (p && v) { v.innerHTML = mcVal(p, mi); xfade(v); }
+    if (cov) cov.setAttribute('aria-label', `Show the next figure on every card (now ${SIM_M[mi][0]})`);
+  }
+  for (const r of $$('#sim-list .sim-row')) { const p = poolById(r.dataset.id), v = r.querySelector('.v'); if (p && v) v.innerHTML = mcVal(p, mi).replace(/<span class="k">.*$/, ''); }
+  const m = $('#sim-m');
+  if (m) m.innerHTML = `${SIM_M[mi][0]} <span class="mdots">${SIM_M.map((_, j) => `<i${j === mi ? ' class="on"' : ''}></i>`).join('')}</span>`;
+}
+function simToggleList() {
+  const p = poolById(S.simFor);
+  if (!p) return;
+  S.simOpen = !S.simOpen;
+  renderSim(p);
+  const b = $('#sim [data-act="sim-all"]');
+  if (b) b.focus({ preventScroll: true });
+}
+
+// ---------- explorer links: every address and pool id opens the chain's explorer in a new tab ----------
+const EXPLORER = { ethereum: ['https://etherscan.io', 'Etherscan'], base: ['https://basescan.org', 'Basescan'] };
+const UNI_CHAIN = { ethereum: 'ethereum', base: 'base' };
+const isAddr = (a) => /^0x[0-9a-f]{40}$/i.test(String(a || ''));
+const shortHex = (a) => (String(a).length > 14 ? String(a).slice(0, 6) + '…' + String(a).slice(-4) : String(a));
+const EXT_SVG = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M4 1.5H1.5v7h7V6M6 1.5h2.5V4M8.5 1.5 4.6 5.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const extA = (url, text, label) => `<a class="ext" href="${esc(url)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" data-act="ext" aria-label="${esc(label)} (opens a new tab)">${esc(text)}${EXT_SVG}</a>`;
+function addrLink(chain, a, kind, what) {
+  if (!isAddr(a)) return esc(a || DASH);
+  if (/^0x0{40}$/i.test(a)) return 'native ETH (no contract)';
+  const ex = EXPLORER[chain];
+  return ex ? extA(`${ex[0]}/${kind}/${a.toLowerCase()}`, shortHex(a), `${what} ${shortHex(a)} on ${ex[1]}`) : esc(a);
+}
+function poolLinks(p) {
+  const id = String(p.id || '').toLowerCase(), uni = UNI_CHAIN[p.chain] ? `https://app.uniswap.org/explore/pools/${UNI_CHAIN[p.chain]}/${id}` : null;
+  if (p.v === 4 && /^0x[0-9a-f]{64}$/.test(id)) return uni ? `<span class="links">${extA(uni, shortHex(id), `Pool ${shortHex(id)} on Uniswap`)}</span>` : esc(id);
+  if (isAddr(id)) return `<span class="links">${addrLink(p.chain, id, 'address', 'Pool')}${uni ? extA(uni, 'Uniswap', `Pool ${shortHex(id)} on Uniswap`) : ''}</span>`;
+  return esc(p.id);
+}
+
+// ---------- smart search: pairs, tokens and pool ids from the loaded pools, likeliest first ----------
+const Q = { q: '', items: [], act: -1, open: false };
+function qScore(label, q) {
+  const s = label.toLowerCase();
+  if (s.startsWith(q)) return 3;
+  if (s.split(/[^a-z0-9]+/).some((x) => x && x.startsWith(q))) return 2;
+  return s.includes(q) ? 1 : 0;
+}
+function suggest(q0) {
+  const q = String(q0 || '').trim().toLowerCase();
+  if (!q || !S.live) return [];
+  const pairs = new Map(), toks = new Map(), out = [], disp = (t) => (String(t).toUpperCase() === 'ETH' ? 'WETH' : String(t)); // each ticker keeps its own case
+  for (const p of S.live.pools) {
+    const w = W(p), vol = w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : 0, g = p.verified === false ? -1 : gemOf(p) ?? -1, sy = pairSyms(p).map(disp);
+    const label = sy.join('/'), key = label.toUpperCase(), a = pairs.get(key) || { k: 'pair', label, n: 0, vol: 0, gem: -1 };
+    a.n++; a.vol += vol; a.gem = Math.max(a.gem, g); pairs.set(key, a);
+    for (const t of new Set(sy)) { const b = toks.get(t.toUpperCase()) || { k: 'token', label: t, n: 0, vol: 0, gem: -1 }; b.n++; b.vol += vol; b.gem = Math.max(b.gem, g); toks.set(t.toUpperCase(), b); }
+    const hex = q.startsWith('0x') ? q : '0x' + q;
+    if (/^0x[0-9a-f]{3,}$/.test(hex) && String(p.id).toLowerCase().startsWith(hex)) out.push({ k: 'pool', id: p.id, label: shortHex(p.id) + ' · ' + p.pair, p, n: 1, vol, gem: g, s: 3 });
+  }
+  for (const it of [...pairs.values(), ...toks.values()]) { const s = qScore(it.label, q); if (s) out.push({ ...it, s }); }
+  const KR = { pair: 0, token: 1, pool: 2 };
+  return out.sort((a, b) => (b.s - a.s) || (b.vol - a.vol) || (KR[a.k] - KR[b.k]) || (b.gem - a.gem) || a.label.localeCompare(b.label)).slice(0, 8);
+}
+function hiMatch(label, q) {
+  const i = label.toLowerCase().indexOf(q);
+  return i < 0 || !q ? esc(label) : esc(label.slice(0, i)) + '<b>' + esc(label.slice(i, i + q.length)) + '</b>' + esc(label.slice(i + q.length));
+}
+const qHintItem = () => { const inp = $('#f-q'), it = Q.items[0]; return Q.open && it && it.k !== 'pool' && inp && inp.value && it.label.toLowerCase().startsWith(inp.value.toLowerCase()) && it.label.length > inp.value.length ? it : null; };
+function qHint() {
+  const h = $('#q-hint'), inp = $('#f-q');
+  if (!h || !inp) return;
+  const it = qHintItem();
+  h.innerHTML = it && inp.scrollWidth <= inp.clientWidth + 1 ? `<span class="t">${esc(inp.value)}</span>${esc(it.label.slice(inp.value.length))}` : '';
+}
+function qRender() {
+  const ul = $('#q-list'), inp = $('#f-q');
+  if (!ul || !inp) return;
+  if (!Q.open || !Q.items.length) {
+    if (!ul.hidden) { ul.hidden = true; ul.innerHTML = ''; }
+    inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); qHint(); return;
+  }
+  ul.innerHTML = Q.items.map((it, i) => `<li role="option" id="qo-${i}" class="qopt" data-act="q-pick" data-i="${i}" aria-selected="${i === Q.act}"><span class="qk">${it.k === 'pair' ? 'PAIR' : it.k === 'token' ? 'TOKEN' : 'POOL'}</span>`
+    + `<span class="qt">${it.k === 'pool' ? esc(it.label) : hiMatch(it.label, Q.q)}</span><span class="qm">${it.k === 'pool' ? `${feeTxt(it.p.feeTier)} · ${chainShort(it.p.chain)}` : `${it.n} pool${it.n === 1 ? '' : 's'}${it.vol > 0 ? ' · ' + usd(it.vol) + '/d' : ''}`}</span></li>`).join('');
+  ul.hidden = false; inp.setAttribute('aria-expanded', 'true');
+  if (Q.act >= 0) { inp.setAttribute('aria-activedescendant', 'qo-' + Q.act); const o = $('#qo-' + Q.act); if (o) o.scrollIntoView({ block: 'nearest' }); }
+  else inp.removeAttribute('aria-activedescendant');
+  qHint();
+}
+function qUpdate() {
+  const inp = $('#f-q');
+  Q.q = inp.value.trim().toLowerCase(); Q.items = suggest(Q.q); Q.act = -1;
+  Q.open = document.activeElement === inp && Q.items.length > 0;
+  qRender();
+}
+function qClose() { if (Q.open) { Q.open = false; Q.act = -1; qRender(); } }
+function qApply(text) { clearTimeout(qt); S.filt.q = text; S.showAll = false; renderTable(); }
+function qPick(i) {
+  const it = Q.items[i], inp = $('#f-q');
+  if (!it) return;
+  Q.open = false; Q.act = -1;
+  if (it.k === 'pool') { qRender(); qApply(inp.value); openDetail(it.id, inp); return; }
+  inp.value = it.label; Q.q = it.label.toLowerCase(); Q.items = suggest(Q.q);
+  qRender(); qApply(it.label);
+}
+function qKey(e) {
+  const inp = e.target, n = Q.items.length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!n) return;
+    e.preventDefault();
+    Q.open = true;
+    Q.act = e.key === 'ArrowDown' ? (Q.act + 1) % n : Q.act <= 0 ? n - 1 : Q.act - 1;
+    qRender();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (Q.open && Q.act >= 0) qPick(Q.act);
+    else if (qHintItem()) qPick(0);
+    else { qClose(); qApply(inp.value); }
+  } else if (e.key === 'Escape' && Q.open) {
+    e.preventDefault(); e.stopPropagation();
+    qClose();
+  } else if (e.key === 'ArrowRight' && inp.selectionStart === inp.value.length && qHintItem()) {
+    e.preventDefault();
+    inp.value = Q.items[0].label; qUpdate(); qApply(inp.value);
+  }
+}
+
+// ---------- backtest highlights: one strategy, one money line, one grid tile ----------
+function hlFor(row) { if (!S.hl || S.hl.pool !== row.id) S.hl = { pool: row.id, lab: null, money: null, cell: null, cellOurs: false }; return S.hl; }
+function refocus(sel) { const b = $(sel); if (b) b.focus({ preventScroll: true }); }
+function hlToggle(el) {
+  const g = el.dataset.g, id = el.dataset.s, had = el === document.activeElement || el.tagName.toLowerCase() === 'button';
+  if (!S.hl) return;
+  if (g === 'lab') {
+    S.hl.lab = S.hl.lab === id ? null : id;
+    if (S.labRow) renderLab(S.labRow);
+    if (had) refocus(`#bt-lab button[data-act="hl"][data-s="${id}"]`);
+  } else {
+    S.hl.money = S.hl.money === id ? null : id;
+    const r = currentReplay();
+    if (r) renderReplay(r);
+    if (had) refocus(`#rp-mleg button[data-act="hl"][data-s="${id}"]`);
+  }
+}
+function cellToggle(el) {
+  if (!S.hl) return;
+  const k = el.dataset.i + ',' + el.dataset.j, on = S.hl.cell !== k, ours = el.dataset.ours === '1';
+  if (S.hl.cellOurs && S.hl.lab === 'ours') S.hl.lab = null; // releasing (or leaving) the ours tile releases its line
+  S.hl.cell = on ? k : null; S.hl.cellOurs = on && ours;
+  if (on && ours) S.hl.lab = 'ours';
+  if (S.labRow) renderLab(S.labRow);
+  refocus(`#bt-lab button[data-act="cell"][data-i="${el.dataset.i}"][data-j="${el.dataset.j}"]`);
+}
+
 // ---------- events ----------
 function setWin(wk) {
   if (!WINS.includes(wk) || wk === S.win) return;
@@ -2414,10 +3112,22 @@ document.addEventListener('pointermove', (e) => { if (down && Math.hypot(e.clien
 document.addEventListener('click', (e) => {
   if (moved) { moved = false; down = null; if (e.target.closest('tr[data-act], [role="button"][data-act], .ns-row, button.tile')) return; } // a swipe, not a tap
   down = null;
+  if (S.popFor && !e.target.closest('#pop') && !S.popFor.contains(e.target)) popClose(); // a tap elsewhere puts the note away
   if (e.target.closest('[data-scrim]')) { closeDetail(); return; }
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
   switch (el.dataset.act) {
+    case 'fav': toggleFav(el.dataset.id, el); break;
+    case 'why': { const p = poolById(el.dataset.id); if (p) popOpen(el, whyPop(p)); break; }
+    case 'gas': if (S.live) popOpen(el, gasPop()); break;
+    case 'legend': { const lg = $('#why-legend'), on = lg.hidden; if (!lg.innerHTML) lg.innerHTML = whyLegend(); lg.hidden = !on; el.setAttribute('aria-expanded', String(on)); store.set('lps.legend', on ? '1' : '0'); break; }
+    case 'sim-cycle': simCycle(); break;
+    case 'sim-all': simToggleList(); break;
+    case 'mc-scroll': mcScroll(el); break;
+    case 'hl': hlToggle(el); break;
+    case 'cell': cellToggle(el); break;
+    case 'q-pick': qPick(Number(el.dataset.i)); break;
+    case 'ext': break; // a plain link: the browser opens the explorer in a new tab
     case 'win': setWin(el.dataset.w); break;
     case 'tab': setBestSel(el.dataset.id, false); break;
     case 'pair': openPair(el.dataset.key, el); break;
@@ -2443,6 +3153,8 @@ document.addEventListener('click', (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
+  if (e.target && e.target.id === 'f-q') { qKey(e); if (e.defaultPrevented) return; }
+  if (e.key === 'Escape' && S.popFor) { const a = S.popFor; popClose(); a.focus({ preventScroll: true }); return; }
   if (e.key === 'Escape' && !$('#sheet').hidden) { closeDetail(); return; }
   const tab = e.target.closest && e.target.closest('[role="tab"]');
   if (tab && ['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) { // arrow keys move along the tabs
@@ -2468,13 +3180,19 @@ document.addEventListener('change', (e) => {
 let qt = 0;
 document.addEventListener('input', (e) => {
   const a = e.target.dataset && e.target.dataset.act;
-  if (a === 'search') { clearTimeout(qt); qt = setTimeout(() => { S.filt.q = e.target.value; S.showAll = false; renderTable(); }, 120); }
+  if (a === 'search') { qUpdate(); clearTimeout(qt); qt = setTimeout(() => { S.filt.q = e.target.value; S.showAll = false; renderTable(); }, 120); }
   if (a === 'scrub') { stopPlay(); S.cut = +e.target.value; const r = currentReplay(); if (r) renderReplay(r); }
 });
 $('#unlock-form').addEventListener('submit', onUnlock);
+// the search's suggestions: open while its box has the focus; a press on one keeps the focus in the box
+document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q' && e.target.value) qUpdate(); });
+document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q')) qClose(); }, 120); });
+document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list')) e.preventDefault(); });
+// card strips: fades follow the scroll; a pop-up note follows its control
+document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); }, { capture: true, passive: true });
 for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) addEventListener(ev, () => { S.touched = true; cancelSettle(); }, { passive: true, capture: true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.key) refresh(); });
-setInterval(renderFresh, 15e3);
+setInterval(() => { renderFresh(); renderStripTime(false); }, 15e3);
 let lastW = innerWidth, rt = 0;
 addEventListener('resize', () => {
   if (innerWidth === lastW) return;
@@ -2484,7 +3202,7 @@ addEventListener('resize', () => {
     if (!S.live) return;
     try { if (S.bt) renderBt(); if (crossed) { renderBest(); if (S.detail) renderDetail(); } } catch (e) { console.error('panel failed on resize: ' + e.message); }
     if (SOLO) isolate();
-    stickyAll(); onScroll();
+    stickyAll(); onScroll(); mcEdgesAll(); popClose();
   }, 120);
 });
 window.LPS = Object.freeze({ build: BUILD, refresh: () => refresh() });

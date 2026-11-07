@@ -32,7 +32,13 @@ test('self-contained: no external scripts, styles or fonts', () => {
   assert.ok(!/<script[^>]+src=/.test(html));
   assert.ok(!/<link[^>]+stylesheet/.test(html));
   const hosts = [...html.matchAll(/https?:\/\/([^/"'\s);]+)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(hosts)].filter((h) => h !== 'www.w3.org').sort(), ['raw.githubusercontent.com']); // w3.org: the svg namespace, never fetched
+  // explorer links open in a new tab (navigation, not a fetch): the only other hosts, never in the CSP's fetch lists
+  const LINKS = ['etherscan.io', 'basescan.org', 'app.uniswap.org'];
+  assert.deepEqual([...new Set(hosts)].filter((h) => h !== 'www.w3.org' && !LINKS.includes(h)).sort(), ['raw.githubusercontent.com']); // w3.org: the svg namespace, never fetched
+  for (const h of LINKS) assert.ok(!csp.includes(h), `${h} is a link target, not a source`);
+  const linkLines = html.split('\n').filter((l) => LINKS.some((h) => l.includes('https://' + h)));
+  assert.ok(linkLines.length >= 1 && linkLines.every((l) => /^const (EXPLORER|UNI_CHAIN) = |^  const id = String\(p\.id/.test(l)), 'explorer hosts only in the link builders');
+  assert.match(html, /target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"/);
   assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
   assert.match(html, /<link rel="apple-touch-icon" href="data:image\/png;base64,/);
   assert.ok(/img-src data:/.test(csp), 'the inline icons are allowed');

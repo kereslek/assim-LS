@@ -97,6 +97,8 @@ const INIT = () => {
     set: () => true, apply: () => sink, construct: () => sink,
   });
   window.open = function () { window.__laOpen++; return sink; };
+  // explorer links (a new tab) are counted like a window, never followed: the audit never leaves the dashboard
+  document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a) { e.preventDefault(); window.__laOpen++; } }, true);
 };
 const SNAP = () => {
   let h = 0; const s = document.body.innerHTML;
@@ -123,6 +125,7 @@ const ENUM = () => {
   let i = 0;
   for (const el of layer.querySelectorAll(sel)) {
     if (el.matches('input, select, textarea, form, label, option') || el.closest('#lockscreen, #loaderr, header [hidden]')) continue;
+    if (el.closest('svg')) continue; // a chart's invisible tap line: its legend button does the same and is pressed instead
     if (el.id === 'lockbtn' || el.id === 'unlock-btn') continue;
     const act = el.dataset.act || '';
     if (SKIP_ACT.test(act)) continue;
@@ -131,10 +134,11 @@ const ENUM = () => {
     const label = ((el.getAttribute('aria-label') || '') + ' ' + (el.title || '') + ' ' + (el.textContent || '')).trim().replace(/\s+/g, ' ').toLowerCase();
     const short = (el.textContent || '').trim();
     let kind;
-    if (/zoom in|zoom-in/.test(label) || short === '+' || el.dataset.zoom === 'in') kind = 'zoom-in';
+    if (el.matches('a[target="_blank"]')) kind = 'explorer-link'; // its own kind: links don't use up the open-window presses
+    else if (/zoom in|zoom-in/.test(label) || short === '+' || el.dataset.zoom === 'in') kind = 'zoom-in';
     else if (/zoom out|zoom-out/.test(label) || short === '−' || short === '-' || short === '–' || el.dataset.zoom === 'out') kind = 'zoom-out';
     else if (/reset zoom|zoom reset|reset the zoom|^reset$|fit all|^1:1$/.test(label) || el.dataset.zoom === 'reset') kind = 'zoom-reset';
-    else if (/open in (a )?(new )?window|new window|pop ?out|open.*window|in a window/.test(label) || el.matches('a[target="_blank"]')) kind = 'open-window';
+    else if (act === 'openchart' || ((!act || act === 'open') && (/open in (a )?(new )?window|new window|pop ?out|open.*window|in a window/.test(label)))) kind = 'open-window';
     else if (act === 'win') kind = 'window-pill';
     else if (act === 'tab' || el.getAttribute('role') === 'tab') kind = 'best-find-tab';
     else if (act === 'pair') kind = 'pair';
@@ -147,7 +151,7 @@ const ENUM = () => {
     const key = ['w', 'id', 'key', 'k', 'to', 'zoom'].map((k) => el.dataset[k] || '').join(',');
     const sig = layerId + '|' + kind + '|' + act + '|' + key + '|' + (key.replace(/,/g, '') ? '' : (el.id || label.slice(0, 40)));
     const noop = el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-current') === 'true'
-      || ['refresh', 'jump', 'zoom-reset', 'open-window'].includes(kind);
+      || ['refresh', 'jump', 'zoom-reset', 'open-window', 'explorer-link'].includes(kind);
     el.setAttribute('data-la-i', String(i));
     out.push({ i: i++, kind, sig, noop });
   }
@@ -227,6 +231,7 @@ async function gestures(page, R, tag, errTotal) {
     await page.evaluate(() => scrollTo(0, 0)); await sleep(350);
     run('gestures: …and is gone back at the top', !(await page.evaluate(STUCK)).on);
   } else skip();
+  await part2(page, run, skip, box, press);
   // back to top
   await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
   await sleep(450);
@@ -238,6 +243,103 @@ async function gestures(page, R, tag, errTotal) {
   run('gestures: ↑ scrolls back to the top and hides', (await page.evaluate(() => scrollY)) === 0 && !(await on()));
   run('gestures: no page or console errors', errTotal() === e0);
   console.log(`[${tag}] gestures: ${n.run} checks run, ${n.skip} skipped (not in this data)`);
+}
+// ---------- 2c. Run 2 part 2: the top strip, favourites, why, new, search, similar pools, highlights, links, the lock note ----------
+// Prints booleans and counts only. Page text stays in the browser, except the best find's first letters, which the
+// search check types back in: held in memory for that, never printed or saved.
+async function part2(page, run, skip, box, press) {
+  const vis = (sel) => page.isVisible(sel).catch(() => false);
+  const esc = async () => { await page.keyboard.press('Escape'); await sleep(200); };
+  // the top strip
+  if (await vis('#mstrip')) {
+    const st = await page.evaluate(() => { const g = document.querySelector('#gas'), t = g.innerText.replace(/\s+/g, ' ').trim(); return { gas: /^(—|\d+(\.\d+)?) gwei/.test(t) && !/^0(\.0+)? gwei/.test(t), tall: g.getBoundingClientRect().height >= 43.5, px: document.querySelectorAll('#mpx .px').length, zero: [...document.querySelectorAll('#mpx .px .v')].some((v) => /^\$0(\.00)?$/.test(v.textContent)), mt: /next( pass)? (in \S+ min|in <1 min|due now|overdue|—) · updated \d\d:\d\d/.test(document.querySelector('#mt').innerText.replace(/\s+/g, ' ')) }; });
+    run('part 2: the top strip shows gas in gwei (a dash, never 0), three prices and the next pass', st.gas && st.tall && st.px === 3 && !st.zero && st.mt);
+    await press('#gas'); await sleep(250);
+    run('part 2: a tap on the gas gauge opens its range', await vis('#pop'));
+    await esc();
+    run('part 2: Escape puts that note away', !(await vis('#pop')));
+  } else skip();
+  // a first visit in this browser marks no pool as new
+  run('part 2: a first visit marks no pool as new', (await page.$$('#all .newdot')).length === 0);
+  // why: the icons explain themselves; the legend unfolds
+  if (await page.$('#all tbody .whyb')) {
+    await press('#all tbody .whyb'); await sleep(250);
+    const ok1 = await vis('#pop') && !(await vis('#sheet'));
+    await esc();
+    run('part 2: a Why cell opens a plain-words note and not the pool', ok1 && !(await vis('#pop')));
+  } else skip();
+  const v0 = await vis('#why-legend'); // the click-through may have left it open (the page remembers it)
+  await press('#why-tog'); await sleep(200);
+  const v1 = await vis('#why-legend'), lg = await page.evaluate(() => document.querySelectorAll('#why-legend > div').length);
+  await press('#why-tog'); await sleep(150);
+  run('part 2: the "Why" legend unfolds every icon and folds again', v1 !== v0 && lg >= 10 && (await vis('#why-legend')) === v0);
+  // favourites: star the best find, it fills the section and survives a reload; then un-star it
+  if (await page.$('#best .ttl .star')) {
+    const n0 = (await page.$$('#fav .mc')).length, was = (await page.getAttribute('#best .ttl .star', 'aria-pressed')) === 'true';
+    await press('#best .ttl .star'); await sleep(250);
+    const n1 = (await page.$$('#fav .mc')).length;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#app:not([hidden])', { timeout: 60000 }); await page.waitForFunction(() => { const b = document.querySelector('#best'); return b && b.children.length > 0; }, null, { timeout: 30000 }); await sleep(800);
+    const n2 = (await page.$$('#fav .mc')).length, on = (await page.getAttribute('#best .ttl .star', 'aria-pressed')) === 'true';
+    await press('#best .ttl .star'); await sleep(250);
+    run('part 2: a star fills (or empties) Favourites and stays after a reload', n1 === n0 + (was ? -1 : 1) && n2 === n1 && on === !was);
+    run('part 2: a second press puts Favourites back as it was', (await page.$$('#fav .mc')).length === n0);
+    run('part 2: the "this device only" note is there', /this device only/.test(await page.innerText('#fav .devnote')));
+  } else skip();
+  // search: the first letters of the best find suggest it; arrows and Enter pick; the table filters
+  if (await page.$('#best h2') && await page.$('#f-q')) {
+    const q = await page.evaluate(() => { const t = document.querySelector('#best h2').textContent.trim(); return t.slice(0, Math.min(3, t.indexOf('/') > 0 ? t.indexOf('/') : 3)); });
+    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
+    await page.click('#f-q'); await page.keyboard.type(q, { delay: 40 }); await sleep(300);
+    const opts = (await page.$$('#q-list .qopt')).length;
+    await page.keyboard.press('ArrowDown'); await sleep(80);
+    const act = await page.getAttribute('#f-q', 'aria-activedescendant');
+    await page.keyboard.press('Enter'); await sleep(400);
+    const rows = (await page.$$('#all tbody tr.row')).length;
+    run('part 2: search suggests as you type, arrows move, Enter picks and filters', opts >= 1 && act === 'qo-0' && rows >= 1 && !(await vis('#q-list')));
+    await page.fill('#f-q', ''); await page.$eval('#f-q', (e) => e.blur()); await sleep(300);
+  } else skip();
+  // similar pools in a pool's detail
+  if (await press('#best [data-act="detail"]')) {
+    await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(600);
+    if (await vis('#sim')) {
+      const first = await page.evaluate(() => { const c = document.querySelector('#sim .mc'); return !!c && c.classList.contains('self') && c.dataset.id === document.querySelector('#best [data-act="detail"]').dataset.id; });
+      const k = () => page.evaluate(() => (document.querySelector('#sim .mc-v .k') || {}).textContent || '');
+      const k0 = await k(), seen = new Set([k0]);
+      for (let i = 0; i < 4; i++) { await page.evaluate(() => document.querySelector('#sim .mc-cover').click()); await sleep(150); seen.add(await k()); }
+      run('part 2: similar pools: this pool first; a tap cycles 4 figures on every card and comes back', first && seen.size === 4 && (await k()) === k0);
+      if (await page.$('#sim [data-act="sim-all"]')) {
+        await page.evaluate(() => document.querySelector('#sim [data-act="sim-all"]').click()); await sleep(250);
+        const n = (await page.$$('#sim-list .sim-row')).length;
+        await page.evaluate(() => document.querySelector('#sim [data-act="sim-all"]').click()); await sleep(200);
+        run('part 2: "see all" lists every similar pool and folds again', n > 9 && !(await vis('#sim-list')));
+      } else skip();
+      if ((await page.$$('#sim .mc-name')).length >= 1) {
+        const t0 = await page.evaluate(() => document.querySelector('#sheet-title').textContent);
+        await page.evaluate(() => document.querySelector('#sim button.mc-name').click()); await sleep(500);
+        run('part 2: a card\'s name opens that pool, shape first', await page.evaluate((t0) => document.querySelector('#sheet-title').textContent !== t0 && document.querySelector('#sheet-body').firstElementChild.dataset.chartbox === 'liq-detail', t0));
+      } else skip();
+      run('part 2: the window pills look small (≤ 26 px) with 44 px taps', await page.evaluate(() => [...document.querySelectorAll('#sheet-win button')].every((b) => b.getBoundingClientRect().height >= 43.5 && b.firstElementChild.getBoundingClientRect().height <= 26)));
+    } else skip();
+    const lk = await page.evaluate(() => { const a = [...document.querySelectorAll('#sheet a[href]')]; return { n: a.length, good: a.every((x) => x.target === '_blank' && /noopener/.test(x.rel) && /noreferrer/.test(x.rel) && /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(x.href)) }; });
+    run('part 2: the pool\'s id and addresses link to the explorer in a new tab', lk.n >= 1 && lk.good);
+    await page.click('#sheet-close').catch(() => {}); await sleep(300);
+  } else skip();
+  // backtest highlights
+  if (await page.$('#bt-lab button[data-act="hl"]')) {
+    const pressed = () => page.evaluate(() => document.querySelectorAll('#bt-lab [aria-pressed="true"]').length);
+    await press('#bt-lab button[data-act="hl"]'); await sleep(250);
+    const a = await pressed();
+    await press('#bt-lab button[data-act="hl"][aria-pressed="true"]'); await sleep(250);
+    run('part 2: a strategy row highlights its line, a second tap lets go', a === 1 && (await pressed()) === 0);
+    if (await page.$('#bt-lab button.cell')) {
+      await press('#bt-lab button.cell'); await sleep(250);
+      const c = await page.evaluate(() => document.querySelectorAll('#bt-lab button.cell[aria-pressed="true"]').length === 1 && !!document.querySelector('#bt-lab .heat-detail'));
+      await press('#bt-lab button.cell[aria-pressed="true"]'); await sleep(250);
+      run('part 2: a grid tile highlights and explains itself, then lets go', c && (await pressed()) === 0);
+    } else skip();
+  } else skip();
+  run('part 2: "Lock this device" carries its one-line explanation', /passphrase is needed next time/.test(await page.innerText('#lock-note').catch(() => '')));
 }
 const JUNK = () => /\bNaN\b|\bundefined\b|\bInfinity\b|\[object /.test(document.body.innerText);
 
@@ -342,8 +444,9 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       } catch (e) { failAs(next.kind, 'not clickable'); continue; }
       await sleep(next.kind === 'refresh' ? 2500 : 450);
       const after = await page.evaluate(SNAP);
+      if (await page.isVisible('#pop')) { await page.keyboard.press('Escape'); await sleep(150); } // a note that opened goes before the next press
       if (errTotal() > e0) failAs(next.kind, 'page error');
-      if (next.kind === 'open-window' && (await page.evaluate(() => window.__laOpen)) === open0 && newPages === np0) failAs(next.kind, 'window.open not called');
+      if ((next.kind === 'open-window' || next.kind === 'explorer-link') && (await page.evaluate(() => window.__laOpen)) === open0 && newPages === np0) failAs(next.kind, next.kind === 'explorer-link' ? 'link not followed' : 'window.open not called');
       else if (after === before && !next.noop) failAs(next.kind, 'no change');
       if (await page.evaluate(JUNK)) junkAfter++;
       if ((await page.evaluate(HSCROLL)) > 0) hscrollAfter++;

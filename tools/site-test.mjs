@@ -5,7 +5,8 @@
 //   node tools/site-test.mjs                         Chromium, widths 360…1920 plus reduced motion
 //   node tools/site-test.mjs --browser webkit --device "iPhone 15"     phone = that device; laptop 1440
 //   node tools/site-test.mjs --shots <dir>           also save full-page screenshots (cut into parts)
-//   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets sticky top zoomfit rows refresh clicks motion
+//   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
+//                                                    sticky top zoomfit rows refresh market fav table similar highlight search links locknote clicks motion
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
@@ -42,7 +43,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,pan,depth,sheets,sticky,top,zoomfit,rows,refresh,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,pan,depth,sheets,sticky,top,zoomfit,rows,refresh,market,fav,table,similar,highlight,search,links,locknote,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -78,6 +79,7 @@ async function newPage(browser, { phone = false, width = 390, height = 860, redu
   const ctx = await browser.newContext({ ...base, reducedMotion });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
   await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
+  await ctx.addInitScript(() => document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a && !window.__allowExt) { e.preventDefault(); (window.__opened ||= []).push(a.href); } }, true)); // explorer links: recorded, never followed
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror ' + String(e.message).split('\n')[0].slice(0, 120)));
@@ -106,6 +108,8 @@ async function openUnlocked(browser, c = 'default', o = {}) {
 const bodyText = (page) => page.evaluate(() => document.body.innerText);
 const domText = (page) => page.evaluate(() => document.body.textContent); // hidden elements included: locked means gone, not hidden
 const noJunk = (txt) => !/\bNaN\b|\bundefined\b|\bInfinity\b|\[object |— of the —|\$1\.0K/.test(txt); // a dash sentence or a rounded ticket is junk too
+// type into the table's search, then leave the box (its suggestion list closes and stays out of the way of the rows)
+async function fillQ(page, v) { await page.fill('#f-q', v); await page.$eval('#f-q', (e) => e.blur()); await sleep(150); }
 async function setWin(page, wk) { await page.click(`#winseg button[data-w="${wk}"]`); await sleep(150); }
 
 // ---------- 1. unlock: wrong, right, kept, locked ----------
@@ -269,13 +273,13 @@ async function testStates(browser) {
   await t.page.waitForSelector('#banner', { state: 'hidden', timeout: 10000 });
   ok('states: the banner clears when the data comes back', /fresh/.test((await badge(t.page)).cls));
   // planted faults
-  await t.page.fill('#f-q', 'onerror');
+  await fillQ(t.page, 'onerror');
   await sleep(300);
   ok('planted: an HTML ticker is printed as text, never run', (await t.page.evaluate(() => window.__xss)) === undefined && (await t.page.$$('#app img')).length === 0);
   ok('planted: …and shows up literally in the table', (await t.page.innerText('#all tbody')).includes('<img src=x'));
-  await t.page.fill('#f-q', 'TALI');
+  await fillQ(t.page, 'TALI');
   await sleep(300);
-  await t.page.fill('#f-q', '');
+  await fillQ(t.page, '');
   await sleep(300);
   if (await t.page.isVisible('#all-more button')) { await t.page.click('#all-more button'); await sleep(200); }
   for (const wk of ['24h', '7d', '30d']) {
@@ -283,15 +287,15 @@ async function testStates(browser) {
     const gems = await t.page.evaluate(() => ({ head: +((document.querySelector('#next .sub').textContent.match(/(\d+) gems?/) || [])[1]), pills: document.querySelectorAll('#all tbody .pill.gem').length }));
     ok(`planted ${wk}: the gem count never includes an unverified pool`, gems.head === gems.pills, `${gems.head} vs ${gems.pills}`);
   }
-  await t.page.fill('#f-q', 'TALI');
+  await fillQ(t.page, 'TALI');
   await sleep(300);
   for (const wk of ['24h', '7d', '30d']) {
     await setWin(t.page, wk);
     ok(`planted ${wk}: an unverified pool is never the best find`, (await t.page.textContent('#best h2')) !== 'TALI/WETH');
     ok(`planted ${wk}: …and carries UNVERIFIED with a void score`, (await t.page.innerText('#all tbody')).includes('UNVERIFIED') && (await t.page.$$('#all tbody .pill.void')).length > 0);
   }
-  for (const [q, cols] of [['ZINTH', ['tvl', 'room', 'net']], ['CALDO', ['sigma', 'range', 'lvr', 'net']], ['BRISK', ['feeApr', 'net', 'aggApr']], ['LOMA', ['room', 'parked', 'net']]]) {
-    await t.page.fill('#f-q', q);
+  for (const [q, cols] of [['ZINTH', ['tvl', 'room', 'net']], ['CALDO', ['sigma', 'edge', 'net']], ['BRISK', ['feeApr', 'net', 'edge']], ['LOMA', ['room', 'net']]]) {
+    await fillQ(t.page, q);
     await sleep(300);
     const cells = await t.page.evaluate((cols) => {
       const keys = [...document.querySelectorAll('#all thead button')].map((b) => b.dataset.k), tr = document.querySelector('#all tbody tr');
@@ -299,11 +303,11 @@ async function testStates(browser) {
     }, cols);
     ok(`missing is never zero: ${q} shows — for ${cols.join(', ')}`, cells.every((c) => c === '—'), cells.join(' '));
   }
-  await t.page.fill('#f-q', '');
+  await fillQ(t.page, '');
   await setWin(t.page, '24h');
   ok('states: a not-checked pool may be a gem, tagged NOT CHECKED', (await t.page.textContent('#best h2')) === 'NUMA/USDC' && (await t.page.innerText('#best')).includes('NOT CHECKED'));
   await setWin(t.page, '30d');
-  await t.page.fill('#f-q', 'PRAXO');
+  await fillQ(t.page, 'PRAXO');
   await sleep(300);
   ok('states: a fresh pool without a 30-day window shows dashes and a tag', /NO 30D DATA/.test(await t.page.innerText('#all tbody')) && (await t.page.innerText('#all tbody')).includes('—'));
   ok('states: no page errors (default)', t.errors.length === 0, t.errors[0]);
@@ -457,7 +461,7 @@ async function testPairs(browser) {
     ok(`pairs ${tag}: a row opens that pool in the best-find card`, !c.open && c.full === pick && c.h === 'VELNA/WETH' && c.top >= -2 && c.top < 400, `${c.open} ${c.h} ${Math.round(c.top)}`);
     // the pair name opens the view from the table and from next best too
     await setWin(p, '30d');
-    await p.fill('#f-q', 'VELNA');
+    await fillQ(p, 'VELNA');
     await sleep(300);
     await p.click('#all tbody tr.row td:nth-child(3)');
     await p.waitForSelector('#sheet:not([hidden])');
@@ -466,7 +470,7 @@ async function testPairs(browser) {
     ok(`pairs ${tag}: a pool's detail links to its pair view`, (await p.textContent('#sheet-title')) === 'VELNA/WETH' && (await p.$$('#sheet tr[data-act="pair-row"]')).length === 4);
     await p.click('#sheet-close');
     // a pool with no data in this window opens from the pair view with dashes (it used to throw in the best-find card)
-    await p.fill('#f-q', 'PRAXO');
+    await fillQ(p, 'PRAXO');
     await sleep(300);
     await p.click('#all tbody tr.row td:nth-child(3)');
     await p.waitForSelector('#sheet:not([hidden])');
@@ -476,7 +480,7 @@ async function testPairs(browser) {
     if (bare) { await p.evaluate((id) => document.querySelector(`#sheet tr[data-id="${id}"]`).click(), bare); await sleep(1400); }
     const card = await p.innerText('#best');
     ok(`pairs ${tag}: a pool with no data in the window opens from the pair view, with dashes`, !!bare && t.errors.length === 0 && /NO 30D DATA/.test(card) && noJunk(card), bare ? t.errors[0] : 'no such row');
-    await p.fill('#f-q', '');
+    await fillQ(p, '');
     ok(`pairs ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
@@ -747,14 +751,14 @@ async function testDepth(browser) {
     a = await look();
     ok(`depth ${tag}: panned to the right end the view stops at the last bar (+${SPAN})`, near(+a.view.split(',')[0], SPAN - 0.45, 2e-3), a.view);
     // QUARX: its map is unread from the fourth coarse bar up: a hatch and "— beyond", never a bar of 0
-    await p.fill('#f-q', 'QUARX'); await sleep(300);
+    await fillQ(p, 'QUARX'); await sleep(300);
     await p.click('#all tbody tr.row td:nth-child(3)');
     await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
     await p.evaluate(() => document.querySelector('#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="-1"]').click()); await sleep(150);
     for (let k = 0; k < 6 && (await p.isVisible('[data-pz="liq-detail"] > .pz-edge.r')); k++) { await p.evaluate(() => document.querySelector('[data-pz="liq-detail"] > .pz-edge.r').click()); await sleep(380); }
     const q = await p.evaluate(() => { const h = document.querySelector('[data-pz="liq-detail"]'); return { unread: h.querySelectorAll('rect.unread').length, by: [...h.querySelectorAll('.bylab')].map((e) => e.textContent), legend: h.closest('[data-chartbox]').querySelector('.legend').innerText }; });
     ok(`depth ${tag}: unread bars are hatched and the unread "beyond" reads —, never 0`, q.unread === 2 && q.by.some((x) => /^— beyond/.test(x)) && /Not read/.test(q.legend) && !/\$0 /.test(q.by.join(' ')), JSON.stringify(q));
-    await p.click('#sheet-close'); await p.fill('#f-q', '');
+    await p.click('#sheet-close'); await fillQ(p, '');
     // old data without depthStep/depthSpan still draws (the closest spacing, half a bin past the outer bars)
     ok(`depth ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
@@ -833,6 +837,15 @@ async function testSheets(browser) {
     await sleep(450);
     ok('sheets phone: a sideways swipe doesn\'t close it', await isOpen());
   }
+  // the similar-pools list scrolls inside the sheet's header: a pull there scrolls it back up before it drags the sheet
+  if (!(await isOpen())) await open();
+  await p.evaluate(() => document.querySelector('#sim [data-act="sim-all"]').click()); await sleep(200);
+  await p.$eval('#sim-list', (l) => { l.scrollTop = 80; });
+  how = await pull(p, '#sim-list', 260, { at: 0.5 });
+  await sleep(500);
+  if (how === 'none') ok('sheets phone: a pull inside the similar-pools list (no synthetic touch here: skipped)', true);
+  else ok('sheets phone: a pull inside the scrolled similar-pools list doesn\'t close the sheet', (await isOpen()) && (await ty()) === 0);
+  await p.evaluate(() => { const b = document.querySelector('#sim [data-act="sim-all"]'); if (b && b.getAttribute('aria-expanded') === 'true') b.click(); }); await sleep(150);
   // a quick flick closes even when short
   if (!(await isOpen())) await open();
   await pull(p, '#sheet .grab', 70, { ms: 8, steps: 4 });
@@ -1032,7 +1045,7 @@ async function testRows(browser) {
     const close = async () => { if (await p.isVisible('#sheet')) { await p.click('#sheet-close'); await sleep(100); } };
     const into = [];
     for (const [name, sel] of [['a table row, by its name', '#all tbody tr.row td:nth-child(1)'], ['by its gem', '#all tbody tr.row td:nth-child(2)'],
-      ['by a number', '#all tbody tr.row td:nth-child(4)'], ['by a tag', '#all tbody tr.row .tag'], ['a next-best row', '#next .nb-row'],
+      ['by a number', '#all tbody tr.row td:nth-child(5)'], ['by a tag', '#all tbody tr.row .tag'], ['a next-best row', '#next .nb-row'],
       ['a new-since row', '#ns-body .ns-row'], ['the bench tile', '#bench'], ['full breakdown', '#best [data-act="detail"]']]) {
       await tap(sel);
       await sleep(400);
@@ -1062,13 +1075,13 @@ async function testRows(browser) {
     ok(`rows ${tag}: a tap that wobbles under 10 px still opens the pool`, await p.isVisible('#sheet'));
     await close();
     // a pool with no fees in 30 days opens like any other (it used to throw)
-    await p.fill('#f-q', 'ORVO');
+    await fillQ(p, 'ORVO');
     await sleep(300);
     await tap('#all tbody tr.row td:nth-child(2)');
     await sleep(400);
     ok(`rows ${tag}: a pool with no fees in 30 days opens and says so`, (await p.isVisible('#sheet')) && /no fees in \d+ days/i.test(await p.innerText('#sheet .daily')));
     await close();
-    await p.fill('#f-q', '');
+    await fillQ(p, '');
     ok(`rows ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
@@ -1108,6 +1121,389 @@ async function testRefresh(browser) {
   await t.ctx.close();
 }
 
+// ---------- 7. Part 2: the top strip, favourites, the table's why and new, similar pools, highlights, search, links ----------
+const SEEN_KEY = (id) => String(id).slice(0, 18).toLowerCase();
+const STRIP = () => {
+  const g = document.querySelector('#gas'), m = document.querySelector('#mstrip'), r = g.getBoundingClientRect(), mr = m.getBoundingClientRect();
+  return { shown: !m.hidden && mr.height > 0, h: r.height, gas: g.innerText.replace(/\s+/g, ' ').trim(), cls: g.className, title: g.title,
+    px: [...document.querySelectorAll('#mpx .px')].map((e) => ({ c: e.dataset.c, t: e.innerText.replace(/\s+/g, ' ').trim(), up: !!e.querySelector('.up'), dn: !!e.querySelector('.dn') })),
+    pxFit: (() => { const x = document.querySelector('#mpx'); return x.scrollWidth <= x.clientWidth + 1; })(), mt: document.querySelector('#mt').innerText.replace(/\s+/g, ' ').trim(),
+    stripH: Math.round(mr.height) };
+};
+async function testMarket(browser) {
+  for (const [tag, o] of [['phone', { phone: true }], ['w360', { width: 360, height: 800 }], ['w768', { width: 768 }], ['laptop', { width: 1440 }]]) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page;
+    const a = await p.evaluate(STRIP);
+    ok(`market ${tag}: a slim strip tops the page once unlocked`, a.shown && a.stripH <= (tag === 'laptop' ? 34 : 60), JSON.stringify(a).slice(0, 120));
+    ok(`market ${tag}: gas shows 2 significant digits in gwei, coloured by its band`, /^0\.\d\d gwei( normal)?$/.test(a.gas) && /g-normal/.test(a.cls), a.gas + ' ' + a.cls);
+    ok(`market ${tag}: the gas button is a 44 px tap target`, a.h >= 43.5, String(a.h));
+    ok(`market ${tag}: its tooltip gives p10 / p50 / p90 and what it is compared with`, /p10 0\.\d+ · p50 0\.\d+ · p90 0\.\d+ gwei/.test(a.title) && /days of hourly readings/.test(a.title), a.title);
+    ok(`market ${tag}: ETH, BTC and SOL with a 24 h arrow each (▲ up, ▼ down)`, a.px.map((x) => x.c).join() === 'ETH,BTC,SOL' && a.px[0].up && a.px[1].dn && a.px[2].up
+      && /^ETH \$3,400 ▲1\.2%$/.test(a.px[0].t) && /^BTC \$96\.2K ▼0\.4%$/.test(a.px[1].t) && /^SOL \$182 ▲3\.1%$/.test(a.px[2].t), a.px.map((x) => x.t).join(' | '));
+    ok(`market ${tag}: the three prices fit without scrolling`, a.pxFit);
+    ok(`market ${tag}: a countdown to the next pass and "updated hh:mm" CET`, /next( pass)? in ([1-7] min|<1 min) · updated \d\d:\d\d( (CET|CEST))?$/.test(a.mt) && (tag !== 'laptop' || / (CET|CEST)$/.test(a.mt)), a.mt); // the fixture's next pass is 6 min after it was written
+    await p.click('#gas'); await sleep(200);
+    const pop = await p.evaluate(() => { const e = document.querySelector('#pop'); return { on: !e.hidden, t: e.innerText, exp: document.querySelector('#gas').getAttribute('aria-expanded') }; });
+    ok(`market ${tag}: a tap on the gauge opens a note with the range`, pop.on && pop.exp === 'true' && /p10 0\.\d+ · median 0\.\d+ · p90 0\.\d+ gwei/.test(pop.t) && /cheap below p25/.test(pop.t), pop.t.slice(0, 60));
+    await p.keyboard.press('Escape'); await sleep(100);
+    ok(`market ${tag}: Escape puts the note away and the focus back on the gauge`, !(await p.isVisible('#pop')) && (await p.evaluate(() => document.activeElement && document.activeElement.id)) === 'gas');
+    if (tag === 'phone' && SHOTS) await snap(p, 'p2-strip-phone', 'header');
+    ok(`market ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // unread: dashes, never 0
+  const t = await openUnlocked(browser, 'nomarket', { phone: true }), p = t.page, a = await p.evaluate(STRIP);
+  ok('market: unread gas shows — gwei, uncoloured, with no band', /^— gwei$/.test(a.gas) && /g-none/.test(a.cls), a.gas);
+  ok('market: an unread price and an unread 24 h change show —, never 0', /^SOL — —$/.test(a.px[2].t) && /^BTC \$96\.2K —$/.test(a.px[1].t) && !/\$0\b|0\.0%|\b0 gwei/.test(a.px.map((x) => x.t).join(' ') + a.gas), a.px.map((x) => x.t).join(' | '));
+  ok('market: no next pass known → the countdown says —', /next( pass)? — · updated \d\d:\d\d/.test(a.mt), a.mt);
+  await p.click('#gas'); await sleep(150);
+  ok('market: the unread gauge’s note says so plainly', /— gwei/.test(await p.innerText('#pop')) && /Not enough history/.test(await p.innerText('#pop')));
+  if (SHOTS) await snap(p, 'p2-strip-unread', 'header');
+  ok('market: no page errors (nomarket)', t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+  // reduced motion: the countdown ring stands still
+  const r = await openUnlocked(browser, 'default', { phone: true, reducedMotion: 'reduce' });
+  ok('market: under reduced motion nothing animates', (await r.page.evaluate(() => document.getAnimations().length)) === 0);
+  await r.ctx.close();
+}
+
+async function testFav(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const favNow = () => p.evaluate(() => ({ cards: [...document.querySelectorAll('#fav .mc')].map((c) => c.dataset.id), empty: !!document.querySelector('#fav .empty'), count: document.querySelector('#fav-count').textContent, note: document.querySelector('#fav .devnote').innerText }));
+    let f = await favNow();
+    ok(`fav ${tag}: an empty Favourites section near the top says how to star a pool`, f.empty && f.cards.length === 0 && /Tap the ☆/.test(await p.innerText('#fav')), JSON.stringify(f).slice(0, 80));
+    ok(`fav ${tag}: …and that stars stay on this device only`, /this device only/.test(f.note) && /can’t recognise you/.test(f.note));
+    const near = await p.evaluate(() => { const a = document.querySelector('#fav').getBoundingClientRect(), b = document.querySelector('#all').getBoundingClientRect(); return a.top < b.top && a.top < innerHeight * (innerWidth < 700 ? 2.2 : 1); });
+    ok(`fav ${tag}: the section sits near the top, above All pools`, near);
+    // star from the table, the best-find header and the detail header
+    const id1 = await p.getAttribute('#all tbody tr.row:nth-child(3)', 'data-id');
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector('#all tbody tr.row:nth-child(3) .star'); b.scrollIntoView({ block: 'center' }); b.click(); });
+    await sleep(150);
+    ok(`fav ${tag}: a row's ☆ turns gold (pressed) without opening the pool`, (await p.getAttribute('#all tbody tr.row:nth-child(3) .star', 'aria-pressed')) === 'true' && !(await p.isVisible('#sheet')));
+    const bestId = await p.getAttribute('#best [data-act="detail"]', 'data-id');
+    await p.evaluate(() => document.querySelector('#best .ttl .star').click()); await sleep(150);
+    f = await favNow();
+    ok(`fav ${tag}: the best-find star adds it too; the section fills, newest first`, f.cards.length === 2 && f.cards[0] === bestId && f.cards[1] === id1 && !f.empty && /2 STARRED/.test(f.count), JSON.stringify(f.cards));
+    ok(`fav ${tag}: the Lens filter's "★ Favourites" count follows at once`, /\(2\)$/.test(await p.$eval('#f-lens option[value="fav"]', (o) => o.textContent)));
+    await p.evaluate(() => document.querySelector('#best [data-act="detail"]').click()); await p.waitForSelector('#sheet:not([hidden])');
+    ok(`fav ${tag}: the detail header's star shows it is starred`, (await p.getAttribute('#sheet-star .star', 'aria-pressed')) === 'true');
+    await p.click('#sheet-star .star'); await sleep(150);
+    ok(`fav ${tag}: …and un-stars it everywhere at once`, (await p.getAttribute('#best .ttl .star', 'aria-pressed')) === 'false' && (await favNow()).cards.length === 1);
+    await p.click('#sheet-star .star'); await sleep(100);
+    await p.click('#sheet-close');
+    await p.reload(); await waitApp(p);
+    f = await favNow();
+    ok(`fav ${tag}: stars survive a reload (this browser keeps them)`, f.cards.length === 2 && f.cards.includes(id1) && f.cards.includes(bestId));
+    if (SHOTS) await snap(p, `p2-fav-${tag}`, '#fav');
+    // a card opens its pool; its star removes it, the keyboard stays in the section
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#fav .mc-name').click(); }); await sleep(300);
+    ok(`fav ${tag}: a favourite card opens that pool, shape first`, (await p.isVisible('#sheet')) && (await p.evaluate(() => document.querySelector('#sheet-body').firstElementChild.dataset.chartbox)) === 'liq-detail');
+    await p.click('#sheet-close');
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#fav').scrollIntoView({ block: 'center' }); }); await sleep(150);
+    const cb = await p.locator('#fav .mc .mc-v').first().boundingBox();
+    await p.mouse.click(cb.x + 10, cb.y + cb.height / 2); await sleep(300);
+    ok(`fav ${tag}: a tap anywhere on the card opens it (one control: the name's link)`, (await p.isVisible('#sheet')) && (await p.$$('#fav .mc-cover')).length === 0);
+    await p.click('#sheet-close');
+    await p.focus('#fav .mc .star'); await p.keyboard.press('Enter'); await sleep(150);
+    ok(`fav ${tag}: un-starring from the card removes it; the focus stays in Favourites`, (await favNow()).cards.length === 1 && (await p.evaluate(() => !!document.activeElement.closest('#fav'))));
+    // the lens filter lists only favourites
+    await p.selectOption('#f-lens', 'fav'); await sleep(200);
+    ok(`fav ${tag}: the Lens filter "★ Favourites" lists the starred pools only`, (await p.$$('#all tbody tr.row')).length === 1);
+    await p.selectOption('#f-lens', 'all'); await sleep(150);
+    ok(`fav ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // planted: garbage in storage never breaks the page
+  const g = await openUnlocked(browser, 'default', { phone: true, storage: { 'lps.fav': '{"not":"a list"', 'lps.seen': '"garbage"', 'lps.simm': '99' } });
+  ok('fav planted: unreadable stored favourites and seen ids are ignored, not fatal', (await g.page.isVisible('#fav .empty')) && (await g.page.$$('#all .newdot')).length === 0 && g.errors.length === 0, g.errors[0]);
+  await g.ctx.close();
+  const h = await openUnlocked(browser, 'default', { phone: true, storage: { 'lps.fav': JSON.stringify(['<img src=x onerror="window.__xss=1">', '0xNOTHEX']) } });
+  ok('fav planted: stored ids that are not pool ids are dropped', (await h.page.isVisible('#fav .empty')) && (await h.page.evaluate(() => window.__xss)) === undefined && h.errors.length === 0);
+  await h.ctx.close();
+}
+
+async function testTable2(browser) {
+  const { live } = makeData({ now: Date.now() });
+  // the key columns fit a phone without a sideways scroll
+  for (const w of [360, 390, 430]) {
+    const t = await openUnlocked(browser, 'default', { width: w, height: 800 }), p = t.page;
+    const fit = await p.evaluate(() => { const box = document.querySelector('#all-box'), b = box.getBoundingClientRect(), ths = [...box.querySelectorAll('thead th')]; return { keys: ths.slice(0, 4).map((x) => x.querySelector('button').dataset.k).join(), right: Math.round(ths[3].getBoundingClientRect().right - b.right), sl: box.scrollLeft, more: box.scrollWidth > box.clientWidth }; });
+    ok(`table w${w}: Pool, Gem, Net APR and Why show without a sideways scroll; the rest scroll`, fit.keys === 'pair,gem,net,why' && fit.right <= 1 && fit.sl === 0 && fit.more, JSON.stringify(fit));
+    await t.ctx.close();
+  }
+  const l = await openUnlocked(browser, 'default', { width: 1440 });
+  ok('table laptop: every column fits a laptop, no sideways scroll', await l.page.evaluate(() => { const b = document.querySelector('#all-box'); return b.scrollWidth <= b.clientWidth + 1; }));
+  ok('table laptop: fewer, better columns (11)', (await l.page.$$eval('#all-tbl thead th', (x) => x.map((e) => e.querySelector('button').dataset.k).join())) === 'pair,gem,net,why,vol,tvl,room,feeApr,edge,sigma,age');
+  await l.ctx.close();
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    // why: pictograms with a note; toxic flow explained
+    const tox = live.pools.find((x) => x.w['30d'] && x.w['30d'].lenses.includes('toxic') && x.verified !== false);
+    await fillQ(p, tox.pair);
+    const cell = await p.evaluate(() => { const b = document.querySelector('#all tbody tr.row td.why .whyb'); return b ? { icons: b.querySelectorAll('svg.wi').length, red: !!b.querySelector('svg.wi.r'), label: b.getAttribute('aria-label') } : null; });
+    ok(`table ${tag}: a toxic pool's Why cell shows a red pictogram with a spoken label`, cell && cell.icons >= 1 && cell.red && /Toxic flow/.test(cell.label), JSON.stringify(cell));
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector('#all tbody tr.row td.why .whyb'); b.scrollIntoView({ block: 'center' }); b.click(); });
+    await sleep(200);
+    const pop = await p.evaluate(() => ({ on: !document.querySelector('#pop').hidden, t: document.querySelector('#pop').innerText, sheet: !document.querySelector('#sheet').hidden }));
+    ok(`table ${tag}: a tap on the icons explains them in plain words (and doesn't open the pool)`, pop.on && !pop.sheet && /Toxic flow\. Traders here tend to know where the price is going: right after their swaps the price moves against LPs, so fees don’t cover the loss \(markout ÷ fee high\)\./.test(pop.t), pop.t.slice(0, 90));
+    if (SHOTS) await snap(p, `p2-why-${tag}`);
+    await p.evaluate(() => document.querySelector('#all h2').click()); await sleep(120);
+    ok(`table ${tag}: a tap elsewhere puts the note away`, !(await p.isVisible('#pop')));
+    await fillQ(p, '');
+    // the legend
+    ok(`table ${tag}: the legend starts folded`, !(await p.isVisible('#why-legend')) && (await p.getAttribute('#why-tog', 'aria-expanded')) === 'false');
+    await p.evaluate(() => document.querySelector('#why-tog').click()); await sleep(120);
+    const lg = await p.evaluate(() => ({ n: document.querySelectorAll('#why-legend > div').length, t: document.querySelector('#why-legend').innerText }));
+    ok(`table ${tag}: "What the Why icons mean" unfolds a plain-words legend (${lg.n})`, (await p.getAttribute('#why-tog', 'aria-expanded')) === 'true' && lg.n === 13 && /Toxic flow: Traders here tend to know/.test(lg.t) && /Stranded: Most of the money sits far from the price/.test(lg.t), lg.t.slice(0, 60));
+    if (SHOTS) await snap(p, `p2-legend-${tag}`, '#all');
+    await p.evaluate(() => document.querySelector('#why-tog').click()); await sleep(100);
+    ok(`table ${tag}: …and folds again`, !(await p.isVisible('#why-legend')));
+    ok(`table ${tag}: the first visit marks nothing as new`, (await p.$$('#all .newdot')).length === 0 && !/NEW/.test(await p.textContent('#all-count')));
+    ok(`table ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // the new dot: two pools not seen at the last page load
+  const g30 = (x) => (x.verified === false || !x.w['30d'] || x.w['30d'].gem.total == null ? -1 : x.w['30d'].gem.total);
+  const fresh = live.pools.slice().sort((a, b) => g30(b) - g30(a)).slice(0, 2).map((x) => x.id); // two pools near the top of the 30-day table
+  const seen = live.pools.filter((x) => !fresh.includes(x.id)).map((x) => SEEN_KEY(x.id));
+  const t = await openUnlocked(browser, 'default', { phone: true, storage: { 'lps.seen': JSON.stringify(seen) } }), p = t.page;
+  const dots = await p.$$eval('#all tbody tr.row', (rs) => rs.filter((r) => r.querySelector('.newdot')).map((r) => r.dataset.id));
+  ok('table: pools new since the last page load carry a small dot, the rest none', dots.length === 2 && fresh.every((id) => dots.includes(id)) && /· 2 NEW$/.test(await p.textContent('#all-count')), `${dots.length} dots`);
+  if (SHOTS) await snap(p, 'p2-newdot', '#all');
+  const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('lps.seen')).length);
+  ok('table: this load\'s pools are remembered as seen', saved === live.pools.length, String(saved));
+  await t.ctx.close();
+}
+
+// the similar-pools ranking, written out again on its own: same pair (native ETH = WETH), then the same tier with a shared
+// token, then the same tier, then a shared token; higher volume per day first; unverified last
+function expectSimilar(live, p, wk) {
+  const n = (s) => (String(s).toUpperCase() === 'ETH' ? 'WETH' : String(s).toUpperCase()), syms = (q) => [n(q.t0.sym), n(q.t1.sym)];
+  const key = (q) => syms(q).slice().sort().join('/'), mine = syms(p);
+  return live.pools.filter((q) => q.id !== p.id).map((q) => {
+    const pair = key(q) === key(p) || q.pairKey === p.pairKey, tier = q.feeTier === p.feeTier, share = syms(q).some((x) => mine.includes(x)), w = q.w[wk];
+    return { id: q.id, uv: q.verified === false ? 1 : 0, g: pair ? 0 : tier && share ? 1 : tier ? 2 : share ? 3 : -1, v: w && w.volUsd != null && w.days > 0 ? w.volUsd / w.days : -1 };
+  }).filter((x) => x.g >= 0).sort((a, b) => a.uv - b.uv || a.g - b.g || b.v - a.v).map((x) => x.id);
+}
+async function testSimilar(browser) {
+  const { live } = makeData({ now: Date.now() });
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const id = await p.getAttribute('#best [data-act="detail"]', 'data-id'), pool = live.pools.find((x) => x.id === id);
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])');
+    const anims = await p.evaluate(() => document.querySelectorAll('#sim .mc').length && document.querySelector('#sim .mc').getAnimations().length);
+    await sleep(500);
+    const read = () => p.evaluate(() => ({ ids: [...document.querySelectorAll('#sim .mc[data-id]')].map((c) => c.dataset.id), self: [...document.querySelectorAll('#sim .mc.self')].map((c) => c.dataset.id),
+      ks: [...new Set([...document.querySelectorAll('#sim .mc-v .k')].map((k) => k.textContent))], dots: [...document.querySelectorAll('#sim .mdots i')].findIndex((i) => i.classList.contains('on')),
+      end: (document.querySelector('#sim [data-act="sim-all"]') || {}).innerText, head: document.querySelector('#sim .mc-head').innerText, inHead: !!document.querySelector('.sheet-head #sim'),
+      first: document.querySelector('#sheet-body').firstElementChild.dataset.chartbox }));
+    let a = await read();
+    const want = expectSimilar(live, pool, '30d');
+    ok(`similar ${tag}: a strip of mini cards sits under the pool's header, this pool first and outlined`, a.inHead && a.self.length === 1 && a.ids[0] === id && a.self[0] === id && a.first === 'liq-detail', JSON.stringify(a).slice(0, 100));
+    ok(`similar ${tag}: ranked same pair, then tier + token, then tier, then token; by volume; unverified last (fixture order)`, JSON.stringify(a.ids.slice(1)) === JSON.stringify(want.slice(0, 8)), `${a.ids.slice(1, 4).map((x) => x.slice(0, 8))} vs ${want.slice(0, 3).map((x) => x.slice(0, 8))}`);
+    const uv = live.pools.filter((x) => x.verified === false && want.includes(x.id)).map((x) => x.id);
+    ok(`similar ${tag}: planted: the pair's unverified pool has the most volume, yet ranks after every verified one`, uv.length > 0 && want.slice(-uv.length).every((x) => uv.includes(x)) && live.pools.find((x) => x.pairKey === pool.pairKey && x.verified === false).w['30d'].volUsd > pool.w['30d'].volUsd);
+    ok(`similar ${tag}: the strip ends in a "see all ${want.length}" card`, new RegExp(`^${want.length}\\s+see all$`).test(a.end.trim()) && new RegExp(`Similar pools · ${want.length}`, 'i').test(a.head), a.end);
+    ok(`similar ${tag}: the cards slide in (motion allowed)`, anims > 0, String(anims));
+    // tapping a card's body cycles the figure on every card: net APR → volume / day → gem → TVL → net APR
+    const seq = [];
+    for (let k = 0; k < 4; k++) {
+      await p.evaluate((k) => document.querySelectorAll('#sim .mc-cover')[k % 3].click(), k); await sleep(120);
+      a = await read(); seq.push(a.ks.join('|') + '@' + a.dots);
+    }
+    ok(`similar ${tag}: a tap on any card's body changes the figure on all cards, with a label and dots`, seq.join(' ') === 'volume / day@1 gem@2 TVL@3 net APR@0', seq.join(' '));
+    await p.evaluate(() => document.querySelector('#sim .mc-cover').click()); await sleep(100); // leave it on volume / day
+    ok(`similar ${tag}: the choice is spoken (aria-live) and kept on this device`, (await p.getAttribute('#sim-m', 'aria-live')) === 'polite' && (await p.evaluate(() => localStorage.getItem('lps.simm'))) === '1');
+    // edge fades
+    const fades = await p.evaluate(async () => { const t = document.querySelector('#sim .mc-track'), w = t.parentElement, a = [w.classList.contains('fl'), w.classList.contains('fr')]; t.scrollLeft = t.scrollWidth; await new Promise((r) => setTimeout(r, 120)); return [...a, w.classList.contains('fl'), w.classList.contains('fr'), getComputedStyle(t).scrollSnapType]; });
+    ok(`similar ${tag}: snap scrolling with soft fades only where more cards lie`, !fades[0] && fades[1] && fades[2] && !fades[3] && /x mandatory/.test(fades[4]), JSON.stringify(fades));
+    // see all: a list, again to fold it
+    await p.evaluate(() => document.querySelector('#sim [data-act="sim-all"]').click()); await sleep(150);
+    const lst = await p.evaluate(() => ({ on: !document.querySelector('#sim-list').hidden, n: document.querySelectorAll('#sim-list .sim-row').length, exp: document.querySelector('#sim [data-act="sim-all"]').getAttribute('aria-expanded'), v: document.querySelector('#sim-list .sim-row .v').textContent }));
+    ok(`similar ${tag}: "see all" opens the whole list (${lst.n} rows), with the chosen figure`, lst.on && lst.n === want.length + 1 && lst.exp === 'true' && /^\$/.test(lst.v), JSON.stringify(lst));
+    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `p2-similar-list-${tag}.png`) });
+    await p.evaluate(() => document.querySelector('#sim [data-act="sim-all"]').click()); await sleep(120);
+    ok(`similar ${tag}: …and folds it again`, !(await p.isVisible('#sim-list')));
+    // a card's pair name opens that pool's detail, shape first
+    const second = (await read()).ids[1];
+    await p.evaluate(() => { const t = document.querySelector('#sim .mc-track'); t.scrollLeft = 0; document.querySelectorAll('#sim .mc-name')[1].click(); });
+    await sleep(400);
+    a = await read();
+    const opened = live.pools.find((x) => x.id === second);
+    ok(`similar ${tag}: a card's name opens that pool, shape first, now first in its own strip`, a.ids[0] === second && (await p.textContent('#sheet-title')) === opened.pair && a.first === 'liq-detail' && (await p.evaluate(() => document.querySelector('#sheet-body').scrollTop)) === 0, `${a.ids[0] === second}`);
+    // the small window pills
+    const pill = await p.evaluate(() => [...document.querySelectorAll('#sheet-win button')].map((b) => ({ b: b.getBoundingClientRect().height, s: b.firstElementChild.getBoundingClientRect().height })));
+    ok(`similar ${tag}: the 24H/7D/30D switch is a small pill (~22 px) with 44 px tap areas`, pill.length === 3 && pill.every((x) => x.b >= 43.5 && x.s >= 19 && x.s <= 25), JSON.stringify(pill));
+    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `p2-similar-${tag}.png`) });
+    await p.click('#sheet-close');
+    ok(`similar ${tag}: closing returns the focus to where the pool was opened`, (await p.evaluate(() => document.activeElement && document.activeElement.dataset.act)) === 'detail');
+    ok(`similar ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  const r = await openUnlocked(browser, 'default', { phone: true, reducedMotion: 'reduce' });
+  await r.page.click('#best [data-act="detail"]'); await sleep(60);
+  ok('similar: under reduced motion the cards appear without sliding', (await r.page.evaluate(() => document.getAnimations().length)) === 0 && (await r.page.$$('#sim .mc')).length > 1);
+  await r.ctx.close();
+}
+
+async function testHighlight(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    await p.click('#bt-lead tr.row'); await sleep(900);
+    const lab = () => p.evaluate(() => ({ pressed: [...document.querySelectorAll('#bt-lab button[data-act="hl"]')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.s),
+      dim: [...document.querySelectorAll('[data-pz="lab"] path.ln')].filter((x) => x.getAttribute('stroke-opacity') === '0.18').map((x) => x.dataset.s), lines: document.querySelectorAll('[data-pz="lab"] path.ln').length,
+      hits: document.querySelectorAll('[data-pz="lab"] path.hit').length, cell: [...document.querySelectorAll('#bt-lab button.cell')].filter((b) => b.getAttribute('aria-pressed') === 'true').length, det: (document.querySelector('#bt-lab .heat-detail') || {}).textContent || '' }));
+    await p.evaluate(() => document.querySelector('#bt-lab button[data-act="hl"][data-s="tight"]').click()); await sleep(150);
+    let a = await lab();
+    ok(`highlight ${tag}: a strategy row highlights its line and dims the other ${a.lines - 1}`, a.pressed.join() === 'tight' && a.dim.length === a.lines - 1 && !a.dim.includes('tight'), JSON.stringify(a));
+    await p.evaluate(() => document.querySelector('#bt-lab button[data-act="hl"][data-s="tight"]').click()); await sleep(150);
+    a = await lab();
+    ok(`highlight ${tag}: a second tap releases it`, a.pressed.length === 0 && a.dim.length === 0);
+    // keyboard
+    await p.focus('#bt-lab button[data-act="hl"][data-s="wide"]'); await p.keyboard.press('Enter'); await sleep(150);
+    const k1 = await lab(), f1 = await p.evaluate(() => document.activeElement.dataset.s);
+    await p.keyboard.press(' '); await sleep(150);
+    const k2 = await lab();
+    ok(`highlight ${tag}: keyboard: Enter highlights, Space releases, the focus stays on the row`, k1.pressed.join() === 'wide' && f1 === 'wide' && k2.pressed.length === 0);
+    // a tap on the line itself
+    ok(`highlight ${tag}: every line has a wide invisible tap target`, a.hits === a.lines);
+    await p.evaluate(() => document.querySelector('[data-pz="lab"] path.hit[data-s="full"]').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await sleep(150);
+    ok(`highlight ${tag}: tapping a line highlights it`, (await lab()).pressed.join() === 'full');
+    await p.evaluate(() => document.querySelector('[data-pz="lab"] path.hit[data-s="full"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))); await sleep(150);
+    // grid tiles
+    await p.evaluate(() => document.querySelector('#bt-lab button.cell[data-ours="1"]').click()); await sleep(150);
+    a = await lab();
+    ok(`highlight ${tag}: the grid's "ours" tile highlights our line on the chart and says so`, a.cell === 1 && a.pressed.join() === 'ours' && /this is ours, highlighted on the chart/.test(a.det), JSON.stringify(a).slice(0, 120));
+    if (SHOTS) await snap(p, `p2-highlight-${tag}`, '#bt-lab');
+    await p.evaluate(() => document.querySelector('#bt-lab button.cell[data-ours="1"]').click()); await sleep(150);
+    a = await lab();
+    ok(`highlight ${tag}: tapping the tile again releases tile and line`, a.cell === 0 && a.pressed.length === 0 && !a.det);
+    await p.evaluate(() => document.querySelector('#bt-lab button.cell:not([data-ours])').click()); await sleep(150);
+    a = await lab();
+    ok(`highlight ${tag}: another tile shows its own numbers (no line runs it)`, a.cell === 1 && a.pressed.length === 0 && /net APR, [+−]\d+ pts vs ours\. No strategy line runs these settings/.test(a.det), a.det);
+    await p.evaluate(() => document.querySelector('#bt-lab button.cell[aria-pressed="true"]').click()); await sleep(120);
+    ok(`highlight ${tag}: every tile is a 44 px button`, await p.evaluate(() => [...document.querySelectorAll('#bt-lab button.cell')].every((b) => b.getBoundingClientRect().height >= 43.5)));
+    ok(`highlight ${tag}: a loss to holding is a red tile`, await p.evaluate(() => [...document.querySelectorAll('#bt-lab button.cell')].some((b) => /226, 102, 76/.test(getComputedStyle(b).backgroundColor) && /^−/.test(b.textContent))));
+    // the money chart's legend
+    const money = () => p.evaluate(() => ({ pressed: [...document.querySelectorAll('#rp-mleg button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.s), dim: [...document.querySelectorAll('[data-pz="rp-money"] path.ln')].filter((x) => x.getAttribute('stroke-opacity') === '0.18').map((x) => x.dataset.s) }));
+    await p.evaluate(() => document.querySelector('#rp-mleg button[data-s="lvr"]').click()); await sleep(150);
+    const m1 = await money();
+    await p.evaluate(() => document.querySelector('#rp-mleg button[data-s="lvr"]').click()); await sleep(150);
+    const m2 = await money();
+    ok(`highlight ${tag}: "cumulative $ vs holding" legend highlights a line, then lets go`, m1.pressed.join() === 'lvr' && m1.dim.sort().join() === 'costs,fees,net' && m2.pressed.length === 0 && m2.dim.length === 0, JSON.stringify([m1, m2]));
+    // a scrub keeps the highlight
+    await p.evaluate(() => document.querySelector('#rp-mleg button[data-s="net"]').click()); await sleep(100);
+    await p.evaluate(() => { const s = document.querySelector('#rp-scrub'); s.value = '3'; s.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(150);
+    ok(`highlight ${tag}: scrubbing the replay keeps the highlight`, (await money()).pressed.join() === 'net');
+    ok(`highlight ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+async function testSearch(browser) {
+  const { live } = makeData({ now: Date.now() });
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const list = () => p.evaluate(() => ({ on: !document.querySelector('#q-list').hidden, items: [...document.querySelectorAll('#q-list .qopt')].map((o) => o.querySelector('.qk').textContent + ' ' + o.querySelector('.qt').textContent),
+      act: document.querySelector('#f-q').getAttribute('aria-activedescendant'), exp: document.querySelector('#f-q').getAttribute('aria-expanded'), hint: document.querySelector('#q-hint').textContent, v: document.querySelector('#f-q').value,
+      rows: [...document.querySelectorAll('#all tbody tr.row .pn2')].map((x) => x.textContent) }));
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
+    await p.click('#f-q'); await p.keyboard.type('vel', { delay: 30 }); await sleep(200);
+    let a = await list();
+    ok(`search ${tag}: typing opens suggestions, likeliest first (prefix, then volume)`, a.on && a.exp === 'true' && a.items[0] === 'PAIR VELNA/WETH' && a.items[1] === 'TOKEN VELNA', a.items.join(' | '));
+    ok(`search ${tag}: the top match shows inline as a hint`, a.hint === 'velNA/WETH', a.hint);
+    if (SHOTS) await snap(p, `p2-search-${tag}`, '#all');
+    await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await sleep(80);
+    a = await list();
+    ok(`search ${tag}: arrow keys move through the list (aria-activedescendant)`, a.act === 'qo-1');
+    await p.keyboard.press('ArrowUp'); await p.keyboard.press('Enter'); await sleep(250);
+    a = await list();
+    ok(`search ${tag}: Enter picks it: the table filters to that pair (native ETH included)`, !a.on && a.v === 'VELNA/WETH' && a.rows.length === 4 && a.rows.every((x) => /^VELNA\/(W?ETH)$/.test(x)), a.rows.join(','));
+    // Enter takes the inline hint
+    await p.fill('#f-q', ''); await p.keyboard.type('num', { delay: 30 }); await sleep(150);
+    await p.keyboard.press('Enter'); await sleep(250);
+    a = await list();
+    ok(`search ${tag}: Enter with the hint showing takes the top match`, a.v === 'NUMA/USDC' && a.rows.length >= 1 && a.rows.every((x) => x.includes('NUMA')), a.v);
+    // a tap picks too; a token beats pairs on a word start
+    await p.fill('#f-q', ''); await p.keyboard.type('weth', { delay: 20 }); await sleep(150);
+    a = await list();
+    ok(`search ${tag}: a token that matches from its start ranks first ("weth")`, a.items[0] === 'TOKEN WETH', a.items.slice(0, 3).join(' | '));
+    await p.fill('#f-q', ''); await p.keyboard.type('kov', { delay: 20 }); await sleep(150);
+    const o = await p.locator('#q-list .qopt').first().boundingBox();
+    await p.mouse.click(o.x + o.width / 2, o.y + o.height / 2); await sleep(250);
+    a = await list();
+    ok(`search ${tag}: a tap on a suggestion picks it`, a.v === 'KOVA/WETH' && !a.on && a.rows.length >= 1 && a.rows.every((x) => x.startsWith('KOVA')), a.v);
+    // a pool id opens that pool
+    const pool = live.pools.find((x) => x.t0.sym === 'SELT');
+    await p.fill('#f-q', ''); await p.keyboard.type(pool.id.slice(0, 7), { delay: 20 }); await sleep(150);
+    a = await list();
+    ok(`search ${tag}: a pool id's first characters suggest that pool`, a.items[0] && a.items[0].startsWith('POOL ' + pool.id.slice(0, 6)), a.items[0]);
+    await p.keyboard.press('ArrowDown'); await p.keyboard.press('Enter'); await sleep(400);
+    ok(`search ${tag}: …and picking it opens it, shape first`, (await p.isVisible('#sheet')) && (await p.textContent('#sheet-title')) === pool.pair);
+    await p.click('#sheet-close');
+    // Escape; planted HTML ticker
+    await p.fill('#f-q', ''); await p.keyboard.type('<img', { delay: 20 }); await sleep(150);
+    a = await list();
+    ok(`search ${tag}: planted: an HTML ticker is suggested as text, never run`, a.items.some((x) => x.includes('<img src=x')) && (await p.evaluate(() => window.__xss)) === undefined && (await p.$$('#q-list img')).length === 0);
+    await p.keyboard.press('Escape'); await sleep(80);
+    ok(`search ${tag}: Escape closes the list and keeps the text`, !(await list()).on && (await p.inputValue('#f-q')) === '<img');
+    await fillQ(p, '');
+    ok(`search ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+async function testLinks(browser) {
+  const t = await openUnlocked(browser, 'default', { width: 1440 }), p = t.page;
+  const links = async (q) => {
+    await fillQ(p, q);
+    await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
+    await p.waitForSelector('#sheet:not([hidden])');
+    const l = await p.$$eval('#sheet a[href]', (as) => as.map((a) => ({ href: a.href, t: a.target, rel: a.rel, act: a.dataset.act, rp: a.referrerPolicy })));
+    const txt = await p.innerText('#sheet .facts');
+    await p.click('#sheet-close');
+    return { l, txt };
+  };
+  let a = await links('VELNA/WETH'); // the first row: VELNA/WETH 0.30% on Base, v3
+  const ok3 = (x) => x.t === '_blank' && x.rel === 'noopener noreferrer' && x.act === 'ext' && x.rp === 'no-referrer';
+  ok('links: a v3 pool on Base links to Basescan (pool, tokens) and to Uniswap, all in a new tab, no referrer', a.l.length >= 4 && a.l.every(ok3)
+    && a.l.some((x) => /^https:\/\/basescan\.org\/address\/0x[0-9a-f]{40}$/.test(x.href)) && a.l.filter((x) => /^https:\/\/basescan\.org\/token\/0x[0-9a-f]{40}$/.test(x.href)).length === 2
+    && a.l.some((x) => /^https:\/\/app\.uniswap\.org\/explore\/pools\/base\/0x[0-9a-f]{40}$/.test(x.href)), JSON.stringify(a.l.map((x) => x.href.replace(/0x[0-9a-f]+/, '0x…'))));
+  a = await links('FENX'); // v4 on Ethereum, with a hook
+  ok('links: a v4 pool id opens its Uniswap page; its hook and tokens open Etherscan', a.l.every(ok3) && a.l.some((x) => /^https:\/\/app\.uniswap\.org\/explore\/pools\/ethereum\/0x[0-9a-f]{64}$/.test(x.href))
+    && a.l.some((x) => /^https:\/\/etherscan\.io\/address\/0x[0-9a-f]{40}$/.test(x.href)) && a.l.filter((x) => /^https:\/\/etherscan\.io\/token\//.test(x.href)).length === 2, JSON.stringify(a.l.map((x) => x.href.slice(0, 40))));
+  a = await links('VELNA/ETH');
+  ok('links: native ETH has no contract: said so, no link', /native ETH \(no contract\)/.test(a.txt) && a.l.filter((x) => /\/token\//.test(x.href)).length === 1);
+  // the CSP lets the link open (the explorer is answered locally: nothing leaves this machine)
+  await t.ctx.route('https://basescan.org/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>made-up explorer</p>' }));
+  await fillQ(p, 'VELNA/WETH');
+  await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
+  await p.waitForSelector('#sheet:not([hidden])');
+  await p.evaluate(() => { window.__allowExt = true; });
+  const [pop] = await Promise.all([t.ctx.waitForEvent('page', { timeout: 8000 }), p.evaluate(() => document.querySelector('#sheet a[href^="https://basescan.org/address/"]').click())]);
+  await pop.waitForLoadState('domcontentloaded').catch(() => {});
+  ok('links: the page\'s CSP lets an explorer link open in a new tab (no opener)', /^https:\/\/basescan\.org\/address\//.test(pop.url()) && (await pop.evaluate(() => window.opener === null)), pop.url().slice(0, 40));
+  await pop.close();
+  ok('links: every link on the page is an explorer link in a new tab', await p.evaluate(() => [...document.querySelectorAll('a[href]')].every((a) => a.target === '_blank' && /noopener/.test(a.rel) && /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(a.href))));
+  ok('links: no page errors', t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+}
+
+async function testLockNote(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const n = await p.evaluate(() => { const b = document.querySelector('#lockbtn').getBoundingClientRect(), e = document.querySelector('#lock-note'), r = e.getBoundingClientRect(); return { t: e.innerText, on: !e.hidden && r.height > 0, near: Math.abs(r.top - b.top) < 80 && r.left < b.right + 200, desc: document.querySelector('#lockbtn').getAttribute('aria-describedby') }; });
+    ok(`lock note ${tag}: next to "Lock this device", one plain line on what it does`, n.on && n.near && n.desc === 'lock-note' && /Forgets the saved key on this device/.test(n.t) && /passphrase is needed next time/.test(n.t) && /stays sealed either way/.test(n.t), JSON.stringify(n).slice(0, 100));
+    await p.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await sleep(200);
+    if (SHOTS) await snap(p, `p2-lock-note-${tag}`, 'footer');
+    await p.click('#lockbtn'); await p.waitForSelector('#lockscreen:not([hidden])');
+    ok(`lock note ${tag}: locked, the note, the strip and every star go`, !(await p.isVisible('#lock-note')) && !(await p.isVisible('#mstrip')) && (await p.$$('.star')).length === 0);
+    await t.ctx.close();
+  }
+}
+
 // ---------- 5. click audit: press every control, check the DOM answered ----------
 const SIG = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
 async function controls(page) {
@@ -1122,7 +1518,7 @@ async function press(page, sig) {
   // beat scroll-settle races: a wheel event first, then bring the control into view
   return page.evaluate((sig) => {
     const sigOf = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
-    const el = [...document.querySelectorAll('[data-act]')].find((e) => sigOf(e) === sig && !e.disabled && e.getBoundingClientRect().width > 0 && e.offsetParent !== null);
+    const el = [...document.querySelectorAll('[data-act]')].find((e) => sigOf(e) === sig && !e.disabled && !e.closest('svg') && e.getBoundingClientRect().width > 0 && e.offsetParent !== null); // a chart's tap line: its legend button is pressed instead
     if (!el) return false;
     window.dispatchEvent(new WheelEvent('wheel'));
     el.scrollIntoView({ block: 'center' });
@@ -1152,13 +1548,13 @@ async function testClicks(browser) {
       const real = sig.replace(/~2$/, ''); // "~2": the same control pressed a second time
       if (!(await press(p, real))) { if (!/^pan:/.test(sig)) bad.push(sig + ' not found'); continue; } // an edge button shows only while there is more that way: testPan presses them
       const act = real.split(':')[0];
-      const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '') + (e.dataset.chart ? ':' + e.dataset.chart : '') + (e.dataset.dir ? ':' + e.dataset.dir : '')) === sig && !e.disabled && e.offsetParent !== null), real);
+      const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '') + (e.dataset.chart ? ':' + e.dataset.chart : '') + (e.dataset.dir ? ':' + e.dataset.dir : '')) === sig && !e.disabled && !e.closest('svg') && e.offsetParent !== null), real);
       if (act === 'lens' || act === 'chain') {
         const v = await handle.evaluate((s) => s.options[Math.min(1, s.options.length - 1)].value);
         await handle.asElement().selectOption(v);
       } else if (act === 'search') await handle.asElement().fill('VEL');
       else if (act === 'scrub') await handle.evaluate((s) => { s.value = String(Math.max(1, Math.floor(+s.max / 2))); s.dispatchEvent(new Event('input', { bubbles: true })); });
-      else await handle.asElement().click();
+      else { try { await handle.asElement().click({ timeout: 5000 }); } catch (er) { bad.push(sig + ' not clickable'); continue; } }
       await sleep(act === 'jump' || act === 'bt-row' ? 1400 : act === 'play' ? 800 : 350);
       const mut = await p.evaluate(() => window.__mut);
       let good = mut > 0;
@@ -1168,6 +1564,9 @@ async function testClicks(browser) {
         const want = real.split(':')[1];
         good = new RegExp(`[?&]view=${want}(&|$)`).test(u) && /[?&]w=(24h|7d|30d)/.test(u) && /[?&]z=\d/.test(u) && (['scatter', 'health'].includes(want) || /[?&]pool=[0-9a-fx]+/.test(u));
       }
+      if (act === 'ext') good = /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(await p.evaluate(() => (window.__opened || []).slice(-1)[0] || ''));
+      if (act === 'why' || act === 'gas') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
+      if (act === 'fav') good = good && (await p.$$('#fav .mc')).length > 0;
       if (act === 'detail' || act === 'pair') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
@@ -1204,10 +1603,13 @@ async function testMotion(browser) {
   await m.page.click('#bt-lead tr.row');
   await sleep(400);
   await m.page.evaluate(() => { const s = document.querySelector('#rp-scrub'); s.value = '1'; s.dispatchEvent(new Event('input', { bubbles: true })); });
+  await m.page.evaluate(() => { window.__keepBtns = [...document.querySelectorAll('#bt-replay .openwin, #bt-replay [data-act="zoom"], #rp-mleg button')]; });
   await m.page.click('#rp-play');
   await sleep(900);
   const w = await m.page.evaluate(() => { const s = document.querySelector('#rp-scrub'); return [+s.value, +s.max]; });
   ok('motion: otherwise the replay plays as a time-lapse', w[0] > 1 && w[0] < w[1], w.join('/'));
+  const kept = await m.page.evaluate(() => window.__keepBtns.length > 6 && window.__keepBtns.every((b) => b.isConnected));
+  ok('motion: while it plays, the replay\'s buttons stay put (a press mid-play lands)', kept);
   await m.ctx.close();
 }
 
@@ -1217,7 +1619,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, sheets: testSheets, sticky: testSticky, top: testTop, zoomfit: testZoomFit, rows: testRows, refresh: testRefresh, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, sheets: testSheets, sticky: testSticky, top: testTop, zoomfit: testZoomFit, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, highlight: testHighlight, search: testSearch, links: testLinks, locknote: testLockNote, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;
