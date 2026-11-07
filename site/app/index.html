@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iEza6474Pogfe1djGvSISqe37aRAIB/g/lamjCgqApY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9uVhJAeErumJ0FGDpSX7xns2GJkm+1QhlT3RbZ3VHj0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -131,6 +131,7 @@ body.solo main{max-width:none}
    a thin bar for where the view sits, a soft hatch where the data ends */
 .pz{position:relative;--pzf:var(--surface);touch-action:pan-y pinch-zoom;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:grab}
 .pz.dragging{cursor:grabbing}
+.pz.dragging>.pz-hint{display:none}
 .pz.pz-xy{touch-action:pinch-zoom}
 .sheet .pz{--pzf:var(--bg)}
 .sub-card .pz{--pzf:var(--surface2)}
@@ -802,7 +803,7 @@ a.ext svg{width:10px;height:10px;flex:none}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.3.0';
+const BUILD = 'v0.3.1';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1763,7 +1764,7 @@ document.addEventListener('pointermove', (e) => {
     G.drag = true; G.x0 = e.clientX; G.y0 = e.clientY; G.v0 = P.x(); G.w0 = P.xy ? P.y() : 0;
     G.host.classList.add('dragging');
     try { G.host.setPointerCapture(e.pointerId); } catch (er) { /* a synthetic pointer */ }
-    if (S.hintEnd) pzHintDone();
+    if (S.hintEnd) S.hintKill = true; // hidden by .dragging; removed once the drag ends
     return;
   }
   const [lo, hi] = P.lim();
@@ -1775,6 +1776,7 @@ document.addEventListener('pointermove', (e) => {
 function pzEnd(e) {
   if (!G || e.pointerId !== G.pid) return;
   const g = G; G = null;
+  if (S.hintKill) { S.hintKill = false; pzHintDone(); }
   if (!g.drag) { // a tap: two quick taps on the chart (not on a button) reset it
     if (e.type !== 'pointerup' || g.btn) return;
     if (lastTap && lastTap.id === g.id && e.timeStamp - lastTap.t < 380 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { lastTap = null; zreset(g.id); }
@@ -1793,6 +1795,11 @@ function pzEnd(e) {
 }
 document.addEventListener('pointerup', pzEnd);
 document.addEventListener('pointercancel', pzEnd);
+// a drag whose pointerup went missing still ends with the mouse button or the finger
+const pzEndLate = (e) => { if (G && G.drag) pzEnd({ type: 'pointerup', pointerId: G.pid, timeStamp: e.timeStamp, clientX: e.clientX, clientY: e.clientY }); };
+document.addEventListener('mouseup', pzEndLate);
+document.addEventListener('touchend', pzEndLate);
+document.addEventListener('touchcancel', pzEndLate);
 // a trackpad's sideways scroll (or shift + wheel) pans the chart under the pointer; up and down still scroll the page
 document.addEventListener('wheel', (e) => {
   const host = e.target.closest && e.target.closest('.pz');

@@ -574,6 +574,16 @@ async function testPan(browser) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
     // the liquidity chart: the bars reach ±64% (coarser past ±45%), so at its ±45% default a drag shows more; past the
     // last bars it rubber-bands over a "no data" hatch, then springs back to the data's edge
+    // the one-time "drag" hint on the first chart that can pan: hidden while it is dragged (nothing removed mid-drag),
+    // gone and remembered once the drag ends
+    const hid = await p.evaluate(() => { const h = document.querySelector('#best .pz-hint'); return h ? h.closest('[data-pz]').dataset.pz : null; });
+    if (hid) {
+      await pzDrag(p, hid, 120, { up: false }); await sleep(60);
+      const disp = await p.$$eval(`[data-pz="${hid}"] > .pz-hint`, (e) => e.map((x) => getComputedStyle(x).display).join());
+      await p.mouse.up(); await pzSettled(p, hid);
+      ok(`pan ${tag}: the one-time "drag" hint hides while dragging and is gone (remembered) after it (${hid})`, disp === 'none' && (await p.$$('.pz-hint')).length === 0 && (await p.evaluate(() => localStorage.getItem('lps.hint'))) === '1', disp);
+      if (await p.$(`[data-act="zreset"][data-chart="${hid}"]`)) { await pzClick(p, `[data-act="zreset"][data-chart="${hid}"]`); await sleep(200); }
+    } else ok(`pan ${tag}: the one-time "drag" hint shows on the first chart that can pan`, false, 'no hint');
     const ta = await p.$eval('[data-pz="liq-best"]', (h) => getComputedStyle(h).touchAction);
     ok(`pan ${tag}: charts pan sideways and leave vertical swipes and pinch to the page (touch-action ${ta})`, /pan-y/.test(ta) && /pinch-zoom/.test(ta));
     let v = await pzView(p, 'liq-best');
@@ -585,7 +595,7 @@ async function testPan(browser) {
     await p.mouse.up();
     v = await pzSettled(p, 'liq-best');
     ok(`pan ${tag}: the bars past ±45% are reachable, and past them a drag rubber-bands over a "no data" hatch, then springs back`, mid.c < edge0 - 0.005 && hatch > 0 && near(v.c, edge0, 2e-3), `${mid.c} ${hatch} ${v.c}`);
-    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
+    if (await p.$('[data-act="zreset"][data-chart="liq-best"]')) { await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150); }
     // + twice: two zoom steps around the view's centre
     await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
     const z1 = await pzView(p, 'liq-best');
