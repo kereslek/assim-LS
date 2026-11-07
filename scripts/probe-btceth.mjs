@@ -53,6 +53,17 @@ const ETH_SYM = /^(WETH|ETH)$/i;
 const STABLE = /USD|DAI|EUR|GHO|FRAX|MIM|BOLD|DOLA|XAUT|PAXG/i;
 const AERO = '0x940181a94a35a4569e4529a3cdfb74e38fd98631';
 
+// A second step prints the notices that did not fit in the first one (GitHub keeps 10 notices a step).
+const MAX_NOTICES = 9;
+const esc = (x) => x.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+if (process.argv[2] === '--more-notices') {
+  const { chunks } = JSON.parse(fs.readFileSync('out/btceth.json', 'utf8'));
+  for (const c of chunks.slice(MAX_NOTICES, 2 * MAX_NOTICES)) console.log(`::notice title=${c.title}::${esc(c.text)}`);
+  if (chunks.length > 2 * MAX_NOTICES) console.log(`::notice title=More::${chunks.length - 2 * MAX_NOTICES} more parts in the job summary`);
+  process.exit(0);
+}
+const AERO_VOTER = '0x16613524e02ad97edfef371bc883f2f5d6c480a5'; // Aerodrome's Voter on Base: gauges(pool)
+
 const errors = [];
 const note = (area, e) => errors.push(`${area} ${category(e)}`);
 
@@ -202,7 +213,8 @@ for (const net of Object.keys(CHAINS)) {
   const planA = mine.map((p) => (p.kind === 'v4'
     ? [call(C.stateView, 'getSlot0(bytes32)', [{ t: 'bytes32', v: p.id }]), call(C.stateView, 'getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]), poolKeysCall(C.posm, p.id)]
     : [call(p.id, 'token0()'), call(p.id, 'token1()'), call(p.id, 'fee()'), call(p.id, 'tickSpacing()'), call(p.id, 'slot0()'), call(p.id, 'liquidity()'),
-      ...(p.kind === 'slip' ? [call(p.id, 'unstakedFee()'), call(p.id, 'gauge()'), call(p.id, 'stakedLiquidity()')] : [])]));
+      ...(p.kind === 'slip' ? [call(p.id, 'unstakedFee()'), call(p.id, 'gauge()'), call(p.id, 'stakedLiquidity()'), call(p.id, 'factory()'),
+        ...(net === 'base' ? [call(AERO_VOTER, 'gauges(address)', [{ t: 'address', v: p.id }])] : [])] : [])]));
   let a;
   try { a = await mc(planA.flat(), tag); } catch (e) { note(`rpc ${net}`, e); a = new Array(planA.flat().length).fill(null); }
   let k = 0;
@@ -215,6 +227,7 @@ for (const net of Object.keys(CHAINS)) {
       if (key) { p.t0 = lower(key.currency0); p.t1 = lower(key.currency1); p.tickSpacing = key.tickSpacing; p.dynamic = key.fee === DYNAMIC_FEE; p.hooked = key.hooks !== ZERO; }
       const pf = s.protocolFee, pf0 = pf & 0xfff, pf1 = pf >> 12, lp = s.lpFee;
       const tot = (x) => x + lp * (1 - x / 1e6);
+      if (p.dynamic && lp === 0) { p.keepNote = 'fee set by the hook on each swap: not read'; continue; } // 0 in slot0 is not the fee charged
       p.feeRate = (tot(pf0) + tot(pf1)) / 2 / 1e6;
       p.lpRate = ((lp * (1 - pf0 / 1e6)) + (lp * (1 - pf1 / 1e6))) / 2 / 1e6;
       p.keepNote = pf ? 'protocol fee on' : '';
@@ -232,9 +245,10 @@ for (const net of Object.keys(CHAINS)) {
       const fp = Number(s0[5]), f0 = fp % 65536, f1 = Math.floor(fp / 65536), share = (f0 + f1) / 2 / 10000;
       if (share >= 0 && share <= 1) { p.lpRate = p.feeRate * (1 - share); p.keepNote = `protocol ${Number((share * 100).toFixed(1))}%`; }
     } else if (p.kind === 'slip') {
-      const u = word(r[6]), g = word(r[7]), sL = word(r[8]);
+      const u = word(r[6]), g = word(r[7]), sL = word(r[8]), fac = word(r[9]), vg = r[10] ? word(r[10]) : null;
       if (u != null && Number(u) <= 1e6) { p.lpRate = p.feeRate * (1 - Number(u) / 1e6); p.keepNote = `unstaked; staked LPs: fees to voters, AERO instead`; }
-      p.gauge = g != null && g !== 0n ? toAddress(g) : null; p.stakedL = sL;
+      p.gauge = g != null && g !== 0n ? toAddress(g) : vg != null && vg !== 0n ? toAddress(vg) : null; p.stakedL = sL;
+      p.slipDiag = { factory: fac != null ? toAddress(fac) : 'unread', unstakedFee: u != null, poolGauge: g != null && g !== 0n, voterGauge: vg != null && vg !== 0n, staked: sL != null };
     }
   }
   // phase B: decimals, balances (TVL cross-check), gauge emissions
@@ -248,7 +262,7 @@ for (const net of Object.keys(CHAINS)) {
   const dec = new Map([[ZERO, 18]]);
   for (const t of toks) { const v = word(b[k++]); if (v != null && v < 80n) dec.set(t, Number(v)); }
   for (const p of mine.filter((x) => x.kind !== 'v4' && x.t0)) { p.bal0 = word(b[k++]); p.bal1 = word(b[k++]); }
-  for (const p of mine.filter((x) => x.gauge)) { p.rewardRate = word(b[k++]); p.periodFinish = word(b[k++]); }
+  for (const p of mine.filter((x) => x.gauge)) { p.rewardRate = word(b[k++]); p.periodFinish = word(b[k++]); if (p.slipDiag) p.slipDiag.rewardRate = p.rewardRate != null; }
   for (const p of mine) { p.d0 = dec.get(p.t0) ?? null; p.d1 = dec.get(p.t1) ?? null; }
   // phase C: the liquidity within ±9% (a few bitmap words around the price)
   const mapIn = mine.filter((p) => p.tickSpacing > 0 && p.tick != null && p.L != null);
@@ -313,6 +327,8 @@ for (const p of all.filter((x) => x.rewardRate != null)) {
   const live = p.periodFinish != null && Number(p.periodFinish) > nowS;
   p.emitYearUsd = live && isNum(aeroUsd) ? (Number(p.rewardRate) / 1e18) * YEAR * aeroUsd : live ? null : 0;
   p.emitApr9 = isNum(p.emitYearUsd) && p.stakedL != null && p.stakedL > 0n && p.unit9 > 0 ? p.emitYearUsd / (Number(p.stakedL) * p.unit9) : null;
+  // staked liquidity unread: a floor, as if all the active liquidity were staked
+  if (p.emitApr9 == null && p.stakedL == null && isNum(p.emitYearUsd) && p.L > 0n && p.unit9 > 0) { p.emitApr9 = p.emitYearUsd / (Number(p.L) * p.unit9); p.emitFloor = true; }
   p.stakedShare = p.stakedL != null && p.L > 0n ? Number(p.stakedL) / Number(p.L) : null;
 }
 
@@ -333,7 +349,7 @@ function hourlyToDaily(pts) {
 const sig = { cg: dailySigma(btcEthD || [], { days: 30 }), cgHourly: hourlyToDaily(btcEthH), eth: dailySigma(ethUsdD || [], { days: 30 }), btc: dailySigma(btcUsdD || [], { days: 30 }) };
 const marketRatio = btcEthH?.at(-1)?.price ?? btcEthD?.at(-1)?.price ?? null; // ETH per BTC now
 // the busiest BTC/ETH pool on Base: its own daily closes, BTC priced in ETH
-const topBase = pairs.filter((p) => p.net === 'base' && isNum(p.vol24)).sort((a, b) => b.vol24 - a.vol24)[0];
+const topBase = pairs.filter((p) => p.net === 'base' && isNum(p.vol24) && isNum(p.created) && Date.now() - p.created > 35 * 86400e3).sort((a, b) => b.vol24 - a.vol24)[0];
 if (topBase) {
   const btcAddr = topBase.be.btc === 'base' ? topBase.base : topBase.quote;
   const j = await gt(`/networks/base/pools/${topBase.id}/ohlcv/day?aggregate=1&limit=31&currency=token&token=${btcAddr}`);
@@ -344,10 +360,13 @@ if (topBase) {
 }
 const sigma = sig.cg ?? sig.pool ?? null;
 const lvr = { full: isNum(sigma) ? (365 * sigma * sigma) / 8 : null, r9: lvrApr(sigma, 0.09), r5: lvrApr(sigma, 0.05), r2: lvrApr(sigma, 0.02), r1: lvrApr(sigma, 0.01) };
+const lvrH9 = lvrApr(sig.cgHourly, 0.09);
+const ethSide = (p) => p.net !== 'bsc' || p.base === OTHER.bsc[0] || p.quote === OTHER.bsc[0]; // BTCB/WBNB is not a BTC/ETH pair
 for (const p of pairs) {
   // fee ÷ LVR at the same range: the range cancels (both scale with concentration), so one number per pool
-  p.edge = isNum(p.posApr9) && isNum(lvr.r9) && lvr.r9 > 0 ? p.posApr9 / lvr.r9 : null;
-  p.edgeStaked = isNum(p.emitApr9) && isNum(lvr.r9) && lvr.r9 > 0 ? p.emitApr9 / lvr.r9 : null;
+  p.edge = ethSide(p) && isNum(p.posApr9) && isNum(lvr.r9) && lvr.r9 > 0 ? p.posApr9 / lvr.r9 : null;
+  p.edgeH = ethSide(p) && isNum(p.posApr9) && isNum(lvrH9) && lvrH9 > 0 ? p.posApr9 / lvrH9 : null;
+  p.edgeStaked = ethSide(p) && isNum(p.emitApr9) && isNum(lvr.r9) && lvr.r9 > 0 ? p.emitApr9 / lvr.r9 : null;
   // the pool's own price vs the market (ETH per BTC), when it is a BTC vs ETH pool
   if (p.sqrtX96 != null && p.d0 != null && p.d1 != null && isNum(marketRatio) && isOther(p.net, p.t0 === ZERO ? ZERO : p.t0) !== isOther(p.net, p.t1)) {
     const s = sqrtX96ToSqrt(p.sqrtX96), raw = s * s * 10 ** (p.d0 - p.d1); // token1 per token0
@@ -381,8 +400,8 @@ function line(p) {
     `fee ${feeTxt(p.feeRate)} (LP keeps ${keep}${p.keepNote ? ', ' + p.keepNote : ''})`, `TVL ${usd(p.tvl)}`, `vol 24h ${usd(p.vol24)}`, `vol/TVL ${ratio(p.volTvl)}`,
     `LP fees 24h ${usd(p.lpFees24)}`, `fee APR ${pc(p.apr)}${p.analytic ? ' ≈' : ''}`, `±9% ${pc(p.share9)} of TVL`, `±1% ${pc(p.share1)}`,
     `swaps ${cnt(p.swaps24)}, buyers ${cnt(p.buyers24)}, sellers ${cnt(p.sellers24)}`];
-  if (isNum(p.posApr9)) bits.push(`new ±9% position: fees ${pc(p.posApr9)}${p.edge != null ? `, fee÷LVR ${p.edge.toFixed(2)}` : ''}`);
-  if (p.kind === 'slip') bits.push(`staked ${pc(p.stakedShare)} of active; AERO for a staked ±9% position ${pc(p.emitApr9)}${p.edgeStaked != null ? ` (÷LVR ${p.edgeStaked.toFixed(2)})` : ''}`);
+  if (isNum(p.posApr9)) bits.push(`new ±9% position: fees ${pc(p.posApr9)}${p.edge != null ? `, fee÷LVR ${p.edge.toFixed(2)} (hourly σ: ${p.edgeH?.toFixed(2) ?? '—'})` : ''}`);
+  if (p.kind === 'slip') bits.push(`staked ${pc(p.stakedShare)} of active; AERO for a staked ±9% position ${p.emitFloor ? '≥ ' : ''}${pc(p.emitApr9)}${p.edgeStaked != null ? ` (÷LVR ${p.emitFloor ? '≥ ' : ''}${p.edgeStaked.toFixed(2)})` : ''}`);
   if (isNum(p.pxDev)) bits.push(`price vs market ${(p.pxDev * 100).toFixed(2)}%`);
   if (p.group !== 'pair' && age(p) != null) bits.push(`age ${age(p)} d`);
   if (p.kind === 'other') bits.push('not read on-chain');
@@ -392,27 +411,31 @@ function line(p) {
 const sortVol = (a, b) => (b.vol24 ?? -1) - (a.vol24 ?? -1);
 const sections = [];
 for (const net of ['base', 'eth', 'bsc']) {
-  const list = pairs.filter((p) => p.net === net).sort(sortVol);
-  sections.push({ short: `BTC-ETH pools ${CHAINS[net].label}`, title: `BTC/ETH pools · ${CHAINS[net].label}${net === 'bsc' ? ' (context: BTCB vs ETH and WBNB)' : ''} · ${list.length} found`, lines: list.length ? list.map(line) : ['none found (GeckoTerminal unread or no pools)'] });
+  const all = pairs.filter((p) => p.net === net).sort(sortVol);
+  const tiny = (p) => !(p.tvl >= 50_000) && !(p.vol24 >= 20_000);
+  const list = all.filter((p) => !tiny(p)), small = all.filter(tiny);
+  if (small.length) list.push({ summaryLine: `${small.length} more under $50k TVL and $20k a day: ${small.map((p) => `${dexLabel(p.dex)} ${pairName(p)} ${feeTxt(p.feeRate)} (TVL ${usd(p.tvl)}, vol ${usd(p.vol24)})`).join('; ')}` });
+  sections.push({ short: `BTC-ETH pools ${CHAINS[net].label}`, title: `BTC/ETH pools · ${CHAINS[net].label}${net === 'bsc' ? ' (context: BTCB vs ETH and WBNB)' : ''} · ${list.length} found`, lines: list.length ? list.map((p) => p.summaryLine ?? line(p)) : ['none found (GeckoTerminal unread or no pools)'] });
 }
 const fmtS = (x) => (isNum(x) ? `${(x * 100).toFixed(2)}%` : '—');
 sections.push({ short: 'Volatility and LVR', title: 'BTC/ETH volatility and LVR (30 days)', lines: [
   `BTC/ETH daily σ ${fmtS(sig.cg)} (CoinGecko daily), ${fmtS(sig.cgHourly)} (from hourly, ×√24), ${fmtS(sig.pool)} (${sig.poolName ?? 'top Base pool'} daily closes)`,
   `for comparison: ETH/USD ${fmtS(sig.eth)}, BTC/USD ${fmtS(sig.btc)} a day; BTC/ETH variance is ${isNum(sigma) && isNum(sig.eth) ? ((sigma * sigma) / (sig.eth * sig.eth) * 100).toFixed(0) + '%' : '—'} of ETH/USD's`,
   `LVR a year (σ²/8 × 365 × concentration): full range ${pc(lvr.full, 2)}, ±9% ${pc(lvr.r9, 1)}, ±5% ${pc(lvr.r5, 1)}, ±2% ${pc(lvr.r2, 1)}, ±1% ${pc(lvr.r1, 1)}`,
+  `with the hourly σ: full range ${pc(isNum(sig.cgHourly) ? (365 * sig.cgHourly ** 2) / 8 : null, 2)}, ±9% ${pc(lvrH9, 1)}, ±5% ${pc(lvrApr(sig.cgHourly, 0.05), 1)}, ±2% ${pc(lvrApr(sig.cgHourly, 0.02), 1)}, ±1% ${pc(lvrApr(sig.cgHourly, 0.01), 1)}`,
   `market now: ${isNum(marketRatio) ? marketRatio.toFixed(3) : '—'} ETH per BTC`,
 ] });
-sections.push({ short: 'Flow', title: 'Is the flow real? (GeckoTerminal: the last ≤300 trades of 24 h)', lines: flowPools.map((p) => `${CHAINS[p.net].label} · ${dexLabel(p.dex)} · ${pairName(p)} · ${p.flow ? `${p.flow.n} trades over ${isNum(p.flow.hours) ? p.flow.hours.toFixed(1) + ' h' : '—'}, ${p.flow.traders} distinct senders, top sender ${pc(p.flow.top1)} of their volume, top 3 ${pc(p.flow.top3)}, median trade ${usd(p.flow.median)}` : 'trades unread'}`) });
-const MIN_TVL = 250_000, MIN_IN9 = 50_000;
+sections.push({ short: 'Flow', title: 'Is the flow real? (GeckoTerminal: the last ≤300 trades of 24 h)', lines: flowPools.map((p) => `${CHAINS[p.net].label} · ${dexLabel(p.dex)} · ${pairName(p)} ${feeTxt(p.feeRate)} · ${p.flow ? `${p.flow.n} trades over ${isNum(p.flow.hours) ? p.flow.hours.toFixed(1) + ' h' : '—'}, ${p.flow.traders} distinct senders, top sender ${pc(p.flow.top1)} of their volume, top 3 ${pc(p.flow.top3)}, median trade ${usd(p.flow.median)}` : 'trades unread'}`) });
+const MIN_TVL = 250_000, MIN_IN9 = 50_000, MIN_TRADERS = 100; // fewer distinct buyers + sellers a day than that is not a market
 const rank = (group) => {
   // concentrated-liquidity pools only: a v2 pool's in-range value is analytic and an LP can't concentrate there
-  const c = leads.filter((p) => p.group === group), ok = c.filter((p) => !p.analytic && p.tvl >= MIN_TVL && p.in9 >= MIN_IN9 && isNum(p.volPerIn9));
+  const c = leads.filter((p) => p.group === group), ok = c.filter((p) => !p.analytic && p.tvl >= MIN_TVL && p.in9 >= MIN_IN9 && isNum(p.volPerIn9) && (p.buyers24 ?? 0) + (p.sellers24 ?? 0) >= MIN_TRADERS);
   return { considered: c.length, readable: c.filter((p) => !p.analytic && p.in9 != null).length, eligible: ok.length, top: ok.sort((a, b) => b.volPerIn9 - a.volPerIn9).slice(0, 5) };
 };
 const leadLine = (p) => `${(p.volPerIn9 ?? 0).toFixed(1)}× vol per $ within ±9% · ${line(p)}`;
 for (const [g, title, short] of [['base', 'Leads · Base, top 5 by 24 h volume per $ within ±9% (no stablecoins, not BTC/ETH)', 'Leads Base'], ['pcs', `Leads · PancakeSwap (BNB Chain, ${pcsDexes.map((x) => x.split(':')[0]).join(', ') || 'no other chains found'}), top 5 by volume per $ within ±9%`, 'Leads PancakeSwap']]) {
   const r = rank(g);
-  sections.push({ short, title: `${title} · ${r.considered} considered, ${r.readable} read on-chain, ${r.eligible} with TVL ≥ ${usd(MIN_TVL)} and ≥ ${usd(MIN_IN9)} within ±9%`, lines: r.top.length ? r.top.map(leadLine) : ['none eligible'] });
+  sections.push({ short, title: `${title} · ${r.considered} considered, ${r.readable} read on-chain, ${r.eligible} with TVL ≥ ${usd(MIN_TVL)}, ≥ ${usd(MIN_IN9)} within ±9% and ≥ ${MIN_TRADERS} buyers + sellers a day`, lines: r.top.length ? r.top.map(leadLine) : ['none eligible'] });
 }
 // checks: TVL on-chain vs GeckoTerminal, reads, and errors (categories only)
 const tv = all.filter((p) => isNum(p.tvlChain) && p.tvl > 0).map((p) => p.tvlChain / p.tvl);
@@ -423,15 +446,29 @@ sections.push({ short: 'Checks', title: 'Checks', lines: [
   ...Object.entries(chainState).map(([net, s]) => `${CHAINS[net].label}: block ${s.block ?? 'unread'}, pool state read ${s.read} of ${s.pools}, near-price maps ${s.mapped}`),
   `TVL from on-chain balances vs GeckoTerminal: ${within} of ${tv.length} pools within 10%, median ratio ${med(tv)?.toFixed(3) ?? '—'}`,
   `AERO ${isNum(aeroUsd) ? '$' + aeroUsd.toPrecision(3) : 'unpriced'}; CoinGecko key ${CG_KEY ? 'set' : 'not set'}; errors: ${errors.length ? [...new Set(errors)].join(', ') : 'none'}`,
+  `BTC/ETH venues (GeckoTerminal dex ids): ${[...new Set(pairs.map((p) => `${p.net}:${p.dex}`))].join(', ')}`,
+  ...(() => { // Aerodrome-type CL pools by factory: which reads answered (counts only)
+    const by = new Map();
+    for (const p of all.filter((x) => x.slipDiag)) { const k = `${p.net} factory ${p.slipDiag.factory}`; const a = by.get(k) || { n: 0, uf: 0, pg: 0, vg: 0, st: 0, rr: 0, dex: new Set() }; a.n++; a.uf += p.slipDiag.unstakedFee; a.pg += p.slipDiag.poolGauge; a.vg += p.slipDiag.voterGauge; a.st += p.slipDiag.staked; a.rr += !!p.slipDiag.rewardRate; a.dex.add(p.dex); by.set(k, a); }
+    return [...by].map(([k, a]) => `CL ${k} (${[...a.dex].join(', ')}): ${a.n} pools; unstakedFee read ${a.uf}, pool gauge ${a.pg}, voter gauge ${a.vg}, stakedLiquidity read ${a.st}, rewardRate read ${a.rr}`);
+  })(),
 ] });
 
 // console, the job summary, and one notice per section (read back through the check-run annotations)
-const esc = (s) => s.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+const chunks = [];
 for (const s of sections) {
   console.log(`\n## ${s.title}\n` + s.lines.map((l) => '- ' + l).join('\n'));
-  console.log(`::notice title=${s.short}::${esc(`${s.title}\n` + s.lines.join('\n'))}`);
+  const texts = [];
+  let cur = s.title;
+  for (const l of s.lines) {
+    if (Buffer.byteLength(cur + '\n' + l) > 3800) { texts.push(cur); cur = `${s.title} (cont.)`; }
+    cur += '\n' + l;
+  }
+  texts.push(cur);
+  texts.forEach((text, i) => chunks.push({ title: texts.length > 1 ? `${s.short} ${i + 1}` : s.short, text }));
 }
+for (const c of chunks.slice(0, MAX_NOTICES)) console.log(`::notice title=${c.title}::${esc(c.text)}`);
 if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, sections.map((s) => `### ${s.title}\n\n${s.lines.map((l) => '- ' + l).join('\n')}\n`).join('\n'));
 fs.mkdirSync('out', { recursive: true });
-fs.writeFileSync('out/btceth.json', JSON.stringify({ t: Date.now(), sections }, null, 1));
+fs.writeFileSync('out/btceth.json', JSON.stringify({ t: Date.now(), sections, chunks }, null, 1));
 process.exit(0);

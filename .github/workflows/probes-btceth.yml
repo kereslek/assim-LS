@@ -25,3 +25,6 @@ jobs:
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
         run: node scripts/probe-btceth.mjs
+      - name: The notices that did not fit in the step above (10 a step)
+        if: always() && hashFiles('out/btceth.json') != ''
+        run: node scripts/probe-btceth.mjs --more-notices
