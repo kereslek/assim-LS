@@ -7,6 +7,7 @@ import { encodeCall, decodeWords, signed, toAddress } from '../lib/abi.mjs';
 import { topic } from '../lib/keccak.mjs';
 import { liquidityMap, ticksInWord, bitmapWordRange, sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { bandStats, hollowness, depthHistogram, nearestWalls, shapeTag } from '../lib/shape.mjs';
+import { readGas, readPrices, gasStats, COINS } from '../lib/market.mjs';
 
 const ETH_RPCS = {
   publicnode: 'https://ethereum-rpc.publicnode.com', drpc: 'https://eth.drpc.org', '1rpc': 'https://1rpc.io/eth',
@@ -79,6 +80,18 @@ async function probeApis() {
       say(false, `api ${label}`, String(e.message || e).replace(/[^A-Za-z0-9 ]/g, '').slice(0, 40));
     }
   }
+}
+
+// The top strip's market block (lib/market.mjs): which host serves each value. Market data only.
+async function probeMarket(rpc) {
+  const g = await readGas(rpc, { timeoutMs: 20000 });
+  const s = g ? gasStats(g.gwei, [], g.blocks) : null;
+  say(g ? g.source === 'feeHistory' : null, 'market gas', g ? `${g.gwei.toFixed(2)} gwei from ${g.source}${g.blocks ? ` over ${g.blocks.length} blocks` : ''}; vs those blocks: ${s.band ?? '—'} (p10 ${s.p10 ?? '—'}, p50 ${s.p50 ?? '—'}, p90 ${s.p90 ?? '—'})` : 'unread');
+  const ll = await readPrices(async (url, init, t) => (url.includes('coingecko.com') ? null : getJson(url, init, t)), { timeoutMs: 15000 });
+  const cg = await readPrices(async (url, init, t) => (url.includes('llama') ? null : getJson(url, init, t)), { timeoutMs: 15000 });
+  const fmt = (r) => Object.keys(COINS).map((k) => `${k} ${r.px[k].usd == null ? '—' : '$' + r.px[k].usd} (${r.px[k].ch24 == null ? '—' : (r.px[k].ch24 * 100).toFixed(1) + '%'})`).join(', ');
+  say(ll.read === 3 ? true : ll.read ? null : false, 'market defillama', fmt(ll));
+  say(cg.read === 3 ? true : cg.read ? null : false, 'market coingecko', fmt(cg));
 }
 
 async function probeContracts(eth, base) {
@@ -168,6 +181,7 @@ const base = makeRpc([BASE_RPCS.base, BASE_RPCS.publicnode, BASE_RPCS.drpc, BASE
 const ethOk = await probeRpcs('eth', ETH_RPCS, '0x1');
 const baseOk = await probeRpcs('base', BASE_RPCS, '0x2105');
 await probeApis();
+await probeMarket(eth);
 await probeContracts(eth, base);
 const archive = await probeArchive(ETH_RPCS);
 await probeLogs(eth, 'eth', 30);

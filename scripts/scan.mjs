@@ -28,6 +28,7 @@ import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { openLock } from '../lib/lock.mjs';
 import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
+import { marketBlock, carryMarket } from '../lib/market.mjs';
 import { parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
 import { allWindows, deltaFg, gemWarnings, isHooked } from '../lib/windows.mjs';
 import { buildPairs } from '../lib/pairs.mjs';
@@ -611,6 +612,19 @@ async function writeOutputs() {
   say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; snapshot rows backfilled ${backfilled} (batches answered with today's state, dropped: ${staleBatches} of ${batches})`);
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
 
+  // the top strip (lib/market.mjs): gas against its own recent range, ETH/BTC/SOL in USD. Its own time
+  // limits; any failure is null and never fails the pass. The gas history rides along in live.json.
+  let market = null;
+  try {
+    const mr = await timed('market', () => marketBlock({ rpc: makeRpc(RPCS, { timeout: 8000, maxRefusals: 2 }), getJson, prev: prev?.market ?? null,
+      now: passT, key: process.env.COINGECKO_KEY || null, gasPriceWei: gp, timeoutMs: 15000 }));
+    market = mr.market;
+    const g = market.gas;
+    say(g.gwei != null && mr.log.read === 3 ? true : null, 'market', `gas ${g.gwei ?? '—'} gwei (${mr.log.gas ?? 'unread'}), band ${g.band ?? '—'} vs ${g.basis ?? 'no'} range (p10 ${g.p10 ?? '—'}, p50 ${g.p50 ?? '—'}, p90 ${g.p90 ?? '—'}; ${g.hist.length} hourly samples over ${g.histDays} days); prices ${mr.log.read} of 3 read, ${mr.log.agree} of ${mr.log.both} agree within 2% across DefiLlama and CoinGecko`);
+  } catch {
+    try { market = carryMarket(prev?.market ?? null, passT); } catch { market = null; }
+    say(null, 'market', 'the market block broke: every reading null this pass, the gas history carried');
+  }
   const area = (a) => lines.find((l) => l.area === a);
   const chk = (id, label, a) => ({ id, label, ok: area(a)?.ok ?? null, value: null, detail: area(a)?.msg ?? '' });
   // the pair view: every pool of a pair side by side (native ETH counts as WETH)
@@ -627,7 +641,7 @@ async function writeOutputs() {
         chk('volatility-xcheck', 'volatility cross-check', 'volatility check'), chk('fees-vs-aggregator', 'fees vs aggregator', 'fees vs aggregator')],
       sealedLog: logStats ? (({ lines: l, errors, categories }) => ({ lines: l, errors, categories }))(logStats()) : null,
     },
-    bench: BENCH, pools: out, pairs,
+    bench: BENCH, pools: out, pairs, market,
   };
   store.put('live.json', live);
   let histWritten = false;

@@ -13,7 +13,7 @@ import { openStore } from '../lib/store.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DUMMY = 'scan outputs test dummy passphrase, not a secret';
-const LIVE_KEYS = ['v', 't', 'phase', 'build', 'next', 'ticket', 'stopLoss', 'windows', 'defaultWindow', 'gemAt', 'chains', 'health', 'bench', 'pools'];
+const LIVE_KEYS = ['v', 't', 'phase', 'build', 'next', 'ticket', 'stopLoss', 'windows', 'defaultWindow', 'gemAt', 'chains', 'health', 'bench', 'pools', 'market'];
 const POOL_KEYS = ['id', 'chain', 'v', 'pair', 't0', 't1', 'feeTier', 'dynamicFee', 'lpKeeps', 'hooks', 'verified', 'firstSeen', 'createdAt', 'pairAgeDays', 'young',
   'tvlUsd', 'mapUsd', 'aggUsd', 'price', 'marketRatio', 'offMarket', 'shape', 'w', 'checks', 'gemFirstAt'];
 const WIN_KEYS = ['days', 'partial', 'volUsd', 'lpFeesUsd', 'protocolFeesUsd', 'swaps', 'traders', 'sigma', 'range', 'rerangeDays', 'inRangeUsd', 'feeApr', 'lvr',
@@ -45,6 +45,12 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
   assert.equal(live.defaultWindow, '24h');
   assert.ok(live.pools.every((p) => Array.isArray(p.daily) && p.daily.length <= 30 && 'pattern' in p && 'burst' in p && !('daily' in (p.w['24h'] || {}))));
   assert.ok(live.pools.every((p) => p.w['24h'] == null || Array.isArray(p.w['24h'].gem.tags)), 'Gem now carries its tags');
+  // the market block: the fake chain answers eth_gasPrice only and every price host fails, so gas reads
+  // 2 gwei with no range yet, and each price is null, never 0
+  const m = live.market;
+  assert.ok(m && m.t === live.t && m.gas.gwei === 2 && m.gas.source === 'gasPrice' && m.gas.band === null && m.gas.p50 === null, JSON.stringify(m?.gas));
+  assert.deepEqual(m.gas.hist.map((r) => r.slice(1)), [[2, 1]]);
+  assert.ok(['ETH', 'BTC', 'SOL'].every((s) => m.px[s].usd === null && m.px[s].ch24 === null));
   assert.equal(live.ticket, 2718, 'the sealed config reaches live.json');
   assert.equal(live.gemAt, 57);
   assert.ok(live.pools.every((p) => p.w['30d'] && p.w['30d'].days >= 29), 'the backfill gives a full 30-day window on the first pass');

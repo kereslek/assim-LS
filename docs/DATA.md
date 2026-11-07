@@ -41,8 +41,24 @@ This file describes shapes only: it holds no data. Every value below lives seale
   },
   bench: "<pool id>",           // UNI/WETH 0.3% on Ethereum
   pools: [Pool],                // every scored pool, sorted by the default window's gem score
-  pairs: { "<addr>-<addr>": Pair }   // every pool of a pair side by side (lib/pairs.mjs); key = the two token
+  pairs: { "<addr>-<addr>": Pair },  // every pool of a pair side by side (lib/pairs.mjs); key = the two token
                                      // addresses, lower first, native ETH read as WETH
+  market: Market | null             // the top strip (lib/market.mjs); null only if the block itself broke
+}
+Market = {
+  t: <ms>,                          // read during this pass (same as live.t)
+  gas: {                            // Ethereum, in gwei: the next block's base fee + the median recent priority fee
+    gwei: <n|null>, p10: <n|null>, p50: <n|null>, p90: <n|null>,
+    band: "cheap"|"normal"|"busy"|"expensive"|null,   // vs the reference: < p25 cheap, ≤ p60 normal, ≤ p90 busy, else expensive
+    basis: "history"|"blocks"|null,  // history = the hourly samples below (12+ hours of them); blocks = the last ~1024
+                                     // blocks (about 3.4 h) while the history is shorter; null = nothing to compare: no band
+    histDays: <n>,                   // days the hourly history spans (0 when empty)
+    source: "feeHistory"|"gasPrice"|null,   // eth_feeHistory, else the eth_gasPrice fallback (no blocks basis then)
+    hist: [[<hour ms>, <mean gwei>, <passes>]]   // the rolling history the scanner carries between passes: one mean
+                                     // per UTC hour, last 7 days (≤ 168 rows); percentiles weight each hour once
+  },
+  px: { ETH|BTC|SOL: { usd: <n|null>, ch24: <fraction|null>, src: "defillama"|"coingecko"|null } }
+                                    // ch24 = 24 h change as a fraction (−0.031 = −3.1%); DefiLlama first, CoinGecko fills a gap
 }
 Pair = {
   label: "<SYM>/<SYM>", pools: ["<pool id>"], best: "<pool id>"|null,   // best = highest net APR in the default
@@ -51,6 +67,8 @@ Pair = {
        rows: [{ id, volumeShare: <0..1|null>, feesPer1kDay: <USD a day for $1,000 at the price, after dilution|null>, net: <APR|null> }] } }
 }
 ```
+
+`market` feeds the dashboard's top strip, so the page never calls a third party (no CSP holes, no viewer IP sent out). Hosts: gas from the scanner's Ethereum RPCs (`eth_feeHistory` over the last 1024 blocks, or 100 where a node caps the span, with the 50th-percentile reward; `eth_gasPrice` as the fallback); prices from `coins.llama.fi/prices/current` and `coins.llama.fi/percentage?period=24h` (ids `coingecko:ethereum`, `coingecko:bitcoin`, `coingecko:solana`), cross-checked with `api.coingecko.com/api/v3/simple/price` (the Demo key, in a header, when set). Gas and prices each have a 15-second limit and fail separately to `null`; a pass that reads nothing still carries `gas.hist` forward. The countdown uses `next` and "updated" uses `t`.
 
 Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggregator`, `maps-complete`, `lp-book`, `creation-events`, `volatility-xcheck`, `fees-vs-aggregator`.
 
