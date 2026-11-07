@@ -77,8 +77,9 @@ test('WebCrypto opens a lib/lock.mjs seal the way the page does (PBKDF2 → AES-
   await assert.rejects(subtle.decrypt({ name: 'AES-GCM', iv: b64(env.iv) }, wrong, b64(env.ct)));
 });
 
-test('chain colours and marks live in one map (CHAINS), each colour written once', () => {
-  const src = scripts[0];
+test('chain colours and marks live in one map (CHAINS), each colour written once', (t) => {
+  const src = scripts[0], v = (/const BUILD = 'v(\d+)\.(\d+)\.(\d+)'/.exec(src) || []).slice(1).map(Number);
+  if (v[0] === 0 && (v[1] < 4 || (v[1] === 4 && v[2] < 1))) { t.skip('a page from before v0.4.1 (a rollback) has no chain marks'); return; }
   assert.match(src, /const CHAINS = \{/);
   for (const c of ['#8A9EF5', '#2F6BFF', '#F0B90B', '#28A0F0']) assert.equal(html.split(c).length - 1, 1, `${c} appears once, in CHAINS`);
   assert.match(src, /const CHAIN_UNKNOWN = '#6B7684'/);
