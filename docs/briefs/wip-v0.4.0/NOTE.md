@@ -1,38 +1,18 @@
-Run 2 part 3 (dashboard v0.4.0) — work in progress, NOT pushed. Working tree left as is.
+Run 2 part 3 (dashboard v0.4.0): SHIPPED in 217169f (pushed, deployed). wip.patch, overlap.mjs and gestures.mjs here are
+now obsolete (applied); delete this folder once site.yml and the live audit are green.
 
-Files: wip.patch (git diff of tracked files) + new untracked tools/overlap.mjs and tools/gestures.mjs (copies here).
+Local: full Chromium site-test 818 checks, 0 fail (all widths + reduced motion, 0 overlaps); planted faults caught.
+Backup run 42391353075 green before the push.
 
-Done (in the working tree):
-- site/app/index.html (BUILD v0.4.0, CSP re-hashed):
-  - slim sticky bar (#top, ~49 px: mark, freshness, refresh, window pills); hides on scroll down, returns on scroll up
-    (--hdr / --hdrh vars); phase line + sealed + market strip moved to #subhead (scrolls away, never sticky);
-    strip wraps instead of overlapping/clipping; sticky table copies dock under the bar; jumps/pop-ups respect the bar.
-  - zoom model: liquidity level 0 = the map's own depthSpan (no NO-DATA hatch when zoomed out), default = fine edge
-    (±45%); continuous levels; pinch (two pointers, zoom around midpoint, two-finger pan), ctrl+wheel trackpad pinch,
-    touch-action pan-y (pz-xy: none), non-passive touchmove hold during chart gestures, gesturestart/change blocked on
-    charts, smaller rubber band, double-tap kept.
-  - one GLOSSARY (GLOSS) + term()/termB() info buttons (44 px tap boxes): tags, meta (fee tier/chain/version), range,
-    gem ring, net APR, LVR, chips, breakdown + liquidity legends, panel facts + every-window rows, similar-card
-    reasons, sealed badge, watchdog. Watchdog relabelled "Watchdog last restart" (— when null).
-  - "Sign out on this device" + new note text; liquidity label declutter (beyond labels move/hide, no-data label hides);
-    one-time hint is a coach mark with a backdrop; detail panel top folds on scroll down; fav card names leave room for
-    the star.
-- tools/site-test.mjs: new groups overlap, touch, header, terms, fold; existing checks updated (sign-out, zoom extent,
-  touch-action, sticky under the bar); market moved early in the order (its countdown needs a fresh fixture).
-- tools/live-audit.mjs: part3 (fingers: drag, pinch, two-finger pan, pinch-closed stops at the map, double tap,
-  gesturestart; bar; term note; panel fold) + overlaps() (safe report: sections and element kinds, never text);
-  sign-out wording; STUCK docks under the bar; similar-card check compares pool ids.
-- tools/fixtures/make-fixture.mjs: new case "long" (worst-case names/numbers); nomarket also nulls watchdogLast.
-
-Test state (Chromium, local):
-- full run before the last two edits: 732 checks, 4 fail — all "market … countdown" (fixture's next pass expired
-  because the suite now runs 11 min; fixed by moving market early, verified in a targeted run).
-- targeted run after the fav-card fix: market/layout/fav pass; overlap group FAILS only because of the favourites step
-  I added last (it stars 5 table rows, then the detector reports "#all: button.star × button.star" and long-case
-  "span.pn2 × button.star" in the All pools table). Before that step was added the overlap group was 0 findings.
-  Left: find why starred table rows report star-glyph overlaps (likely the starPop scale animation still running,
-  or a real collision of the star with long names in td.pool) and fix; then full run, push, check site.yml WebKit
-  job and the live audit.
-- live-audit dry run on local fixtures (Chromium as both profiles): passes except the fav card overlap (now fixed in CSS)
-  and the similar-card name check (now fixed). Not yet run on the deployed page or in WebKit.
-- Planted fault: the overlap group FAILS on the old v0.3.2 page (header strip clip at 320, cpill × bylab chart labels).
+Left (CI on 217169f, logs show check names only):
+- site.yml Chromium (Pixel 7): 769 checks, 1 fail: "table w360: Pool, Gem, Net APR and Why show without a sideways
+  scroll" (Why column ends 6 px past 360 in device mode; local 360 passes). Likely a fixture row with more Why icons.
+- site.yml WebKit (iPhone 15): 736 checks, 9 fail: pan phone (drag and the edge button don't move the depth chart;
+  spring-back lands 4e-3 off), pan phone daily-detail drag, touch phone (vertical swipe; then a null scrollIntoView
+  stopped the group), top phone (back-to-top covers a control at the page bottom), table w360 (as above). The v0.4.0
+  touch/pinch work had never run in WebKit before: check pointer handling there first.
+- live audit run 42392685986: laptop 68/69, iPhone 42/45. Both: "lock: the unlocked data is gone from the page"
+  (some element keeps the best pool's name after Sign out; not seen on fixtures). iPhone only: click failures pan ×1,
+  why (not clickable) ×1; overlap: backtest scatter labels text.t-fg × text.t-acc ×7 (WebKit only).
+- Re-pin loop/PIN to 0a85d84: the page handles depthEdges (uncapped far bars), fullRangeUsd/fullRangeSpan (thin flat
+  band under the bars, bars exclude it), beyond 0 = empty, null = hatched, 14 d / 90 d history.
