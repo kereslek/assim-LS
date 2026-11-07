@@ -27,6 +27,10 @@ both times 0 overlaps, 0 page errors, 0 click failures, sign-out check PASSED. T
 in WebKit (bar on top while scrolling; then the sticky All pools header). Both now wait for frames and transitions
 (tools/live-audit.mjs REST/rest(), every scroll read in gestures/part3/overlaps) — committed, not yet run on real data.
 
+Rollback snag (fixed): the new static chain-map test failed on the v0.3.2 page, so the pages build refused both rollback
+pushes (b01b42b, a796215) and v0.4.1 stayed live until the test skipped pre-v0.4.1 pages (97f5ab4) and pages was
+re-dispatched (run 42416537524, green, v0.3.2 live from about 22:40 CET).
+
 Next (in order):
 1. Dispatch site.yml with page=tools/candidate/index.html, only=none, audit=yes; then backup.yml; both green.
 2. cp tools/candidate/index.html site/app/index.html, push; wait for pages + live-audit; roll back to 1b050a3's page if red.
