@@ -8,9 +8,9 @@ This file describes shapes only: it holds no data. Every value below lives seale
 |---|---|---|---|
 | `lock.json` | no (salt, rounds, a sealed check string) | lock init, once | never; a new passphrase means a new lock |
 | `live.json` | yes | every scanner pass | each pass |
-| `history.json` | yes | scanner | hourly |
+| `history.json` | yes | scanner | when a pool gains an hourly row (about hourly; every pass while the backfill catches up) |
 | `backtest.json` | yes | backtest job | daily and on demand |
-| `snapshots.json` | yes | scanner | when a pool gains an hourly row (about hourly) |
+| `snapshots.json` | yes | scanner | when a pool gains an hourly row (about hourly; every pass while the backfill catches up) |
 | `inbox.json` | no (the X25519 public key only) | lock init | with `lock.json` |
 
 - **Envelope** (`lib/lock.mjs`): `{"lock":1,"t":<ms>,"z":1,"iv":"<b64>","ct":"<b64>"}`. `z` = gzip before sealing; only `t` is readable, so a staleness check needs no key.
@@ -94,14 +94,22 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
     lpsAtPrice: <n|null>,
     depth: [[<log offset of the bin's centre>, <usd|null>], ...],   // the liquidity chart's bars, ascending (lib/shape.mjs
                                 //   depthProfile): 48 fine bins across ±0.45, the same bars as before, then 5 coarser bins
-                                //   a side out to depthSpan; a null bar = that stretch of the map was not read (never 0);
+                                //   a side out to ±0.6375 as before, then up to 5 "far" bins a side, each twice as wide as
+                                //   the one before, out to the side's furthest initialized tick, at most ±ln 10 (price ×10 /
+                                //   ÷10): 58 to 68 bars; a null bar = that stretch of the map was not read (never 0);
                                 //   [] = no map this pass, or token1 unpriced
-    depthSpan: [<min log offset>, <max log offset>]|null,   // the bars' outer edges: [−0.6375, 0.6375] (price −47% / +89%);
-                                //   null when depth is []
-    depthStep: { fine: 0.01875, coarse: 0.0375, edge: 0.45 }|null,   // bar widths in log price: fine inside ±edge, coarse from
-                                //   there to depthSpan (a coarse bar spans twice the price range of a fine one)
+    depthEdges: [<log offset>, ...]|null,   // every bar's edges, ascending, one more than the bars: bar i spans depthEdges[i]
+                                //   to depthEdges[i + 1] (draw widths from these: the far bars are 0.075, 0.15, 0.3, 0.6 and
+                                //   the rest to ln 10 wide); e.g. [−2.30259, −1.7625, −1.1625, −0.8625, −0.7125, −0.6375, −0.6,
+                                //   …, 0.6375, 0.7125, 0.8625, 1.1625, 1.7625, 2.30259]; null when depth is []
+    depthSpan: [<min log offset>, <max log offset>]|null,   // the bars' outer edges = depthEdges' first and last: from
+                                //   [−0.6375, 0.6375] (price −47% / +89%) for a map that ends inside them, out to
+                                //   [−2.30259, 2.30259] (÷10 / ×10); per side and per pool; null when depth is []
+    depthStep: { fine: 0.01875, coarse: 0.0375, edge: 0.45 }|null,   // kept for the first readers: bar widths in log price, fine
+                                //   inside ±edge, coarse from there to ±0.6375 (the far bars' widths are in depthEdges only)
     beyond: { below: <usd|null>, above: <usd|null> },   // everything past depthSpan on that side, out to the last tick: a bucket
-                                //   to label ("$1.2M further down"), not a bar; null = not read, or no map
+                                //   to label ("$1.2M further down"), not a bar; 0 (real) when the bars reach the side's last
+                                //   tick; null = not read, or no map
     walls: { below: <log offset|null>, above: <log offset|null> }   // found on the ±0.45 fine bars only, as before
   },
   w: { "24h": Window|null, "7d": Window|null, "30d": Window|null },
@@ -114,7 +122,7 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
 }
 ```
 
-**The liquidity chart's bins.** The bars plus both `beyond` buckets add up to `mapUsd` (each value is rounded to 5 significant digits). The ±0.45 bars, `parked`, `above`, `band9` and `walls` are computed exactly as before the chart was widened (`test/shape.test.mjs`, `test/scan-outputs.test.mjs`). The scanner reads each map in full or not at all, so today a pool has either every bar or none; `depthProfile` already takes a list of unread tick chunks for a partial read. An unread chunk hides itself and everything past it on its side (the map is walked out from the price), so those bars and that side's `beyond` are `null`; a chunk that holds the price hides every bar. A bar past the last tick a pool can use is a real 0.
+**The liquidity chart's bins.** The bars plus both `beyond` buckets add up to `mapUsd` (each value is rounded to 5 significant digits). The ±0.45 bars, the coarse bars to ±0.6375, `parked`, `above`, `band9` and `walls` are computed exactly as before the chart was widened (`test/shape.test.mjs`, `test/scan-outputs.test.mjs`). Past ±0.6375 the far bars run, on each side, until the side's furthest initialized tick is inside the last one, or to ±ln 10: a pool whose liquidity ends at +0.80 has two far bars above (to 0.8625) and `beyond.above` = 0, a real 0; a pool with liquidity past ×10 (a full-range position, say) gets all five a side, with what lies past ×10 in `beyond`. The edges are the same for every pool (only how many far bars each side has differs), and the page can zoom out to `depthSpan` without a "no data" stretch: past it there is either `beyond` or nothing at all. The scanner reads each map in full or not at all, so today a pool has either every bar or none; `depthProfile` already takes a list of unread tick chunks for a partial read. An unread chunk hides itself and everything past it on its side (the map is walked out from the price), so those bars and that side's `beyond` are `null`, and that side's far bars run out to ±ln 10 (where its last tick is, nobody knows); a chunk that holds the price hides every bar. A bar past the last tick a pool can use is a real 0. Size: about 9 KB more in the sealed `live.json` for about 100 pools (MOCKUP · MADE-UP NUMBERS measurement).
 
 ### Window
 
@@ -142,11 +150,13 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
 ```
 {
   v: 1, t: <ms>,
-  pools: { "<id>": { h: [[t, price, liquidity, lpFeesUsd, parked]],    // hourly, last 7 days
-                     d: [[t, price, lpFeesUsd, volUsd, parked]] } },   // daily, last 30 days
-  health: [[t, okPasses, passes, unread]]                              // hourly
+  pools: { "<id>": { h: [[t, price, liquidity, lpFeesUsd, parked]],    // hourly, last 14 days (≤ 337 rows)
+                     d: [[t, price, lpFeesUsd, volUsd, parked]] } },   // daily, last 90 days (≤ 91 rows)
+  health: [[t, okPasses, passes, unread]]                              // hourly, last 7 days
 }
 ```
+
+Built by `lib/charts.mjs` from `snapshots.json`, one row per stored snapshot row, ascending by `t` (the row's own time: a pass time, or a backfilled block's timestamp). `price` = token1 per token0 (8 significant digits); `liquidity` = the pool's active liquidity (8 significant digits); `parked` 0..1 (4 decimals). `lpFeesUsd` = the pool's LP fees **from the row before to this one** (fee growth × the interval's liquidity, at the pass's token prices), `volUsd` = those fees ÷ the LP fee rate. Rows are not always exactly an hour or a day apart (a gap the backfill has not filled yet, or a row a few minutes off its mark), so a chart of fees per hour or per day divides by the gap to the row before. `null` = unread: the first row, a row whose counters were not read and the row after it. A pool's rows start where its data starts: hours and days before the pool existed have **no row at all** (absent, never a 0 row), and a pool younger than the span simply has fewer rows. Size, sealed, for about 100 pools: about 0.55 MB with 7 and 30 days, about 1.1 MB with 14 and 90 (made-up data of the same shape; 60 days instead of 90 would save under 10%, the 14 days of hours are most of it).
 
 ## snapshots.json
 
@@ -154,12 +164,18 @@ The raw state each pass reads, from which every time window is recomputed (`lib/
 
 ```
 {
-  v: 1, t: <ms>,
-  pools: { "<id>": { h: Tier, d: Tier } }   // h: first row of each UTC hour, 7 days; d: first row of each UTC day, 30 days
+  v: 1, t: <ms>, fix: 2,
+  pools: { "<id>": { h: Tier, d: Tier,      // h: first row of each UTC hour, 14 days; d: first row of each UTC day, 90 days
+                     nb: <ms> } }           // optional: the latest moment a backfill found the pool not there yet
 }
 Tier = { t: [<ms, then deltas>], block: [<n, then deltas>], sqrtP: ["<decimal>"], tick: [<n>], L: ["<decimal>"],
          fg0: ["<decimal>"], fg1: ["<decimal>"], parked: [<basis points>] }   // parallel arrays; null = unread
 ```
+
+- **What reads what.** `history.json` charts every row. The time windows read exactly what they always read: 7 days of the hourly tier (windows up to 7 days) and 30 days of the daily one, each plus one step (`lib/windows.mjs` `READS`), so `24h`, `7d` and `30d` are unchanged by the longer store (`test/windows.test.mjs`); a configured window longer than 30 days would read its own span of daily rows.
+- **Never a pre-creation row.** A row with no price read and both fee counters at exactly 0 is what a pool that did not exist yet answers (a v4 pool before its initialisation reads 0 everywhere); it is never stored, and an older store holding one loses it on load. Stored, it would book the pool's whole lifetime of fees into its first real interval.
+- **Backfill** (`lib/backfill.mjs`, run by the scan through archive nodes: drpc, mevblocker, blockscout). Each pass asks for the moments a pool's series is missing: 5 minutes past each empty UTC hour of the last 14 days and past the first hour of each empty UTC day of the last 90 (one read fills a day and its first hour). Order: the 24h window's hours, the 30d window's days, the 7d window's hours, then the older days, then the older hours; newest first. Budget per pass: at most 120 batches (one block and up to 250 calls each, 3 at a time) and none started after 60 seconds; whatever is left is still missing next pass, so the backfill resumes by itself until both tiers are full, and costs nothing once they are. Each moment's block comes from the (time, block) pairs the store holds; where the moments reach past them, a few block timestamps are read first, one every 3 days, so the clock interpolates instead of extrapolating (missed slots make a plain 12 s a block land hours off at 90 days). Each batch's own block timestamp (Multicall3) must be about as old as its block: a node that answers an old block with today's state is dropped. A pool not there yet at a moment (a v3 address with no code, a pool not initialised, a v4 pool StateView reads 0 for) gives no row; the moment becomes `nb`, and nothing at or before it, or before the pool's creation event, is asked for again. A row a few minutes off its mark is real data and is kept. The past maps (10, 20 and 30 days ago, for the persistence check) now carry their block timestamp too, and become full snapshot rows with their parked share.
+- **Size**, sealed, for about 100 pools: about 1.7 MB with 7 and 30 days, about 3.6–3.8 MB with 14 and 90 (made-up data of the same shape).
 
 ## backtest.json
 

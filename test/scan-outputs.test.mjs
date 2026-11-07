@@ -60,19 +60,25 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
   assert.ok(snaps.v === 1 && Object.keys(snaps.pools).length === live.pools.length);
   assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'out', 'shortlist.json'), 'utf8')).ids.length >= 1);
   for (const f of fs.readdirSync(path.join(dir, 'out', 'data'))) assert.ok(!fs.readFileSync(path.join(dir, 'out', 'data', f), 'utf8').includes('2718'), `${f} is sealed`);
-  // the liquidity chart's bins (docs/DATA.md): ±45% as before, coarser out to ±0.6375, then one beyond bucket a side;
-  // all of it together is the whole map (the fake world parks a wall at +60..+90%, mostly past the bars)
+  // the liquidity chart's bins (docs/DATA.md): ±45% as before, coarser out to ±0.6375, far bins doubling out to ×10 / ÷10
+  // (every fake pool has a thin full range), then one beyond bucket a side; all of it together is the whole map
+  const EDGES_FAR = [-2.30259, -1.7625, -1.1625, -0.8625, -0.7125, -0.6375];
   for (const p of live.pools) {
     const s = p.shape;
-    assert.equal(s.depth.length, 58, p.pair);
-    assert.deepEqual(s.depthSpan, [-0.6375, 0.6375]);
+    assert.equal(s.depth.length, 68, p.pair);
+    assert.deepEqual(s.depthSpan, [-2.30259, 2.30259]);
+    assert.equal(s.depthEdges.length, 69);
+    assert.deepEqual(s.depthEdges.slice(0, 6), EDGES_FAR);
+    assert.deepEqual(s.depthEdges.slice(-6), EDGES_FAR.map((x) => -x).reverse());
     assert.deepEqual(s.depthStep, { fine: 0.01875, coarse: 0.0375, edge: 0.45 });
-    assert.ok(s.depth.every(([o, v], i) => Math.abs(o) < 0.6375 && Number.isFinite(v) && v >= 0 && (i === 0 || o > s.depth[i - 1][0])), p.pair);
+    assert.ok(s.depth.every(([o, v], i) => o > s.depthEdges[i] && o < s.depthEdges[i + 1] && Number.isFinite(v) && v >= 0), p.pair);
     assert.ok(s.beyond.below >= 0 && s.beyond.above >= 0);
     const all = s.depth.reduce((a, d) => a + d[1], 0) + s.beyond.below + s.beyond.above;
     assert.ok(Math.abs(all / p.mapUsd - 1) < 1e-4, `${p.pair}: bars + beyond ${all} vs map ${p.mapUsd}`);
   }
-  assert.ok(live.pools.some((p) => p.shape.beyond.above > 0.5 * p.mapUsd), 'the far wall shows up in beyond');
+  // the fake world parks a wall at +60..+90%: it was in beyond, now it is on the far bars
+  const one = live.pools.find((p) => p.pair === 'ONE/WETH').shape, onFar = one.depth.filter(([o]) => o > 0.45).reduce((a, d) => a + d[1], 0);
+  assert.ok(onFar > 0.5 * (onFar + one.beyond.above) && one.beyond.above < onFar, `far bars ${onFar} vs beyond ${one.beyond.above}`);
   // regression: the wider chart left parked, above, band9, walls and the ±45% bars exactly as the scan published
   // them before it (golden values from that scan of the same fake world; fine = a hash of the ±45% bars)
   const GOLD = {
@@ -86,9 +92,40 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
     assert.ok(s, pair);
     assert.deepEqual({ parked: s.parked, above: s.above, band9: s.band9, walls: s.walls, fine: hash(s.depth.filter(([o]) => Math.abs(o) < 0.45)) }, g, pair);
   }
+  // history.json (lib/charts.mjs) on the first pass: the budgeted backfill fills the 24h and 30d windows' moments first
+  for (const [id, hp] of Object.entries(hist.pools)) {
+    assert.ok(hp.d.length >= 30 && hp.h.length >= 24, `first pass: ${hp.d.length} days, ${hp.h.length} hours`);
+    assert.ok([hp.h, hp.d].every((rows) => rows.every((r, i) => r.length === 5 && (i === 0 || r[0] > rows[i - 1][0]))), id);
+  }
   // planted faults: a missing field, a window field left undefined, or a NaN fails the contract check
   const bad1 = structuredClone(live); delete bad1.pools[0].shape;
   const bad2 = structuredClone(live); delete bad2.pools[0].w['30d'].feeApr;
   const bad3 = structuredClone(live); bad3.pools[0].w['30d'].net = NaN;
   for (const b of [bad1, bad2, bad3]) assert.equal(contractOk(b), false);
+});
+
+test('the backfill resumes pass after pass until history.json holds 90 days and 14 days of hours, the windows unchanged', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lps-scan-'));
+  initLock({ dir: path.join(dir, 'lock'), passphrase: DUMMY, iterations: 1000 });
+  const pass = () => spawnSync(process.execPath, [path.join(ROOT, 'tools', 'fakes', 'fake-scan.mjs')], { cwd: dir, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY } });
+  const store = openStore({ lockDir: path.join(dir, 'lock'), outDir: path.join(dir, 'out', 'data'), env: { LOCK_PASSPHRASE: DUMMY } });
+  const counts = [];
+  let first = null;
+  for (let k = 0; k < 5; k++) {
+    const r = pass();
+    assert.ok(r.stdout.includes('PASS sealed outputs'), r.stdout + r.stderr);
+    const h = store.get('history.json');
+    if (k === 0) first = store.get('live.json');
+    counts.push(Object.values(h.pools).map((p) => [p.d.length, p.h.length]));
+  }
+  // each pass adds rows until both tiers are full; then nothing more is asked for
+  const days = counts.map((c) => Math.min(...c.map((x) => x[0]))), hours = counts.map((c) => Math.min(...c.map((x) => x[1])));
+  assert.ok(days.every((d, i) => i === 0 || d >= days[i - 1]) && hours.every((h, i) => i === 0 || h >= hours[i - 1]), `days ${days}, hours ${hours}`);
+  assert.ok(days.at(-1) >= 90 && hours.at(-1) >= 14 * 24, `after 5 passes: ${days.at(-1)} days, ${hours.at(-1)} hours`);
+  assert.ok(days[0] < days.at(-1) || hours[0] < hours.at(-1), 'one pass does not do it all: the budget holds');
+  // the windows read only what they always read: the 30d window covers 30 days, not 90
+  const live = store.get('live.json');
+  assert.ok(live.pools.every((p) => p.w['30d'] && p.w['30d'].days <= 31 && p.w['7d'].days <= 7.1), 'windows keep their spans');
+  assert.ok(live.pools.every((p) => p.daily.length <= 30));
+  for (const p of live.pools) assert.equal(p.w['30d'].lpFeesUsd, first.pools.find((x) => x.id === p.id).w['30d'].lpFeesUsd, `${p.pair}: the 30d fees do not see the older rows`);
 });

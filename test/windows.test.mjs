@@ -283,3 +283,27 @@ test('a backfill that measured the shape on a few past days still gives a 30-day
   const thin = merge(emptySeries(), keep(0), { now: NOW });
   assert.equal(run({ ...sim, series: thin }, '30d').parkedAvg, null);
 });
+
+// ---- the longer store: 14 days of hours and 90 of days feed history.json, never the windows -----------
+test('old windows are unchanged: the 24h, 7d and 30d windows read the same rows as when the store kept 7 and 30 days', () => {
+  // 40 days of passes every half hour; the price swings hard in days 8–14 and stays calm in the last week
+  const swing = (t) => 2.5 * Math.exp(t < NOW - 7 * DAY && t > NOW - 14 * DAY ? 0.08 * Math.sin(t / 2.7e6) : 0.003 * Math.sin(t / 3.1e6));
+  const sim = simulate({ from: NOW - 40 * DAY, passMin: 30, price: swing, swapsPerHour: 3, seed: 31 });
+  const full = sim.series;
+  assert.ok(full.h[0].t < NOW - 13.9 * DAY && full.d[0].t < NOW - 39 * DAY, 'the store keeps 14 days of hours and every day');
+  // what the store kept before: 7 days of hours and 30 of days, each plus one step
+  const old = (s) => ({ h: s.h.filter((r) => r.t >= NOW - 7 * DAY - HOUR), d: s.d.filter((r) => r.t >= NOW - 31 * DAY) });
+  const input = (series) => ({ series, cur: sim.cur, pool: POOL, config: CONFIG, chain: 'ethereum' });
+  assert.deepEqual(allWindows(input(full)), allWindows(input(old(full))), 'a full store');
+  // a store with few daily rows: the 30d σ falls back to the hourly rows, and must read only the last 7 days of them
+  const sparse = { h: full.h, d: full.d.slice(-4) };
+  const ok = allWindows(input(sparse)), was = allWindows(input(old(sparse)));
+  assert.deepEqual(ok, was, 'a store with few days');
+  // planted fault: a window maths that reads every row the store keeps sees the stormy second week
+  const faulty = allWindows(input(sparse), { parts: { ...PARTS, view: (s) => s } });
+  assert.ok(faulty['30d'].sigma > 2 * ok['30d'].sigma, `30d σ ${faulty['30d'].sigma} with every row vs ${ok['30d'].sigma}`);
+  assert.notDeepEqual(faulty['30d'], ok['30d']);
+  // a configured 90-day window reads its own span of daily rows
+  const w90 = windowMetrics({ ...input(full), window: '90d' });
+  assert.ok(w90 && w90.days > 39 && w90.partial === true, `90d window covers ${w90?.days} days`);
+});

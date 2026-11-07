@@ -30,8 +30,10 @@ import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
 import { marketBlock, carryMarket } from '../lib/market.mjs';
 import { parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
-import { allWindows, deltaFg, gemWarnings, isHooked } from '../lib/windows.mjs';
+import { BACKFILL, blockClock, storePoints, planBackfill, runBudgeted, retryJobs, readBackfill, probeMoments, oldestMissing } from '../lib/backfill.mjs';
+import { allWindows, gemWarnings, isHooked } from '../lib/windows.mjs';
 import { buildPairs } from '../lib/pairs.mjs';
+import { historyRows } from '../lib/charts.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, MAX_WORDS = 600_000, DAY_BLOCKS = 7200, GROUP = 40;
 const EXAMPLE_TICKET = 1000, HOLD_DAYS = 14, RERANGE_GAS = 630_000, MARKOUT_BLOCKS = 25; // a made-up example size, not anyone's position
@@ -266,7 +268,8 @@ const hist = { series: new Map([...cgHist.series, ...llHist.series]), unread: ll
 // Each pool's own price at 31 daily blocks (archive state): that price is what range exits and LVR
 // follow. Each block's own timestamp comes along (Multicall3), so the market is sampled at the same moments.
 const nowSec = Math.floor(Date.now() / 1000);
-const pxCalls = [{ target: MULTICALL3, data: encodeCall('getCurrentBlockTimestamp()') }, ...mapped.map((p) => (p.v === 3 ? { target: p.id, data: encodeCall('slot0()') } : v4Slot0Call(C.v4StateView, p.id)))];
+const tsCall = { target: MULTICALL3, data: encodeCall('getCurrentBlockTimestamp()') };
+const pxCalls = [tsCall, ...mapped.map((p) => (p.v === 3 ? { target: p.id, data: encodeCall('slot0()') } : v4Slot0Call(C.v4StateView, p.id)))];
 const pxDays = await timed('daily prices', () => mapLimit(Array.from({ length: 31 }, (_, k) => block - k * DAY_BLOCKS), 3, (b) => amc(pxCalls, '0x' + b.toString(16))));
 const dayTs = pxDays.map((res, k) => { const ts = readUint(res[0]); return ts != null ? Number(ts) : nowSec - k * 86400; });
 mapped.forEach((p, i) => {
@@ -323,29 +326,38 @@ let budget = 250_000;
 const cands = mapped.filter((p) => p.hollow >= 0.5 || p.id === BENCH).filter((p) => { const w = wordsFor(p.tickSpacing).length * 3; if (w > budget && p.id !== BENCH) return false; budget -= w; return true; });
 const nowSeg = new Map(ready.map((p, i) => [p.id, maps[i]?.segments ?? null]));
 const pastBlocks = [10, 20, 30].map((d) => block - d * DAY_BLOCKS);
-let pastRead = 0, pastTried = 0;
+let pastRead = 0, pastTried = 0, pastStale = 0;
 await timed('past maps', async () => {
   for (const pb of pastBlocks) {
     const ptag = '0x' + pb.toString(16);
-    const st = await amc(cands.flatMap((p) => (p.v === 3
-      ? [{ target: p.id, data: encodeCall('slot0()') }, { target: p.id, data: encodeCall('liquidity()') }]
-      : [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }])), ptag);
+    // the block's own timestamp rides along: a node that answers an old block with today's state is not
+    // a past map; the fee counters ride along too, so each past map is also a full snapshot row
+    const st = await amc([tsCall, ...cands.flatMap((p) => [...stCalls(p), ...fgCalls(p)])], ptag);
+    const ts = readUint(st[0]), real = ts != null && pastBlockAnswer(ts, { nowSec, blocksBack: block - pb });
+    if (!real) pastStale++;
     const alive = [];
-    cands.forEach((p, i) => {
-      const s0 = p.v === 3 ? readV3Slot0(st[2 * i]) : readV4Slot0(st[2 * i]), L = readUint(st[2 * i + 1]);
+    let o = 1;
+    cands.forEach((p) => {
+      const n = stCalls(p).length + fgCalls(p).length, a = st.slice(o, o + n);
+      o += n;
+      const s0 = p.v === 3 ? readV3Slot0(a[0]) : readV4Slot0(a[0]), L = readUint(a[1]);
       p.past = p.past || [];
+      if (!real) { p.past.push({ hollow: null, segments: null }); return; } // not that block's state: unread
       if (s0 === false) { p.past.push({ hollow: null, segments: null, absent: true }); return; } // the pool did not exist yet
       if (!s0 || L == null || !(s0.sqrtPriceX96 > 0n)) { p.past.push({ hollow: null, segments: null }); return; }
-      alive.push({ p, s0, L });
+      alive.push({ p, s0, L, a, t: Number(ts) * 1000 });
     });
     pastTried += alive.length;
     const ms = alive.length ? await readMaps(amc, alive.map(({ p, s0, L }) => ({ v: p.v, id: p.id, tickSpacing: p.tickSpacing, tick: s0.tick, liquidity: L })), { stateView: C.v4StateView, tag: ptag }) : [];
-    alive.forEach(({ p, s0 }, i) => {
+    alive.forEach(({ p, s0, a, t }, i) => {
       const m = ms[i];
       if (!m || m.unread || !(m.checks.netSumZero && m.checks.matchesPool)) { p.past.push({ hollow: null, segments: null }); return; }
       pastRead++;
       const h = hollowness(m.segments, sqrtX96ToSqrt(s0.sqrtPriceX96), p.d1, s0.tick, m.checks.walkedLiquidity, { near: nearOf(p) });
       p.past.push({ hollow: h.hollow, segments: m.segments });
+      // the snapshot row at that block, with its parked share (merged with the backfill in the outputs)
+      const r = readBackfill(p.v, a);
+      if (r.kind === 'row') (p.pastRows ||= []).push({ t, block: pb, ...r.row, parked: Number.isFinite(h.hollow) ? h.hollow : null });
     });
   }
 });
@@ -367,7 +379,7 @@ for (const p of cands) {
   p.gem = gemScore({ stranded: p.hollowAvg, net: p.score?.net ?? null, persistence: p.persistence, flow: p.flow, warnings, fails: p.verified === false ? ['unverified: its hook can settle swaps outside the pool'] : [] });
 }
 const gems = cands.filter((p) => p.gem?.total != null && p.id !== BENCH);
-say(pastRead ? true : null, 'persistence', `past maps read ${pastRead} of ${pastTried} (${cands.length} pools × 3 dates through archive nodes); stranded in every snapshot ${cands.filter((p) => p.strandedShare === 1).length}; median share of today's parked value already there 30 days ago ${fr(median(cands.map((p) => p.sticky)))}`);
+say(pastRead ? true : null, 'persistence', `past maps read ${pastRead} of ${pastTried} (${cands.length} pools × 3 dates through archive nodes; dates answered with today's state, dropped: ${pastStale} of 3); stranded in every snapshot ${cands.filter((p) => p.strandedShare === 1).length}; median share of today's parked value already there 30 days ago ${fr(median(cands.map((p) => p.sticky)))}`);
 say(true, 'gem scores', `${gems.length} candidates scored: ${gems.filter((p) => p.gem.total >= 60).length} at 60 or more, ${gems.filter((p) => p.gem.total >= 40).length} at 40 or more; median ${median(gems.map((p) => p.gem.total)) ?? '—'}; blank for missing inputs ${cands.filter((p) => p.gem && p.gem.total == null).length} (most often: ${top(tally(cands.flatMap((p) => p.gem?.missing ?? [])), 3)})`);
 const b = ready.find((p) => p.id === BENCH);
 if (b && b.tag) {
@@ -408,38 +420,57 @@ async function writeOutputs() {
     p.row = { t: passT, block, sqrtPriceX96: B(p.s.sqrtPriceX96), tick: p.s.tick, L: p.L, fg0: fg?.[0] ?? null, fg1: fg?.[1] ?? null, parked: isNum(p.hollow) ? p.hollow : null };
     rows.set(p.id, [p.row]);
   }
-  // backfill: a pool with under 20 daily or hourly rows gets the last 24 hours hourly and 30 days daily
-  // (archive state). Each batch carries its own block timestamp through Multicall3, and a batch whose
-  // node answered with today's state for an old block is dropped: a first version mixed such answers in,
-  // so the fee counters barely moved over "30 days" and a busy pool showed a few dollars of fees.
-  const need = snapsOk ? mapped.filter((p) => (snaps.get(p.id)?.d.length ?? 0) < 20 || (snaps.get(p.id)?.h.length ?? 0) < 20) : [];
-  let backfilled = 0, staleBatches = 0, batches = 0;
-  if (need.length) {
-    const bfCalls = (p) => [...stCalls(p), ...fgCalls(p)]; // slot0, liquidity, fee growth
-    const backs = [...Array.from({ length: 24 }, (_, j) => (j + 1) * 300), ...Array.from({ length: 29 }, (_, j) => (j + 2) * DAY_BLOCKS)];
-    const groups = [];
-    for (let i = 0, n = 0, g = []; i < need.length; i++) { g.push(need[i]); n += bfCalls(need[i]).length; if (n >= 250 || i === need.length - 1) { groups.push(g); g = []; n = 0; } }
-    const jobs = backs.flatMap((back) => groups.map((g) => ({ back, g })));
-    const tsCall = { target: MULTICALL3, data: encodeCall('getCurrentBlockTimestamp()') };
-    const res = await timed('backfill', () => mapLimit(jobs, 3, ({ back, g }) => amc([tsCall, ...g.flatMap(bfCalls)], '0x' + (block - back).toString(16))));
-    jobs.forEach(({ back, g }, j) => {
-      batches++;
-      const ans = res[j] || [], ts = readUint(ans[0]);
-      if (ts == null || !pastBlockAnswer(ts, { nowSec, blocksBack: back })) { staleBatches++; return; } // not that block's state
-      let o = 1;
-      for (const p of g) {
-        const n = bfCalls(p).length, a = ans.slice(o, o + n);
-        o += n;
-        const s0 = p.v === 3 ? readV3Slot0(a[0]) : readV4Slot0(a[0]), L = readUint(a[1]), fg = readFeeGrowth(p, a.slice(2));
-        if (!s0 && !fg) continue; // not born yet, or unread: no row
-        const d = back / DAY_BLOCKS;
-        const parked = Number.isInteger(d) && d % 10 === 0 ? p.past?.[d / 10 - 1]?.hollow ?? null : null; // the past maps (10, 20, 30 days ago) where read
-        rows.get(p.id).push({ t: Number(ts) * 1000, block: block - back, sqrtPriceX96: s0 ? s0.sqrtPriceX96 : null, tick: s0 ? s0.tick : null, L: L ?? null, fg0: fg?.[0] ?? null, fg1: fg?.[1] ?? null, parked });
-        backfilled++;
-      }
+  for (const p of mapped) if (p.pastRows) rows.get(p.id).push(...p.pastRows);
+  // backfill (lib/backfill.mjs): every hour of the last 14 days and every day of the last 90 that a pool's
+  // series is missing, read at that moment's block through archive nodes, the windows' moments first, at
+  // most BACKFILL.maxBatches batches and BACKFILL.deadlineMs a pass; what is left waits for the next pass.
+  // Each batch carries its own block timestamp through Multicall3, and a batch whose node answered with
+  // today's state for an old block is dropped: a first version mixed such answers in, so the fee counters
+  // barely moved over "30 days" and a busy pool showed a few dollars of fees. A pool that was not there
+  // yet gives no row (absent, never 0), and that moment is remembered so it is not asked for again.
+  const bfCalls = (p) => [...stCalls(p), ...fgCalls(p)]; // slot0, liquidity, fee growth
+  const byId = new Map(mapped.map((p) => [p.id, p])), unborn = new Map();
+  const entries = mapped.map((p) => ({ id: p.id, calls: bfCalls(p).length, series: snaps.get(p.id), notBefore: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
+  const anchors = [{ t: passT, block }, ...storePoints(snaps)];
+  let plan = { jobs: [], wanted: 0, planned: 0 }, jobs = [], run = { results: [], started: 0, skipped: 0, retried: 0 }, probesRead = 0, probesTried = 0;
+  if (snapsOk) {
+    await timed('backfill', async () => {
+      // block timestamps first where the moments wanted reach past the pairs the store knows (lib/backfill.mjs)
+      const clock0 = blockClock(anchors);
+      const probes = probeMoments(anchors, oldestMissing(entries, { now: passT })).map((T) => clock0(T)).filter((b) => Number.isSafeInteger(b) && b > 0 && b < block);
+      const pr = await mapLimit(probes, 3, (b) => amc([tsCall], '0x' + b.toString(16)));
+      const pairs = [];
+      probes.forEach((b, i) => { const ts = readUint(pr[i]?.[0]); if (ts != null && pastBlockAnswer(ts, { nowSec, blocksBack: block - b })) pairs.push({ t: Number(ts) * 1000, block: b }); });
+      probesTried = probes.length; probesRead = pairs.length;
+      plan = planBackfill(entries, { now: passT, clock: blockClock([...anchors, ...pairs]), block });
+      const read = (job) => amc([tsCall, ...job.ids.flatMap((id) => bfCalls(byId.get(id)))], '0x' + job.block.toString(16));
+      const t0 = Date.now(), first = await runBudgeted(plan.jobs, read);
+      // a batch that landed outside its moment's hour is read once more at the block its timestamp points to
+      const tsOf = (ans, job) => { const ts = readUint(ans?.[0]); return ts != null && pastBlockAnswer(ts, { nowSec, blocksBack: block - job.block }) ? Number(ts) * 1000 : null; };
+      const again = retryJobs(plan.jobs, plan.jobs.map((job, j) => tsOf(first.results[j], job)), { block, max: Math.ceil(BACKFILL.maxBatches / 4) });
+      const left = BACKFILL.deadlineMs - (Date.now() - t0);
+      const second = again.length && left > 0 ? await runBudgeted(again, read, { deadlineMs: left }) : { results: again.map(() => null), started: 0, skipped: again.length };
+      jobs = [...plan.jobs, ...again];
+      run = { results: [...first.results, ...second.results], started: first.started + second.started, skipped: first.skipped + second.skipped, retried: again.length };
     });
   }
-  const snaps2 = mergeStore(snapsOk ? snaps : new Map(), rows, { now: passT });
+  let backfilled = 0, staleBatches = 0, unreadBatches = 0, unbornMoments = 0;
+  const batches = run.started;
+  jobs.forEach((job, j) => {
+    const ans = run.results[j];
+    if (!ans) return; // not started within the time budget: next pass
+    const ts = readUint(ans[0]);
+    if (ts == null) { unreadBatches++; return; }
+    if (!pastBlockAnswer(ts, { nowSec, blocksBack: block - job.block })) { staleBatches++; return; } // not that block's state
+    let o = 1;
+    for (const id of job.ids) {
+      const p = byId.get(id), n = bfCalls(p).length, r = readBackfill(p.v, ans.slice(o, o + n));
+      o += n;
+      if (r.kind === 'row') { rows.get(id).push({ t: Number(ts) * 1000, block: job.block, ...r.row, parked: null }); backfilled++; }
+      else if (r.kind === 'unborn') { unborn.set(id, Math.max(unborn.get(id) ?? 0, Number(ts) * 1000)); unbornMoments++; }
+    }
+  });
+  const snaps2 = mergeStore(snapsOk ? snaps : new Map(), rows, { now: passT, unborn });
   const changed = snapsOk && (rebuilt || sig(snaps2) !== before);
 
   // contract-verified: both tokens' source on Etherscan (cached a week; no key or a refused call: unread)
@@ -610,7 +641,7 @@ async function writeOutputs() {
   const bRatio = b24?.lpFeesUsd != null && bm?.aggVolumeUsd24h > 0 ? b24.lpFeesUsd / (bm.aggVolumeUsd24h * 0.003 * (out.find((x) => x.id === BENCH).lpKeeps ?? 1)) : null;
   pub(`benchmark UNI/WETH 0.3%: 24 h LP fees ÷ (aggregator 24 h volume × 0.3% × LP share) = ${bRatio == null ? 'unread' : bRatio.toFixed(3)}`);
   const nWin = (wk) => out.filter((x) => x.w[wk] != null).length;
-  say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; snapshot rows backfilled ${backfilled} (batches answered with today's state, dropped: ${staleBatches} of ${batches})`);
+  say(true, 'windows', `${out.length} pools: ${windows.map((wk) => `${wk} ${nWin(wk)}`).join(', ')} with a window (under a day of snapshots is blank); ${out.filter((x) => gemOf(x) >= 0).length} with a gem score; shortlist ${short.length}; backfill: ${plan.wanted} pool moments missing, ${plan.planned} planned in ${plan.jobs.length} batches (${run.retried} read again at a corrected block; ${run.skipped} left by the time budget), ${backfilled} rows read, ${unbornMoments} before a pool existed (no row); block-time probes ${probesRead} of ${probesTried}; batches answered with today's state, dropped: ${staleBatches} of ${batches}, unread ${unreadBatches}`);
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
 
   // the top strip (lib/market.mjs): gas against its own recent range, ETH/BTC/SOL in USD. Its own time
@@ -647,22 +678,13 @@ async function writeOutputs() {
   store.put('live.json', live);
   let histWritten = false;
   if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/history.json`))) {
+    // history.json's charts (lib/charts.mjs): 14 days hourly, 90 days daily, nothing before a pool existed
     const hp = {};
     for (const p of mapped) {
       const s2 = snaps2.get(p.id), t0 = tok.get(p.t0) || {}, t1 = tok.get(p.t1) || {};
       if (!s2) continue;
       const x = out.find((o) => o.id === p.id), rate = x.feeTier && x.lpKeeps ? x.feeTier * x.lpKeeps : null;
-      const usd = (a0, a1) => usdOfPair([a0, a1], t0.decimals, t1.decimals, t0.usd, t1.usd);
-      const px = (row) => (row.sqrtPriceX96 != null ? rnd(poolPrice(row.sqrtPriceX96, t0.decimals, t1.decimals), 8) : null);
-      const fees = (a, b) => {
-        if (!a || a.fg0 == null || a.fg1 == null || b.fg0 == null || b.fg1 == null || a.L == null || b.L == null) return null;
-        const L = a.L > 0n && b.L > 0n ? (2n * a.L * b.L) / (a.L + b.L) : a.L > b.L ? a.L : b.L;
-        return usd((deltaFg(a.fg0, b.fg0) * L) >> 128n, (deltaFg(a.fg1, b.fg1) * L) >> 128n);
-      };
-      hp[p.id] = {
-        h: s2.h.map((row, i) => [row.t, px(row), row.L == null ? null : Number(row.L), rnd(fees(s2.h[i - 1], row), 5), row.parked]),
-        d: s2.d.map((row, i) => { const f = fees(s2.d[i - 1], row); return [row.t, px(row), rnd(f, 5), f != null && rate ? rnd(f / rate, 5) : null, row.parked]; }),
-      };
+      hp[p.id] = historyRows(s2, { d0: t0.decimals, d1: t1.decimals, usd0: t0.usd, usd1: t1.usd, rate });
     }
     let ph = null;
     try { ph = store.get('history.json'); } catch { ph = null; }

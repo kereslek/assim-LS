@@ -48,18 +48,22 @@ test('appending downsamples: the first row of each hour and of each day, nothing
 });
 
 test('pruning drops rows past each tier span (plus one step), and only those', () => {
-  const rows = passes(T0, 40 * 24, 5).filter((_, i) => i % 5 === 0); // 40 days, a pass every 30 minutes
+  const rows = passes(T0, 100 * 24, 5).filter((_, i) => i % 5 === 0); // 100 days, a pass every 30 minutes
   const now = rows.at(-1).t;
-  const s = build(rows);
+  const s = merge(emptySeries(), rows, { now });
   assert.ok(prunedAt(s, now));
-  assert.ok(s.h.length >= 7 * 24 && s.h.length <= 7 * 24 + 2, `hourly rows ${s.h.length}`);
-  assert.ok(s.d.length >= 30 && s.d.length <= 32, `daily rows ${s.d.length}`);
+  assert.deepEqual([TIERS.h.span, TIERS.d.span], [14 * DAY, 90 * DAY]);
+  assert.ok(s.h.length >= 14 * 24 && s.h.length <= 14 * 24 + 2, `hourly rows ${s.h.length}`);
+  assert.ok(s.d.length >= 90 && s.d.length <= 92, `daily rows ${s.d.length}`);
+  assert.ok(sameRows(merge(emptySeries(), rows.slice(-91 * 48), { now }), s), 'a merge of everything = a merge of what the spans keep');
   const later = prune(s, now + 3 * DAY);
   assert.ok(later.h.length < s.h.length && later.d.length < s.d.length && prunedAt(later, now + 3 * DAY));
   // planted fault: no pruning at all is caught
   assert.equal(prunedAt({ h: rows.map(normRow), d: s.d }, now), false);
-  // planted fault: pruning a day too early (a full 7-day window would lose its start row) is caught
-  assert.equal(prunedAt({ h: s.h.filter((r) => r.t >= now - 6 * DAY), d: s.d }, now), false);
+  // planted fault: pruning a day too early (the 14-day hourly chart would lose its first row) is caught
+  assert.equal(prunedAt({ h: s.h.filter((r) => r.t >= now - 13 * DAY), d: s.d }, now), false);
+  // planted fault: the old spans (7 and 30 days) are caught
+  assert.equal(prunedAt({ h: s.h.filter((r) => r.t >= now - 7 * DAY - HOUR), d: s.d.filter((r) => r.t >= now - 31 * DAY) }, now), false);
 });
 
 test('a backfill merges without duplicates, in any order, and merging twice changes nothing', () => {
@@ -137,7 +141,7 @@ test('unread fields stay null; an empty row is not stored; a fuller row replaces
   assert.throws(() => normRow({ t, L: -1n }), /out of range/);
   assert.throws(() => normRow({ t, parked: 1.5 }), /0\.\.1/);
   // mergeStore drops pools whose rows have all aged out
-  const st = mergeStore(new Map([['old-pool', s]]), { 'new-pool': row(T0 + 40 * DAY) }, { now: T0 + 40 * DAY });
+  const st = mergeStore(new Map([['old-pool', s]]), { 'new-pool': row(T0 + 100 * DAY) }, { now: T0 + 100 * DAY });
   assert.deepEqual([...st.keys()], ['new-pool']);
   assert.equal(rowsIn(st.get('new-pool'), 'h').length, 1);
 });
