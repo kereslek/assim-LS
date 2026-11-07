@@ -240,10 +240,10 @@ async function gestures(page, R, tag, errTotal) {
   // the All pools header sticks while its rows scroll by, and leaves at the top
   if ((await page.$$('#all-tbl tbody tr.row')).length >= 12) {
     await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr.row:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
-    await sleep(450);
+    await sleep(150); await page.evaluate(REST); // the header copy follows the scroll a frame later and slides .22 s
     const s = await page.evaluate(STUCK);
     run('gestures: the All pools header sticks right under the bar on top, columns aligned', s.on && s.top && s.mis === 0);
-    await page.evaluate(() => scrollTo(0, 0)); await sleep(350);
+    await page.evaluate(() => scrollTo(0, 0)); await sleep(150); await page.evaluate(REST);
     run('gestures: …and is gone back at the top', !(await page.evaluate(STUCK)).on);
   } else skip();
   await part2(page, run, skip, box, press);
@@ -252,12 +252,12 @@ async function gestures(page, R, tag, errTotal) {
   await overlaps(page, run, tag);
   // back to top
   await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
-  await sleep(450);
+  await sleep(150); await page.evaluate(REST);
   const on = () => page.evaluate(() => { const b = document.querySelector('#totop'); if (!b) return false; const cs = getComputedStyle(b), r = b.getBoundingClientRect(); return cs.visibility === 'visible' && +cs.opacity > 0 && r.width >= 44 && r.height >= 44 && r.bottom <= innerHeight && r.right <= innerWidth; });
   run('gestures: a screen down, the ↑ back-to-top button shows (44 px, on screen)', await on());
   await page.click('#totop').catch(() => {});
   await page.waitForFunction(() => scrollY === 0, null, { timeout: 5000 }).catch(() => {});
-  await sleep(400);
+  await sleep(150); await page.evaluate(REST);
   run('gestures: ↑ scrolls back to the top and hides', (await page.evaluate(() => scrollY)) === 0 && !(await on()));
   run('gestures: no page or console errors', errTotal() === e0);
   console.log(`[${tag}] gestures: ${n.run} checks run, ${n.skip} skipped (not in this data)`);
@@ -553,7 +553,7 @@ async function overlaps(page, run, tag) {
   }
   if ((await page.$$('#all-tbl tbody tr.row')).length >= 12) {
     await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr.row:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 60); });
-    await sleep(300); await page.evaluate(() => scrollBy(0, -60)); await sleep(450);
+    await sleep(300); await page.evaluate(REST); await page.evaluate(() => scrollBy(0, -60)); await sleep(150); await page.evaluate(REST);
     await look();
     await page.evaluate(() => scrollTo(0, 0)); await sleep(250);
   }
@@ -565,7 +565,7 @@ async function overlaps(page, run, tag) {
     await look('#sheet');
     for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-hr', 'd-day']) for (let k = 0; k < 6 && (await page.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
     await look('#sheet');
-    await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 600; }); await sleep(450);
+    await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 600; }); await sleep(150); await page.evaluate(REST);
     await look('#sheet');
     await page.click('#sheet-close').catch(() => {}); await sleep(250);
   }
