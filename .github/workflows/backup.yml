@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Backup tests first (planted faults: an unsealed file must be refused)
+      - name: Backup tests first (planted faults, e.g. an unsealed file must be refused)
         run: node --test test/backup.test.mjs
       - name: Check out the data branch (as published)
         uses: actions/checkout@v5
