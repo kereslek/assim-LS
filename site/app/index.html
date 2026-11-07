@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9uVhJAeErumJ0FGDpSX7xns2GJkm+1QhlT3RbZ3VHj0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BdlsWgSqjGWon4zJyp1Wf4DktgOIDEr2n+m4Qhd6+Io='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -532,6 +532,7 @@ td.pool{min-width:150px;max-width:230px}
 }
 .pcell{display:flex;align-items:flex-start;gap:2px}
 .pcell .pcm{min-width:0;flex:1 1 auto;padding-top:5px}
+.pcell .pn2{overflow-wrap:normal;word-break:keep-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.pool{padding-left:2px}
 .best-head .star,.sheet-head .star{margin:-8px 0 -8px -6px}
 .ttl{display:flex;align-items:center;gap:4px;min-width:0}
@@ -803,7 +804,7 @@ a.ext svg{width:10px;height:10px;flex:none}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.3.1';
+const BUILD = 'v0.3.2';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1929,7 +1930,7 @@ function renderTable() {
   }).join('') + '</tr>';
   const fresh = L.pools.filter(isNew).length;
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td class="pool"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${feeTxt(p.feeTier)} · ${chainShort(p.chain)} v${esc(p.v)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
+    + `<td class="pool"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${feeTxt(p.feeTier)} · ${chainShort(p.chain)} v${esc(p.v)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
     + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
