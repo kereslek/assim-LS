@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jNGPxlDBsSz4ZV5gap0SLinXou6vRGnlMz4IHmTlo9o='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-OLEy4XQ+Q9UHOf68RLS3P8cdXtop7emcg7O5HmB03c0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1198,7 +1198,7 @@ function renderBest() {
   }
   const rank = list.indexOf(p) + 1;
   const kick = p === best ? 'BEST FIND NOW' : p.id === S.bestExtra && !topTen(wk).includes(p) ? `FROM THE PAIR VIEW · ${p.verified === false ? 'UNVERIFIED · NEVER A GEM' : isGem(p, wk) ? 'GEM' : 'NOT IN THE TOP 10'}` : `#${rank} OF ${list.length} · ${p.verified === false ? 'UNVERIFIED · NEVER A GEM' : isGem(p, wk) ? 'GEM' : 'ON WATCH'}`;
-  const w = W(p, wk), tvl = p.tvlUsd;
+  const w = W(p, wk) || {}, tvl = p.tvlUsd; // a pool opened from the pair view may have no reading in this window: dashes
   const outside = isNum(tvl) && tvl > 0 && isNum(w.inRangeUsd) ? Math.max(0, 1 - w.inRangeUsd / tvl) : null;
   const perDay = isNum(w.lpFeesUsd) && isNum(w.days) && w.days > 0 ? w.lpFeesUsd / w.days : null;
   const lps = p.shape && p.shape.lpsAtPrice;

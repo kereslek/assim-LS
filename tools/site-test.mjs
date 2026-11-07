@@ -465,6 +465,17 @@ async function testPairs(browser) {
     await sleep(150);
     ok(`pairs ${tag}: a pool's detail links to its pair view`, (await p.textContent('#sheet-title')) === 'VELNA/WETH' && (await p.$$('#sheet tr[data-act="pair-row"]')).length === 4);
     await p.click('#sheet-close');
+    // a pool with no data in this window opens from the pair view with dashes (it used to throw in the best-find card)
+    await p.fill('#f-q', 'PRAXO');
+    await sleep(300);
+    await p.click('#all tbody tr.row td:nth-child(3)');
+    await p.waitForSelector('#sheet:not([hidden])');
+    await p.click('#sheet-pair');
+    await sleep(150);
+    const bare = await p.evaluate(() => { const r = [...document.querySelectorAll('#sheet tr[data-act="pair-row"]')].find((x) => /NO 30D DATA/.test(x.innerText)); return r ? r.dataset.id : null; });
+    if (bare) { await p.evaluate((id) => document.querySelector(`#sheet tr[data-id="${id}"]`).click(), bare); await sleep(1400); }
+    const card = await p.innerText('#best');
+    ok(`pairs ${tag}: a pool with no data in the window opens from the pair view, with dashes`, !!bare && t.errors.length === 0 && /NO 30D DATA/.test(card) && noJunk(card), bare ? t.errors[0] : 'no such row');
     await p.fill('#f-q', '');
     ok(`pairs ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
