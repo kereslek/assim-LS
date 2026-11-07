@@ -160,6 +160,17 @@ const ENUM = () => {
   return { layer: layerId, overlay: layer !== document.body, controls: out };
 };
 const HSCROLL = () => document.documentElement.scrollWidth - document.documentElement.clientWidth;
+// wait until the page is at rest: every chart's view the same over 3 drawn frames and no animation running (a slow
+// WebKit draws a frame every 100–260 ms, so a pan step or a fade can still be under way long after a fixed sleep).
+// The wheel event first is what a user's own scroll does: it ends the page's re-aligning after a jump.
+const REST = async (ms = 2500) => {
+  window.dispatchEvent(new WheelEvent('wheel'));
+  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  const views = () => [...document.querySelectorAll('[data-pz]')].map((h) => h.dataset.view).join('|');
+  const busy = () => document.getAnimations().some((a) => (a.playState === 'running' || a.pending) && !(a.effect && a.effect.getComputedTiming().endTime === Infinity)); // a pulse that never ends doesn't count
+  let a = views(), same = 0;
+  for (const t0 = performance.now(); performance.now() - t0 < ms && (same < 3 || busy());) { await frame(); const b = views(); if (b === a) same++; else { same = 0; a = b; } }
+};
 // a chart host's view ("<position>,<width>[,<y>]"): compared in memory, never printed
 const VIEW = (id) => { const h = document.querySelector(`[data-pz="${id}"]`); return h ? h.dataset.view : null; };
 const STUCK = () => { // the All pools header copy: right under the bar on top (at the top while the bar is away), columns over the real ones
@@ -623,6 +634,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     const visited = new Set(), seen = new Set(), perKind = {}, CAP = 10, MAX = 160, BUDGET = 6 * 60 * 1000;
     let junkAfter = 0, hscrollAfter = 0, stuck = 0;
     while (counts.clicked < MAX && Date.now() - t < BUDGET) {
+      await page.evaluate(REST);
       const L = await page.evaluate(ENUM);
       const fresh = L.controls.filter((c) => !visited.has(c.sig));
       for (const c of L.controls) if (!seen.has(c.sig)) { seen.add(c.sig); counts.found++; }
@@ -644,12 +656,18 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       perKind[next.kind] = (perKind[next.kind] || 0) + 1;
       counts.kinds[next.kind] = (counts.kinds[next.kind] || 0) + 1;
       const target = page.locator(`[data-la-i="${next.i}"]`);
-      try { await target.scrollIntoViewIfNeeded({ timeout: 3000 }); await sleep(150); } catch (e) { /* the click below reports it */ }
+      try { await target.scrollIntoViewIfNeeded({ timeout: 3000 }); await sleep(150); await page.evaluate(REST); } catch (e) { /* the click below reports it */ }
       const before = await page.evaluate(SNAP), e0 = errTotal(), np0 = newPages, open0 = await page.evaluate(() => window.__laOpen);
       try {
         await target.click({ timeout: 5000 });
         counts.clicked++;
-      } catch (e) { failAs(next.kind, 'not clickable'); continue; }
+      } catch (e) {
+        // a control that went away on its own (an edge button hides once its chart reaches the end) is not a failure;
+        // one that is still there but can't be pressed (covered, say) is
+        const still = await target.isVisible().catch(() => false);
+        if (still) failAs(next.kind, 'not clickable'); else counts.gone = (counts.gone || 0) + 1;
+        continue;
+      }
       await sleep(next.kind === 'refresh' ? 2500 : 450);
       const after = await page.evaluate(SNAP);
       if (await page.isVisible('#pop')) { await page.keyboard.press('Escape'); await sleep(150); } // a note that opened goes before the next press
@@ -660,7 +678,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       if ((await page.evaluate(HSCROLL)) > 0) hscrollAfter++;
     }
     T.clicks = secs(t);
-    console.log(`[${tag}] controls: ${counts.found} found, ${counts.clicked} clicked`);
+    console.log(`[${tag}] controls: ${counts.found} found, ${counts.clicked} clicked${counts.gone ? `, ${counts.gone} went away before the press` : ''}`);
     console.log(`[${tag}] clicked by kind: ${Object.entries(counts.kinds).map(([k, n]) => `${k} ×${n}`).join(', ') || 'none'}`);
     const fl = Object.entries(fails);
     console.log(`[${tag}] click failures: ${fl.length ? fl.map(([k, n]) => `${k} ×${n}`).join(', ') : 'none'}`);

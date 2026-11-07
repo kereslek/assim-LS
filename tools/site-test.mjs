@@ -7,7 +7,7 @@
 //   node tools/site-test.mjs --shots <dir>           also save full-page screenshots (cut into parts)
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
-//                                                    search links terms fold locknote clicks motion history stable
+//                                                    search links terms fold locknote clicks motion history stable chains
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
@@ -46,7 +46,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,highlight,search,links,terms,fold,locknote,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -1805,6 +1805,47 @@ async function testLockNote(browser) {
   }
 }
 
+// ---------- 4o. chain marks: a colour edge and a mark on every pool row and card, and in the detail header ----------
+const CHAIN_COL = { ethereum: '#8A9EF5', base: '#2F6BFF', bsc: '#F0B90B', arbitrum: '#28A0F0' }, CHAIN_NAME = { ethereum: 'Ethereum', base: 'Base' };
+const CHAIN_SEEN = () => {
+  const one = (el) => { if (!el) return null; const m = el.querySelector('.cg'); return { cc: getComputedStyle(el).getPropertyValue('--cc').trim().toUpperCase(), stripe: /inset/.test(getComputedStyle(el).boxShadow) && getComputedStyle(el).boxShadow.includes('3px 0px 0px'), mark: m ? m.getAttribute('aria-label') : null, markW: m ? Math.round(m.getBoundingClientRect().width) : 0 }; };
+  return {
+    rows: [...document.querySelectorAll('#all-tbl tbody tr.row')].map((r) => ({ id: r.dataset.id, ...one(r.querySelector('td.pool')) })),
+    best: { id: document.querySelector('#best [data-act="detail"]') && document.querySelector('#best [data-act="detail"]').dataset.id, ...one(document.querySelector('#best')), mark: (document.querySelector('#best .ttl > .cg') || { getAttribute: () => null }).getAttribute('aria-label') },
+    tabs: [...document.querySelectorAll('#best .tab')].map((t) => ({ id: t.dataset.id, mark: (t.querySelector('.cg') || { getAttribute: () => null }).getAttribute('aria-label') })),
+    next: [...document.querySelectorAll('#next .nb-row')].map((r) => ({ id: r.dataset.id, ...one(r) })),
+    fav: [...document.querySelectorAll('#fav .mc[data-id]')].map((c) => ({ id: c.dataset.id, ...one(c) })),
+    key: [...document.querySelectorAll('#ch-key > span')].map((x) => x.textContent.trim()),
+  };
+};
+async function testChains(browser) {
+  const chainOk = (x) => { const p = poolOf(x.id); return p && x.cc === CHAIN_COL[p.chain] && x.stripe && x.mark === CHAIN_NAME[p.chain] && x.markW >= 10; };
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    await p.evaluate(() => { for (const b of [...document.querySelectorAll('#all tbody .star')].slice(0, 3)) b.click(); });
+    await sleep(250);
+    const c = await p.evaluate(CHAIN_SEEN);
+    const bad = c.rows.filter((x) => !chainOk(x));
+    ok(`chains ${tag}: every All pools row carries its chain's colour edge and mark (${c.rows.length} rows, ${new Set(c.rows.map((x) => x.cc)).size} chains)`, c.rows.length >= 20 && bad.length === 0 && new Set(c.rows.map((x) => x.cc)).size >= 2, JSON.stringify(bad[0] || {}));
+    ok(`chains ${tag}: the best find carries its pool's colour edge and mark, and every tab its mark`, chainOk(c.best) && c.tabs.length >= 3 && c.tabs.every((x) => x.mark === CHAIN_NAME[poolOf(x.id).chain]), JSON.stringify(c.best));
+    ok(`chains ${tag}: Next best rows and favourite cards carry them too`, c.next.length >= 3 && c.next.every(chainOk) && c.fav.length === 3 && c.fav.every(chainOk), JSON.stringify([c.next.find((x) => !chainOk(x)), c.fav.find((x) => !chainOk(x))]));
+    ok(`chains ${tag}: a small key names the chains in this pass`, c.key.join() === 'Ethereum,Base', c.key.join());
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    const d = await p.evaluate(() => { const h = document.querySelector('#sheet .sheet-head'), m = h.querySelector('.ttl > .cg'); return { cc: getComputedStyle(h).getPropertyValue('--cc').trim().toUpperCase(), mark: m && m.getAttribute('aria-label'), sim: [...document.querySelectorAll('#sim .mc[data-id]')].map((c) => ({ id: c.dataset.id, cc: getComputedStyle(c).getPropertyValue('--cc').trim().toUpperCase(), mark: (c.querySelector('.cg') || { getAttribute: () => null }).getAttribute('aria-label') })) }; });
+    const bp = poolOf(await bestId(p));
+    ok(`chains ${tag}: the detail header carries the pool's mark and colour edge, and every similar pool card its own`, d.cc === CHAIN_COL[bp.chain] && d.mark === CHAIN_NAME[bp.chain] && d.sim.length >= 2 && d.sim.every((x) => x.cc === CHAIN_COL[poolOf(x.id).chain] && x.mark === CHAIN_NAME[poolOf(x.id).chain]), JSON.stringify(d).slice(0, 160));
+    if (SHOTS) await snap(p, `chains-${tag}-detail`);
+    await p.click('#sheet-close');
+    // the pair view shows no single chain: its header has no mark and no edge
+    await p.click('#best .best-h-btn'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(250);
+    ok(`chains ${tag}: the pair view's header has no chain mark (it spans chains)`, await p.evaluate(() => !document.querySelector('#sheet .ttl > .cg') && !document.querySelector('#sheet .sheet-head').classList.contains('chs')));
+    await p.click('#sheet-close');
+    if (SHOTS) { await snap(p, `chains-${tag}-best`, '#best'); await snap(p, `chains-${tag}-all`, '#all'); }
+    ok(`chains ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
 // ---------- 4j. text overlap: no text collides with other text or is cut off, at every width, before and after interactions ----------
 // tools/overlap.mjs reads every visible text's line boxes (Range.getClientRects) and an icon-only control's glyph, per
 // layer (the page, the panel, a note, the search list, a sticky header copy and the bar are layers of their own). The
@@ -2305,7 +2346,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;
