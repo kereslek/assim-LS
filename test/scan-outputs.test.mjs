@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { initLock } from '../lib/lock.mjs';
@@ -59,6 +60,32 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
   assert.ok(snaps.v === 1 && Object.keys(snaps.pools).length === live.pools.length);
   assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'out', 'shortlist.json'), 'utf8')).ids.length >= 1);
   for (const f of fs.readdirSync(path.join(dir, 'out', 'data'))) assert.ok(!fs.readFileSync(path.join(dir, 'out', 'data', f), 'utf8').includes('2718'), `${f} is sealed`);
+  // the liquidity chart's bins (docs/DATA.md): ±45% as before, coarser out to ±0.6375, then one beyond bucket a side;
+  // all of it together is the whole map (the fake world parks a wall at +60..+90%, mostly past the bars)
+  for (const p of live.pools) {
+    const s = p.shape;
+    assert.equal(s.depth.length, 58, p.pair);
+    assert.deepEqual(s.depthSpan, [-0.6375, 0.6375]);
+    assert.deepEqual(s.depthStep, { fine: 0.01875, coarse: 0.0375, edge: 0.45 });
+    assert.ok(s.depth.every(([o, v], i) => Math.abs(o) < 0.6375 && Number.isFinite(v) && v >= 0 && (i === 0 || o > s.depth[i - 1][0])), p.pair);
+    assert.ok(s.beyond.below >= 0 && s.beyond.above >= 0);
+    const all = s.depth.reduce((a, d) => a + d[1], 0) + s.beyond.below + s.beyond.above;
+    assert.ok(Math.abs(all / p.mapUsd - 1) < 1e-4, `${p.pair}: bars + beyond ${all} vs map ${p.mapUsd}`);
+  }
+  assert.ok(live.pools.some((p) => p.shape.beyond.above > 0.5 * p.mapUsd), 'the far wall shows up in beyond');
+  // regression: the wider chart left parked, above, band9, walls and the ±45% bars exactly as the scan published
+  // them before it (golden values from that scan of the same fake world; fine = a hash of the ±45% bars)
+  const GOLD = {
+    'ONE/WETH': { parked: 0.9771239018035686, above: 1, band9: 0.008468288551747008, walls: { below: 0.009375, above: 0.009375 }, fine: 'b9e1b94925c76411' },
+    'UNI/WETH': { parked: 0, above: null, band9: 0.6464305135146509, walls: { below: 0.009375, above: 0.009375 }, fine: '6492e4ff967a1c32' },
+    'ETH/ONE': { parked: 0, above: null, band9: 0.3953119424674881, walls: { below: 0.009375, above: 0.009375 }, fine: 'dc034ec3a670351b' },
+  };
+  const hash = (x) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex').slice(0, 16);
+  for (const [pair, g] of Object.entries(GOLD)) {
+    const s = live.pools.find((p) => p.pair === pair)?.shape;
+    assert.ok(s, pair);
+    assert.deepEqual({ parked: s.parked, above: s.above, band9: s.band9, walls: s.walls, fine: hash(s.depth.filter(([o]) => Math.abs(o) < 0.45)) }, g, pair);
+  }
   // planted faults: a missing field, a window field left undefined, or a NaN fails the contract check
   const bad1 = structuredClone(live); delete bad1.pools[0].shape;
   const bad2 = structuredClone(live); delete bad2.pools[0].w['30d'].feeApr;

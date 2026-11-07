@@ -38,7 +38,10 @@ test('every pool and window follows the contract and adds up', () => {
       'tvlUsd', 'mapUsd', 'aggUsd', 'price', 'marketRatio', 'offMarket', 'shape', 'w', 'checks', 'gemFirstAt'], p.pair);
     keys(p.shape, ['tag', 'parked', 'above', 'band9', 'lpsAtPrice', 'depth', 'walls'], p.pair + ' shape');
     assert.ok(['served', 'mixed', 'stranded', 'one-sided'].includes(p.shape.tag));
-    for (const [o, v] of p.shape.depth) assert.ok(Math.abs(o) <= 0.45 && v >= 0);
+    // the bars reach ±45%, or out to depthSpan where the data carries one (coarser bins past ±45%); an unread bin is null
+    const reach = Array.isArray(p.shape.depthSpan) ? Math.max(-p.shape.depthSpan[0], p.shape.depthSpan[1]) : 0.45;
+    for (const [o, v] of p.shape.depth) assert.ok(Math.abs(o) <= reach + 1e-9 && (v === null || v >= 0));
+    if ('beyond' in p.shape) for (const k of ['below', 'above']) assert.ok(numOrNull(p.shape.beyond[k]) && !(p.shape.beyond[k] < 0), `${p.pair} beyond`);
     assert.deepEqual(Object.keys(p.w), W);
     for (const wk of W) {
       const w = p.w[wk];

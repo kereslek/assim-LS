@@ -92,8 +92,17 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
     above: <0..1>,              // share of the parked value above the price
     band9: <0..1>,              // share of value within ±9%
     lpsAtPrice: <n|null>,
-    depth: [[<log offset from price>, <usd>], ...],   // histogram, ±45%, for the liquidity chart
-    walls: { below: <log offset|null>, above: <log offset|null> }
+    depth: [[<log offset of the bin's centre>, <usd|null>], ...],   // the liquidity chart's bars, ascending (lib/shape.mjs
+                                //   depthProfile): 48 fine bins across ±0.45, the same bars as before, then 5 coarser bins
+                                //   a side out to depthSpan; a null bar = that stretch of the map was not read (never 0);
+                                //   [] = no map this pass, or token1 unpriced
+    depthSpan: [<min log offset>, <max log offset>]|null,   // the bars' outer edges: [−0.6375, 0.6375] (price −47% / +89%);
+                                //   null when depth is []
+    depthStep: { fine: 0.01875, coarse: 0.0375, edge: 0.45 }|null,   // bar widths in log price: fine inside ±edge, coarse from
+                                //   there to depthSpan (a coarse bar spans twice the price range of a fine one)
+    beyond: { below: <usd|null>, above: <usd|null> },   // everything past depthSpan on that side, out to the last tick: a bucket
+                                //   to label ("$1.2M further down"), not a bar; null = not read, or no map
+    walls: { below: <log offset|null>, above: <log offset|null> }   // found on the ±0.45 fine bars only, as before
   },
   w: { "24h": Window|null, "7d": Window|null, "30d": Window|null },
   checks: [{ id: "<id>", label: "<short>", ok: true|false|null }],   // the per-pool checklist, e.g. "12/12 checks pass"
@@ -104,6 +113,8 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
   burst: { maxDay, medianDay, burstDays, oneTrader: <share of the biggest day's fees from its largest tx|null> }
 }
 ```
+
+**The liquidity chart's bins.** The bars plus both `beyond` buckets add up to `mapUsd` (each value is rounded to 5 significant digits). The ±0.45 bars, `parked`, `above`, `band9` and `walls` are computed exactly as before the chart was widened (`test/shape.test.mjs`, `test/scan-outputs.test.mjs`). The scanner reads each map in full or not at all, so today a pool has either every bar or none; `depthProfile` already takes a list of unread tick chunks for a partial read. An unread chunk hides itself and everything past it on its side (the map is walked out from the price), so those bars and that side's `beyond` are `null`; a chunk that holds the price hides every bar. A bar past the last tick a pool can use is a real 0.
 
 ### Window
 

@@ -12,7 +12,7 @@ import { encodeCall } from '../lib/abi.mjs';
 import { ETHEREUM as C, ZERO, DYNAMIC_FEE, TOPICS, decodeModifyLiquidity, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice, extremeFee } from '../lib/pools.mjs';
 import { readMaps, wordsFor, feeGrowthCalls, readFeeGrowth } from '../lib/maps.mjs';
 import { sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
-import { hollowness, shapeTag, bandStats, depthHistogram, nearestWalls } from '../lib/shape.mjs';
+import { hollowness, shapeTag, bandStats, depthHistogram, nearestWalls, depthProfile, depthFields } from '../lib/shape.mjs';
 import { SWAP_TOPICS, EXTRA_TOPICS, decodeSwap, decodeExtra, hookReturnsSwapDelta, summarize, usdOfPair, swapFees } from '../lib/swaps.mjs';
 import { dailySigma, ratioByDay, markouts } from '../lib/flow.mjs';
 import { scorePool, recentMoves } from '../lib/score.mjs';
@@ -568,7 +568,8 @@ async function writeOutputs() {
     checks.push({ id: 'window-vs-replay', label: '24 h fees from the counters vs the swap replay', ok: wr == null ? null : Math.abs(wr - 1) <= 0.1 });
     p.windowVsReplay = wr;
     const w = winsWith(checks);
-    const hist = seg ? depthHistogram(seg, p.sqrt, p.d1, p.s.tick) : null;
+    // the chart's bins: ±45% as before (the walls above come from those alone), coarser out to about ±64% log, then beyond
+    const prof = seg ? depthProfile(seg, p.sqrt, p.d1, p.s.tick) : null;
     const gem = w[defaultWindow]?.gem?.total ?? null;
     const series = snaps2.get(p.id);
     out.push({
@@ -582,7 +583,7 @@ async function writeOutputs() {
       price: rnd(pxNow, 10), marketRatio: rnd(ratio), offMarket,
       shape: {
         tag: p.tag ?? null, parked: p.hollow ?? null, above: p.aboveShare ?? null, band9: p.band9 ?? null, lpsAtPrice: p.v === 4 ? bookOf.get(p.id)?.lpsAtPrice ?? null : null,
-        depth: hist && isNum(p.per1) ? hist.buckets.map((v, i) => [rnd(-hist.span + (i + 0.5) * hist.bucketLog, 4), rnd(v * p.per1, 5)]) : [],
+        ...depthFields(prof, p.per1),
         walls: { below: isNum(p.walls?.below) ? p.walls.below : null, above: isNum(p.walls?.above) ? p.walls.above : null },
       },
       w: Object.fromEntries(Object.entries(w).map(([k, x]) => [k, x && (({ daily: _d, ...rest }) => rest)(x)])),
