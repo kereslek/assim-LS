@@ -1,0 +1,2059 @@
+diff --git a/site/app/index.html b/site/app/index.html
+index 6c384a2..a0a5ebc 100644
+--- a/site/app/index.html
++++ b/site/app/index.html
+@@ -5,7 +5,7 @@
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+ <meta name="robots" content="noindex, nofollow">
+ <meta name="referrer" content="no-referrer">
+-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BdlsWgSqjGWon4zJyp1Wf4DktgOIDEr2n+m4Qhd6+Io='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
++<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-m/x5Vo7+cxExXVHPhSzo9v/tKtblMTs0Jegt021Un/4='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+ <meta name="color-scheme" content="dark">
+ <meta name="theme-color" content="#06080B">
+ <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
+@@ -43,12 +43,18 @@ p{margin:0}
+ .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+ .ribbon{background:var(--warn);color:#0B0B0B;text-align:center;padding:5px 12px;font:700 11px/1.3 var(--mono);letter-spacing:.12em}
+ 
+-/* header */
+-.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left));background:var(--head);border-bottom:1px solid var(--line)}
+-.brand{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0}
++/* header: one slim bar stays on top (it slides away while you scroll down and comes back when you scroll up); the
++   phase line and the market strip under it scroll away with the page */
++.top{position:sticky;top:0;z-index:45;display:flex;align-items:center;gap:8px 10px;min-height:48px;padding:max(2px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 2px max(16px,env(safe-area-inset-left));background:var(--head);border-bottom:1px solid var(--line);transition:transform .22s ease,box-shadow .22s ease}
++.top.stuck{box-shadow:0 10px 18px -12px rgba(0,0,0,.85)}
++.top.hid{transform:translateY(calc(-100% - 2px));box-shadow:none}
++.brand{display:flex;align-items:center;gap:9px;flex:0 1 auto;min-width:0}
+ .brand svg{flex:none;display:block}
+-.title{font:700 13px/1.1 var(--mono);letter-spacing:.1em}
+-.hdr-right{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
++.title{font:700 13px/1.1 var(--mono);letter-spacing:.1em;white-space:nowrap}
++.top #refresh{margin-left:auto}
++.subhead{max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:10px max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
++.subhead .sub-l{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0}
++.sr{position:absolute!important;width:1px!important;height:1px!important;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+ .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;background:var(--raised);border:1px solid var(--line2);font:600 11px/1.2 var(--mono);color:var(--fg2);white-space:nowrap}
+ .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+ .badge.fresh{background:rgba(47,191,74,.12);border-color:rgba(47,191,74,.45);color:var(--fg)}
+@@ -70,8 +76,8 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
+ .iconbtn.spin svg{animation:spin .8s linear infinite}
+ .iconbtn:disabled{cursor:progress}
+ @keyframes spin{to{transform:rotate(360deg)}}
+-#refresh-msg{flex-basis:100%;text-align:right;white-space:normal}
+-#refresh-msg.err{color:var(--neg)}
++.rmsg{position:absolute;right:max(16px,env(safe-area-inset-right));top:calc(100% + 6px);padding:6px 9px;border-radius:6px;border:1px solid var(--line2);background:var(--raised);box-shadow:0 8px 18px rgba(0,0,0,.5);white-space:nowrap}
++.rmsg.err{color:var(--neg)}
+ .tabs{display:flex;gap:4px;overflow-x:auto;margin:6px 0 2px;padding-bottom:2px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+ .tab{flex:none;min-height:44px;padding:0 1px;border:0;background:transparent;cursor:pointer;display:flex;align-items:center}
+ .tab .tp{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line2);background:var(--raised);font:600 12px/1.2 var(--mono);color:var(--fg2);white-space:nowrap}
+@@ -129,10 +135,10 @@ body.solo main{max-width:none}
+ 
+ /* pan: drag a chart sideways (a vertical swipe still scrolls the page), edge buttons where more lies off-screen,
+    a thin bar for where the view sits, a soft hatch where the data ends */
+-.pz{position:relative;--pzf:var(--surface);touch-action:pan-y pinch-zoom;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:grab}
++.pz{position:relative;--pzf:var(--surface);touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:grab}
+ .pz.dragging{cursor:grabbing}
+ .pz.dragging>.pz-hint{display:none}
+-.pz.pz-xy{touch-action:pinch-zoom}
++.pz.pz-xy{touch-action:none}
+ .sheet .pz{--pzf:var(--bg)}
+ .sub-card .pz{--pzf:var(--surface2)}
+ .pz-c{position:relative}
+@@ -151,7 +157,8 @@ body.solo main{max-width:none}
+ .pz-end.r{right:0;border-left:1px dashed var(--line3)}
+ .liq .pz-end{top:20px;bottom:20px}
+ .pz-end span{margin-top:4px;padding:1px 4px;border-radius:3px;background:var(--pzf);font:600 10px/1.2 var(--mono);letter-spacing:.06em;color:var(--muted);white-space:nowrap}
+-.pz-hint{position:absolute;left:50%;top:50%;z-index:3;transform:translate(-50%,-50%);padding:5px 10px;border-radius:999px;border:1px solid var(--line3);background:rgba(6,8,11,.88);font:600 11px/1.2 var(--mono);color:var(--fg);white-space:nowrap;pointer-events:none;animation:hint 4.2s ease forwards}
++.pz-hint{position:absolute;inset:0;z-index:3;display:grid;place-items:center;border-radius:6px;background:rgba(6,8,11,.72);pointer-events:none;animation:hint 4.2s ease forwards}
++.pz-hint>span{padding:5px 10px;border-radius:999px;border:1px solid var(--line3);background:var(--raised);font:600 11px/1.2 var(--mono);color:var(--fg);white-space:nowrap}
+ @keyframes hint{0%{opacity:0}10%,78%{opacity:1}100%{opacity:0}}
+ .liq .tick.off{transform:none;color:var(--fg);font-weight:600}
+ .liq .tick.off.l{left:4px}
+@@ -160,7 +167,7 @@ body.solo main{max-width:none}
+ 
+ /* sticky table headers: a copy of the header row sticks to the top while a long table scrolls under it */
+ .shw{position:relative;min-width:0}
+-.sh{position:sticky;top:0;z-index:4;height:var(--shh,0px);pointer-events:none}
++.sh{position:sticky;top:var(--hdr,0px);z-index:4;height:var(--shh,0px);pointer-events:none;transition:top .22s ease}
+ .shw>.tbl-box{margin-top:calc(-1 * var(--shh,0px))!important}
+ .sheet-body .sh{top:-14px} /* the panel's own top padding: the copy sticks to its very top */
+ .sh-in.tbl-box{display:none;margin:0;overflow:hidden;border-radius:8px 8px 0 0;background:var(--raised);box-shadow:0 10px 14px -8px rgba(0,0,0,.7);pointer-events:auto}
+@@ -174,9 +181,9 @@ body.solo .totop{display:none}
+ 
+ /* layout */
+ main{max-width:1400px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+-main>section,main>aside{min-width:0;scroll-margin-top:12px}
++main>section,main>aside{min-width:0;scroll-margin-top:calc(var(--hdrh,48px) + 12px)}
+ #side{display:grid;gap:14px;align-content:start;min-width:0}
+-#side>section{scroll-margin-top:12px}
++#side>section{scroll-margin-top:calc(var(--hdrh,48px) + 12px)}
+ @media (min-width:1000px){
+   main{grid-template-columns:minmax(0,1fr) 340px;grid-template-areas:"glance glance" "best side" "next side" "all all" "bt bt";align-items:start}
+   #glance{grid-area:glance}#best{grid-area:best}#next{grid-area:next}#side{grid-area:side}#all{grid-area:all}#bt{grid-area:bt}
+@@ -306,7 +313,7 @@ td .tags{margin-top:2px}
+ 
+ /* backtest */
+ .bt-grid{display:grid;gap:14px;margin-top:12px}
+-.sub-card{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface2);min-width:0;display:grid;gap:12px;scroll-margin-top:12px}
++.sub-card{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface2);min-width:0;display:grid;gap:12px;scroll-margin-top:calc(var(--hdrh,48px) + 12px)}
+ .sub-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:6px 12px}
+ .sub-head h3{font:600 14px/1.3 var(--sans)}
+ .calib{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+@@ -419,10 +426,9 @@ footer .btn{font-family:var(--sans)}
+   .bignum{font-size:42px}
+   .best-head h2{font-size:20px}
+   main{padding:12px max(12px,env(safe-area-inset-right)) 12px max(12px,env(safe-area-inset-left))}
+-  .top{padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 10px max(12px,env(safe-area-inset-left))}
+-  .hdr-right{width:100%;justify-content:space-between}
+-  .seg{flex:1 1 100%}
+-  .seg button{flex:1 1 0}
++  .top{gap:8px;padding:max(2px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 2px max(12px,env(safe-area-inset-left))}
++  .top .title{display:none}
++  .subhead{padding:9px max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));gap:6px 12px}
+   .nb-row svg{width:52px}
+   .best-r{order:-1}
+   .strip>div:first-child{grid-column:span 2}
+@@ -445,15 +451,14 @@ footer .btn{font-family:var(--sans)}
+ .seg.pills button:focus-visible>span{outline:2px solid var(--accent);outline-offset:2px}
+ @media (max-width:520px){.seg.pills{flex:none}.seg.pills button{flex:none}}
+ 
+-/* top strip: gas, three prices, the next pass; tiny and quiet */
+-.mstrip{flex:1 1 100%;order:-1;display:flex;align-items:center;gap:4px 16px;margin:-2px 0 0;padding:0 0 9px;border-bottom:1px solid var(--line);font:500 10.5px/1.2 var(--mono);color:var(--fg2);font-variant-numeric:tabular-nums;min-width:0}
+-.mstrip .mpx{display:flex;align-items:center;gap:4px 14px;min-width:0;overflow-x:auto;scrollbar-width:none}
+-.mstrip .mpx::-webkit-scrollbar{display:none}
++/* the market strip under the bar: gas, three prices, the next pass; tiny and quiet, and it scrolls away with the page */
++.mstrip{flex:1 1 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px 16px;font:500 10.5px/1.2 var(--mono);color:var(--fg2);font-variant-numeric:tabular-nums;min-width:0}
++.mstrip .mpx{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;min-width:0}
+ .mstrip .px{white-space:nowrap;display:inline-flex;align-items:baseline;gap:5px}
+ .mstrip .px b{font-weight:700;color:var(--muted);letter-spacing:.06em}
+ .mstrip .px .v{color:var(--fg)}
+ .mstrip .up{color:var(--pos);font-style:normal}.mstrip .dn{color:var(--neg);font-style:normal}.mstrip .na{color:var(--muted);font-style:normal}
+-.mstrip .mt{margin-left:auto;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--muted)}
++.mstrip .mt{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--muted)}
+ .mstrip .mt .v{color:var(--fg2)}
+ .mstrip .mt.late .v{color:var(--warn)}
+ .cd{width:12px;height:12px;flex:none;display:block;transform:rotate(-90deg)}
+@@ -468,23 +473,21 @@ footer .btn{font-family:var(--sans)}
+ .gas .gv{font-weight:700}
+ .g-cheap{--gc:var(--accent)}.g-normal{--gc:#6EA9FF}.g-busy{--gc:var(--warn)}.g-expensive{--gc:var(--bad)}.g-none{--gc:var(--faint)}
+ .gas .gb{color:var(--gc)}
+-@media (max-width:699px){ /* a phone: the three prices across the top, gas and the next pass under them */
+-  .mstrip{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto 20px;column-gap:10px;row-gap:6px;padding-bottom:8px}
+-  .mstrip .mpx{grid-column:1/3;grid-row:1;justify-content:space-between;gap:4px 10px}
++@media (max-width:699px){ /* a phone: the three prices across, gas and the next pass under them; anything too long wraps, never overlaps */
++  .subhead .mstrip{flex:1 1 100%;justify-content:space-between;gap:6px 10px}
++  .mstrip .mpx{flex:1 1 100%;order:-1;justify-content:space-between;gap:4px 10px}
+   .mstrip .px{gap:4px}
+-  .mstrip .gas{grid-row:2;grid-column:1;margin:-12px 0}
+-  .mstrip .mt{grid-row:2;grid-column:2;margin-left:0;justify-content:flex-end}
++  .mstrip .gas{margin:-12px 0}
++  .mstrip .mt{margin-left:auto}
+ }
+ @media (max-width:400px){.mstrip .gas .gb,.mstrip .w{display:none}}
+-@media (min-width:700px) and (max-width:959px){.mstrip{gap:4px 12px}.mstrip .w{display:none}.mstrip .mpx{gap:4px 10px}}
++@media (min-width:700px) and (max-width:1099px){.mstrip .w{display:none}}
+ @media (max-width:520px){
+-  #mstrip:not([hidden]) ~ .hdr-right .ftm{display:none} /* the strip already says "updated hh:mm" */
+-  .hdr-right .sl-t{display:none}
+-  .hdr-right{gap:6px;justify-content:flex-start}
+-  .hdr-right #refresh{margin-left:auto}
++  .top .ftm{display:none} /* the strip under the bar says "updated hh:mm" */
+   .seg.pills button>span{padding-left:8px;padding-right:8px}
+ }
+-@media (max-width:400px){.hdr-right .badge.sealed{display:none}} /* the footer and the lock screen say it too */
++@media (max-width:400px){.top .fw{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}} /* the dot's colour and the label say it */
++@media (max-width:340px){.top .brand{display:none}}
+ 
+ /* pop-up notes: why a pool stands out, the gas range */
+ .pop{position:fixed;z-index:70;max-width:min(320px,calc(100vw - 24px));padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:rgba(17,23,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2)}
+@@ -496,6 +499,26 @@ footer .btn{font-family:var(--sans)}
+ @keyframes popIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+ .pop:not([hidden]){animation:popIn .14s ease-out}
+ 
++/* explainable terms: a dotted underline (or a small chip) opens a short plain-words note; the tap area is 44 px tall */
++.term{display:inline-flex;align-items:center;min-height:44px;margin:-15px 0;padding:0;border:0;background:none;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;text-align:inherit;cursor:help;vertical-align:baseline;text-decoration:underline dotted rgba(139,150,163,.75);text-decoration-thickness:1px;text-underline-offset:3px}
++.term:hover,.term[aria-expanded="true"]{text-decoration-color:var(--accent);color:var(--fg)}
++.termb{display:inline-flex;align-items:center;min-height:44px;margin:-14px 0;padding:0;border:0;background:none;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;cursor:help;vertical-align:middle;gap:6px}
++.termb:focus-visible,.term:focus-visible{outline:none}
++.termb:focus-visible>*,.term:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
++.termb[aria-expanded="true"]>.tag,.termb[aria-expanded="true"]>.chip,.termb[aria-expanded="true"]>.badge{border-color:var(--accent)}
++.termb>.tag,.termb>.chip,.termb>.badge{cursor:help}
++.tags .termb{margin:-13px 0}
++.chips .termb{margin:-10px 0}
++.legend .termb{margin:-14px 0;color:var(--fg2)}
++.legend .termb>span{display:inline-flex;align-items:center;gap:6px;text-decoration:underline dotted rgba(139,150,163,.6);text-underline-offset:3px}
++.pop .gl{color:var(--fg2)}
++.pop .gl+.gl{margin-top:5px}
++button.ring{padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:help;border-radius:50%}
++button.ring:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
++/* the detail panel's top folds while its content scrolls down, and opens again on the way back up */
++.sheet-head{position:relative;z-index:1}
++.sheet-card.cond #sheet-kicker,.sheet-card.cond #sheet-meta,.sheet-card.cond .sim{display:none}
++
+ /* why it's interesting: small pictograms */
+ .wi{width:14px;height:14px;flex:none;display:block}
+ .wi.g{color:var(--accent)}.wi.a{color:var(--warn)}.wi.r{color:var(--bad)}
+@@ -562,7 +585,9 @@ div.mc-name{cursor:inherit;pointer-events:none}
+ .mc-rel{position:relative;z-index:0;pointer-events:none;margin-top:4px;font:600 10px/1.2 var(--mono);letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+ .mc-rel.g0{color:var(--accent)}.mc-rel.uv{color:var(--bad)}
+ .mc .star{position:absolute;top:0;right:0;z-index:2;width:34px;min-width:34px}
+-.mc.fav .mc-name{position:static}
++.mc-relb{position:relative;z-index:1;align-self:flex-start;margin:-10px 0 -14px;max-width:100%}
++.mc-relb>.mc-rel{margin-top:0;text-decoration:underline dotted rgba(139,150,163,.6);text-underline-offset:3px}
++.mc.fav .mc-name{position:static;padding-right:30px} /* a long name wraps before the star */
+ .mc.fav .mc-name::after{content:"";position:absolute;inset:0;z-index:1;border-radius:10px}
+ .mc.fav{cursor:pointer}
+ .mc.end{width:96px;align-items:center;justify-content:center;text-align:center;padding:8px;border-style:dashed;background:transparent;color:var(--accent);font:600 12px/1.3 var(--sans);cursor:pointer;min-height:44px}
+@@ -645,36 +670,35 @@ a.ext svg{width:10px;height:10px;flex:none}
+ </head>
+ <body>
+ <div id="ribbon" class="ribbon" role="note" hidden>MOCKUP · MADE-UP NUMBERS</div>
+-<header class="top">
+-  <div class="mstrip" id="mstrip" aria-label="Market and scanner timing" hidden>
+-    <button type="button" class="gas g-none" id="gas" data-act="gas" aria-haspopup="true" aria-expanded="false" aria-label="Ethereum gas">—</button>
+-    <span class="mpx" id="mpx"></span>
+-    <span class="mt" id="mt"></span>
+-  </div>
++<header class="top" id="top">
+   <div class="brand">
+     <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="6" width="3.5" height="16" rx="1" fill="#4B5563"/><rect x="5.5" y="12" width="3.5" height="10" rx="1" fill="#4B5563"/><rect x="10" y="18" width="3.5" height="4" rx="1" fill="#16C784"/><rect x="14.5" y="11" width="3.5" height="11" rx="1" fill="#4B5563"/><rect x="19" y="4" width="3.5" height="18" rx="1" fill="#4B5563"/></svg>
+-    <div>
+-      <h1 class="title">LP SHAPE SCANNER</h1>
+-      <div class="lbl" id="phase" style="margin-top:3px">PHASE —</div>
+-    </div>
++    <h1 class="title">LP SHAPE SCANNER</h1>
+   </div>
+-  <div class="hdr-right">
+-    <span class="badge" id="fresh" role="status"><span class="dot"></span><span id="fresh-t">NO DATA YET</span></span>
+-    <button type="button" class="iconbtn" id="refresh" data-act="refresh" aria-label="Refresh" title="Refresh now" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.2 2.6v3.4h-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+-    <span class="badge sealed" title="Every data file is sealed with AES-256-GCM"><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="6.5" rx="1.5" fill="#AAB4C0"/><path d="M3 5V3.6a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="#AAB4C0" stroke-width="1.4"/></svg><span class="sl-t">SEALED</span></span>
+-    <div class="seg pills" role="group" aria-label="Time window" id="winseg" hidden>
+-      <button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button>
+-    </div>
+-    <span class="lbl" id="refresh-msg" role="status" aria-live="polite" hidden></span>
++  <span class="badge" id="fresh" role="status"><span class="dot"></span><span id="fresh-t">NO DATA YET</span></span>
++  <button type="button" class="iconbtn" id="refresh" data-act="refresh" aria-label="Refresh" title="Refresh now" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.2 2.6v3.4h-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
++  <div class="seg pills" role="group" aria-label="Time window" id="winseg" hidden>
++    <button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button>
+   </div>
++  <span class="lbl rmsg" id="refresh-msg" role="status" aria-live="polite" hidden></span>
+ </header>
++<div class="subhead" id="subhead">
++  <div class="sub-l"><span class="lbl" id="phase">PHASE —</span>
++    <button type="button" class="termb" data-act="term" data-term="sealed" aria-expanded="false" aria-label="Sealed: what does it mean?"><span class="badge sealed"><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="6.5" rx="1.5" fill="#AAB4C0"/><path d="M3 5V3.6a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="#AAB4C0" stroke-width="1.4"/></svg><span class="sl-t">SEALED</span></span></button>
++  </div>
++  <div class="mstrip" id="mstrip" aria-label="Market and scanner timing" hidden>
++    <button type="button" class="gas g-none" id="gas" data-act="gas" aria-haspopup="true" aria-expanded="false" aria-label="Ethereum gas">—</button>
++    <span class="mpx" id="mpx"></span>
++    <span class="mt" id="mt"></span>
++  </div>
++</div>
+ <div id="banner" class="banner" role="status" hidden></div>
+ 
+ <div id="lockscreen" class="lockscreen" hidden>
+   <form id="unlock-form" class="lock-card" autocomplete="on" novalidate>
+     <div class="lbl">LP SHAPE SCANNER · SEALED</div>
+     <h1>Unlock this device</h1>
+-    <p>Every data file is sealed with AES-256-GCM. Enter the passphrase once: this browser then keeps the key (it can't be read back out) until you lock the device.</p>
++    <p>Every data file is sealed with AES-256-GCM. Enter the passphrase once: this browser then keeps the key (it can't be read back out) until you sign out on this device.</p>
+     <label class="lbl" for="pass">Passphrase</label>
+     <input id="pass" name="password" type="password" autocomplete="current-password" spellcheck="false" data-act="pass" required>
+     <button class="btn" type="submit" id="unlock-btn" data-act="unlock">Unlock</button>
+@@ -795,8 +819,8 @@ a.ext svg{width:10px;height:10px;flex:none}
+ <footer>
+   <span id="foot-l">build — · data sealed (AES-256-GCM) · times Europe/Budapest</span>
+   <span id="foot-r"></span>
+-  <div class="lockgrp"><button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden aria-describedby="lock-note">Lock this device</button>
+-  <span class="lock-note" id="lock-note" hidden>Forgets the saved key on this device: the passphrase is needed next time. The data stays sealed either way.</span></div>
++  <div class="lockgrp"><button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden aria-describedby="lock-note">Sign out on this device</button>
++  <span class="lock-note" id="lock-note" hidden>Forgets the saved key here. You’ll need your passphrase next time. Your data stays encrypted either way.</span></div>
+ </footer>
+ <div class="pop" id="pop" role="tooltip" hidden></div>
+ <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+@@ -804,7 +828,7 @@ a.ext svg{width:10px;height:10px;flex:none}
+ <script>
+ (() => {
+ 'use strict';
+-const BUILD = 'v0.3.2';
++const BUILD = 'v0.4.0';
+ const TZ = 'Europe/Budapest';
+ const CHECK = 'lps-lock-check-v1';
+ const WINS = ['24h', '7d', '30d'];
+@@ -907,20 +931,20 @@ const poolById = (id) => (S.live && S.live.pools.find((p) => p.id === id)) || nu
+ const ageDays = (p) => (isNum(p.createdAt) ? (S.live.t - p.createdAt) / D : null);
+ const quoteSym = (p) => (p.t1 && p.t1.sym) || 'the quote token';
+ 
+-function tagsHtml(p, wk = S.win, slim = false) {
+-  const t = [];
+-  if (p.verified === false) t.push('<span class="tag bad" title="Its swaps can’t be checked against its fee counters: never a gem">UNVERIFIED</span>');
+-  if (p.verified === null) t.push('<span class="tag amber" title="Fee check not run yet (too few swaps, or unread)">NOT CHECKED</span>');
+-  if (p.young && !slim) t.push('<span class="tag amber">YOUNG POOL</span>');
++function tagsHtml(p, wk = S.win, slim = false, explain = false) {
++  const t = [], x = (k, h) => (explain ? termB(k, h) : h);
++  if (p.verified === false) t.push(x('unverified', '<span class="tag bad" title="Its swaps can’t be checked against its fee counters: never a gem">UNVERIFIED</span>'));
++  if (p.verified === null) t.push(x('notchecked', '<span class="tag amber" title="Fee check not run yet (too few swaps, or unread)">NOT CHECKED</span>'));
++  if (p.young && !slim) t.push(x('young', '<span class="tag amber">YOUNG POOL</span>'));
+   const gt = (W(p, wk) && W(p, wk).gem && Array.isArray(W(p, wk).gem.tags)) ? W(p, wk).gem.tags : [];
+-  if (gt.includes('unchecked') && !(slim && p.verified === null)) t.push('<span class="tag amber" title="A safety check didn’t run: the gem is capped at 40">UNCHECKED</span>');
+-  if (gt.includes('unconfirmed') && !slim) t.push('<span class="tag amber">UNCONFIRMED</span>');
+-  if (gt.includes('one-off') && !slim) t.push('<span class="tag amber">ONE-OFF</span>');
+-  if (p.hooks) t.push('<span class="tag amber">HOOK</span>');
+-  if (p.offMarket && !slim) t.push('<span class="tag amber">OFF MARKET</span>');
++  if (gt.includes('unchecked') && !(slim && p.verified === null)) t.push(x('unchecked', '<span class="tag amber" title="A safety check didn’t run: the gem is capped at 40">UNCHECKED</span>'));
++  if (gt.includes('unconfirmed') && !slim) t.push(x('unconfirmed', '<span class="tag amber">UNCONFIRMED</span>'));
++  if (gt.includes('one-off') && !slim) t.push(x('oneoff', '<span class="tag amber">ONE-OFF</span>'));
++  if (p.hooks) t.push(x('hook', '<span class="tag amber">HOOK</span>'));
++  if (p.offMarket && !slim) t.push(x('offmarket', '<span class="tag amber">OFF MARKET</span>'));
+   const w = W(p, wk);
+-  if (w && w.partial) t.push(`<span class="tag info">${esc(Math.round(w.days * 10) / 10)} OF ${WIN_DAYS[wk]} D</span>`);
+-  if (!w) t.push(`<span class="tag info">NO ${WIN_LABEL[wk]} DATA</span>`);
++  if (w && w.partial) t.push(x('partial', `<span class="tag info">${esc(Math.round(w.days * 10) / 10)} OF ${WIN_DAYS[wk]} D</span>`));
++  if (!w) t.push(x('nodata', `<span class="tag info">NO ${WIN_LABEL[wk]} DATA</span>`));
+   return t.join('');
+ }
+ const metaTxt = (p) => `${feeTxt(p.feeTier)} · ${chainShort(p.chain)} · v${esc(p.v)}`;
+@@ -930,6 +954,72 @@ function gemPill(p, wk = S.win) {
+   return `<span class="pill${isGem(p, wk) ? ' gem' : ''}">${g == null ? DASH : g}</span>`;
+ }
+ 
++// ---------- explainable terms: one glossary, a short plain-words note for each (a tap opens it, a second tap or Esc closes) ----------
++const GLOSS = {
++  hook: ['Hook', 'A hook is extra code attached to a Uniswap v4 pool. It can change fees or move tokens; unverified hooks are a risk.'],
++  fee: ['Fee tier', 'What every swap pays the pool, as a share of the trade: 0.30% means $3 on a $1,000 swap. The LPs in range split it, minus any protocol cut.'],
++  v3: ['Uniswap v3', 'Each LP picks a price range and earns fees only while the price is inside it. The classic concentrated-liquidity pool.'],
++  v4: ['Uniswap v4', 'Works like v3, but every pool lives in one contract and a pool can carry a hook (extra code). Native ETH trades without wrapping.'],
++  ethereum: ['Ethereum', 'The pool lives on Ethereum mainnet: the deepest markets, but every transaction costs more gas, so re-centring is dearer.'],
++  base: ['Base', 'The pool lives on Base, a cheaper network that settles on Ethereum. Gas costs cents or less, so re-centring is cheap.'],
++  gem: ['Gem score', 'How good this pool looks for a new LP right now, 0–100: yield now, how few LPs share the price, trader flow and staying power. 60 or more is a gem.'],
++  lvr: ['LVR', 'Loss-versus-rebalancing: what arbitrage traders take from LPs each time the price moves. The fees have to beat it.'],
++  net: ['Net APR', 'The yearly return on the example ticket after LVR, re-centring swaps and gas: what you would keep, not the headline fee rate.'],
++  feeApr: ['Fee APR', 'Fees alone, for a position inside the suggested range, before LVR and costs are taken off.'],
++  aggApr: ['Aggregator APR', 'Fees divided by the whole pool’s value: the figure trackers show. Inside a tight range the rate is higher.'],
++  swaps: ['Re-centre swaps', 'Each time the price leaves the range, the position is moved back around it; the swap that rebalances it costs a little.'],
++  gascost: ['Gas', 'What the network charges for each transaction the position needs (opening, re-centring), as a yearly share of the ticket.'],
++  parked: ['Parked liquidity', 'Money sitting in ranges away from the price. It earns nothing until the price gets there, so the LPs at the price share the fees.'],
++  stranded: ['Stranded share', 'The share of the pool’s money parked far from the price. The higher it is, the fewer LPs split the fees at the price.'],
++  walls: ['Wall', 'A big block of liquidity at one price. A move often slows down or stalls when it reaches a wall.'],
++  range: ['Suggested range', 'The ± band around the price a new position would cover, sized from how much the price moves in a day.'],
++  price: ['Price now', 'The pool’s current price; the chart’s % marks are moves away from it.'],
++  beyond: ['Beyond the bars', 'Liquidity past the chart’s last bar, out to the pool’s last tick. It is too far away to earn fees soon.'],
++  unread: ['Not read', 'This stretch of the liquidity map couldn’t be read this pass. It is hatched, never drawn as zero.'],
++  logscale: ['Log scale', 'Equal steps are equal % moves, so a fall of 50% and a rise of 100% sit the same distance from the price.'],
++  edge: ['Edge', 'Fee APR divided by LVR. Above 1× the fees outrun what arbitrage takes from LPs.'],
++  sigma: ['σ / day', 'How much the price typically moves in a day (daily volatility). More movement means more LVR and more re-centring.'],
++  rerange: ['Re-range', 'How often the price is expected to leave the suggested range, so the position has to be moved.'],
++  room: ['Room', 'The value already inside the suggested range. A new position shares the fees with it: less room, a bigger share.'],
++  stop: ['Stop', 'A position closes if its value drops this much, measured in the quote token.'],
++  markout: ['Markout ÷ fee', 'How far the price moves against LPs right after swaps, per dollar of fee. High means the traders know more (toxic flow).'],
++  unverified: ['Unverified', 'Its swaps can’t be checked against its fee counters (often a hook that moves tokens). It is never counted as a gem.'],
++  notchecked: ['Not checked', 'The fee check hasn’t run yet (too few swaps, or not read). It may still be a gem: look twice.'],
++  unchecked: ['Unchecked', 'A safety check didn’t run this pass, so the gem score is capped at 40.'],
++  unconfirmed: ['Unconfirmed', 'The pool is young, so its gem hasn’t been confirmed over a full window yet.'],
++  young: ['Young pool', 'Under 30 days old: there is little history to trust yet.'],
++  oneoff: ['One-off', 'A single trader paid most of the best day’s fees. Don’t count on it again.'],
++  offmarket: ['Off market', 'The pool’s price is away from the market price. Check before trusting its numbers.'],
++  partial: ['Part of the window', 'The pool is younger than this window, so its figures cover fewer days.'],
++  nodata: ['No data in this window', 'The pool is too new for this time window, or it wasn’t read: its figures show as dashes.'],
++  feecheck: ['Fee check', 'The pool’s swaps replayed against its own fee counters. When they match, its fee numbers can be trusted.'],
++  lpkeeps: ['LPs keep', 'The share of the swap fee that goes to LPs after the protocol’s cut.'],
++  lpsat: ['LPs at the price', 'How many positions cover the current price: the LPs a new position would share the fees with.'],
++  tvl: ['TVL · map · aggregator', 'The pool’s total value, what its liquidity map adds up to, and a tracker’s figure, as a cross-check.'],
++  vsmarket: ['Vs market', 'The pool’s price divided by the market price. Close to 1.000× is healthy.'],
++  shape: ['Shape', 'How the pool’s money spreads around the price: served (most at the price), mixed, stranded (most far away) or one-sided.'],
++  steady: ['Steady fees', 'Fees arrive day after day, not in one burst.'],
++  bursty: ['Bursty fees', 'Fees come in spikes, with quiet days between them.'],
++  emerging: ['Rising fees', 'Fees have grown day after day.'],
++  fading: ['Fading fees', 'Fees have been falling.'],
++  mixed: ['Mixed fees', 'No clear pattern in how the fees arrive.'],
++  samepair: ['Same pair', 'The same two tokens, in another pool: another fee tier, version or chain.'],
++  tiertoken: ['Tier + token', 'The same fee tier, with one token in common.'],
++  sametier: ['Same tier', 'The same fee tier, other tokens.'],
++  sharedtoken: ['Shared token', 'One token in common, at another fee tier.'],
++  thispool: ['This pool', 'The pool you have open, first in the strip so the others compare with it.'],
++  sealed: ['Sealed', 'Every data file is encrypted (AES-256-GCM). Only a browser holding the key from your passphrase can open it.'],
++  watchdog: ['Watchdog last restart', 'The last time the watchdog started a new scanner loop (it does when the loop has stopped). A dash: it hasn’t had to.'],
++  gas: ['Gas', 'What Ethereum charges to run a transaction. Opening or re-centring a position pays it, so cheap gas is a better time.'],
++};
++const plain = (h) => String(h).replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
++// a word or figure that explains itself (dotted underline); `label` is HTML already escaped
++const term = (k, label) => (GLOSS[k] ? `<button type="button" class="term" data-act="term" data-term="${k}" aria-expanded="false" aria-controls="pop" aria-label="${esc(plain(label) + ' · ' + GLOSS[k][0])}: what is it?">${label}</button>` : label);
++// a tag, chip or badge that explains itself: it keeps its small look, the button around it is 44 px tall
++const termB = (k, inner, cls = '') => (GLOSS[k] ? `<button type="button" class="termb${cls ? ' ' + cls : ''}" data-act="term" data-term="${k}" aria-expanded="false" aria-controls="pop" aria-label="${esc(plain(inner) + ' · ' + GLOSS[k][0])}: what is it?">${inner}</button>` : inner);
++const termPop = (k) => (GLOSS[k] ? `<span class="lbl">${esc(GLOSS[k][0])}</span><p class="gl">${esc(GLOSS[k][1])}</p>` : '');
++const chainTerm = (c) => (c === 'base' || c === 'ethereum' ? c : '');
++
+ // ---------- pairs: derived from the pools' tokens until live.json carries them (WETH and ETH are one pair) ----------
+ const symN = (s) => { const u = String(s || '').toUpperCase(); return u === 'ETH' ? 'WETH' : u; };
+ const pairSyms = (p) => (p.t0 && p.t1 ? [p.t0.sym, p.t1.sym] : String(p.pair || '').split('/'));
+@@ -1071,13 +1161,15 @@ async function manualRefresh() {
+   if (!S.key || S.busy || now - lastManual < 1500) return;
+   lastManual = now;
+   b.classList.add('spin'); b.setAttribute('aria-busy', 'true'); b.disabled = true;
+-  m.hidden = false; m.className = 'lbl'; m.textContent = 'REFRESHING…';
++  clearTimeout(rmsgT); m.hidden = false; m.className = 'lbl rmsg'; m.textContent = 'REFRESHING…';
+   try { await refresh(); } finally {
+     b.classList.remove('spin'); b.removeAttribute('aria-busy'); b.disabled = false;
+-    if (S.failing) { m.className = 'lbl err'; m.textContent = `Refresh failed — showing data from ${S.live ? hm(S.live.t) : DASH}`; }
++    if (S.failing) { m.className = 'lbl rmsg err'; m.textContent = `Refresh failed — showing data from ${S.live ? hm(S.live.t) : DASH}`; }
+     else m.textContent = `Updated ${hm(Date.now())} ${TZ_NAME}`;
++    clearTimeout(rmsgT); rmsgT = setTimeout(() => { m.hidden = true; }, 6000);
+   }
+ }
++let rmsgT = 0;
+ 
+ // ---------- unlock / lock ----------
+ function lockMsg(t, err) { const m = $('#lock-msg'); m.textContent = t || ''; m.className = 'lock-msg' + (err ? ' err' : ''); }
+@@ -1121,7 +1213,7 @@ async function lockDevice() {
+   $('#app').innerHTML = APP_TEMPLATE;
+   $('#ribbon').hidden = true; $('#loaderr').hidden = true;
+   showLock();
+-  lockMsg('This device is locked: the key was removed from this browser.');
++  lockMsg('Signed out on this device: the key was removed from this browser.');
+   renderFresh(); renderBanner();
+ }
+ function showLoadError(e) {
+@@ -1134,6 +1226,7 @@ function showLoadError(e) {
+ 
+ async function boot() {
+   try { history.scrollRestoration = 'manual'; } catch (e) { /* old browser */ }
++  barMeasure();
+   $('#foot-l').textContent = `build ${BUILD} · data sealed (AES-256-GCM) · times Europe/Budapest`;
+   scrollTo(0, 0);
+   try { S.lock = await getLock(); } catch (e) {
+@@ -1152,18 +1245,19 @@ async function boot() {
+ // ---------- header, banner, freshness ----------
+ function renderFresh() {
+   const t = S.live ? S.live.t : S.peekT, el = $('#fresh'), tx = $('#fresh-t');
+-  if (!isNum(t)) { el.className = 'badge'; tx.textContent = 'NO DATA YET'; el.title = ''; return; }
++  if (!isNum(t)) { el.className = 'badge'; tx.textContent = 'NO DATA YET'; el.title = ''; el.removeAttribute('aria-label'); return; }
+   const age = Math.max(0, Date.now() - t), min = age / 6e4;
+   let cls, txt;
+   const failing = S.failing && S.live; // showing an older pass because the newest couldn't be read
+-  const at = `<span class="ftm"> · ${hm(t)}</span> · `;
+-  if (failing) { cls = 'stale'; txt = `STALE${at}${min < 60 ? 'REFRESH FAILED' : ageTxt(age) + ' old'}`; }
+-  else if (min < 15) { cls = 'fresh'; txt = `FRESH${at}${min < 1 ? 'JUST NOW' : Math.floor(min) + ' MIN AGO'}`; }
+-  else if (min < 60) { cls = 'late'; txt = `LATE${at}${Math.floor(min)} MIN AGO`; }
+-  else { cls = 'stale'; txt = `STALE${at}${ageTxt(age)} old`; }
++  const at = `<span class="ftm"> · ${hm(t)}</span><span class="fw"> · </span>`, fw = (x) => `<span class="fw">${x}</span>`;
++  if (failing) { cls = 'stale'; txt = `${fw('STALE')}${at}${min < 60 ? 'REFRESH FAILED' : ageTxt(age) + ' old'}`; }
++  else if (min < 15) { cls = 'fresh'; txt = `${fw('FRESH')}${at}${min < 1 ? 'JUST NOW' : Math.floor(min) + ' MIN AGO'}`; }
++  else if (min < 60) { cls = 'late'; txt = `${fw('LATE')}${at}${Math.floor(min)} MIN AGO`; }
++  else { cls = 'stale'; txt = `${fw('STALE')}${at}${ageTxt(age)} old`; }
+   if (el.className !== 'badge ' + cls) el.className = 'badge ' + cls;
+   if (tx.innerHTML !== txt) tx.innerHTML = txt;
+   el.title = 'Scanner pass ' + full(t);
++  el.setAttribute('aria-label', `${{ fresh: 'Fresh', late: 'Late', stale: 'Stale' }[cls]} data: scanner pass ${hm(t)}`);
+ }
+ function renderBanner() {
+   const b = $('#banner');
+@@ -1214,7 +1308,7 @@ function renderAll() {
+   if (store.get('lps.legend') === '1') { $('#why-legend').hidden = false; $('#why-tog').setAttribute('aria-expanded', 'true'); }
+   if (document.activeElement === $('#f-q')) qUpdate();
+   if (!S.touched) scrollTo(0, 0);
+-  stickyAll(); mcEdgesAll(); popPlace();
++  barMeasure(); liqDeclutterAll(); stickyAll(); mcEdgesAll(); popPlace();
+   onScroll();
+ }
+ 
+@@ -1257,9 +1351,9 @@ function renderGlance() {
+ // ---------- best find ----------
+ function ring(total, dim) {
+   const r = 26, c = 2 * Math.PI * r, v = isNum(total) ? Math.max(0, Math.min(100, total)) : 0;
+-  return `<div class="ring" role="img" aria-label="Gem score ${isNum(total) ? total : 'not available'} of 100"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="${r}" fill="none" stroke="#1E2A22" stroke-width="5"/>`
++  return `<button type="button" class="ring" data-act="term" data-term="gem" aria-expanded="false" aria-controls="pop" aria-label="Gem score ${isNum(total) ? total : 'not available'} of 100: what is it?"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="${r}" fill="none" stroke="#1E2A22" stroke-width="5"/>`
+     + `<circle cx="32" cy="32" r="${r}" fill="none" stroke="${dim ? '#4B5563' : '#E8B84A'}" stroke-width="5" stroke-linecap="round" transform="rotate(-90 32 32)" stroke-dasharray="${(c * v / 100).toFixed(1)} ${c.toFixed(1)}"/></svg>`
+-    + `<span class="rv">${isNum(total) ? total : DASH}</span><span class="rl">GEM</span></div>`;
++    + `<span class="rv">${isNum(total) ? total : DASH}</span><span class="rl">GEM</span></button>`;
+ }
+ function breakdown(w) {
+   const f = w.feeApr, l = w.lvr, s = w.swapCost, g = w.gas, n = w.net;
+@@ -1271,9 +1365,9 @@ function breakdown(w) {
+     + (n < 0 ? `<div class="fee-mark" style="left:${Math.min(100, (f / tot) * 100).toFixed(1)}%" title="fees reach here"></div>` : '');
+   const aria = n >= 0 ? `Fee APR ${pct(f)} splits into net ${pct(n)}, LVR ${pct(l)}, swaps ${pct(s)} and gas ${pct(g)}` : `Costs ${pct(tot)} are more than the fee APR ${pct(f)}: net ${pct(n)}`;
+   return `<div><div class="bar" role="img" aria-label="${esc(aria)}">${bar}</div><div class="legend" style="margin-top:8px">`
+-    + (n >= 0 ? `<span><i class="sw" style="background:var(--accent2)"></i>Net to you ${pct(n)}</span>` : `<span><i class="sw" style="background:var(--fg);width:2px;height:12px"></i>Fees ${pct(f)} cover ${pct(f / tot)} of the costs</span>`)
+-    + `<span><i class="sw" style="background:var(--lvr)"></i>LVR (arbs) ${pct(l)}</span><span><i class="sw" style="background:var(--swap)"></i>Re-centre swaps ${pct(s)}</span>`
+-    + `<span><i class="sw" style="background:var(--gas)"></i>Gas ${pct(g)}</span><span>${n >= 0 ? 'fees ' + pct(f) + ' in all' : 'net <b class="neg">' + pct(n) + '</b>'}</span></div></div>`;
++    + (n >= 0 ? termB('net', `<span><i class="sw" style="background:var(--accent2)"></i>Net to you ${pct(n)}</span>`) : termB('feeApr', `<span><i class="sw" style="background:var(--fg);width:2px;height:12px"></i>Fees ${pct(f)} cover ${pct(f / tot)} of the costs</span>`))
++    + termB('lvr', `<span><i class="sw" style="background:var(--lvr)"></i>LVR (arbs) ${pct(l)}</span>`) + termB('swaps', `<span><i class="sw" style="background:var(--swap)"></i>Re-centre swaps ${pct(s)}</span>`)
++    + termB('gascost', `<span><i class="sw" style="background:var(--gas)"></i>Gas ${pct(g)}</span>`) + `<span>${n >= 0 ? 'fees ' + pct(f) + ' in all' : 'net <b class="neg">' + pct(n) + '</b>'}</span></div></div>`;
+ }
+ const LIQ_L = 0.45;
+ // the map's own edges and bar widths: the scanner's depthSpan and depthStep (fine bars inside ±edge, coarser ones out
+@@ -1312,14 +1406,16 @@ function liqChart(p, w, id) {
+   const all = ((p.shape && p.shape.depth) || []).filter((d) => Array.isArray(d) && isNum(d[0]) && (isNum(d[1]) || d[1] === null));
+   const depth = all.filter((d) => isNum(d[1])), unread = all.filter((d) => d[1] === null);
+   if (!depth.length) { delete PZ[id]; return `<p class="empty" style="margin-top:8px">Liquidity map not read this pass (${DASH}).</p>`; }
+-  const ext = liqExtent(p.shape, all), key = p.id, L = () => LIQ_SPANS[zget(id)];
+-  // the centre may move inside the data; zoomed out past the data, the view holds still around the price
++  const ext = liqExtent(p.shape, all), key = p.id, sp = liqSpans(ext), L = () => liqHalf(sp, zget(id));
++  // the centre may move inside the data; the widest view is the whole map, centred on it
+   const lim = () => { const l = L(); if (2 * l < ext.hi - ext.lo - 1e-9) return [ext.lo + l, ext.hi - l]; const c = clamp(0, ext.hi - l, ext.lo + l); return [c, c]; };
+   const P = PZ[id] = {
+-    key, p, w, depth, unread, ex: ext, kind: 'liq', aria: ['Show lower prices', 'Show higher prices'], hint: '◂ drag ▸ · double-tap resets',
+-    x: () => panGet(id, key, clamp(0, ...lim())), setX: (v) => panPut(id, key, v), lim,
++    key, p, w, depth, unread, ex: ext, sp, kind: 'liq', aria: ['Show lower prices', 'Show higher prices'], hint: '◂ drag ▸ · pinch to zoom',
++    x: () => panGet(id, key, clamp(0, ...lim())), setX: (v) => panPut(id, key, v), lim, half: L,
+     span: () => 2 * L(), unit: (h) => (2 * L()) / Math.max(40, h.clientWidth),
+     vw: () => [P.x() - L(), P.x() + L()], ext: () => [ext.lo, ext.hi],
++    zr: () => [sp[0] > sp[1] + 1e-9 ? 0 : 1, ZMAX.liq], wAt: (lv) => 2 * liqHalf(sp, lv), lvOf: (wd) => liqLevel(sp, wd / 2), place: (a) => P.setX(a + L()),
++    caps: () => ['±' + Math.round(L() * 100) + '%'],
+     isDef: () => Math.abs(P.x() - clamp(0, ...lim())) < 1e-6,
+     rezoom: () => { if (panned(id, key)) P.setX(clamp(P.x(), ...lim())); },
+     inner: () => liqInner(id),
+@@ -1330,14 +1426,14 @@ function liqChart(p, w, id) {
+   P.label = `Liquidity by price: ${pct(r != null ? sum(depth.filter(([o]) => Math.abs(o) <= r + 1e-9).map((d) => d[1])) / (p.tvlUsd || tot) : null)} of the pool sits inside the suggested range`;
+   const by = (p.shape && p.shape.beyond) || {}, byTxt = [['below', 'further down'], ['above', 'further up']].filter(([k]) => by[k] !== 0 && by[k] !== undefined).map(([k, t]) => `${usd(by[k])} ${t}`);
+   return pzShell(id, 'liq')
+-    + `<div class="legend" style="margin-top:8px"><span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span><span><i class="sw" style="background:#4B5563"></i>Outside it</span>`
+-    + `<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>${isNum(walls.below) || isNum(walls.above) ? '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>' : ''}`
+-    + (unread.length ? '<span><i class="sw hatch"></i>Not read</span>' : '')
+-    + (byTxt.length ? `<span title="Liquidity past the chart’s last bars, out to the pool’s last tick">Past the bars: ${byTxt.join(' · ')}</span>` : '') + '</div>';
++    + `<div class="legend" style="margin-top:8px">${termB('range', `<span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span>`)}${termB('parked', '<span><i class="sw" style="background:#4B5563"></i>Parked, outside it</span>')}`
++    + `${termB('price', '<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>')}${isNum(walls.below) || isNum(walls.above) ? termB('walls', '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>') : ''}`
++    + (unread.length ? termB('unread', '<span><i class="sw hatch"></i>Not read</span>') : '')
++    + (byTxt.length ? termB('beyond', `<span>Past the bars: ${byTxt.join(' · ')}</span>`) : '') + '</div>';
+ }
+ // the drawing inside the liquidity chart for its current view (redrawn on every frame of a drag)
+ function liqInner(id) {
+-  const P = PZ[id], { p, w, depth, unread } = P, ext = P.ex, L = LIQ_SPANS[zget(id)], c = P.x(), v0 = c - L, v1 = c + L, VW = 480, VH = 120;
++  const P = PZ[id], { p, w, depth, unread } = P, ext = P.ex, L = P.half(), c = P.x(), v0 = c - L, v1 = c + L, VW = 480, VH = 120;
+   const r = w && isNum(w.range) ? w.range : null;
+   const X = (o) => ((o - v0) / (2 * L)) * VW;
+   // a coarse bar covers more price than a fine one: heights are value per fine-bar width, so a wide bar isn't drawn taller
+@@ -1394,6 +1490,26 @@ function liqInner(id) {
+   }
+   return s + pzEnds((ext.lo - v0) / (2 * L), (v1 - ext.hi) / (2 * L), 'NO DATA', 'NO DATA');
+ }
++// the liquidity chart's labels never sit on each other: the price pill stays by the price and the "parked" labels on their
++// rows at the top; a "no data" label that would touch them steps aside, and a "beyond" label moves down to the next free
++// row, or steps aside when none is free (the legend under the chart still names it)
++function liqDeclutter(id) {
++  const h = pzHost(id), P = PZ[id];
++  if (!h || !P || P.kind !== 'liq') return;
++  const hit = (a, b) => a.left < b.right + 3 && b.left < a.right + 3 && a.top < b.bottom + 1 && b.top < a.bottom + 1;
++  const fixed = [...h.querySelectorAll('.cpill, .mlab, .tick')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0);
++  for (const e of h.querySelectorAll('.pz-end span')) { const r = e.getBoundingClientRect(); if (fixed.some((f) => hit(r, f))) e.style.visibility = 'hidden'; else fixed.push(r); }
++  for (const b of h.querySelectorAll('.bylab')) {
++    let ok = false;
++    for (const top of [24, 40, 56, 72, 88, 104]) {
++      b.style.top = top + 'px';
++      const r = b.getBoundingClientRect();
++      if (!fixed.some((f) => hit(r, f))) { fixed.push(r); ok = true; break; }
++    }
++    if (!ok) { b.style.top = '24px'; b.style.visibility = 'hidden'; }
++  }
++}
++const liqDeclutterAll = () => { for (const id of Object.keys(PZ)) liqDeclutter(id); };
+ function checksLine(p) {
+   const c = Array.isArray(p.checks) ? p.checks : [];
+   if (!c.length) return `<div class="checks"><span><b>Checks not read</b> (${DASH})</span></div>`;
+@@ -1469,23 +1585,25 @@ function renderBest() {
+   const perDay = isNum(w.lpFeesUsd) && isNum(w.days) && w.days > 0 ? w.lpFeesUsd / w.days : null;
+   const lps = p.shape && p.shape.lpsAtPrice;
+   const daysTxt = w.partial ? `${+w.days.toFixed(1)}-day` : WIN_WORD[wk];
++  const lq = liqChart(p, w, 'liq-best');
+   el.innerHTML = `<div class="lbl acc">TOP ${list.length} · ${WIN_LABEL[wk]} · TAP A POOL</div>${tabs}<div class="best-head"><div class="grow">`
+     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
+     + `<div class="ttl"><h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
+-    + `<div class="lbl best-meta">${feeTxt(p.feeTier)} · ${chainLong(p.chain)} · UNISWAP V${esc(p.v)} · ${rangeTxt(w.range)}</div>`
+-    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
++    + `<div class="lbl best-meta">${metaTerms(p)} · ${term('range', rangeTxt(w.range))}</div>`
++    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
+     + `<div class="best-body"><div class="best-l">`
+-    + `<div class="bigline"><span class="bignum${w.net < 0 ? ' neg' : ''}">${pct(w.net)}</span><span class="bigsub">${daysTxt} net APR at ${usdFull(L.ticket)}<br>after LVR, swaps and gas</span></div>`
++    + `<div class="bigline"><span class="bignum${w.net < 0 ? ' neg' : ''}">${pct(w.net)}</span><span class="bigsub">${daysTxt} ${term('net', 'net APR')} at ${usdFull(L.ticket)}<br>after ${term('lvr', 'LVR')}, swaps and gas</span></div>`
+     + breakdown(w)
+     + `<p class="sentence">${sentence(outside, tvl, w, lps, perDay)}</p>`
+-    + `<div class="chips"><span class="chip">EDGE ${times(w.edge)}</span><span class="chip">σ ${pct(w.sigma, { dp: 1 })}/DAY</span>`
+-    + `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span><span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`
+-    + `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>${patternChip(p)}</div>`
++    + `<div class="chips">${termB('edge', `<span class="chip">EDGE ${times(w.edge)}</span>`)}${termB('sigma', `<span class="chip">σ ${pct(w.sigma, { dp: 1 })}/DAY</span>`)}`
++    + `${termB('rerange', `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span>`)}${termB('room', `<span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`)}`
++    + `${termB('stop', `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>`)}${patternChip(p)}</div>`
+     + dailyStrip(p, w) + gemNow(p, w)
+-    + `</div><div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">LOG SCALE · ±${Math.round(LIQ_SPANS[zget('liq-best')] * 100)}%</span>${ztools('liq-best', p.id)}</div>${liqChart(p, w, 'liq-best')}</div></div>`
++    + `</div><div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">${term('logscale', 'LOG SCALE')} · <span class="pz-cap1">${liqCap('liq-best')}</span></span>${ztools('liq-best', p.id)}</div>${lq}</div></div>`
+     + checksLine(p)
+     + `<div class="btns"><button type="button" class="btn" disabled>Paper-trade · Phase 1</button><button type="button" class="btn" disabled>Propose live · Phase 2</button>`
+     + `<button type="button" class="btn" data-act="detail" data-id="${esc(p.id)}">Full breakdown</button></div>`;
++  liqDeclutter('liq-best');
+ }
+ 
+ // Gem now: yield now 45 + thinness 25 + flow 20 + staying power 10. Older data (stranded, persistence) shows dashes.
+@@ -1499,11 +1617,14 @@ function gemNow(p, w) {
+   const g = w && w.gem;
+   if (!g || p.verified === false) return '';
+   const parts = gemPartsList(g);
+-  return `<div class="dsec"><span class="lbl">Gem now ${isNum(g.total) ? g.total : DASH} · how it adds up</span><div class="gemnow">`
++  return `<div class="dsec"><span class="lbl">${term('gem', 'Gem now ' + (isNum(g.total) ? g.total : DASH))} · how it adds up</span><div class="gemnow">`
+     + parts.map(([n, v, mx]) => `<div><span class="lbl">${esc(n)}</span><span class="track"><i style="width:${isNum(v) ? Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0) : 0}%"></i></span><span class="v">${isNum(v) ? v : DASH}/${mx}</span></div>`).join('') + '</div></div>';
+ }
+ const PATTERN_TXT = { steady: 'STEADY', bursty: 'BURSTY', emerging: 'EMERGING', fading: 'FADING', mixed: 'MIXED' };
+-const patternChip = (p) => (PATTERN_TXT[p.pattern] ? `<span class="chip p-${p.pattern}" title="How the fees arrived over 30 days">${PATTERN_TXT[p.pattern]}</span>` : '');
++const patternChip = (p) => (PATTERN_TXT[p.pattern] ? termB(p.pattern, `<span class="chip p-${p.pattern}" title="How the fees arrived over 30 days">${PATTERN_TXT[p.pattern]}</span>`) : '');
++// fee tier · chain · version, each explaining itself
++const metaTerms = (p, long = true) => `${term('fee', feeTxt(p.feeTier))} · ${term(chainTerm(p.chain), long ? chainLong(p.chain) : chainShort(p.chain))} · ${term('v' + p.v, 'UNISWAP V' + esc(p.v))}`;
++const liqCap = (id) => (PZ[id] && PZ[id].kind === 'liq' ? PZ[id].caps()[0] : DASH);
+ // one-off: the scanner's tag, or most of the biggest day's fees from a single transaction
+ const oneOff = (p, w) => !!((w && w.gem && Array.isArray(w.gem.tags) && w.gem.tags.includes('one-off')) || (p.burst && isNum(p.burst.oneTrader) && p.burst.oneTrader >= 0.5));
+ function dailyStrip(p, w, id = 'daily-best') {
+@@ -1540,24 +1661,42 @@ function dailyStrip(p, w, id = 'daily-best') {
+ // time charts: the latest 1/2^k of the span, or an older stretch once dragged; the scatter: its axes narrowed around
+ // the middle, then dragged in both directions. Zooming keeps the view's centre (a time chart showing the newest
+ // point keeps showing it).
+-const LIQ_SPANS = [0.9, 0.45, 0.25, 0.12, 0.06];
++// liquidity: level 0 is the whole map (its depthSpan), level 1 the fine bars' edge (±45%), then ±25%, ±12% and ±6%;
++// a pinch lands between levels (geometric steps in between); zooming out never shows more than the data
++const LIQ_IN = [0.45, 0.25, 0.12, 0.06];
+ const ZMAX = { liq: 4, time: 3, scatter: 3 }, ZDEF = { liq: 1, time: 0, scatter: 0 };
++function liqSpans(ext) { // half-spans per level, from the map's own extent
++  const full = Math.max(0.01, (ext.hi - ext.lo) / 2), def = Math.min(full, isFinite(ext.edge) ? ext.edge : LIQ_IN[0]);
++  return [full, ...LIQ_IN.map((x) => Math.min(full, (x * def) / LIQ_IN[0]))];
++}
++function liqHalf(sp, lv) {
++  const i = clamp(Math.floor(lv), 0, sp.length - 1), f = clamp(lv - i, 0, 1);
++  return i >= sp.length - 1 ? sp[sp.length - 1] : sp[i] * Math.pow(sp[i + 1] / sp[i], f);
++}
++function liqLevel(sp, h) {
++  if (h >= sp[0] - 1e-9) return sp[0] > sp[1] + 1e-9 ? 0 : 1;
++  for (let i = 0; i < sp.length - 1; i++) if (h >= sp[i + 1] - 1e-9 && sp[i] > sp[i + 1] + 1e-9) return i + Math.log(sp[i] / h) / Math.log(sp[i] / sp[i + 1]);
++  return sp.length - 1;
++}
++const near1 = (a, b) => Math.abs(a - b) < 1e-6;
++// the zoom a chart allows, from its data where it is drawn: [widest level, closest level]
++function zrange(id) { const P = PZ[id]; return P && P.zr ? P.zr() : [0, ZMAX[zkind(id)]]; }
+ const zkind = (id) => (id.startsWith('liq') ? 'liq' : id === 'scatter' ? 'scatter' : 'time');
+ // a phone opens the daily fee strip on its latest 15 days, bars wide enough to tell apart: a drag shows the older ones
+ const zdef = (id) => (id.startsWith('daily') && !SOLO && innerWidth < 600 ? 1 : ZDEF[zkind(id)]);
+ const zget = (id) => (S.zoom && isNum(S.zoom[id]) ? S.zoom[id] : zdef(id));
+-const tlenAt = (n, lv) => { const f = Math.pow(0.5, lv); return f >= 1 ? n : Math.min(n, Math.max(2, Math.ceil(n * f))); }; // index units in view
++const tlenAt = (n, lv) => { const f = Math.pow(0.5, lv); return f >= 1 ? n : Math.min(n, Math.max(2, n * f)); }; // index units in view
+ const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+ // a pan belongs to the pool (or replay) it was made on: another pool opens on its default view
+ const panGet = (id, key, def) => { const s = S.pan && S.pan[id]; return s && s.k === key ? s.v : def; };
+ const panPut = (id, key, v) => { (S.pan ||= {})[id] = { k: key, v }; };
+ const panned = (id, key) => !!(S.pan && S.pan[id] && S.pan[id].k === key);
+ function ztools(id, pool) {
+-  const lv = zget(id), k = zkind(id);
++  const lv = zget(id), [z0, z1] = zrange(id);
+   return `<div class="ctools"><div class="zseg" role="group" aria-label="Zoom this chart">`
+-    + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="-1" aria-label="Zoom out" title="Zoom out"${lv <= 0 ? ' disabled' : ''}>−</button>`
+-    + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="1" aria-label="Zoom in" title="Zoom in"${lv >= ZMAX[k] ? ' disabled' : ''}>+</button></div>`
+-    + (lv !== zdef(id) || panned(id, pool || '') ? `<button type="button" class="zreset" data-act="zreset" data-chart="${id}" aria-label="Reset zoom" title="Reset zoom (or double-tap the chart)">reset</button>` : '')
++    + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="-1" aria-label="Zoom out" title="Zoom out (or pinch)"${lv <= z0 + 1e-6 ? ' disabled' : ''}>−</button>`
++    + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="1" aria-label="Zoom in" title="Zoom in (or pinch)"${lv >= z1 - 1e-6 ? ' disabled' : ''}>+</button></div>`
++    + (!near1(lv, zdef(id)) || panned(id, pool || '') ? `<button type="button" class="zreset" data-act="zreset" data-chart="${id}" aria-label="Reset zoom" title="Reset zoom (or double-tap the chart)">reset</button>` : '')
+     + `<button type="button" class="openwin" data-act="openchart" data-chart="${id}" data-pool="${esc(pool || '')}" aria-label="Open this chart in a new window" title="Open in a new window">`
+     + `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 2h5v5M14 2 7.5 8.5M12 9.5V14H2V4h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
+ }
+@@ -1570,7 +1709,7 @@ function rerender(id) {
+   if (SOLO) isolate();
+ }
+ function zoom(id, dir) {
+-  const k = zkind(id), old = zget(id), lv = Math.max(0, Math.min(ZMAX[k], old + dir));
++  const old = zget(id), [z0, z1] = zrange(id), lv = clamp(dir > 0 ? Math.floor(old + 1e-6) + 1 : Math.ceil(old - 1e-6) - 1, z0, z1);
+   pzStop(id);
+   (S.zoom ||= {})[id] = lv;
+   const P = PZ[id];
+@@ -1580,13 +1719,24 @@ function zoom(id, dir) {
+   if (b && !b.disabled) b.focus({ preventScroll: true }); else { const o = $(`[data-act="zoom"][data-chart="${id}"]:not([disabled])`); if (o) o.focus({ preventScroll: true }); }
+ }
+ function zreset(id) { pzStop(id); if (S.zoom) delete S.zoom[id]; if (S.pan) delete S.pan[id]; rerender(id); }
++function zoomed(id) {
++  const P = PZ[id];
++  pzStop(id);
++  if (S.zoom && isNum(S.zoom[id])) { const r = Math.round(S.zoom[id]); if (Math.abs(S.zoom[id] - r) < 0.05) S.zoom[id] = r; } // a pinch that ends near a step lands on it
++  if (P) {
++    const [lo, hi] = P.lim(); P.setX(clamp(P.x(), lo, hi));
++    if (P.xy) { const [ly, hy] = P.limY(); P.setY(clamp(P.y(), ly, hy)); }
++    if (P.isDef() && S.pan) delete S.pan[id];
++  }
++  rerender(id);
++}
+ function openChart(id, pool) {
+   const u = new URL(location.href);
+   u.hash = '';
+   u.searchParams.set('view', id);
+   if (pool) u.searchParams.set('pool', pool); else u.searchParams.delete('pool');
+   u.searchParams.set('w', S.win);
+-  u.searchParams.set('z', String(zget(id)));
++  u.searchParams.set('z', String(+zget(id).toFixed(3)));
+   const pn = panned(id, pool || '') ? S.pan[id].v : null; // the window opens on the same stretch
+   if (pn != null) u.searchParams.set('pan', Array.isArray(pn) ? pn.map((x) => +x.toFixed(4)).join(',') : String(+pn.toFixed(4))); else u.searchParams.delete('pan');
+   window.open(u.toString(), '_blank', 'noopener');
+@@ -1608,6 +1758,7 @@ function pzTime(id, key, n, o) {
+     key, n, kind: 'time', ...o,
+     x: () => n - panGet(id, key, 0), setX: (v) => panPut(id, key, n - v),
+     lim: () => [Math.min(len(), n), n], span: len, vw: () => [P.x() - len(), P.x()], ext: () => [0, n],
++    zr: () => [0, Math.max(0, Math.min(ZMAX.time, Math.log2(n / 2)))], wAt: (lv) => tlenAt(n, lv), lvOf: (wd) => Math.log2(n / Math.max(1e-9, wd)), place: (a) => P.setX(a + len()),
+     unit: (h) => len() / Math.max(40, h.clientWidth * (1 - (o.plot ? o.plot[0] + o.plot[1] : 0))),
+     isDef: () => Math.abs(panGet(id, key, 0)) < 1e-6,
+     rezoom: (old) => { const back = panGet(id, key, 0); if (!(back > 1e-6)) return; const l0 = tlenAt(n, old), l1 = len(); P.setX(clamp(n - back - l0 / 2 + l1 / 2, Math.min(l1, n), n)); },
+@@ -1634,7 +1785,7 @@ function pzHintHtml(id, st) { // once per device, on the first chart that can pa
+   const P = PZ[id];
+   if (SOLO || P.xy || !(st.l || st.r) || store.get('lps.hint') === '1' || (S.hint && S.hint !== id)) return '';
+   if (!S.hint) { S.hint = id; S.hintEnd = Date.now() + 4200; setTimeout(pzHintDone, 4200); }
+-  return Date.now() < S.hintEnd ? `<span class="pz-hint" aria-hidden="true">${esc(P.hint || '◂ drag ▸')}</span>` : '';
++  return Date.now() < S.hintEnd ? `<span class="pz-hint" aria-hidden="true"><span>${esc(P.hint || '◂ drag ▸')}</span></span>` : '';
+ }
+ function pzHintDone() { S.hintEnd = 0; store.set('lps.hint', '1'); for (const h of $$('.pz-hint')) h.remove(); }
+ function pzShell(id, cls = '', inset = null) { // the chart's host: drawing, edge buttons, the position bar
+@@ -1669,6 +1820,7 @@ function pzRedraw(id) {
+   h.dataset.view = st.view;
+   if (!h.classList.contains('still')) h.classList.add('still');
+   pzCaps(id);
++  if (P.kind === 'liq') liqDeclutter(id);
+ }
+ const pzq = new Set();
+ let pzRaf = 0;
+@@ -1744,16 +1896,40 @@ function pzCoast(id, vx, vy, host) { // a flick keeps moving and slows down; pas
+   };
+   PZA[id] = requestAnimationFrame(step);
+ }
+-let G = null, lastTap = null;
++// One finger (or the mouse) drags the view: sideways only, unless the chart takes both directions; a mostly vertical
++// swipe stays the page's. Two fingers on the same chart pinch: the view zooms around the point between them and follows
++// them as they move (a two-finger pan). Touch, pen and mouse all arrive as pointer events: chart surfaces carry
++// touch-action: pan-y, so the browser keeps vertical scrolling and leaves sideways drags and pinches to the chart.
++const RUB = 0.18; // how far past an end the view may be pulled, as a share of the view (it springs back)
++let G = null, PIN = null, lastTap = null;
++const PTS = new Map(); // fingers and pens down on a chart: pointerId -> { x, y }
++const swallowClick = () => { // the gesture's own click presses nothing
++  const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
++  addEventListener('click', stop, { capture: true, once: true });
++  setTimeout(() => removeEventListener('click', stop, { capture: true }), 0);
++};
++// where a chart draws its view on screen
++function pzPlot(host, P) {
++  if (P.box) return P.box(host);
++  const r = host.getBoundingClientRect(), pl = P.plot || [0, 0];
++  return { l: r.left + r.width * pl[0], w: Math.max(20, r.width * (1 - pl[0] - pl[1])), t: r.top, h: Math.max(20, r.height) };
++}
+ document.addEventListener('pointerdown', (e) => {
+   const host = e.target.closest && e.target.closest('.pz');
+-  if (!host || G || (e.pointerType === 'mouse' && e.button !== 0)) return;
++  if (!host || (e.pointerType === 'mouse' && e.button !== 0)) return;
+   const id = host.dataset.pz, P = PZ[id];
+   if (!P) return;
++  if (e.pointerType !== 'mouse') PTS.set(e.pointerId, { x: e.clientX, y: e.clientY });
++  if (PIN) return; // a third finger changes nothing
++  if (G && G.host === host && G.pid !== e.pointerId && e.pointerType !== 'mouse') { pinStart(e); return; }
++  if (G) return;
+   pzStop(id); // a touch catches a coasting chart
+   G = { id, host, pid: e.pointerId, x0: e.clientX, y0: e.clientY, v0: P.x(), w0: P.xy ? P.y() : 0, drag: false, s: [], btn: !!e.target.closest('button') };
+ }, { passive: true });
+ document.addEventListener('pointermove', (e) => {
++  const pt = PTS.get(e.pointerId);
++  if (pt) { pt.x = e.clientX; pt.y = e.clientY; }
++  if (PIN) { if (e.pointerId === PIN.a || e.pointerId === PIN.b) pinMove(); return; }
+   if (!G || e.pointerId !== G.pid) return;
+   const P = PZ[G.id];
+   if (!P || !G.host.isConnected) { G = null; return; }
+@@ -1769,8 +1945,8 @@ document.addEventListener('pointermove', (e) => {
+     return;
+   }
+   const [lo, hi] = P.lim();
+-  P.setX(rubber(G.v0 - dx * P.unit(G.host), lo, hi, P.span() * 0.3));
+-  if (P.xy) { const [ly, hy] = P.limY(); P.setY(rubber(G.w0 + dy * P.unitY(G.host), ly, hy, P.spanY() * 0.3)); }
++  P.setX(rubber(G.v0 - dx * P.unit(G.host), lo, hi, P.span() * RUB));
++  if (P.xy) { const [ly, hy] = P.limY(); P.setY(rubber(G.w0 + dy * P.unitY(G.host), ly, hy, P.spanY() * RUB)); }
+   G.s.push([e.clientX, e.clientY, e.timeStamp]); if (G.s.length > 8) G.s.shift();
+   pzDraw(G.id);
+ });
+@@ -1785,28 +1961,98 @@ function pzEnd(e) {
+     return;
+   }
+   g.host.classList.remove('dragging');
+-  const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; // the drag's own click doesn't press anything
+-  addEventListener('click', stop, { capture: true, once: true });
+-  setTimeout(() => removeEventListener('click', stop, { capture: true }), 0);
++  swallowClick();
+   const s = g.s.filter((q) => e.timeStamp - q[2] < 100);
+   let vx = 0, vy = 0;
+   if (e.type === 'pointerup' && s.length >= 2) { const a = s[0], b = s[s.length - 1], dt = Math.max(8, b[2] - a[2]); vx = (b[0] - a[0]) / dt; vy = (b[1] - a[1]) / dt; }
+   if (pzRaf) { cancelAnimationFrame(pzRaf); pzRaf = 0; pzq.clear(); }
+   pzCoast(g.id, vx, vy, g.host);
+ }
+-document.addEventListener('pointerup', pzEnd);
+-document.addEventListener('pointercancel', pzEnd);
+-// a drag whose pointerup went missing still ends with the mouse button or the finger
+-const pzEndLate = (e) => { if (G && G.drag) pzEnd({ type: 'pointerup', pointerId: G.pid, timeStamp: e.timeStamp, clientX: e.clientX, clientY: e.clientY }); };
++// pinch: the data point under the middle of the two fingers stays under it, the view's width follows their spread
++function pinStart(e) {
++  const g = G, P = PZ[g.id], a = PTS.get(g.pid) || { x: g.x0, y: g.y0 }, b = { x: e.clientX, y: e.clientY };
++  G = null; lastTap = null;
++  if (!P || !P.wAt) return;
++  pzStop(g.id);
++  if (pzRaf) { cancelAnimationFrame(pzRaf); pzRaf = 0; pzq.clear(); }
++  const [v0, v1] = P.vw();
++  PIN = { id: g.id, host: g.host, a: g.pid, b: e.pointerId, d0: Math.max(24, Math.hypot(a.x - b.x, a.y - b.y)), m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
++    v0, w0: v1 - v0, top0: P.y ? P.y() + (v1 - v0) / 2 : 0, lv0: zget(g.id), box: pzPlot(g.host, P), moved: false };
++  g.host.classList.add('dragging');
++  try { g.host.setPointerCapture(e.pointerId); } catch (er) { /* a synthetic pointer */ }
++  if (S.hintEnd) S.hintKill = true;
++}
++function pinMove() {
++  const g = PIN, P = PZ[g.id];
++  if (!P || !g.host.isConnected) { PIN = null; return; }
++  const a = PTS.get(g.a), b = PTS.get(g.b);
++  if (!a || !b) return;
++  const d = Math.max(24, Math.hypot(a.x - b.x, a.y - b.y)), m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, box = g.box;
++  if (!g.moved && Math.abs(d - g.d0) < 3 && Math.hypot(m.x - g.m0.x, m.y - g.m0.y) < 3) return;
++  g.moved = true;
++  const [z0, z1] = zrange(g.id), lv = clamp(P.lvOf((g.w0 * g.d0) / d), z0, z1);
++  (S.zoom ||= {})[g.id] = lv;
++  const wv = P.wAt(lv);
++  P.place(g.v0 + ((g.m0.x - box.l) / box.w) * g.w0 - ((m.x - box.l) / box.w) * wv);
++  const [lo, hi] = P.lim(); P.setX(rubber(P.x(), lo, hi, P.span() * RUB));
++  if (P.placeY) { // the scatter: the same up and down (its values grow upwards)
++    P.placeY(g.top0 - ((g.m0.y - box.t) / box.h) * g.w0 + ((m.y - box.t) / box.h) * wv - wv);
++    const [ly, hy] = P.limY(); P.setY(rubber(P.y(), ly, hy, P.spanY() * RUB));
++  }
++  pzDraw(g.id);
++}
++function pinEnd() {
++  const g = PIN; PIN = null;
++  if (!g) return;
++  g.host.classList.remove('dragging');
++  if (S.hintKill) { S.hintKill = false; pzHintDone(); }
++  lastTap = null;
++  swallowClick();
++  if (pzRaf) { cancelAnimationFrame(pzRaf); pzRaf = 0; pzq.clear(); }
++  if (!g.moved) return;
++  if (!near1(zget(g.id), g.lv0)) zoomed(g.id); // a new zoom: its buttons, caption and limits redrawn
++  else pzCoast(g.id, 0, 0, g.host); // a two-finger pan: springs back inside the data if pulled past it
++}
++function pzUp(e) {
++  PTS.delete(e.pointerId);
++  if (PIN) { if (e.pointerId === PIN.a || e.pointerId === PIN.b) pinEnd(); return; }
++  pzEnd(e);
++}
++document.addEventListener('pointerup', pzUp);
++document.addEventListener('pointercancel', pzUp);
++// a gesture whose pointerup went missing still ends with the mouse button or the last finger
++const pzEndLate = (e) => {
++  if (e.touches && e.touches.length) { if (PIN && e.touches.length < 2) { PTS.clear(); pinEnd(); } return; }
++  if (e.touches) PTS.clear();
++  if (PIN) { pinEnd(); return; }
++  if (G && G.drag) pzEnd({ type: 'pointerup', pointerId: G.pid, timeStamp: e.timeStamp, clientX: e.clientX, clientY: e.clientY });
++};
+ document.addEventListener('mouseup', pzEndLate);
+ document.addEventListener('touchend', pzEndLate);
+ document.addEventListener('touchcancel', pzEndLate);
+-// a trackpad's sideways scroll (or shift + wheel) pans the chart under the pointer; up and down still scroll the page
++// iOS Safari: while a chart is dragged or pinched the page neither scrolls nor zooms under the fingers, and its own
++// pinch events (gesturestart / gesturechange) never zoom the page from a chart
++document.addEventListener('touchmove', (e) => { if ((PIN || (G && G.drag)) && e.cancelable) e.preventDefault(); }, { passive: false });
++for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => { const el = e.target; if (el && el.nodeType === 1 && el.closest('.pz')) e.preventDefault(); }, { passive: false });
++// a trackpad's sideways scroll (or shift + wheel) pans the chart under the pointer, a trackpad pinch (ctrl + wheel) zooms
++// it around the pointer; up and down still scroll the page
+ document.addEventListener('wheel', (e) => {
+   const host = e.target.closest && e.target.closest('.pz');
+   if (!host) return;
+   const id = host.dataset.pz, P = PZ[id];
+   if (!P) return;
++  if (e.ctrlKey && P.wAt) {
++    e.preventDefault();
++    pzStop(id);
++    const [v0, v1] = P.vw(), box = pzPlot(host, P), f = clamp((e.clientX - box.l) / box.w, 0, 1), [z0, z1] = zrange(id);
++    const lv = clamp(P.lvOf((v1 - v0) * Math.exp(clamp(e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY, -120, 120) * 0.01)), z0, z1);
++    (S.zoom ||= {})[id] = lv;
++    P.place(v0 + f * (v1 - v0) - f * P.wAt(lv));
++    const [lo, hi] = P.lim(); P.setX(clamp(P.x(), lo, hi));
++    pzDraw(id);
++    clearTimeout(wheelZ); wheelZ = setTimeout(() => zoomed(id), 260);
++    return;
++  }
+   const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+   if (!d) return;
+   e.preventDefault();
+@@ -1816,6 +2062,7 @@ document.addEventListener('wheel', (e) => {
+   pzDraw(id);
+   clearTimeout(P.wt); P.wt = setTimeout(() => pzSettle(id), 220);
+ }, { passive: false });
++let wheelZ = 0;
+ 
+ // a window opened from a chart shows just that chart, from the same sealed data (the stored key opens it)
+ const SOLO = /^[a-z-]{2,20}$/.test(QP.get('view') || '') ? QP.get('view') : null;
+@@ -2056,7 +2303,10 @@ function drawScatter(rows) {
+   const lim = () => [c0 - H0 + h(), c0 + H0 - h()], pan = () => panGet('scatter', '', [0, 0]);
+   const scale = (host) => Math.min(1, Math.max(40, host.clientWidth) / Wd); // the drawing is at most Wd wide
+   const P = PZ.scatter = {
+-    key: '', xy: zget('scatter') > 0, kind: 'xy', aria: ['Show lower forecasts', 'Show higher forecasts'],
++    key: '', get xy() { return zget('scatter') > 1e-6; }, kind: 'xy', aria: ['Show lower forecasts', 'Show higher forecasts'],
++    zr: () => [0, ZMAX.scatter], wAt: (lv) => 2 * H0 * Math.pow(0.6, lv), lvOf: (wd) => Math.log((2 * H0) / Math.max(1e-9, wd)) / Math.log(1 / 0.6),
++    place: (a) => P.setX(a + h()), placeY: (b) => P.setY(b + h()),
++    box: (host) => { const sv = host.querySelector('svg'), r = (sv || host).getBoundingClientRect(), k = r.width / Wd; return { l: r.left + L * k, w: pw * k, t: r.top + T * k, h: ph * k }; },
+     x: () => c0 + pan()[0], setX: (v) => panPut('scatter', '', [v - c0, pan()[1]]), lim, span: () => 2 * h(),
+     unit: (host) => (2 * h()) / (pw * scale(host)),
+     y: () => c0 + pan()[1], setY: (v) => panPut('scatter', '', [pan()[0], v - c0]), limY: lim, spanY: () => 2 * h(),
+@@ -2065,7 +2315,7 @@ function drawScatter(rows) {
+     isDef: () => Math.abs(pan()[0]) < 1e-6 && Math.abs(pan()[1]) < 1e-6,
+     rezoom: () => { if (panned('scatter', '')) { const [a, b] = lim(); P.setX(clamp(P.x(), a, b)); P.setY(clamp(P.y(), a, b)); } },
+     inner: () => {
+-      const zoomed = zget('scatter') > 0;
++      const zoomed = zget('scatter') > 1e-6;
+       let xlo = P.x() - h(), xhi = P.x() + h(), ylo = P.y() - h(), yhi = P.y() + h(), xt = linTicks(xlo, xhi, 4), yt = linTicks(ylo, yhi, 4);
+       if (!zoomed) { xlo = ylo = Math.min(xlo, xt[0]); xhi = yhi = Math.max(xhi, xt[xt.length - 1]); yt = xt; } // the full view ends on round numbers
+       else { xt = xt.filter((v) => v >= xlo && v <= xhi); yt = yt.filter((v) => v >= ylo && v <= yhi); }
+@@ -2123,9 +2373,8 @@ function renderReplay(row) {
+     + `<div><span class="lbl">Fee share</span><span class="v">${pct(b.share)}</span><span class="s">of pool fees</span></div>`;
+   // price pane, log scale
+   // rewritten only when their markup changes: while the replay plays, its buttons stay put (a press mid-play lands)
+-  putHtml('rp-tools1', `<span id="rp-tools1">${ztools('rp', row.id)}</span>`, true);
+-  putHtml('rp-shape', p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · ±${Math.round(LIQ_SPANS[zget('liq-replay')] * 100)}%</span>${ztools('liq-replay', row.id)}</div>${liqChart(p, W(p), 'liq-replay')}</div>` : '');
+-  putHtml('rp-tools2', `<span id="rp-tools2">${ztools('rp-money', row.id)}</span>`, true);
++  const rq = p ? liqChart(p, W(p), 'liq-replay') : '';
++  putHtml('rp-shape', p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · <span class="pz-cap1">${liqCap('liq-replay')}</span></span>${ztools('liq-replay', row.id)}</div>${rq}</div>` : '');
+   // the price pane (log scale) and the money pane (one $ axis) each drag along the window on their own
+   const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58, MR = 78, inset = [+((ML / Wd) * 100).toFixed(2), +((MR / Wd) * 100).toFixed(2)];
+   const tw = { plot: [ML / Wd, MR / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier' };
+@@ -2133,6 +2382,9 @@ function renderReplay(row) {
+   pzMount(pbox, 'rp', 'pz-line', inset);
+   const P2 = pzTime('rp-money', row.id, n, { ...tw, inner: () => rpMoney(row, P2, Wd, ML, MR, cut, span) });
+   pzMount($('#rp-money'), 'rp-money', 'pz-line', inset);
++  liqDeclutter('liq-replay');
++  putHtml('rp-tools1', `<span id="rp-tools1">${ztools('rp', row.id)}</span>`, true);
++  putHtml('rp-tools2', `<span id="rp-tools2">${ztools('rp-money', row.id)}</span>`, true);
+   const mh = hlFor(row).money;
+   $('#rp-mleg').className = 'legend' + (mh ? ' hl' : '');
+   putHtml('rp-mleg', [['fees', '#8CF0B0', 'Fees'], ['lvr', '#E2664C', 'LVR'], ['costs', '#D39A2C', 'Costs'], ['net', '#16C784', 'Net']].map(([k, c, t]) => `<button type="button" class="lg-btn" data-act="hl" data-g="money" data-s="${k}" aria-pressed="${mh === k}" title="${mh === k ? 'Tap again to show every line' : 'Highlight this line'}"><svg width="16" height="8" aria-hidden="true"><line x1="0" y1="4" x2="16" y2="4" stroke="${c}" stroke-width="${k === 'net' ? 3 : 2}"${k === 'costs' ? ' stroke-dasharray="1.5 2.5"' : ''}/></svg>${t}</button>`).join('')
+@@ -2277,6 +2529,7 @@ function renderLab(row) {
+   const box = $('#lab-lines'), Wd = boxW(box), L = 52, R = 12;
+   const PL = pzTime('lab', row.id, n, { plot: [L / Wd, R / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', inner: () => labLines(row, strats, PL, Wd, L, R) });
+   pzMount(box, 'lab', 'pz-line', [+((L / Wd) * 100).toFixed(2), +((R / Wd) * 100).toFixed(2)]);
++  const lt = lab.querySelector('[data-chartbox="lab"] .ctools'); if (lt) lt.outerHTML = ztools('lab', row.id); // its zoom range is known now
+ }
+ function labLines(row, strats, P, Wd, L, R) {
+   const b = row.b, n = b.series.t.length - 1, Ht = Math.round((Wd >= 600 ? 440 : 220) * (SOLO ? 1.4 : 1)), T = 10, B = 20, pw = Wd - L - R, ph = Ht - T - B;
+@@ -2342,7 +2595,7 @@ function renderHealth() {
+   const mark = (ok) => (ok === true ? '<span class="ok-t">✓</span>' : ok === false ? '<span class="bad-t">✗</span>' : '<span class="warn-t">?</span>');
+   let dl = `<dt>Loop</dt><dd>${loop ? `${int(loop.ok24h)}/${int(loop.passes24h)} OK · 24 h` : DASH}</dd>`
+     + `<dt>Last gap between passes</dt><dd>${loop && isNum(loop.lastGapMin) ? int(loop.lastGapMin) + ' min' : DASH}</dd>`
+-    + `<dt>Watchdog</dt><dd>${loop && isNum(loop.watchdogLast) ? 'last check ' + dmhm(loop.watchdogLast) : DASH}</dd>`
++    + `<dt>${term('watchdog', 'Watchdog last restart')}</dt><dd>${loop && isNum(loop.watchdogLast) ? dmhm(loop.watchdogLast) : DASH}</dd>`
+     + `<dt>Pools read</dt><dd>${chains.length ? chains.map((c) => chainShort(c.id) + ' ' + int(c.pools)).join(' · ') : DASH}</dd>`
+     + `<dt>Unread this pass</dt><dd>${chains.length ? int(sum(chains.map((c) => c.unread))) + ', shown as ' + DASH : DASH}</dd>`
+     + `<dt>Re-range gas</dt><dd>${chains.length ? chains.map((c) => chainShort(c.id) + ' ' + usd(c.gasUsd)).join(' · ') : DASH}</dd>`;
+@@ -2430,6 +2683,7 @@ function openDetail(id, opener) {
+ }
+ function showSheet() {
+   sheetReset();
++  sheetCard.classList.remove('cond'); foldY = 0; foldAcc = 0;
+   $('#sheet').hidden = false;
+   document.documentElement.classList.add('modal-open');
+   $('#sheet-body').scrollTop = 0;
+@@ -2443,6 +2697,7 @@ function closeDetail() {
+   $('#sheet').hidden = true;
+   S.simFor = null;
+   sheetReset();
++  sheetCard.classList.remove('cond');
+   document.documentElement.classList.remove('modal-open');
+   S.detail = null; S.pair = null;
+   const o = S.opener; S.opener = null;
+@@ -2490,7 +2745,7 @@ function renderDetail() {
+   $('#sheet-kicker').textContent = `POOL DETAIL · ${WIN_LABEL[wk]}${p.id === L.bench ? ' · BENCHMARK' : ''}`;
+   $('#sheet-title').textContent = p.pair;
+   $('#sheet-star').innerHTML = starBtn(p);
+-  $('#sheet-meta').textContent = `${feeTxt(p.feeTier)} · ${chainLong(p.chain)} · UNISWAP V${p.v}`;
++  $('#sheet-meta').innerHTML = metaTerms(p);
+   $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p);
+   renderSim(p);
+   const rowsDef = [
+@@ -2504,14 +2759,16 @@ function renderDetail() {
+     ['Gem now', (x) => (p.verified === false ? 'never (unverified)' : x.gem && isNum(x.gem.total) ? String(x.gem.total) : DASH)],
+   ];
+   const wins = (L.windows || WINS).filter((x) => WINS.includes(x));
++  const WT_TERM = { 'σ / day': 'sigma', Range: 'range', 'Re-range every': 'rerange', 'Room (in range)': 'room', 'Fee APR': 'feeApr', LVR: 'lvr', 'Re-centre swaps': 'swaps', Gas: 'gascost', 'Net APR': 'net', Edge: 'edge', 'Aggregator APR': 'aggApr', 'Parked (avg)': 'parked', 'Stranded share': 'stranded', 'Markout ÷ fee': 'markout', 'Gem now': 'gem' };
+   const wt = `<div class="tbl-box" style="margin:0"><table class="wtbl"><thead><tr><th><span class="lbl" style="display:block;padding:0">Window</span></th>${wins.map((x) => `<th class="${x === wk ? 'cur' : ''}"><span class="lbl">${WIN_LABEL[x]}</span></th>`).join('')}</tr></thead><tbody>`
+-    + rowsDef.map(([name, f]) => `<tr><td>${esc(name)}</td>${wins.map((x) => { const ww = W(p, x); return `<td class="${x === wk ? 'cur' : ''}${name === 'Net APR' && ww && ww.net < 0 ? ' neg' : ''}">${ww ? f(ww) : DASH}</td>`; }).join('')}</tr>`).join('') + '</tbody></table></div>';
++    + rowsDef.map(([name, f]) => `<tr><td>${WT_TERM[name] ? term(WT_TERM[name], esc(name)) : esc(name)}</td>${wins.map((x) => { const ww = W(p, x); return `<td class="${x === wk ? 'cur' : ''}${name === 'Net APR' && ww && ww.net < 0 ? ' neg' : ''}">${ww ? f(ww) : DASH}</td>`; }).join('')}</tr>`).join('') + '</tbody></table></div>';
+   const gem = w && w.gem;
+   const parts = gem && p.verified !== false ? gemPartsList(gem)
+     .map(([n2, v, mx]) => `<span>${n2}</span><span class="track"><i style="width:${isNum(v) ? Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0) : 0}%"></i></span><span class="mono">${isNum(v) ? v : DASH}/${mx}</span>`).join('') : '';
+   const hist = S.hist && S.hist.pools && S.hist.pools[p.id];
+   const s2 = p.shape || {};
+   const tok = (t) => (t ? `${esc(t.sym)} · ${isNum(t.usd) ? '$' + px(t.usd) : DASH} · ${addrLink(p.chain, t.addr, 'token', 'Token ' + t.sym)}` : DASH);
++  const FACT_TERM = { 'Fee check': 'feecheck', 'Fee tier': 'fee', 'LPs keep': 'lpkeeps', Hook: 'hook', 'TVL · map · aggregator': 'tvl', 'Vs market': 'vsmarket', Shape: 'shape', 'LPs at the price': 'lpsat', Walls: 'walls' };
+   const facts = [
+     ['Pool id', poolLinks(p)], ['Fee check', p.verified === true ? 'swaps match the fee counters' : p.verified === false ? 'unverified: never a gem' : 'not checked yet'],
+     ['Fee tier', feeTxt(p.feeTier) + (p.dynamicFee ? ' · dynamic' : '')], ['LPs keep', pct(p.lpKeeps)], ['Hook', p.hooks ? addrLink(p.chain, p.hooks, 'address', 'Hook contract') : 'none'],
+@@ -2523,9 +2780,10 @@ function renderDetail() {
+     ['LPs at the price', int(s2.lpsAtPrice)], ['Walls', `below ${s2.walls && isNum(s2.walls.below) ? rangeTxt(Math.abs(s2.walls.below)).replace('±', MINUS) : DASH} · above ${s2.walls && isNum(s2.walls.above) ? rangeTxt(s2.walls.above).replace('±', '+') : DASH}`],
+     ['Token 0', tok(p.t0)], ['Token 1', tok(p.t1)],
+   ];
+-  $('#sheet-body').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · log · ±${Math.round(LIQ_SPANS[zget('liq-detail')] * 100)}%</span>${ztools('liq-detail', p.id)}</div>${liqChart(p, w, 'liq-detail')}</div>` // the shape first
+-    + `<div class="best-head"><div class="grow"><div class="tags">${tagsHtml(p, wk)}</div>`
+-    + `<p class="sentence" style="margin-top:8px">${w ? `${WIN_WORD[wk]} net APR <b class="${w.net < 0 ? 'neg' : ''}">${pct(w.net)}</b> at ${usdFull(L.ticket)} · fees ${pct(w.feeApr)} · LVR ${pct(w.lvr)}.` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
++  const lq = liqChart(p, w, 'liq-detail');
++  $('#sheet-body').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · ${term('logscale', 'log')} · <span class="pz-cap1">${liqCap('liq-detail')}</span></span>${ztools('liq-detail', p.id)}</div>${lq}</div>` // the shape first
++    + `<div class="best-head"><div class="grow"><div class="tags">${tagsHtml(p, wk, false, true)}</div>`
++    + `<p class="sentence" style="margin-top:8px">${w ? `${WIN_WORD[wk]} ${term('net', 'net APR')} <b class="${w.net < 0 ? 'neg' : ''}">${pct(w.net)}</b> at ${usdFull(L.ticket)} · fees ${pct(w.feeApr)} · ${term('lvr', 'LVR')} ${pct(w.lvr)}.` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
+     + (w ? `<div class="dsec"><span class="lbl">Breakdown · ${WIN_LABEL[wk]}</span>${breakdown(w)}</div>` : '')
+     + `<div class="dsec"><span class="lbl">Every window</span>${wt}</div>`
+     + `<div class="dsec">${dailyStrip(p, w, 'daily-detail')}</div>`
+@@ -2535,7 +2793,8 @@ function renderDetail() {
+     + `<div class="minis">${miniLine(w && w.spark && w.spark.px, `Price · ${WIN_LABEL[wk]} · log`, true, 'd-px', p.id)}${miniBars(w && w.spark && w.spark.fees, `LP fees · ${WIN_LABEL[wk]}`, 'd-fees', p.id)}`
+     + (hist && Array.isArray(hist.d) ? miniBars(hist.d.map((r) => r[2]), `LP fees per day · ${hist.d.length} d`, 'd-day', p.id) : '') + '</div>'
+     + `<div class="dsec"><span class="lbl">Checks</span>${checksLine(p).replace('class="checks"', 'class="checks" style="margin:0;border:0;padding:0"')}</div>`
+-    + `<div class="dsec"><span class="lbl">Pool facts</span><dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl></div>`;
++    + `<div class="dsec"><span class="lbl">Pool facts</span><dl class="facts">${facts.map(([k, v]) => `<dt>${FACT_TERM[k] ? term(FACT_TERM[k], esc(k)) : esc(k)}</dt><dd>${v}</dd>`).join('')}</dl></div>`;
++  liqDeclutter('liq-detail');
+   if (!$('#sheet').hidden) stickyAll();
+ }
+ 
+@@ -2551,9 +2810,9 @@ function jumpTo(sel) {
+   settle = setInterval(() => { // late renders can shift the page: keep it aligned until the user takes over
+     n++;
+     if (n < 7) return;
+-    const top = el.getBoundingClientRect().top;
++    const top = el.getBoundingClientRect().top, want = parseFloat(getComputedStyle(el).scrollMarginTop) || 12;
+     const room = document.documentElement.scrollHeight - innerHeight - scrollY;
+-    if (Math.abs(top - 12) > 6 && !(top > 12 && room < 2)) go(false);
++    if (Math.abs(top - want) > 6 && !(top > want && room < 2)) go(false);
+     if (n > 30) cancelSettle();
+   }, 100);
+ }
+@@ -2588,7 +2847,7 @@ function stickySync() {
+   for (const sh of $$('.sh')) {
+     const box = sh.parentElement.querySelector(':scope > .tbl-box'), th = box && box.querySelector('thead');
+     if (sh.hidden || !th || !box.offsetParent) { sh.classList.remove('on'); continue; }
+-    const sc = sh.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : 0, r = th.getBoundingClientRect();
++    const sc = sh.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : barBottom(), r = th.getBoundingClientRect();
+     const on = r.top < top - 1 && box.getBoundingClientRect().bottom > top + 1;
+     if (sh.classList.contains('on') !== on) sh.classList.toggle('on', on);
+     const inn = sh.firstElementChild;
+@@ -2596,16 +2855,47 @@ function stickySync() {
+   }
+ }
+ 
++// ---------- the bar on top: it slides away while the page scrolls down and comes back on the way up ----------
++// --hdr is where the bar ends now (0 while it is away): the sticky table headers dock right under it. --hdrh is its
++// full height: a section a jump lands on keeps that much room above it.
++const bar = $('#top');
++let barY = 0, barAcc = 0, barH = 48, barHid = false;
++const barBottom = () => (barHid || SOLO ? 0 : Math.max(0, bar.getBoundingClientRect().bottom));
++function barSet(hid) {
++  barHid = hid;
++  bar.classList.toggle('hid', hid);
++  document.documentElement.style.setProperty('--hdr', (hid ? 0 : barH) + 'px');
++}
++function barMeasure() {
++  const h = Math.round(bar.offsetHeight);
++  if (h && h !== barH) barH = h;
++  document.documentElement.style.setProperty('--hdrh', barH + 'px');
++  barSet(barHid);
++}
++function barScroll() {
++  const y = scrollY, dy = y - barY;
++  barY = y;
++  if (document.documentElement.classList.contains('modal-open')) return;
++  if (bar.classList.contains('stuck') !== y > 2) bar.classList.toggle('stuck', y > 2);
++  if (y <= barH || bar.querySelector(':focus-visible') || (S.popFor && bar.contains(S.popFor))) { barAcc = 0; if (barHid) barSet(false); return; } // the keyboard in it keeps it
++  barAcc = Math.sign(dy) === Math.sign(barAcc) ? barAcc + dy : dy;
++  if (barAcc > 14 && !barHid) barSet(true);
++  else if (barAcc < -14 && barHid) barSet(false);
++}
++bar.addEventListener('focusin', () => { if (barHid) barSet(false); });
++
+ // ---------- back to top: a small round button once the page is a screen down ----------
+ let scrollRaf = 0;
+ function onScroll() {
+   if (scrollRaf) return;
+   scrollRaf = requestAnimationFrame(() => {
+     scrollRaf = 0;
++    barScroll();
+     const on = !SOLO && !$('#app').hidden && scrollY > innerHeight * 0.9;
+     const t = $('#totop');
+     if (t.classList.contains('on') !== on) t.classList.toggle('on', on);
+     stickySync();
++    sheetFold();
+   });
+ }
+ function toTop() {
+@@ -2624,6 +2914,26 @@ $('#sheet-body').addEventListener('scroll', onScroll, { passive: true });
+ const SW = { on: false, off: 0 };
+ const sheetCard = $('#sheet .sheet-card'), sheetScrim = $('#sheet .scrim'), sheetBody = $('#sheet-body');
+ const phoneSheet = () => matchMedia('(max-width:700px)').matches;
++// the panel's top (its kicker, the pool's meta line and the similar-pools strip) folds away while the content scrolls
++// down and opens again on the way back up or at the top; the content slides instead of jumping
++let foldY = 0, foldAcc = 0, foldLock = 0;
++function foldSet(on) {
++  const head = $('#sheet .sheet-head'), h0 = head.offsetHeight;
++  sheetCard.classList.toggle('cond', on);
++  const d = h0 - head.offsetHeight;
++  foldLock = Date.now() + 280; foldAcc = 0;
++  if (d && !reduced()) sheetBody.animate([{ transform: `translateY(${d}px)` }, { transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' });
++}
++function sheetFold() {
++  if ($('#sheet').hidden) return;
++  const y = sheetBody.scrollTop, dy = y - foldY, cond = sheetCard.classList.contains('cond');
++  foldY = y;
++  if (Date.now() < foldLock) return;
++  if (y <= 2) { foldAcc = 0; if (cond) foldSet(false); return; }
++  foldAcc = Math.sign(dy) === Math.sign(foldAcc) ? foldAcc + dy : dy;
++  if (!cond && foldAcc > 24 && y > 48 && sheetBody.scrollHeight - sheetBody.clientHeight > 320) foldSet(true);
++  else if (cond && foldAcc < -40) foldSet(false);
++}
+ function sheetReset() { for (const a of sheetCard.getAnimations()) if (a.id === 'swipe') a.cancel(); sheetCard.style.transform = ''; sheetScrim.style.opacity = ''; sheetCard.classList.remove('swiping'); SW.off = 0; }
+ function sheetFollow(dy) {
+   const off = dy > 0 ? dy : -Math.min(24, Math.sqrt(-dy) * 2.5); // rubber band upwards
+@@ -2738,11 +3048,12 @@ function popPlace() {
+   const pop = $('#pop'), a = S.popFor;
+   if (!a || pop.hidden) return;
+   const r = a.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, vw = document.documentElement.clientWidth;
+-  if (!a.isConnected || r.bottom < 0 || r.top > innerHeight || (r.width === 0 && r.height === 0)) { popClose(); return; }
++  const top = (bar.contains(a) || !$('#sheet').hidden ? 0 : barBottom()) + 8; // never under the bar on top
++  if (!a.isConnected || r.bottom < top - 8 || r.top > innerHeight || (r.width === 0 && r.height === 0)) { popClose(); return; }
+   let y = r.bottom + 4;
+-  if (y + h > innerHeight - 8 && r.top - h - 4 > 8) y = r.top - h - 4;
++  if (y + h > innerHeight - 8 && r.top - h - 4 > top) y = r.top - h - 4;
+   pop.style.left = clamp(r.left + r.width / 2 - w / 2, 12, Math.max(12, vw - w - 12)) + 'px';
+-  pop.style.top = Math.max(8, y) + 'px';
++  pop.style.top = clamp(y, top, Math.max(top, innerHeight - h - 8)) + 'px';
+ }
+ function popClose() {
+   const pop = $('#pop');
+@@ -2814,7 +3125,7 @@ function gasBasis(g) {
+ }
+ function gasPop() {
+   const g = (S.live && S.live.market && S.live.market.gas) || {}, band = GAS_BANDS.includes(g.band) ? g.band : null, basis = gasBasis(g);
+-  return `<span class="lbl">Ethereum gas · next block</span><p><b>${gwei(g.gwei)} gwei</b>${band ? ' · ' + band : ''}</p>`
++  return `<span class="lbl">Ethereum gas · next block</span><p class="gl">${esc(GLOSS.gas[1])}</p><p><b>${gwei(g.gwei)} gwei</b>${band ? ' · ' + band : ''}</p>`
+     + `<p>Typical: p10 <b>${gwei(g.p10)}</b> · median <b>${gwei(g.p50)}</b> · p90 <b>${gwei(g.p90)}</b> gwei</p>`
+     + `<p>${basis ? 'Compared with ' + basis + ': cheap below p25, normal to p60, busy to p90, expensive above.' : 'Not enough history yet to call it cheap or busy.'}</p>`;
+ }
+@@ -2868,7 +3179,7 @@ const SIM_M = [
+   ['gem', (p) => (p.verified === false ? null : gemOf(p)), (x) => (isNum(x) ? String(x) : DASH)],
+   ['TVL', (p) => p.tvlUsd, (x) => usd(x)],
+ ];
+-const REL = ['same pair', 'tier + token', 'same tier', 'shared token'];
++const REL = ['same pair', 'tier + token', 'same tier', 'shared token'], REL_TERM = ['samepair', 'tiertoken', 'sametier', 'sharedtoken'];
+ const SIM_N = 8;
+ const simM = () => { const i = S.simM != null ? S.simM : Number(store.get('lps.simm') || 0); return Number.isInteger(i) && i >= 0 && i < SIM_M.length ? i : 0; };
+ function mcVal(p, mi) {
+@@ -2883,7 +3194,7 @@ function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } =
+     : `<button type="button" class="mc-name" data-act="detail" data-id="${esc(p.id)}" title="Open ${esc(p.pair)}, shape first"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></button>`;
+   // similar: the card's body cycles the figure; a favourite: the name's link reaches over the whole card (one control)
+   const cover = mode === 'sim' ? `<button type="button" class="mc-cover" data-act="sim-cycle" aria-label="Show the next figure on every card (now ${SIM_M[mi][0]})"></button>` : '';
+-  const foot = mode === 'sim' ? `<span class="mc-rel${self ? ' g0' : uv ? ' uv' : rel === 0 ? ' g0' : ''}">${self ? 'this pool' : uv ? 'unverified' : REL[rel] || ''}</span>`
++  const foot = mode === 'sim' ? termB(self ? 'thispool' : uv ? 'unverified' : REL_TERM[rel], `<span class="mc-rel${self ? ' g0' : uv ? ' uv' : rel === 0 ? ' g0' : ''}">${self ? 'this pool' : uv ? 'unverified' : REL[rel] || ''}</span>`, 'mc-relb')
+     : `<span class="mc-rel"><span class="why-icons">${whyKeys(p, W(p)).slice(0, 4).map(wiSvg).join('') || DASH}</span></span>`;
+   return `<div class="mc${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i}">${cover}${name}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}</div>`;
+ }
+@@ -3128,6 +3439,7 @@ document.addEventListener('click', (e) => {
+     case 'fav': toggleFav(el.dataset.id, el); break;
+     case 'why': { const p = poolById(el.dataset.id); if (p) popOpen(el, whyPop(p)); break; }
+     case 'gas': if (S.live) popOpen(el, gasPop()); break;
++    case 'term': popOpen(el, termPop(el.dataset.term)); break;
+     case 'legend': { const lg = $('#why-legend'), on = lg.hidden; if (!lg.innerHTML) lg.innerHTML = whyLegend(); lg.hidden = !on; el.setAttribute('aria-expanded', String(on)); store.set('lps.legend', on ? '1' : '0'); break; }
+     case 'sim-cycle': simCycle(); break;
+     case 'sim-all': simToggleList(); break;
+@@ -3210,7 +3522,7 @@ addEventListener('resize', () => {
+     if (!S.live) return;
+     try { if (S.bt) renderBt(); if (crossed) { renderBest(); if (S.detail) renderDetail(); } } catch (e) { console.error('panel failed on resize: ' + e.message); }
+     if (SOLO) isolate();
+-    stickyAll(); onScroll(); mcEdgesAll(); popClose();
++    barMeasure(); liqDeclutterAll(); stickyAll(); onScroll(); mcEdgesAll(); popClose();
+   }, 120);
+ });
+ window.LPS = Object.freeze({ build: BUILD, refresh: () => refresh() });
+diff --git a/tools/fixtures/make-fixture.mjs b/tools/fixtures/make-fixture.mjs
+index 73b4ddc..f7e3ed0 100644
+--- a/tools/fixtures/make-fixture.mjs
++++ b/tools/fixtures/make-fixture.mjs
+@@ -14,15 +14,17 @@
+ //   nogems   no pool reaches the gem bar in any window; no backtests yet
+ //   nofiles  lock.json and live.json only (history and backtest not published yet)
+ //   rekeyed  live.json sealed under another passphrase than lock.json (the page must show nothing)
+-//   nomarket the default data, but the top strip's gas, one price, one 24 h change and the next pass unread (null,
+-//            never 0): the page must show dashes
++//   nomarket the default data, but the top strip's gas, one price, one 24 h change, the next pass and the watchdog's
++//            last restart unread (null, never 0): the page must show dashes
++//   long     the default data at its widest: long tickers, billion-dollar pools, five-digit APRs, four-digit gas,
++//            six-figure prices (real names and numbers run longer than the fixtures: the overlap audit reads this case)
+ import fs from 'node:fs';
+ import path from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { newLockFile, unlock, seal, ITERATIONS } from '../../lib/lock.mjs';
+ 
+ export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
+-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket'];
++export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long'];
+ export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
+ 
+ const H = 3600e3, D = 24 * H;
+@@ -477,9 +479,57 @@ function unreadMarket(data) {
+   live.market.gas = { gwei: null, p10: null, p50: null, p90: null, band: null, basis: null, histDays: 0, source: null, hist: [] };
+   live.market.px.SOL = { usd: null, ch24: null, src: null };
+   live.market.px.BTC.ch24 = null;
++  live.health.loop.watchdogLast = null; // the watchdog never had to start a loop: a dash, never a time or 0
+   return { ...data, live };
+ }
+ 
++// the same pass at its widest: every text the page prints as long as real data makes it (the layout must hold)
++export const LONG_PAD = 'WMWMWMWMWMWM';
++export function longCase(data) {
++  const live = structuredClone(data.live), bt = structuredClone(data.backtest), hist = structuredClone(data.history);
++  const grow = (s) => (s.length >= 11 || /[<>]/.test(s) ? s : (s + LONG_PAD).slice(0, 11));
++  const QUOTE = { WETH: 'WSTETHW', USDC: 'USDC.EWM', ETH: 'ETH' };
++  const BIG = 997; // money: $1M pools become about $1B
++  const money = (x) => (isNum(x) ? sig(x * BIG, 6) : x);
++  for (const p of live.pools) {
++    p.t0.sym = grow(p.t0.sym); p.t1.sym = QUOTE[p.t1.sym] || grow(p.t1.sym);
++    p.pair = p.t0.sym + '/' + p.t1.sym;
++    for (const k of ['tvlUsd', 'mapUsd', 'aggUsd']) p[k] = money(p[k]);
++    const sh = p.shape;
++    sh.depth = sh.depth.map(([o, v]) => [o, money(v)]);
++    if (sh.beyond) sh.beyond = { below: money(sh.beyond.below), above: money(sh.beyond.above) };
++    if (isNum(sh.lpsAtPrice)) sh.lpsAtPrice = sh.lpsAtPrice * 137 + 1;
++    for (const wk of WINDOWS) {
++      const w = p.w[wk];
++      if (!w) continue;
++      for (const k of ['volUsd', 'lpFeesUsd', 'protocolFeesUsd', 'inRangeUsd']) w[k] = money(w[k]);
++      for (const k of ['swaps', 'traders']) if (isNum(w[k])) w[k] = w[k] * 1009;
++      for (const k of ['feeApr', 'net', 'aggApr']) if (isNum(w[k])) w[k] = sig(w[k] * 97, 5); // −4,567% and 12,345% APRs
++    }
++    for (const c of p.checks) c.label = c.label + ' (long label)';
++    p.daily = p.daily.map((d) => ({ ...d, feesPer1k: isNum(d.feesPer1k) ? sig(d.feesPer1k * 37, 4) : d.feesPer1k, net: isNum(d.net) ? sig(d.net * 97, 4) : d.net }));
++  }
++  for (const pr of Object.values(live.pairs)) {
++    pr.label = pr.label.split('/').map((x) => QUOTE[x] || grow(x)).join('/');
++    for (const w of Object.values(pr.w)) { w.volUsd = money(w.volUsd); w.lpFeesUsd = money(w.lpFeesUsd); for (const r of w.rows) if (isNum(r.net)) r.net = sig(r.net * 97, 5); }
++  }
++  live.chains = live.chains.map((c) => ({ ...c, pools: c.pools * 97, unread: c.unread * 311, gasUsd: c.gasUsd * 113 }));
++  live.next = live.t + 123 * 60e3;
++  live.market.gas = { ...live.market.gas, gwei: 1234, p10: 456, p50: 789, p90: 1111, band: 'expensive', histDays: 6.5 };
++  live.market.px = { ETH: { usd: 12345.6, ch24: -0.1234, src: 'defillama' }, BTC: { usd: 123456.78, ch24: 0.1987, src: 'defillama' }, SOL: { usd: 1234.5, ch24: -0.0999, src: 'coingecko' } };
++  live.health.sealedLog = { lines: 1234567, errors: 12345, categories: { timeout: 1234, HTTP: 5678, parse: 99 } };
++  for (const e of Object.values(bt.pools)) for (const b of Object.values(e)) {
++    if (!b) continue;
++    for (const k of ['fees', 'lvr', 'costs', 'net']) b.series[k] = b.series[k].map((x) => money(x));
++    for (const st of b.strategies) { st.netUsd = money(st.netUsd); st.series = st.series.map((x) => money(x)); st.net = sig(st.net * 97, 5); }
++    b.net = sig(b.net * 97, 5); if (isNum(b.forecastNet)) b.forecastNet = sig(b.forecastNet * 97, 5);
++    for (const k of ['netUsd', 'feesUsd', 'lvrUsd', 'costsUsd', 'entryUsd']) b[k] = money(b[k]);
++    b.grid.net = b.grid.net.map((row) => row.map((x) => (isNum(x) ? sig(x * 97, 5) : x)));
++  }
++  for (const h of Object.values(hist.pools)) { h.d = h.d.map((r) => [r[0], r[1], money(r[2]), money(r[3]), r[4]]); h.h = h.h.map((r) => [r[0], r[1], r[2], money(r[3]), r[4]]); }
++  return { live, history: hist, backtest: bt };
++}
++
+ // 30 days of fees per $1,000 and net, plus the shape of the fee stream (pattern, burst) and the gem's tags.
+ // Parts are renamed to "Gem now" (yield now 45, thinness 25, flow 20, staying power 10); totals stay as scored.
+ function addDaily(r, p, now) {
+@@ -716,6 +766,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
+   const other = unlock(newLockFile('a different made-up passphrase', 1000), 'a different made-up passphrase').aes;
+   sealCase(path.join(outDir, 'rekeyed'), keys, data, now, ['live', 'history', 'backtest'], other);
+   sealCase(path.join(outDir, 'nomarket'), keys, unreadMarket(data), now);
++  sealCase(path.join(outDir, 'long'), keys, longCase(data), now);
+   return { outDir, cases: CASES, passphrase: FIXTURE_PASSPHRASE };
+ }
+ 
+diff --git a/tools/live-audit.mjs b/tools/live-audit.mjs
+index 878a71a..ed6b47d 100644
+--- a/tools/live-audit.mjs
++++ b/tools/live-audit.mjs
+@@ -14,6 +14,8 @@ import crypto from 'node:crypto';
+ import { execFileSync } from 'node:child_process';
+ import { createRequire } from 'node:module';
+ import { fileURLToPath } from 'node:url';
++import { TEXT_OVERLAP } from './overlap.mjs';
++import { FINGERS, HOST_BOX, pinchPts } from './gestures.mjs';
+ 
+ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+ const args = process.argv.slice(2);
+@@ -160,13 +162,14 @@ const ENUM = () => {
+ const HSCROLL = () => document.documentElement.scrollWidth - document.documentElement.clientWidth;
+ // a chart host's view ("<position>,<width>[,<y>]"): compared in memory, never printed
+ const VIEW = (id) => { const h = document.querySelector(`[data-pz="${id}"]`); return h ? h.dataset.view : null; };
+-const STUCK = () => { // the All pools header copy: shown at the top, columns over the real ones
+-  const box = document.querySelector('#all-box'), sh = box && box.parentElement.querySelector(':scope > .sh');
++const STUCK = () => { // the All pools header copy: right under the bar on top (at the top while the bar is away), columns over the real ones
++  const box = document.querySelector('#all-box'), sh = box && box.parentElement.querySelector(':scope > .sh'), bar = document.querySelector('#top');
+   if (!sh || !sh.classList.contains('on')) return { on: false };
+   const real = [...box.querySelectorAll('thead th')], copy = [...sh.querySelectorAll('th')], vw = sh.firstElementChild.getBoundingClientRect();
++  const dock = !bar || bar.classList.contains('hid') ? 0 : Math.max(0, bar.getBoundingClientRect().bottom);
+   let mis = 0;
+   real.forEach((th, i) => { const a = th.getBoundingClientRect(), b = copy[i] && copy[i].getBoundingClientRect(); if (!b) { mis++; return; } if (Math.min(a.right, vw.right) - Math.max(a.left, vw.left) > 4 && Math.abs(a.left - b.left) > 1) mis++; });
+-  return { on: true, top: Math.abs(vw.top) <= 1, mis };
++  return { on: true, top: Math.abs(vw.top - dock) <= 1, mis };
+ };
+ 
+ // ---------- 2b. gestures: zoom twice, drag, double-tap, swipe a sheet closed, sticky header, back to top ----------
+@@ -225,13 +228,15 @@ async function gestures(page, R, tag, errTotal) {
+   // the All pools header sticks while its rows scroll by, and leaves at the top
+   if ((await page.$$('#all-tbl tbody tr.row')).length >= 12) {
+     await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr.row:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
+-    await sleep(350);
++    await sleep(450);
+     const s = await page.evaluate(STUCK);
+-    run('gestures: the All pools header sticks to the top, columns aligned', s.on && s.top && s.mis === 0);
++    run('gestures: the All pools header sticks right under the bar on top, columns aligned', s.on && s.top && s.mis === 0);
+     await page.evaluate(() => scrollTo(0, 0)); await sleep(350);
+     run('gestures: …and is gone back at the top', !(await page.evaluate(STUCK)).on);
+   } else skip();
+   await part2(page, run, skip, box, press);
++  await part3(page, run, skip);
++  await overlaps(page, run, tag);
+   // back to top
+   await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
+   await sleep(450);
+@@ -315,9 +320,10 @@ async function part2(page, run, skip, box, press) {
+         run('part 2: "see all" lists every similar pool and folds again', n > 9 && !(await vis('#sim-list')));
+       } else skip();
+       if ((await page.$$('#sim .mc-name')).length >= 1) {
+-        const t0 = await page.evaluate(() => document.querySelector('#sheet-title').textContent);
++        const id0 = await page.evaluate(() => (document.querySelector('#sheet-star [data-id]') || {}).dataset.id || ''); // the pool open now (same-pair cards share its name)
++        const want = await page.evaluate(() => document.querySelector('#sim button.mc-name').dataset.id);
+         await page.evaluate(() => document.querySelector('#sim button.mc-name').click()); await sleep(500);
+-        run('part 2: a card\'s name opens that pool, shape first', await page.evaluate((t0) => document.querySelector('#sheet-title').textContent !== t0 && document.querySelector('#sheet-body').firstElementChild.dataset.chartbox === 'liq-detail', t0));
++        run('part 2: a card\'s name opens that pool, shape first', await page.evaluate(({ id0, want }) => { const id = (document.querySelector('#sheet-star [data-id]') || {}).dataset.id; return id === want && id !== id0 && document.querySelector('#sheet-body').firstElementChild.dataset.chartbox === 'liq-detail'; }, { id0, want }));
+       } else skip();
+       run('part 2: the window pills look small (≤ 26 px) with 44 px taps', await page.evaluate(() => [...document.querySelectorAll('#sheet-win button')].every((b) => b.getBoundingClientRect().height >= 43.5 && b.firstElementChild.getBoundingClientRect().height <= 26)));
+     } else skip();
+@@ -339,7 +345,156 @@ async function part2(page, run, skip, box, press) {
+       run('part 2: a grid tile highlights and explains itself, then lets go', c && (await pressed()) === 0);
+     } else skip();
+   } else skip();
+-  run('part 2: "Lock this device" carries its one-line explanation', /passphrase is needed next time/.test(await page.innerText('#lock-note').catch(() => '')));
++  run('part 2: "Sign out on this device" carries its one-line explanation', (await page.textContent('#lockbtn').catch(() => '')) === 'Sign out on this device' && /Forgets the saved key here\. You’ll need your passphrase next time\./.test(await page.innerText('#lock-note').catch(() => '')));
++}
++// ---------- 2d. Run 2 part 3: fingers on the charts, the bar on top, info notes, the panel's folding top ----------
++// Synthetic fingers (tools/gestures.mjs: pointer events with pointerType 'touch') on the real page. Views are compared in
++// memory and never printed; every step is a check, or a skip when the live data lacks that part.
++async function part3(page, run, skip) {
++  const view = (id) => page.evaluate(VIEW, id);
++  const num = (v, i) => Number(String(v).split(',')[i]);
++  const fingers = (pts, o = {}) => page.evaluate(FINGERS, { pts, ...o });
++  const box = (id, root = '') => page.evaluate(HOST_BOX, { id, root });
++  const press = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel); if (!b || b.disabled) return false; window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
++  const settle = async (id) => { let a = await view(id); for (let k = 0; k < 20; k++) { await sleep(150); const b = await view(id); if (b === a) return b; a = b; } return a; };
++  const tas = await page.$$eval('.pz', (hs) => hs.map((h) => [h.classList.contains('pz-xy'), getComputedStyle(h).touchAction]));
++  if (tas.length) run('part 3: every chart surface takes sideways drags and pinches, vertical swipes stay the page\'s', tas.every(([xy, ta]) => ta === (xy ? 'none' : 'pan-y')));
++  else skip();
++  const liq = await page.evaluate(() => { const h = document.querySelector('#best [data-pz^="liq"]'); return h ? h.dataset.pz : null; });
++  if (liq) {
++    await press(`[data-act="zreset"][data-chart="${liq}"]`); await sleep(250);
++    const v0 = await view(liq);
++    let b = await box(liq);
++    await fingers([{ id: 31, x0: b.x + b.w / 2, y0: b.y + b.h / 2, x1: b.x + b.w / 2 - 110, y1: b.y + b.h / 2 }], { steps: 12, ms: 30 });
++    run('part 3: a finger drags the depth chart sideways', num(await settle(liq), 0) !== num(v0, 0));
++    await press(`[data-act="zreset"][data-chart="${liq}"]`); await sleep(250);
++    b = await box(liq);
++    await fingers(pinchPts(b, 2)); await sleep(200);
++    const v1 = await settle(liq);
++    run('part 3: spreading two fingers zooms the depth chart in (the view about halves)', Math.abs(num(v1, 1) / num(v0, 1) - 0.5) < 0.03);
++    b = await box(liq);
++    await fingers(pinchPts(b, 1, { mx: 80 })); await sleep(200);
++    const v2 = await settle(liq);
++    run('part 3: two fingers moved together pan it, at the same zoom', num(v2, 0) !== num(v1, 0) && Math.abs(num(v2, 1) - num(v1, 1)) < 1e-3);
++    b = await box(liq);
++    await fingers(pinchPts(b, 0.15, { d0: 170 })); await sleep(250);
++    const v3 = await settle(liq);
++    const rest = await page.evaluate((id) => ({ hatch: document.querySelectorAll(`[data-pz="${id}"] .pz-end`).length, out: !!(document.querySelector(`[data-act="zoom"][data-chart="${id}"][data-dir="-1"]`) || {}).disabled }), liq);
++    run('part 3: pinched closed, it stops at the whole map: no "no data" hatch, − disabled', rest.hatch === 0 && rest.out && num(v3, 1) >= num(v0, 1));
++    b = await box(liq);
++    for (let k = 0; k < 2; k++) { await fingers([{ id: 51 + k, x0: b.x + b.w / 2, y0: b.y + 70, x1: b.x + b.w / 2, y1: b.y + 70 }], { steps: 1, ms: 10 }); await sleep(90); }
++    run('part 3: a double tap with a finger resets it', (await settle(liq)) === v0);
++    const g = await page.evaluate((id) => document.querySelector(`[data-pz="${id}"]`).dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true })), liq);
++    run('part 3: Safari\'s own pinch (gesturestart) never zooms the page from a chart', g === false);
++  } else { skip(); skip(); skip(); skip(); skip(); skip(); }
++  if (await page.evaluate(() => !!document.querySelector('#best [data-pz="daily-best"]'))) {
++    await press('[data-act="zreset"][data-chart="daily-best"]'); await sleep(200);
++    const d0 = await view('daily-best'), b = await box('daily-best');
++    await fingers(pinchPts(b, 2, { fx: 0.7 })); await sleep(200);
++    const d1 = await settle('daily-best');
++    run('part 3: a pinch on the daily strip shows fewer days', num(d1, 1) < num(d0, 1) * 0.75 || num(d0, 1) <= 2.01);
++    await press('[data-act="zreset"][data-chart="daily-best"]'); await sleep(200);
++  } else skip();
++  // the bar on top: slim; away going down, back going up
++  const bar = () => page.evaluate(() => { const b = document.querySelector('#top'), r = b.getBoundingClientRect(); return { h: r.height, hid: b.classList.contains('hid'), bottom: r.bottom, top: r.top, strip: document.querySelector('#mstrip').getBoundingClientRect().bottom }; });
++  await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(300);
++  const h0 = await bar();
++  await page.evaluate(() => scrollTo(0, 1100)); await sleep(450);
++  const h1 = await bar();
++  await page.evaluate(() => scrollBy(0, -140)); await sleep(450);
++  const h2 = await bar();
++  run('part 3: the bar on top is one slim row (≤ 52 px)', h0.h >= 44 && h0.h <= 52 && !h0.hid);
++  run('part 3: scrolling down slides it away and the market strip scrolls off; scrolling up brings the bar back', h1.hid && h1.bottom <= 0 && h1.strip < 0 && !h2.hid && Math.abs(h2.top) <= 1);
++  await page.evaluate(() => scrollTo(0, 0)); await sleep(300);
++  // an explainable word: a short note inside the screen, closed by Esc
++  if (await press('#best [data-act="term"]')) {
++    await sleep(200);
++    const pop = await page.evaluate(() => { const e = document.querySelector('#pop'), r = e.getBoundingClientRect(), bb = document.querySelector('#top').classList.contains('hid') ? 0 : document.querySelector('#top').getBoundingClientRect().bottom; return { on: !e.hidden, gl: ((e.querySelector('.gl') || {}).textContent || '').length, inside: r.left >= 0 && r.right <= document.documentElement.clientWidth && r.top >= bb - 1 && r.bottom <= innerHeight + 1 }; });
++    await page.keyboard.press('Escape'); await sleep(200);
++    run('part 3: a tap on an explainable word opens a short note inside the screen, below the bar; Esc closes it', pop.on && pop.gl >= 25 && pop.inside && !(await page.isVisible('#pop')));
++  } else skip();
++  // the detail panel's top folds while its content scrolls down
++  if (await press('#best [data-act="detail"]')) {
++    await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
++    const long = await page.evaluate(() => { const b = document.querySelector('#sheet-body'); return b.scrollHeight - b.clientHeight > 400; });
++    if (long) {
++      for (const y of [80, 220, 420]) { await page.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(130); }
++      await sleep(350);
++      const f1 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
++      await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(450);
++      const f2 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
++      run('part 3: the panel\'s top folds while its content scrolls down and opens at the top', f1 && !f2);
++    } else skip();
++    const lb = await box('liq-detail', '#sheet');
++    if (lb) {
++      const a = await view('liq-detail');
++      await page.evaluate(FINGERS, { pts: pinchPts(lb, 2) }); await sleep(250);
++      run('part 3: in the panel a pinch zooms its chart and the panel stays open', num(await settle('liq-detail'), 1) < num(a, 1) * 0.6 && (await page.isVisible('#sheet')));
++    } else skip();
++    await page.click('#sheet-close').catch(() => {}); await sleep(300);
++  } else { skip(); skip(); }
++}
++// ---------- 2e. text that collides or is cut off, in the views a phone and a laptop show ----------
++// The report names sections and element kinds (tag and first class) with counts: never a word of the page's text.
++async function overlaps(page, run, tag) {
++  const rep = {};
++  let views = 0;
++  const look = async (root) => { views++; for (const x of await page.evaluate(TEXT_OVERLAP, { root, safe: true })) { const k = `${x.kind} ${x.sec}: ${x.a} × ${x.b}`; rep[k] = (rep[k] || 0) + 1; } };
++  const press = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel); if (!b || b.disabled) return false; window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
++  const esc = async () => { await page.keyboard.press('Escape'); await sleep(150); };
++  await page.evaluate(() => scrollTo(0, 0)); await sleep(250);
++  await look();
++  // the best find's liquidity chart: every pool tab, every zoom level, both pan ends (the labels must never collide)
++  const tabs = await page.$$eval('#best [role="tab"]', (t) => t.length), t0 = Date.now();
++  for (let i = 0; i < tabs && Date.now() - t0 < 90e3; i++) {
++    await page.evaluate((i) => document.querySelectorAll('#best [role="tab"]')[i].click(), i); await sleep(80);
++    for (const dir of [-1, 1]) {
++      for (let z = 0; z < 5; z++) {
++        for (const side of ['', 'l', 'r']) {
++          if (side) for (let k = 0; k < 10 && (await page.evaluate((s) => { const e = document.querySelector(`#best [data-pz^="liq"] > .pz-edge.${s}:not([hidden])`); if (!e) return false; e.click(); return true; }, side)); k++) await sleep(30);
++          await sleep(60); await look('#best .best-r');
++        }
++        if (!(await page.evaluate((d) => { const b = document.querySelector(`#best [data-act="zoom"][data-dir="${d}"][data-chart^="liq"]`); if (!b || b.disabled) return false; b.click(); return true; }, dir))) break;
++        await sleep(60);
++      }
++      await page.evaluate(() => { const b = document.querySelector('#best [data-act="zreset"][data-chart^="liq"]'); if (b) b.click(); }); await sleep(80);
++    }
++  }
++  for (let k = 0; k < 3 && (await press('[data-act="zoom"][data-chart="daily-best"][data-dir="1"]')); k++) await sleep(100);
++  await look('#best');
++  await press('[data-act="zreset"][data-chart="daily-best"]'); await sleep(100);
++  if (await press('#gas')) { await sleep(200); await look(); await esc(); }
++  if (await press('#all tbody .whyb')) { await sleep(200); await look(); await esc(); }
++  if (await press('#best [data-act="term"]')) { await sleep(200); await look(); await esc(); }
++  if (await page.$('#f-q') && await page.$('#best h2')) {
++    const q = await page.evaluate(() => { const t = document.querySelector('#best h2').textContent.trim(); return t.slice(0, 2); }); // two letters, kept in memory only
++    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
++    await page.click('#f-q'); await page.keyboard.type(q, { delay: 40 }); await sleep(300);
++    await look();
++    await esc(); await page.fill('#f-q', ''); await page.$eval('#f-q', (e) => e.blur()); await sleep(300);
++  }
++  if ((await page.$$('#all-tbl tbody tr.row')).length >= 12) {
++    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr.row:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 60); });
++    await sleep(300); await page.evaluate(() => scrollBy(0, -60)); await sleep(450);
++    await look();
++    await page.evaluate(() => scrollTo(0, 0)); await sleep(250);
++  }
++  if (await press('#best [data-act="detail"]')) {
++    await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
++    await look('#sheet');
++    if (await press('#sim [data-act="sim-all"]')) { await sleep(250); await look('#sheet'); await press('#sim [data-act="sim-all"]'); await sleep(150); }
++    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-day']) for (let k = 0; k < 5 && (await page.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
++    await look('#sheet');
++    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-day']) for (let k = 0; k < 6 && (await page.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
++    await look('#sheet');
++    await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 600; }); await sleep(450);
++    await look('#sheet');
++    await page.click('#sheet-close').catch(() => {}); await sleep(250);
++  }
++  if (await press('#bt-lead tr.row')) { await sleep(1000); await look('#bt'); }
++  const n = Object.values(rep).reduce((a, b) => a + b, 0);
++  console.log(`[${tag}] overlap: ${views} views, ${n} findings${n ? ': ' + Object.entries(rep).map(([k, v]) => `${k} ×${v}`).join(', ') : ''}`);
++  run('overlap: no text collides with other text or is cut off, in every view walked', n === 0);
+ }
+ const JUNK = () => /\bNaN\b|\bundefined\b|\bInfinity\b|\[object /.test(document.body.innerText);
+ 
+@@ -474,7 +629,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
+     } catch (e) { console.log(`[${tag}] gestures step stopped: ${errName(e)}`); R.ok('gestures: ran to the end', false); }
+     T.gestures = secs(t);
+ 
+-    // close anything open, then "lock this device"
++    // close anything open, then "Sign out on this device"
+     t = Date.now();
+     for (let k = 0; k < 3 && (await page.evaluate(ENUM)).overlay; k++) { await page.keyboard.press('Escape'); await sleep(300); }
+     let locked = false;
+@@ -484,7 +639,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
+       await page.waitForSelector('#lockscreen:not([hidden])', { timeout: 15000 });
+       locked = true;
+     } catch (e) { console.log(`[${tag}] lock step stopped: ${errName(e)}`); }
+-    R.ok('lock: "lock this device" shows the lock screen', locked);
++    R.ok('lock: "Sign out on this device" shows the lock screen', locked);
+     R.ok('lock: the data is hidden after locking', locked && !(await page.isVisible('#app')));
+     R.ok('lock: the unlocked data is gone from the page', locked && (!probe || !(await page.evaluate((p) => document.body.textContent.includes(p), probe))));
+     if (locked) {
+diff --git a/tools/site-test.mjs b/tools/site-test.mjs
+index 0b37276..38338eb 100644
+--- a/tools/site-test.mjs
++++ b/tools/site-test.mjs
+@@ -6,7 +6,8 @@
+ //   node tools/site-test.mjs --browser webkit --device "iPhone 15"     phone = that device; laptop 1440
+ //   node tools/site-test.mjs --shots <dir>           also save full-page screenshots (cut into parts)
+ //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
+-//                                                    sticky top zoomfit rows refresh market fav table similar highlight search links locknote clicks motion
++//                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
++//                                                    search links terms fold locknote clicks motion
+ //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
+ //   node tools/site-test.mjs --verbose              also list every passing check
+ //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
+@@ -20,6 +21,8 @@ import crypto from 'node:crypto';
+ import { createRequire } from 'node:module';
+ import { fileURLToPath } from 'node:url';
+ import { writeFixtures, makeData, FIXTURE_PASSPHRASE } from './fixtures/make-fixture.mjs';
++import { TEXT_OVERLAP } from './overlap.mjs';
++import { FINGERS, HOST_BOX, pinchPts } from './gestures.mjs';
+ 
+ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+ const PAGE = path.join(ROOT, 'site', 'app', 'index.html');
+@@ -43,7 +46,7 @@ const pw = require('playwright');
+ const BROWSER = opt('browser', 'chromium');
+ const DEVICE = opt('device');
+ const SHOTS = opt('shots');
+-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,pan,depth,sheets,sticky,top,zoomfit,rows,refresh,market,fav,table,similar,highlight,search,links,locknote,clicks,motion').split(',');
++const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,highlight,search,links,terms,fold,locknote,clicks,motion').split(',');
+ const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
+ const LAPTOP = DEVICE ? [768, 1440] : [];
+ 
+@@ -137,7 +140,7 @@ async function testUnlock(browser) {
+   ok('unlock: the device stays unlocked after a reload', await page.isVisible('#app'));
+   await page.click('#lockbtn');
+   await page.waitForSelector('#lockscreen:not([hidden])');
+-  ok('lock: "lock this device" removes every number', !(await page.isVisible('#app')) && !(await domText(page)).includes('VELNA'));
++  ok('lock: "Sign out on this device" removes every number', (await page.textContent('#lockbtn')) === 'Sign out on this device' && !(await page.isVisible('#app')) && !(await domText(page)).includes('VELNA'));
+   await page.reload();
+   await page.waitForSelector('#lockscreen:not([hidden])');
+   ok('lock: after a reload the device asks again', await page.isVisible('#pass'));
+@@ -151,7 +154,7 @@ const AUDIT = () => {
+   const vis = (el) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+   const inScroll = (el) => !!el.closest('.tbl-box, .heat-box, .sheet-body, .tabs');
+   const name = (el) => (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '')) + ' "' + (el.textContent || '').trim().slice(0, 24) + '"';
+-  for (const el of document.querySelectorAll('#app *, header *, footer *, #banner')) {
++  for (const el of document.querySelectorAll('#app *, header *, #subhead *, footer *, #banner')) {
+     if (!vis(el) || (el.closest('svg') && el.tagName.toLowerCase() !== 'svg')) continue; // an svg's own box counts, its insides don't
+     const r = el.getBoundingClientRect();
+     if (!inScroll(el) && (r.right > vw + 1 || r.left < -1)) out.offRight.push(name(el));
+@@ -159,12 +162,13 @@ const AUDIT = () => {
+     if (own) {
+       const cs = getComputedStyle(el), fs = parseFloat(cs.fontSize), mono = /mono/i.test(cs.fontFamily);
+       if (fs < 10 || (fs < 12 && !mono)) out.small.push(name(el) + ' ' + fs + 'px');
+-      if ((cs.overflow === 'hidden' || cs.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 1 && !(el.classList.contains('pn') && el.textContent.length > 16)) out.clipped.push(name(el));
++      const srOnly = r.width <= 1 && r.height <= 1 && cs.overflow === 'hidden'; // read aloud only: a visually hidden label
++      if (!srOnly && (cs.overflow === 'hidden' || cs.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 1 && !(el.classList.contains('pn') && el.textContent.length > 16)) out.clipped.push(name(el));
+     }
+     if (el.matches('button, select, input, [role="button"]') && el.getBoundingClientRect().height < 43.5) out.short.push(name(el) + ' ' + Math.round(r.height) + 'px');
+   }
+   // labels and headings must not be hidden under something else
+-  const labels = [...document.querySelectorAll('#app .lbl, #app h2, #app h3, #app .chip, header .lbl, header h1')].filter((el) => vis(el) && !el.closest('tbody, .tbl-box'));
++  const labels = [...document.querySelectorAll('#app .lbl, #app h2, #app h3, #app .chip, header .lbl, header h1, #subhead .lbl')].filter((el) => vis(el) && !el.closest('tbody, .tbl-box'));
+   for (const el of labels) {
+     el.scrollIntoView({ block: 'center', inline: 'nearest' });
+     const r = el.getBoundingClientRect(), x = Math.min(vw - 1, Math.max(0, r.left + Math.min(r.width / 2, 6))), y = r.top + r.height / 2;
+@@ -503,7 +507,7 @@ async function testCharts(browser) {
+     ok(`charts ${tag}: …keeps the focus on the button for the keyboard`, (await p.evaluate(() => document.activeElement && document.activeElement.dataset.act)) === 'zoom');
+     await press('[data-act="zreset"][data-chart="liq-best"]'); await sleep(100);
+     await press('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(100);
+-    ok(`charts ${tag}: reset, then − zooms out to ±90%`, (await span()) === '90');
++    ok(`charts ${tag}: reset, then − zooms out to the whole map (±64%), no further`, (await span()) === '64' && (await p.isDisabled('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]')));
+     // the detail panel's charts
+     await p.click('#best [data-act="detail"]');
+     await p.waitForSelector('#sheet:not([hidden])');
+@@ -585,7 +589,7 @@ async function testPan(browser) {
+       if (await p.$(`[data-act="zreset"][data-chart="${hid}"]`)) { await pzClick(p, `[data-act="zreset"][data-chart="${hid}"]`); await sleep(200); }
+     } else ok(`pan ${tag}: the one-time "drag" hint shows on the first chart that can pan`, false, 'no hint');
+     const ta = await p.$eval('[data-pz="liq-best"]', (h) => getComputedStyle(h).touchAction);
+-    ok(`pan ${tag}: charts pan sideways and leave vertical swipes and pinch to the page (touch-action ${ta})`, /pan-y/.test(ta) && /pinch-zoom/.test(ta));
++    ok(`pan ${tag}: charts take sideways drags and pinches, vertical swipes stay the page's (touch-action ${ta})`, ta === 'pan-y');
+     let v = await pzView(p, 'liq-best');
+     ok(`pan ${tag}: the liquidity chart opens on the price, ±45% wide`, near(v.c, 0) && near(v.w, 0.9), JSON.stringify(v));
+     const edge0 = -SPAN + 0.45; // the view's centre can go no lower
+@@ -680,7 +684,7 @@ async function testPan(browser) {
+     ok(`pan ${tag}: the replay's price, money and strategy-lab charts drag to earlier data`, bt.length === 0, bt.join(','));
+     await pzClick(p, '[data-act="zoom"][data-chart="scatter"][data-dir="1"]'); await sleep(150);
+     const sc0 = await pzView(p, 'scatter');
+-    ok(`pan ${tag}: a zoomed scatter takes drags both ways (touch-action pinch-zoom)`, (await p.$eval('[data-pz="scatter"]', (h) => getComputedStyle(h).touchAction)) === 'pinch-zoom');
++    ok(`pan ${tag}: a zoomed scatter takes drags and pinches both ways (touch-action none)`, (await p.$eval('[data-pz="scatter"]', (h) => getComputedStyle(h).touchAction)) === 'none');
+     await pzDrag(p, 'scatter', -60, { dy: -50, steps: 8 });
+     const sc1 = await pzView(p, 'scatter');
+     ok(`pan ${tag}: …and moves right and up, inside the full view`, sc1.c > sc0.c + 0.1 && sc1.y < sc0.y - 0.1, `${JSON.stringify(sc0)} ${JSON.stringify(sc1)}`);
+@@ -737,7 +741,7 @@ async function testDepth(browser) {
+       const bars = [...h.querySelectorAll('svg path')].map((x) => x.getAttribute('d')).join('');
+       const widths = [...bars.matchAll(/h(\d+(?:\.\d+)?)v/g)].map((m) => +m[1]);
+       return { view: h.dataset.view, edges: [...h.querySelectorAll(':scope > .pz-edge:not([hidden])')].length, by: [...h.querySelectorAll('.bylab')].map((e) => { const r = e.getBoundingClientRect(); return { t: e.textContent, inside: r.left >= hr.left - 1 && r.right <= hr.right + 1 }; }),
+-        mlab: [...h.querySelectorAll('.mlab')].map((e) => e.textContent), widths, legend: h.closest('[data-chartbox]').querySelector('.legend').innerText, unread: h.querySelectorAll('rect.unread').length };
++        mlab: [...h.querySelectorAll('.mlab')].map((e) => e.textContent), widths, legend: h.closest('[data-chartbox]').querySelector('.legend').innerText, unread: h.querySelectorAll('rect.unread').length, hatch: h.querySelectorAll('.pz-end').length };
+     });
+     let a = await look();
+     ok(`depth ${tag}: the default view is ±45% around the price, with more to see both ways`, /^0\.0000,0\.9000$/.test(a.view) && a.edges === 2, a.view + ' ' + a.edges);
+@@ -745,7 +749,7 @@ async function testDepth(browser) {
+     await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(150);
+     a = await look();
+     const ws = [...new Set(a.widths.map((x) => Math.round(x)))].sort((x, y) => x - y);
+-    ok(`depth ${tag}: zoomed out to ±90%, both "beyond" buckets are labelled at the data's edges, inside the chart`, a.by.length === 2 && a.by.every((b) => /beyond/.test(b.t) && b.inside), JSON.stringify(a.by));
++    ok(`depth ${tag}: zoomed out to the whole map, it fills the chart (no "no data" hatch) and both "beyond" buckets are labelled at its edges, inside the chart`, a.by.length === 2 && a.by.every((b) => /beyond/.test(b.t) && b.inside) && a.hatch === 0 && /^0\.0000,1\.2750$/.test(a.view), JSON.stringify(a.by) + ' ' + a.view + ' ' + a.hatch);
+     ok(`depth ${tag}: …and the coarse bars past ±45% are drawn twice as wide as the fine ones`, ws.length >= 2 && Math.abs(ws[ws.length - 1] / ws[0] - 2) < 0.35, ws.join(','));
+     await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
+     // KOVA: 40% of its parked value above sits past ±45%; the "parked" label reads the fine bars only
+@@ -889,7 +893,7 @@ async function testSheets(browser) {
+ // ---------- 4h. sticky table headers and back to top ----------
+ const STICKY = (sel) => {
+   const box = document.querySelector(sel), sh = box.parentElement.querySelector(':scope > .sh'), real = [...box.querySelectorAll('thead th')], copy = sh ? [...sh.querySelectorAll('th')] : [];
+-  const sc = box.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : 0;
++  const bar = document.querySelector('#top'), sc = box.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : bar.classList.contains('hid') ? 0 : Math.max(0, bar.getBoundingClientRect().bottom); // the copy docks under the bar on top
+   const on = !!sh && sh.classList.contains('on') && getComputedStyle(sh.firstElementChild).display !== 'none';
+   const cr = on ? sh.firstElementChild.getBoundingClientRect() : null, br = box.getBoundingClientRect();
+   const vw = sh ? sh.firstElementChild.getBoundingClientRect() : br;
+@@ -906,7 +910,7 @@ async function testSticky(browser) {
+     let s = await p.evaluate(STICKY, '#all-box');
+     ok(`sticky ${tag}: no header copy at the top of the page`, !s.on);
+     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
+-    await sleep(200);
++    await sleep(380);
+     s = await p.evaluate(STICKY, '#all-box');
+     ok(`sticky ${tag}: inside All pools the header row sticks to the top, columns aligned (${s.cols})`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
+     const hit = await p.evaluate(() => { const r = document.querySelector('#all .sh .sh-in').getBoundingClientRect(), e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e && !!e.closest('.sh'); });
+@@ -922,20 +926,20 @@ async function testSticky(browser) {
+     ok(`sticky ${tag}: sorting from the stuck header sorts the table`, before === 'none' && (await p.getAttribute('#all-tbl thead th:nth-child(3)', 'aria-sort')) !== 'none' && (await p.evaluate(STICKY, '#all-box')).on);
+     // at the end of the table it leaves with the table: never over what follows
+     await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom - 30); });
+-    await sleep(200);
++    await sleep(380);
+     s = await p.evaluate(STICKY, '#all-box');
+     ok(`sticky ${tag}: at the table's end the header goes with it, never past it`, !s.on || s.bottom <= s.boxBottom + 1, JSON.stringify(s));
+     await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom + 40); });
+-    await sleep(200);
++    await sleep(380);
+     ok(`sticky ${tag}: past the table no header copy is left behind`, !(await p.evaluate(STICKY, '#all-box')).on);
+-    await p.evaluate(() => scrollTo(0, 0)); await sleep(200);
++    await p.evaluate(() => scrollTo(0, 0)); await sleep(380);
+     ok(`sticky ${tag}: back at the top it is gone (not stuck)`, !(await p.evaluate(STICKY, '#all-box')).on);
+     // the detail panel's long "every window" table sticks inside the panel's own scroll
+     await p.click('#best [data-act="detail"]');
+     await p.waitForSelector('#sheet:not([hidden])'); await sleep(320);
+     const wsel = '#sheet-body .tbl-box:not(.sh-in) > .wtbl';
+     await p.evaluate((sel) => { const b = document.querySelector('#sheet-body'), tb = document.querySelector(sel).closest('.tbl-box'), r = tb.querySelector('tbody tr:nth-child(8)').getBoundingClientRect(); b.scrollTop += r.top - b.getBoundingClientRect().top - 40; }, wsel);
+-    await sleep(200);
++    await sleep(380);
+     const ws = await p.evaluate((sel) => { const tb = document.querySelector(sel).closest('.tbl-box'); tb.id ||= 'wtbl-box'; return '#' + tb.id; }, wsel);
+     s = await p.evaluate(STICKY, ws);
+     ok(`sticky ${tag}: in the detail panel the window table's header sticks to the panel's top`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
+@@ -1504,8 +1508,9 @@ async function testLinks(browser) {
+ async function testLockNote(browser) {
+   for (const phone of [true, false]) {
+     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+-    const n = await p.evaluate(() => { const b = document.querySelector('#lockbtn').getBoundingClientRect(), e = document.querySelector('#lock-note'), r = e.getBoundingClientRect(); return { t: e.innerText, on: !e.hidden && r.height > 0, near: Math.abs(r.top - b.top) < 80 && r.left < b.right + 200, desc: document.querySelector('#lockbtn').getAttribute('aria-describedby') }; });
+-    ok(`lock note ${tag}: next to "Lock this device", one plain line on what it does`, n.on && n.near && n.desc === 'lock-note' && /Forgets the saved key on this device/.test(n.t) && /passphrase is needed next time/.test(n.t) && /stays sealed either way/.test(n.t), JSON.stringify(n).slice(0, 100));
++    const n = await p.evaluate(() => { const b = document.querySelector('#lockbtn').getBoundingClientRect(), e = document.querySelector('#lock-note'), r = e.getBoundingClientRect(); return { t: e.innerText, on: !e.hidden && r.height > 0, near: Math.abs(r.top - b.top) < 80 && r.left < b.right + 200, desc: document.querySelector('#lockbtn').getAttribute('aria-describedby'), btn: document.querySelector('#lockbtn').textContent }; });
++    ok(`lock note ${tag}: the button reads "Sign out on this device"`, n.btn === 'Sign out on this device', n.btn);
++    ok(`lock note ${tag}: next to "Sign out on this device", one plain line on what it does`, n.on && n.near && n.desc === 'lock-note' && n.t === 'Forgets the saved key here. You’ll need your passphrase next time. Your data stays encrypted either way.', JSON.stringify(n).slice(0, 100));
+     await p.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await sleep(200);
+     if (SHOTS) await snap(p, `p2-lock-note-${tag}`, 'footer');
+     await p.click('#lockbtn'); await p.waitForSelector('#lockscreen:not([hidden])');
+@@ -1514,6 +1519,384 @@ async function testLockNote(browser) {
+   }
+ }
+ 
++// ---------- 4j. text overlap: no text collides with other text or is cut off, at every width, before and after interactions ----------
++// tools/overlap.mjs reads every visible text's line boxes (Range.getClientRects) and an icon-only control's glyph, per
++// layer (the page, the panel, a note, the search list, a sticky header copy and the bar are layers of their own). The
++// "long" fixture carries worst-case names and numbers: real data runs longer than the made-up default.
++const OVL = (page, root) => page.evaluate(TEXT_OVERLAP, { root });
++async function overlapSteps(p, tag, found, views) {
++  const look = async (step, root) => { views.n++; for (const x of await OVL(p, root)) found.push(`${tag} ${step} · ${x.kind} ${x.sec}: ${x.a} × ${x.b}`); };
++  const click = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); if (!b || b.disabled) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
++  const esc = async () => { await p.keyboard.press('Escape'); await sleep(120); };
++  await look('top');
++  // favourites: a few starred pools fill the strip near the top (long names next to their stars)
++  for (const i of [1, 2, 3, 4, 7]) await p.evaluate((i) => { const b = document.querySelector(`#all tbody tr.row:nth-child(${i}) .star`); if (b) b.click(); }, i);
++  await sleep(150);
++  await look('favourites', '#fav');
++  for (let k = 0; k < 4 && (await click('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]')); k++) await sleep(80);
++  await look('chart zoomed out', '#best');
++  for (let k = 0; k < 6 && (await click('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]')); k++) await sleep(80);
++  for (let k = 0; k < 8 && (await click('[data-pz="liq-best"] > .pz-edge.r:not([hidden])')); k++) await sleep(40);
++  await look('chart zoomed in, right end', '#best');
++  await click('[data-act="zreset"][data-chart="liq-best"]'); await sleep(100);
++  for (let k = 0; k < 3 && (await click('[data-act="zoom"][data-chart="daily-best"][data-dir="1"]')); k++) await sleep(80);
++  await look('daily strip zoomed in', '#best');
++  await click('[data-act="zreset"][data-chart="daily-best"]'); await sleep(100);
++  if (await click('#best .tags [data-term="hook"], #best .best-meta [data-act="term"]')) { await sleep(150); await look('a term\'s note'); await esc(); }
++  if (await click('#gas')) { await sleep(150); await look('gas note'); await esc(); }
++  if (await click('#all tbody .whyb')) { await sleep(150); await look('why note'); await esc(); }
++  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
++  await p.click('#f-q'); await p.keyboard.type('ve', { delay: 20 }); await sleep(200);
++  await look('search list');
++  await esc(); await p.fill('#f-q', ''); await p.$eval('#f-q', (e) => e.blur()); await sleep(150);
++  if (await click('#why-tog')) { await sleep(120); await look('why legend', '#all'); await click('#why-tog'); }
++  // scrolled into the table, the bar back on top: the sticky header copy and the bar are layers over the rows
++  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 60); });
++  await sleep(250); await p.evaluate(() => scrollBy(0, -60)); await sleep(380);
++  await look('table scrolled, sticky header');
++  await p.evaluate(() => scrollTo(0, 0)); await sleep(200);
++  if (await click('#bt-lead tr.row')) { await sleep(800); await look('replay', '#bt'); }
++  if (await click('#best [data-act="detail"]')) {
++    await p.waitForSelector('#sheet:not([hidden])'); await sleep(400);
++    await look('detail panel', '#sheet');
++    if (await click('#sim [data-act="sim-all"]')) { await sleep(200); await look('similar list', '#sheet'); await click('#sim [data-act="sim-all"]'); }
++    if (await click('#sheet .tags [data-act="term"], #sheet-meta [data-act="term"]')) { await sleep(150); await look('a term\'s note in the panel'); await esc(); }
++    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-day']) {
++      for (let k = 0; k < 5 && (await p.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
++    }
++    await look('panel charts zoomed out', '#sheet');
++    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-day']) {
++      for (let k = 0; k < 6 && (await p.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
++    }
++    await look('panel charts zoomed in', '#sheet');
++    await p.evaluate(() => { const b = document.querySelector('#sheet-body'); b.scrollTop = 500; }); await sleep(380);
++    await look('panel scrolled (its top folded)', '#sheet');
++    await p.click('#sheet-close'); await sleep(150);
++  }
++  if (await click('#best h2 button[data-act="pair"]')) { await sleep(350); await look('pair view', '#sheet'); await p.click('#sheet-close'); await sleep(120); }
++}
++async function testOverlap(browser) {
++  const widths = DEVICE ? [0, 768, 1300, 1440, 1920] : [320, 360, 375, 390, 430, 768, 1300, 1440, 1920];
++  for (const c of ['default', 'long']) {
++    const found = [], views = { n: 0 }, errs = [];
++    for (const w of widths) {
++      const t = await openUnlocked(browser, c, w ? { width: w, height: 860, storage: { 'lps.hint': '1' } } : { phone: true, storage: { 'lps.hint': '1' } }), p = t.page;
++      try { await overlapSteps(p, w ? 'w' + w : 'phone', found, views); } catch (e) { errs.push(String(e.message).split('\n')[0].slice(0, 100)); }
++      if (SHOTS && (w === 390 || w === 1440 || !w)) await snap(p, `overlap-${c}-${w || 'phone'}`);
++      if (t.errors.length) errs.push(t.errors[0]);
++      await t.ctx.close();
++    }
++    const secs = [...new Set(found.map((f) => f.replace(/^.*· \w+ ([^:]+):.*$/, '$1')))];
++    ok(`overlap ${c}: no text collides or is cut off (${views.n} views, widths ${widths.map((x) => x || 'phone').join('/')})`, found.length === 0, `${found.length} in ${secs.join(', ')}: ${found.slice(0, 3).join(' | ')}`);
++    ok(`overlap ${c}: the walk-through ran without page errors`, errs.length === 0, errs[0]);
++  }
++  // the long case's liquidity chart, every best-find pool at every zoom level and both pan ends: the price pill, the
++  // "parked" and "beyond" labels and the ticks never sit on each other
++  const found = [];
++  let views = 0;
++  for (const o of DEVICE ? [{ phone: true }, { width: 1440 }] : [{ width: 360 }, { width: 390 }, { width: 1440 }]) {
++    const t = await openUnlocked(browser, 'long', { ...o, height: 860, reducedMotion: 'reduce', storage: { 'lps.hint': '1' } }), p = t.page, tag = o.width ? 'w' + o.width : 'phone';
++    for (const wk of ['24h', '30d']) {
++      await setWin(p, wk);
++      const n = await p.$$eval('#best [role="tab"]', (x) => x.length);
++      for (let i = 0; i < n; i++) {
++        await p.evaluate((i) => document.querySelectorAll('#best [role="tab"]')[i].click(), i); await sleep(40);
++        for (const dir of [-1, 1]) {
++          for (let z = 0; z < 5; z++) {
++            for (const side of ['', 'l', 'r']) {
++              if (side) for (let k = 0; k < 10 && (await p.evaluate((s) => { const e = document.querySelector(`[data-pz="liq-best"] > .pz-edge.${s}:not([hidden])`); if (!e) return false; e.click(); return true; }, side)); k++);
++              views++;
++              for (const x of await p.evaluate(TEXT_OVERLAP, { root: '[data-chartbox="liq-best"]' })) found.push(`${tag} ${wk} tab ${i} z${dir}${z}${side} · ${x.kind}: ${x.a} × ${x.b}`);
++            }
++            if (!(await p.evaluate((d) => { const b = document.querySelector(`[data-act="zoom"][data-chart="liq-best"][data-dir="${d}"]`); if (!b || b.disabled) return false; b.click(); return true; }, dir))) break;
++          }
++          await p.evaluate(() => { const b = document.querySelector('[data-act="zreset"][data-chart="liq-best"]'); if (b) b.click(); });
++        }
++      }
++    }
++    await t.ctx.close();
++  }
++  ok(`overlap: the liquidity chart's labels never collide, any pool, zoom or pan (${views} views of the long case)`, found.length === 0, `${found.length}: ${found.slice(0, 3).join(' | ')}`);
++}
++
++// ---------- 4k. touch: one finger drags, two fingers pinch and pan, as pointer events with pointerType 'touch' ----------
++// The page sees what a phone sends (tools/gestures.mjs: pointerdown / move / up per finger, each with its own
++// pointerId); WebKit in Actions runs these same events. What they can't show: that a real iPhone's Safari hands the
++// gesture to the page at all (that rests on touch-action: pan-y, checked below, and on preventDefault of its touchmove
++// and gesture events, also checked).
++// a pinch on a chart: two fingers `d0` px apart around (fx, fy) of the host, spread by `k`, the middle moved by (mx, my)
++async function pinch(page, id, k, { root = '', steps = 10, end = 'pointerup', ...o } = {}) {
++  const b = await page.evaluate(HOST_BOX, { id, root });
++  await sleep(60);
++  return page.evaluate(FINGERS, { steps, end, pts: pinchPts(b, k, o) });
++}
++async function finger(page, id, dx, { dy = 0, fy = 0.5, steps = 10, ms = 16, end = 'pointerup', root = '' } = {}) {
++  const b = await page.evaluate(HOST_BOX, { id, root });
++  await sleep(60);
++  const x0 = b.x + b.w / 2, y0 = b.y + b.h * fy;
++  return page.evaluate(FINGERS, { steps, ms, end, pts: [{ id: 31, x0, y0, x1: x0 + dx, y1: y0 + dy }] });
++}
++const liqSpan = (page, id) => page.evaluate((id) => (document.querySelector(`[data-chartbox="${id}"] .pz-cap1`) || {}).textContent || '', id);
++async function testTouch(browser) {
++  for (const phone of [true, false]) {
++    const t = await openUnlocked(browser, 'default', { phone, width: 1440, storage: { 'lps.hint': '1' } }), p = t.page, tag = phone ? 'phone' : 'laptop';
++    const tas = await p.$$eval('.pz', (hs) => hs.map((h) => [h.classList.contains('pz-xy'), getComputedStyle(h).touchAction]));
++    ok(`touch ${tag}: every chart surface leaves vertical swipes to the page and takes sideways drags and pinches (touch-action pan-y) (${tas.length})`, tas.length >= 3 && tas.every(([xy, ta]) => ta === (xy ? 'none' : 'pan-y')), JSON.stringify(tas.slice(0, 3)));
++    // one finger
++    let v0 = await pzView(p, 'liq-best');
++    await finger(p, 'liq-best', -110, { steps: 12, ms: 30 }); await sleep(60);
++    let v1 = await pzSettled(p, 'liq-best');
++    ok(`touch ${tag}: a finger dragged left shows higher prices`, v1.c > v0.c + 0.05 && near(v1.w, v0.w), `${v0.c} → ${v1.c}`);
++    await finger(p, 'liq-best', 8, { dy: 90 }); await sleep(60);
++    ok(`touch ${tag}: a mostly vertical swipe leaves the chart alone (the page scrolls)`, near((await pzSettled(p, 'liq-best')).c, v1.c));
++    // the page doesn't scroll under a chart being dragged; iOS's own pinch events never reach the page from a chart
++    const blocked = await p.evaluate(async () => {
++      const h = document.querySelector('[data-pz="liq-best"]'), r = h.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, el = document.elementFromPoint(x, y);
++      const pe = (type, xx) => el.dispatchEvent(new PointerEvent(type, { pointerId: 41, pointerType: 'touch', isPrimary: true, clientX: xx, clientY: y, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1 }));
++      const tm = () => document.dispatchEvent(new Event('touchmove', { bubbles: true, cancelable: true }));
++      const before = tm(); // nothing dragged: a touchmove is left alone (the page scrolls)
++      pe('pointerdown', x); for (let i = 1; i <= 4; i++) { pe('pointermove', x - i * 8); await new Promise((r2) => setTimeout(r2, 16)); }
++      const during = tm(); pe('pointerup', x - 32);
++      const g1 = h.dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true })), g2 = h.dispatchEvent(new Event('gesturechange', { bubbles: true, cancelable: true }));
++      const g3 = document.querySelector('#all h2').dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true }));
++      return { before, during, g1, g2, g3 };
++    });
++    ok(`touch ${tag}: while a chart is dragged its touchmoves are held (no page scroll), otherwise not`, blocked.before === true && blocked.during === false, JSON.stringify(blocked));
++    ok(`touch ${tag}: Safari's pinch events (gesturestart / gesturechange) are stopped on charts only`, blocked.g1 === false && blocked.g2 === false && blocked.g3 === true, JSON.stringify(blocked));
++    await pzSettled(p, 'liq-best');
++    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
++    // two fingers: spread to zoom in around the point between them
++    v0 = await pzView(p, 'liq-best');
++    await pinch(p, 'liq-best', 2); await sleep(120);
++    v1 = await pzSettled(p, 'liq-best');
++    const cap1 = await liqSpan(p, 'liq-best');
++    ok(`touch ${tag}: spreading two fingers zooms in (the view halves, the price stays in the middle)`, near(v1.w, v0.w / 2, 0.01) && near(v1.c, v0.c, 0.01) && /^±2[23]%$/.test(cap1), `${JSON.stringify(v0)} → ${JSON.stringify(v1)} ${cap1}`);
++    ok(`touch ${tag}: …and the zoom buttons follow (reset shows, − and + both work)`, (await p.isVisible('[data-chartbox="liq-best"] [data-act="zreset"]')) && (await p.isEnabled('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]')) && (await p.isEnabled('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]')));
++    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
++    // off-centre: the price under the fingers' midpoint stays under it
++    v0 = await pzView(p, 'liq-best');
++    const want = v0.c - v0.w / 2 + 0.25 * v0.w, wantC = want + (0.5 - 0.25) * (v0.w / 2);
++    await pinch(p, 'liq-best', 2, { fx: 0.25 }); await sleep(120);
++    v1 = await pzSettled(p, 'liq-best');
++    ok(`touch ${tag}: a pinch zooms around the point between the fingers, not the middle of the chart`, near(v1.w, v0.w / 2, 0.01) && near(v1.c, wantC, 0.012), `${v1.c} vs ${wantC}`);
++    // both fingers moving together pan the zoomed chart
++    v0 = v1;
++    await pinch(p, 'liq-best', 1, { mx: 90 }); await sleep(120);
++    v1 = await pzSettled(p, 'liq-best');
++    ok(`touch ${tag}: two fingers moved together pan the chart (no zoom change)`, near(v1.w, v0.w, 0.005) && v1.c < v0.c - 0.03, `${JSON.stringify(v0)} → ${JSON.stringify(v1)}`);
++    // pinching in stops at the whole map: all the data, no "no data" hatch, − disabled
++    await pinch(p, 'liq-best', 0.2, { d0: 160 }); await sleep(120);
++    v1 = await pzSettled(p, 'liq-best');
++    const rest = await p.evaluate(() => ({ hatch: document.querySelectorAll('[data-pz="liq-best"] .pz-end').length, out: document.querySelector('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]').disabled }));
++    ok(`touch ${tag}: pinched closed, the view stops at the whole map (±${(SPAN * 100).toFixed(0)}%): every bar, no hatch, − disabled`, near(v1.c, 0, 2e-3) && near(v1.w, 2 * SPAN, 2e-3) && rest.hatch === 0 && rest.out && (await liqSpan(p, 'liq-best')) === '±64%', `${JSON.stringify(v1)} ${JSON.stringify(rest)}`);
++    // a double tap (two finger taps) resets
++    const hb = await p.evaluate(() => { const r = document.querySelector('[data-pz="liq-best"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 70 }; });
++    for (let k = 0; k < 2; k++) { await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 51 + k, x0: hb.x, y0: hb.y, x1: hb.x, y1: hb.y }] }); await sleep(90); }
++    v1 = await pzSettled(p, 'liq-best');
++    ok(`touch ${tag}: a double tap resets the chart`, near(v1.c, 0) && near(v1.w, 0.9), JSON.stringify(v1));
++    // a cancelled touch (the browser took the gesture) ends the drag cleanly
++    await finger(p, 'liq-best', 260, { end: 'pointercancel' }); await sleep(80);
++    v1 = await pzSettled(p, 'liq-best');
++    ok(`touch ${tag}: a cancelled drag ends cleanly and springs back inside the data`, !(await p.$('[data-pz="liq-best"].dragging')) && v1.c >= -SPAN + 0.45 - 2e-3, JSON.stringify(v1));
++    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]').catch(() => {}); await sleep(120);
++    // the daily strip: a pinch shows fewer, wider days; a finger drag shows older ones
++    let dv = await pzView(p, 'daily-best');
++    await pinch(p, 'daily-best', 2, { fx: 0.75 }); await sleep(120);
++    let dv2 = await pzSettled(p, 'daily-best');
++    ok(`touch ${tag}: a pinch on the daily strip shows fewer, wider days`, near(dv2.w, dv.w / 2, 0.6), `${dv.w} → ${dv2.w}`);
++    dv = dv2;
++    await finger(p, 'daily-best', 120, { steps: 12, ms: 30 }); await sleep(60);
++    dv2 = await pzSettled(p, 'daily-best');
++    ok(`touch ${tag}: a finger dragged right on the strip shows older days`, dv2.c < dv.c - 1, `${dv.c} → ${dv2.c}`);
++    // the detail panel: its charts pinch too, and the panel stays open
++    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(350);
++    v0 = await pzView(p, 'liq-detail');
++    await pinch(p, 'liq-detail', 2, { root: '#sheet' }); await sleep(120);
++    v1 = await pzSettled(p, 'liq-detail');
++    await finger(p, 'liq-detail', -80, { root: '#sheet', steps: 12, ms: 30 }); await sleep(60);
++    const v2 = await pzSettled(p, 'liq-detail');
++    ok(`touch ${tag}: in the detail panel a pinch zooms and a finger drags the chart; the panel stays open`, near(v1.w, v0.w / 2, 0.01) && v2.c > v1.c + 0.02 && (await p.isVisible('#sheet')), `${v0.w}→${v1.w} ${v1.c}→${v2.c}`);
++    await p.click('#sheet-close');
++    // the scatter: a pinch zooms both axes, then it takes drags both ways
++    await p.click('#bt-lead tr.row'); await sleep(900);
++    await pinch(p, 'scatter', 2); await sleep(200);
++    const sc = await p.evaluate(() => { const h = document.querySelector('[data-pz="scatter"]'); return { xy: h.classList.contains('pz-xy'), ta: getComputedStyle(h).touchAction, view: h.dataset.view }; });
++    ok(`touch ${tag}: a pinch on the scatter zooms it; zoomed, it takes drags both ways (touch-action none)`, sc.xy && sc.ta === 'none' && sc.view.split(',').length === 3, JSON.stringify(sc));
++    // a pop-out window: the same gestures
++    const pool = await p.getAttribute('#best [data-act="detail"]', 'data-id');
++    const w2 = await t.ctx.newPage();
++    await w2.goto(url('default', `&view=liq-best&pool=${pool}&w=30d`));
++    await w2.waitForSelector('.solo-box [data-pz="liq-best"]', { timeout: 20000 }); await sleep(300);
++    const s0 = await pzView(w2, 'liq-best');
++    await pinch(w2, 'liq-best', 2); await sleep(150);
++    const s1 = await pzSettled(w2, 'liq-best');
++    await finger(w2, 'liq-best', -100, { steps: 12, ms: 30 }); await sleep(60);
++    const s2 = await pzSettled(w2, 'liq-best');
++    ok(`touch ${tag}: in a chart's own window a pinch zooms and a finger drags`, near(s1.w, s0.w / 2, 0.01) && s2.c > s1.c + 0.02, `${JSON.stringify(s0)} ${JSON.stringify(s1)} ${JSON.stringify(s2)}`);
++    await w2.close();
++    ok(`touch ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
++    await t.ctx.close();
++  }
++  // reduced motion: a pinch still zooms, nothing animates after it
++  const r = await openUnlocked(browser, 'default', { phone: true, reducedMotion: 'reduce', storage: { 'lps.hint': '1' } }), p = r.page;
++  const v0 = await pzView(p, 'liq-best');
++  await pinch(p, 'liq-best', 2); await sleep(60);
++  ok('touch: under reduced motion a pinch zooms at once and nothing animates', near((await pzView(p, 'liq-best')).w, v0.w / 2, 0.01) && (await p.evaluate(() => document.getAnimations().length)) === 0);
++  await r.ctx.close();
++}
++
++// ---------- 4l. the bar on top: one slim row; it slides away going down and comes back going up; the strip scrolls away ----------
++const BAR = () => {
++  const b = document.querySelector('#top'), r = b.getBoundingClientRect(), m = document.querySelector('#mstrip').getBoundingClientRect();
++  const kids = [...b.children].filter((e) => e.getBoundingClientRect().width > 0 && getComputedStyle(e).position !== 'absolute').map((e) => { const q = e.getBoundingClientRect(); return q.top + q.height / 2; });
++  return { h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom), hid: b.classList.contains('hid'), pos: getComputedStyle(b).position, oneRow: kids.length >= 3 && Math.max(...kids) - Math.min(...kids) <= 4, strip: Math.round(m.bottom), y: scrollY, anim: document.getAnimations().length };
++};
++async function testHeader(browser) {
++  for (const [tag, o] of [['phone', { phone: true }], ['w360', { width: 360, height: 760 }], ['w768', { width: 768 }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
++    const t = await openUnlocked(browser, 'default', { ...o, storage: { 'lps.hint': '1' } }), p = t.page;
++    let b = await p.evaluate(BAR);
++    ok(`header ${tag}: the bar on top is one slim row (${b.h} px: mark, freshness, refresh, window), sticky`, b.oneRow && b.h >= 44 && b.h <= 52 && b.pos === 'sticky' && !b.hid && b.top >= 0 && b.top <= 30, JSON.stringify(b)); // under the MOCKUP ribbon
++    if (SHOTS && !/reduced/.test(tag)) await snap(p, `header-${tag.replace(' ', '-')}-top`, 'body');
++    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 900); }); await sleep(420);
++    b = await p.evaluate(BAR);
++    ok(`header ${tag}: scrolling down slides the bar away${tag.startsWith('phone') || tag === 'w360' ? ' and the market strip scrolls off with the page' : ''}`, b.hid && b.bottom <= 0 && b.strip < 0, JSON.stringify(b));
++    if (/reduced/.test(tag)) ok(`header ${tag}: under reduced motion it goes at once (nothing animates)`, b.anim === 0, String(b.anim));
++    await p.evaluate(() => scrollBy(0, -120)); await sleep(420);
++    b = await p.evaluate(BAR);
++    ok(`header ${tag}: a little scroll up brings it back`, !b.hid && b.top === 0 && b.bottom >= 44, JSON.stringify(b));
++    // the All pools header copy docks right under the bar, never under it
++    await p.evaluate(() => { const r = document.querySelector('#all-tbl tbody tr:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 40); }); await sleep(300);
++    await p.evaluate(() => scrollBy(0, -50)); await sleep(420);
++    const d = await p.evaluate(() => { const bar = document.querySelector('#top').getBoundingClientRect(), sh = document.querySelector('#all .sh'), r = sh && sh.firstElementChild.getBoundingClientRect(), on = !!sh && sh.classList.contains('on'); const e = on ? document.elementFromPoint(r.left + 40, r.top + r.height / 2) : null; return { on, gap: on ? Math.round(r.top - bar.bottom) : null, mine: !!e && !!e.closest('.sh') }; });
++    ok(`header ${tag}: with the bar back, the sticky table header docks right under it, not under it`, d.on && Math.abs(d.gap) <= 1 && d.mine, JSON.stringify(d));
++    if (SHOTS && !/reduced/.test(tag)) await p.screenshot({ path: path.join(SHOTS, `header-${tag.replace(' ', '-')}-docked.png`) });
++    // the keyboard brings the bar back
++    await p.evaluate(() => scrollBy(0, 400)); await sleep(420);
++    const hid = (await p.evaluate(BAR)).hid;
++    await p.evaluate(() => document.querySelector('#refresh').focus()); await sleep(300);
++    ok(`header ${tag}: focusing a control in the hidden bar brings it back`, hid && !(await p.evaluate(BAR)).hid);
++    await p.evaluate(() => scrollTo(0, 0)); await sleep(300);
++    b = await p.evaluate(BAR);
++    ok(`header ${tag}: at the top it shows, flat (no shadow)`, !b.hid && b.top >= 0 && !(await p.$eval('#top', (e) => e.classList.contains('stuck'))));
++    ok(`header ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
++    await t.ctx.close();
++  }
++}
++
++// ---------- 4m. info notes: one glossary, a small note for each explainable word ----------
++const POP = () => { const e = document.querySelector('#pop'), r = e.getBoundingClientRect(), bar = document.querySelector('#top'), bb = bar.classList.contains('hid') ? 0 : bar.getBoundingClientRect().bottom, inSheet = !document.querySelector('#sheet').hidden;
++  return { on: !e.hidden, t: e.innerText, lbl: !!e.querySelector('.lbl'), gl: (e.querySelector('.gl') || {}).textContent || '', inside: r.left >= 0 && r.right <= document.documentElement.clientWidth && r.bottom <= innerHeight + 1 && r.top >= (inSheet ? 0 : bb) - 1, top: Math.round(r.top), bb: Math.round(bb) }; };
++async function testTerms(browser) {
++  const HOOK = 'A hook is extra code attached to a Uniswap v4 pool. It can change fees or move tokens; unverified hooks are a risk.';
++  for (const phone of [true, false]) {
++    const t = await openUnlocked(browser, 'default', { phone, width: 1440, storage: { 'lps.hint': '1' } }), p = t.page, tag = phone ? 'phone' : 'laptop';
++    const press = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
++    const keys = () => p.evaluate((root) => [...new Set([...document.querySelectorAll(`${root} [data-act="term"]`)].filter((b) => b.getClientRects().length).map((b) => b.dataset.term))], phone ? '#best' : '#best');
++    const best = await keys();
++    ok(`terms ${tag}: the best find explains its fee tier, chain, version, range, gem, net APR, LVR and chips`, ['fee', 'v3', 'range', 'gem', 'net', 'lvr', 'edge', 'sigma', 'room', 'stop'].every((k) => best.includes(k)) && (best.includes('base') || best.includes('ethereum')), best.join(','));
++    // the hook, in plain words
++    await p.evaluate(() => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.querySelector('.tn').textContent === 'TALI/WETH').click()); await sleep(150);
++    await press('#best .tags [data-term="hook"]'); await sleep(150);
++    let a = await p.evaluate(POP);
++    ok(`terms ${tag}: tapping "hook" opens a small note: "${HOOK.slice(0, 40)}…"`, a.on && a.gl === HOOK && a.inside, JSON.stringify(a).slice(0, 140));
++    ok(`terms ${tag}: …the word shows it is open (aria-expanded)`, (await p.getAttribute('#best .tags [data-term="hook"]', 'aria-expanded')) === 'true');
++    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `terms-hook-${tag}.png`) });
++    await press('#best .tags [data-term="hook"]'); await sleep(120);
++    ok(`terms ${tag}: a second tap closes it`, !(await p.evaluate(POP)).on && (await p.getAttribute('#best .tags [data-term="hook"]', 'aria-expanded')) === 'false');
++    await press('#best .tags [data-term="hook"]'); await sleep(120);
++    await p.evaluate(() => document.querySelector('#all h2').click()); await sleep(120);
++    ok(`terms ${tag}: a tap elsewhere closes it`, !(await p.evaluate(POP)).on);
++    await p.focus('#best .tags [data-term="hook"]'); await p.keyboard.press('Enter'); await sleep(120);
++    const kb = (await p.evaluate(POP)).on;
++    await p.keyboard.press('Escape'); await sleep(120);
++    ok(`terms ${tag}: the keyboard opens it (Enter) and Esc closes it, the focus back on the word`, kb && !(await p.evaluate(POP)).on && (await p.evaluate(() => document.activeElement && document.activeElement.dataset.term)) === 'hook');
++    // every explainable word on the card and in the panel: a label and a plain sentence, on screen, below the bar
++    const bad = [];
++    let n = 0;
++    const each = async (root) => {
++      for (const k of await p.evaluate((root) => [...new Set([...document.querySelectorAll(`${root} [data-act="term"]`)].filter((b) => b.getClientRects().length).map((b) => b.dataset.term))], root)) {
++        // (the panel's top folds while its content scrolls: a word up there is pressed with the content back at the top)
++        const shown = await p.evaluate(({ root, k }) => { window.dispatchEvent(new WheelEvent('wheel')); const b = [...document.querySelectorAll(`${root} [data-act="term"][data-term="${k}"]`)].find((x) => x.getClientRects().length); if (!b) { const sb = document.querySelector('#sheet-body'); if (sb) sb.scrollTop = 0; return false; } b.scrollIntoView({ block: 'center' }); return true; }, { root, k });
++        if (!shown) await sleep(420);
++        n++;
++        await p.evaluate(({ root, k }) => { const b = [...document.querySelectorAll(`${root} [data-act="term"][data-term="${k}"]`)].find((x) => x.getClientRects().length); b.scrollIntoView({ block: 'center' }); b.click(); }, { root, k }); await sleep(90);
++        const q = await p.evaluate(POP);
++        if (!q.on || !q.lbl || q.gl.length < 25 || !q.inside) bad.push(`${k} ${JSON.stringify(q).slice(0, 60)}`);
++        if (q.on) { await p.keyboard.press('Escape'); await sleep(60); }
++      }
++    };
++    await each('#best'); await each('#subhead'); await each('#health');
++    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(350);
++    await each('#sheet');
++    ok(`terms ${tag}: every explainable word opens its note: a name and a plain sentence, inside the screen, never under the bar (${n} kinds)`, bad.length === 0 && n >= 30, bad.slice(0, 3).join(' | '));
++    // the similar pools' reasons
++    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(420);
++    await p.evaluate(() => document.querySelector('#sim .mc-relb').click()); await sleep(120);
++    const k0 = await p.evaluate(() => document.querySelector('#sim .mc-v .k').textContent);
++    a = await p.evaluate(POP);
++    ok(`terms ${tag}: a similar pool's reason ("this pool", "same pair"…) explains itself, without switching the cards' figure`, a.on && /this pool|same pair|tier \+ token|same tier|shared token|unverified/i.test(a.t) && k0 === (await p.evaluate(() => document.querySelector('#sim .mc-v .k').textContent)), a.t.slice(0, 60));
++    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `terms-sim-${tag}.png`) });
++    await p.keyboard.press('Escape'); await sleep(80);
++    // one glossary: the same word gives the same note everywhere
++    await p.evaluate(() => document.querySelector('#sheet [data-term="net"]').click()); await sleep(100);
++    const n1 = (await p.evaluate(POP)).gl;
++    await p.keyboard.press('Escape'); await p.click('#sheet-close'); await sleep(100);
++    await press('#best [data-term="net"]'); await sleep(100);
++    ok(`terms ${tag}: one glossary: "net APR" reads the same in the card and the panel`, n1.length > 20 && n1 === (await p.evaluate(POP)).gl);
++    await p.keyboard.press('Escape');
++    // a note near the top of the screen stays below the bar
++    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - 400); }); await sleep(300);
++    await p.evaluate(() => scrollBy(0, -40)); await sleep(350);
++    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - document.querySelector('#top').getBoundingClientRect().bottom - 4); }); await sleep(380);
++    await p.evaluate(() => document.querySelector('#best .best-meta [data-term="fee"]').click()); await sleep(120);
++    a = await p.evaluate(POP);
++    ok(`terms ${tag}: a note opened right under the bar sits below it, inside the screen`, a.on && a.inside, JSON.stringify(a).slice(0, 120));
++    await p.keyboard.press('Escape');
++    // the gas gauge and the watchdog
++    await press('#gas'); await sleep(120);
++    ok(`terms ${tag}: the gas gauge's note starts with what gas is`, /^Ethereum gas · next block\s*What Ethereum charges to run a transaction/i.test((await p.evaluate(POP)).t), (await p.evaluate(POP)).t.slice(0, 60));
++    await p.keyboard.press('Escape');
++    const wd = await p.evaluate(() => { const dt = [...document.querySelectorAll('#health dt')].find((x) => /Watchdog/.test(x.textContent)); return dt ? [dt.textContent, dt.nextElementSibling.textContent] : null; });
++    ok(`terms ${tag}: health says "Watchdog last restart" with a time, and explains it`, wd && wd[0] === 'Watchdog last restart' && /^\d\d:\d\d$|^\d+ \w+ \d\d:\d\d$/.test(wd[1]), JSON.stringify(wd));
++    ok(`terms ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
++    await t.ctx.close();
++  }
++  const m = await openUnlocked(browser, 'nomarket', { phone: true });
++  const wd = await m.page.evaluate(() => { const dt = [...document.querySelectorAll('#health dt')].find((x) => /Watchdog/.test(x.textContent)); return dt ? dt.nextElementSibling.textContent : null; });
++  ok('terms: a watchdog that never restarted the loop shows —, never a time or 0', wd === '—', wd);
++  await m.ctx.close();
++}
++
++// ---------- 4n. the detail panel's top folds while its content scrolls down, and opens again on the way up ----------
++const FOLD = () => { const c = document.querySelector('#sheet .sheet-card'), h = document.querySelector('#sheet .sheet-head'); return { cond: c.classList.contains('cond'), h: Math.round(h.getBoundingClientRect().height), sim: !document.querySelector('#sim').hidden && document.querySelector('#sim').getBoundingClientRect().height > 0, st: document.querySelector('#sheet-body').scrollTop, anim: document.getAnimations().length }; };
++async function testFold(browser) {
++  for (const [tag, o] of [['phone', { phone: true }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
++    const t = await openUnlocked(browser, 'default', o), p = t.page;
++    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(400);
++    const f0 = await p.evaluate(FOLD);
++    for (const y of [80, 200, 400]) { await p.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(120); }
++    await sleep(300);
++    const f1 = await p.evaluate(FOLD);
++    ok(`fold ${tag}: scrolling the panel's content down folds its top (${f0.h} → ${f1.h} px; the similar pools tuck away)`, f0.sim && !f0.cond && f1.cond && !f1.sim && f1.h < f0.h - 60, JSON.stringify([f0, f1]));
++    if (/reduced/.test(tag)) ok(`fold ${tag}: under reduced motion it folds without sliding`, f1.anim === 0, String(f1.anim));
++    if (SHOTS && tag === 'phone') await p.screenshot({ path: path.join(SHOTS, 'fold-phone-folded.png') });
++    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop -= 30; }); await sleep(80);
++    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop -= 30; }); await sleep(380);
++    const f2 = await p.evaluate(FOLD);
++    ok(`fold ${tag}: a scroll back up opens it again`, !f2.cond && f2.sim, JSON.stringify(f2));
++    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 600; }); await sleep(420);
++    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(380);
++    ok(`fold ${tag}: back at the top it is open`, !(await p.evaluate(FOLD)).cond);
++    // a short panel (the pair view) never folds back and forth
++    await p.click('#sheet-close'); await sleep(120);
++    await p.evaluate(() => document.querySelector('#best h2 button[data-act="pair"]').click()); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
++    const flips = await p.evaluate(async () => { let n = 0; const mo = new MutationObserver(() => n++); mo.observe(document.querySelector('#sheet .sheet-card'), { attributes: true, attributeFilter: ['class'] }); const b = document.querySelector('#sheet-body'); for (let i = 0; i < 12; i++) { b.scrollTop = i % 2 ? b.scrollHeight : b.scrollHeight - 30; await new Promise((r) => setTimeout(r, 60)); } await new Promise((r) => setTimeout(r, 400)); mo.disconnect(); return n; });
++    ok(`fold ${tag}: a short panel never flips between folded and open`, flips <= 2, String(flips));
++    ok(`fold ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
++    await t.ctx.close();
++  }
++}
++
+ // ---------- 5. click audit: press every control, check the DOM answered ----------
+ const SIG = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
+ async function controls(page) {
+@@ -1575,7 +1958,7 @@ async function testClicks(browser) {
+         good = new RegExp(`[?&]view=${want}(&|$)`).test(u) && /[?&]w=(24h|7d|30d)/.test(u) && /[?&]z=\d/.test(u) && (['scatter', 'health'].includes(want) || /[?&]pool=[0-9a-fx]+/.test(u));
+       }
+       if (act === 'ext') good = /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(await p.evaluate(() => (window.__opened || []).slice(-1)[0] || ''));
+-      if (act === 'why' || act === 'gas') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
++      if (act === 'why' || act === 'gas' || act === 'term') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
+       if (act === 'fav') good = good && (await p.$$('#fav .mc')).length > 0;
+       if (act === 'detail' || act === 'pair') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
+       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
+@@ -1629,7 +2012,7 @@ writeFixtures(FX);
+ const srv = await serve();
+ ORIGIN = `http://127.0.0.1:${srv.address().port}`;
+ const browser = await pw[BROWSER].launch();
+-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, sheets: testSheets, sticky: testSticky, top: testTop, zoomfit: testZoomFit, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, highlight: testHighlight, search: testSearch, links: testLinks, locknote: testLockNote, clicks: testClicks, motion: testMotion };
++const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion };
+ try {
+   for (const g of ONLY) {
+     if (!groups[g]) continue;
