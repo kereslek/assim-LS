@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4Vb4aaZUkHvrCJltoMV31FcLwaDfe0aCOP1qzhO4Qgc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jNGPxlDBsSz4ZV5gap0SLinXou6vRGnlMz4IHmTlo9o='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -44,7 +44,7 @@ p{margin:0}
 .ribbon{background:var(--warn);color:#0B0B0B;text-align:center;padding:5px 12px;font:700 11px/1.3 var(--mono);letter-spacing:.12em}
 
 /* header */
-.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:12px 16px;background:var(--head);border-bottom:1px solid var(--line)}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left));background:var(--head);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0}
 .brand svg{flex:none;display:block}
 .title{font:700 13px/1.1 var(--mono);letter-spacing:.1em}
@@ -95,7 +95,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 
 /* daily fee strip, pattern chip, gem-now parts */
 .daily{display:grid;gap:4px}
-.daily svg{display:block;width:100%;height:44px}
+.daily .pz-c>svg{display:block;width:100%;height:44px}
 .chip.p-steady{color:var(--accent);border-color:rgba(22,199,132,.55)}
 .chip.p-bursty{color:var(--warn);border-color:rgba(250,178,25,.55)}
 .chip.p-emerging{color:#22D3EE;border-color:rgba(34,211,238,.55)}
@@ -122,13 +122,57 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 body.solo main{max-width:none}
 .solo-box{padding:8px 0}
 .solo-box .liq{height:min(64vh,560px)}
-.solo-box .liq svg{height:calc(100% - 40px)}
+.solo-box .liq .pz-c>svg{height:calc(100% - 40px)}
 .solo-box .liq .tick{top:auto;bottom:4px}
 .solo-box svg[preserveAspectRatio="none"]{height:min(48vh,420px)!important}
 .solo-cap{margin-bottom:8px}
 
+/* pan: drag a chart sideways (a vertical swipe still scrolls the page), edge buttons where more lies off-screen,
+   a thin bar for where the view sits, a soft hatch where the data ends */
+.pz{position:relative;--pzf:var(--surface);touch-action:pan-y pinch-zoom;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:grab}
+.pz.dragging{cursor:grabbing}
+.pz.pz-xy{touch-action:pinch-zoom}
+.sheet .pz{--pzf:var(--bg)}
+.sub-card .pz{--pzf:var(--surface2)}
+.pz-c{position:relative}
+.liq>.pz-c{position:absolute;inset:0}
+.pz-edge{position:absolute;top:0;bottom:0;z-index:2;min-width:30px;min-height:44px;padding:0 4px;border:0;display:flex;align-items:center;gap:3px;color:var(--accent);cursor:pointer;font:600 10px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.pz-edge.l{left:var(--pzl,0);justify-content:flex-start;padding-right:14px;background:linear-gradient(90deg,var(--pzf) 0,var(--pzf) 45%,transparent)}
+.pz-edge.r{right:var(--pzr,0);justify-content:flex-end;padding-left:14px;background:linear-gradient(270deg,var(--pzf) 0,var(--pzf) 45%,transparent)}
+.pz>.pz-edge>svg{width:12px;height:12px;flex:none;display:block;position:static;box-sizing:content-box;padding:4px;border-radius:50%;background:var(--raised);border:1px solid var(--line3)}
+.pz-edge:focus-visible{outline-offset:-2px}
+.liq>.pz-edge{top:20px;bottom:20px}
+.pz-bar{position:absolute;left:var(--pzl,0);right:var(--pzr,0);bottom:-4px;height:2px;border-radius:1px;background:var(--line);pointer-events:none}
+.pz-bar i{position:absolute;top:0;bottom:0;border-radius:1px;background:var(--accent)}
+.liq>.pz-bar{bottom:15px}
+.pz-end{position:absolute;top:0;bottom:0;pointer-events:none;overflow:hidden;display:flex;justify-content:center;align-items:flex-start;background:repeating-linear-gradient(135deg,rgba(139,150,163,.13) 0 2px,transparent 2px 7px)}
+.pz-end.l{left:0;border-right:1px dashed var(--line3)}
+.pz-end.r{right:0;border-left:1px dashed var(--line3)}
+.liq .pz-end{top:20px;bottom:20px}
+.pz-end span{margin-top:4px;padding:1px 4px;border-radius:3px;background:var(--pzf);font:600 10px/1.2 var(--mono);letter-spacing:.06em;color:var(--muted);white-space:nowrap}
+.pz-hint{position:absolute;left:50%;top:50%;z-index:3;transform:translate(-50%,-50%);padding:5px 10px;border-radius:999px;border:1px solid var(--line3);background:rgba(6,8,11,.88);font:600 11px/1.2 var(--mono);color:var(--fg);white-space:nowrap;pointer-events:none;animation:hint 4.2s ease forwards}
+@keyframes hint{0%{opacity:0}10%,78%{opacity:1}100%{opacity:0}}
+.liq .tick.off{transform:none;color:var(--fg);font-weight:600}
+.liq .tick.off.l{left:4px}
+.liq .tick.off.r{left:auto;right:4px}
+.solo-box .liq>.pz-bar{bottom:18px}
+
+/* sticky table headers: a copy of the header row sticks to the top while a long table scrolls under it */
+.shw{position:relative;min-width:0}
+.sh{position:sticky;top:0;z-index:4;height:var(--shh,0px);pointer-events:none}
+.shw>.tbl-box{margin-top:calc(-1 * var(--shh,0px))!important}
+.sheet-body .sh{top:-14px} /* the panel's own top padding: the copy sticks to its very top */
+.sh-in.tbl-box{display:none;margin:0;overflow:hidden;border-radius:8px 8px 0 0;background:var(--raised);box-shadow:0 10px 14px -8px rgba(0,0,0,.7);pointer-events:auto}
+.sh.on .sh-in{display:block}
+
+/* back to top */
+.totop{position:fixed;right:calc(14px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));z-index:40;width:44px;height:44px;padding:0;border-radius:50%;border:1px solid var(--line3);background:rgba(17,23,30,.94);color:var(--accent);display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.5);visibility:hidden;opacity:0;transform:translateY(10px);transition:opacity .18s ease,transform .18s ease,visibility 0s linear .18s}
+.totop.on{visibility:visible;opacity:1;transform:none;transition:opacity .18s ease,transform .18s ease,visibility 0s}
+.totop svg{width:18px;height:18px;display:block}
+body.solo .totop{display:none}
+
 /* layout */
-main{max-width:1400px;margin:0 auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+main{max-width:1400px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 main>section,main>aside{min-width:0;scroll-margin-top:12px}
 #side{display:grid;gap:14px;align-content:start;min-width:0}
 #side>section{scroll-margin-top:12px}
@@ -211,7 +255,7 @@ button.tile:hover{border-color:var(--line3)}
 .chart-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px}
 .chart-head h3{font:600 13px/1.3 var(--sans)}
 .liq{position:relative;height:156px;margin-top:8px}
-.liq svg{position:absolute;left:0;top:20px;width:100%;height:116px;display:block}
+.liq .pz-c>svg{position:absolute;left:0;top:20px;width:100%;height:116px;display:block}
 .liq .mlab{position:absolute;transform:translateX(-50%);white-space:nowrap;font:500 10px/1.2 var(--mono);color:var(--fg2)}
 .liq .cpill{position:absolute;transform:translateX(-50%);white-space:nowrap;padding:2px 5px;border-radius:4px;background:var(--surface);border:1px solid var(--line2);font:600 10px/1.2 var(--mono);color:var(--fg)}
 .liq .tick{position:absolute;top:142px;transform:translateX(-50%);font:500 10px/1.2 var(--mono);color:var(--muted);white-space:nowrap}
@@ -271,7 +315,7 @@ td .tags{margin-top:2px}
 .kpi .v.acc{color:var(--gold)}
 .kpi .d{font-size:12px;color:var(--muted)}
 .chart{width:100%;min-width:0}
-.chart svg{display:block;overflow:visible;width:100%;height:auto}
+.chart>svg,.chart .pz-c>svg{display:block;overflow:visible;width:100%;height:auto}
 svg text{font-family:var(--mono);font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}
 svg .gridl{stroke:var(--grid);stroke-width:1;fill:none}
 svg .axisl{stroke:var(--line);stroke-width:1;fill:none}
@@ -335,12 +379,20 @@ tr.sel td{background:rgba(22,199,132,.08)}
 
 /* detail sheet */
 .sheet{position:fixed;inset:0;z-index:50}
-.scrim{position:absolute;inset:0;background:rgba(2,4,6,.72)}
+.scrim{position:absolute;inset:0;background:rgba(2,4,6,.72);touch-action:none}
 .sheet-card{position:absolute;top:0;right:0;bottom:0;width:min(680px,100%);background:var(--bg);border-left:1px solid var(--line2);display:flex;flex-direction:column;outline:none}
-.sheet-head{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--head)}
+.sheet-head{display:flex;align-items:flex-start;gap:12px;padding:12px max(16px,env(safe-area-inset-right)) 12px 16px;border-bottom:1px solid var(--line);background:var(--head)}
 .sheet-head .grow{flex:1 1 auto;min-width:0}
 .sheet-head h2{font:700 18px/1.25 var(--sans);overflow-wrap:anywhere;margin-top:3px}
-.sheet-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:14px 16px 28px;display:grid;gap:14px;align-content:start;-webkit-overflow-scrolling:touch}
+.sheet-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:14px max(16px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) 16px;display:grid;gap:14px;align-content:start;-webkit-overflow-scrolling:touch}
+/* on a phone the panel is a sheet: a grab handle on top, swipe it down (or the content, once scrolled to the top) to close */
+.grab{display:none;flex:none;justify-content:center;align-items:center;height:20px;background:var(--head);touch-action:none;cursor:grab}
+.grab i{display:block;width:40px;height:5px;border-radius:3px;background:var(--line3)}
+@media (max-width:700px){
+  .sheet-card{top:max(10px,env(safe-area-inset-top));border-left:0;border-top:1px solid var(--line2);border-radius:14px 14px 0 0;overflow:hidden;box-shadow:0 -10px 30px rgba(0,0,0,.55)}
+  .grab{display:flex}
+  .sheet-head{padding-top:2px}
+}
 .dsec{display:grid;gap:6px;min-width:0}
 .wtbl td,.wtbl th{padding:5px 8px}
 .wtbl th{padding:6px 8px;color:var(--muted)}
@@ -355,15 +407,15 @@ ul.plain{margin:0;padding-left:18px;font-size:12px;color:var(--fg2)}
 .parts .track{height:8px;border-radius:4px;background:var(--grid);overflow:hidden}
 .parts .track i{display:block;height:100%;background:var(--accent2)}
 
-footer{max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:14px 16px 24px;border-top:1px solid var(--line);font:400 12px/1.5 var(--mono);color:var(--muted)}
+footer{max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:14px max(16px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));border-top:1px solid var(--line);font:400 12px/1.5 var(--mono);color:var(--muted)}
 footer .btn{font-family:var(--sans)}
 
 @media (max-width:520px){
   .card{padding:12px}
   .bignum{font-size:42px}
   .best-head h2{font-size:20px}
-  main{padding:12px}
-  .top{padding:10px 12px}
+  main{padding:12px max(12px,env(safe-area-inset-right)) 12px max(12px,env(safe-area-inset-left))}
+  .top{padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 10px max(12px,env(safe-area-inset-left))}
   .hdr-right{width:100%;justify-content:space-between}
   .seg{flex:1 1 100%}
   .seg button{flex:1 1 0}
@@ -379,7 +431,7 @@ footer .btn{font-family:var(--sans)}
 @keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 .sheet:not([hidden]) .sheet-card{animation:sheetIn .22s ease-out}
 .sheet:not([hidden]) .scrim{animation:fadeIn .22s ease-out}
-.liq svg path,.daily svg rect{transform-box:fill-box;transform-origin:50% 100%;animation:grow .25s ease-out}
+.liq:not(.still) .pz-c>svg path,.daily .pz:not(.still) .pz-c>svg rect{transform-box:fill-box;transform-origin:50% 100%;animation:grow .25s ease-out}
 .xfade{animation:fadeIn .2s ease-out}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 </style>
@@ -505,6 +557,7 @@ footer .btn{font-family:var(--sans)}
 <div id="sheet" class="sheet" hidden>
   <div class="scrim" data-scrim></div>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
+    <div class="grab" aria-hidden="true" title="Swipe down to close"><i></i></div>
     <div class="sheet-head">
       <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><h2 id="sheet-title">—</h2><div class="lbl" id="sheet-meta" style="margin-top:3px"></div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px"><div class="seg winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false">24H</button><button type="button" data-act="win" data-w="7d" aria-pressed="false">7D</button><button type="button" data-act="win" data-w="30d" aria-pressed="true">30D</button></div><button type="button" class="btn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button></div></div>
@@ -519,11 +572,12 @@ footer .btn{font-family:var(--sans)}
   <span id="foot-r"></span>
   <button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden>Lock this device</button>
 </footer>
+<button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.1.0';
+const BUILD = 'v0.2.0';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -799,7 +853,7 @@ async function manualRefresh() {
 
 // ---------- unlock / lock ----------
 function lockMsg(t, err) { const m = $('#lock-msg'); m.textContent = t || ''; m.className = 'lock-msg' + (err ? ' err' : ''); }
-function showLock() { $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
+function showLock() { $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
 async function onUnlock(ev) {
   ev.preventDefault();
   const input = $('#pass'), btn = $('#unlock-btn'), pass = input.value;
@@ -923,6 +977,8 @@ function renderAll() {
   if (SOLO) isolate();
   S.rendered = true;
   if (!S.touched) scrollTo(0, 0);
+  stickyAll();
+  onScroll();
 }
 
 // ---------- glance: new since, scanner, bench ----------
@@ -983,48 +1039,94 @@ function breakdown(w) {
     + `<span><i class="sw" style="background:var(--gas)"></i>Gas ${pct(g)}</span><span>${n >= 0 ? 'fees ' + pct(f) + ' in all' : 'net <b class="neg">' + pct(n) + '</b>'}</span></div></div>`;
 }
 const LIQ_L = 0.45;
-const LIQ_TICKS = { 0.9: [-0.5, -0.25, 0, 0.5, 1], 0.45: [-0.3, -0.15, 0, 0.15, 0.3], 0.25: [-0.15, -0.08, 0, 0.08, 0.15], 0.12: [-0.08, -0.04, 0, 0.04, 0.08], 0.06: [-0.04, -0.02, 0, 0.02, 0.04] };
-function liqChart(p, w, span = LIQ_L) {
-  const L = span;
-  const depth = ((p.shape && p.shape.depth) || []).filter((d) => Array.isArray(d) && isNum(d[0]) && isNum(d[1]) && Math.abs(d[0]) <= L + 1e-9);
-  if (!depth.length) return `<p class="empty" style="margin-top:8px">Liquidity map not read this pass (${DASH}).</p>`;
-  const r = w && isNum(w.range) ? w.range : null, VW = 480, VH = 120;
+// the map's own edges: half a bin past the outermost bins (the scanner reads about ±45%; nothing is drawn beyond it)
+function liqExtent(depth) {
   const offs = depth.map((d) => d[0]).sort((a, b) => a - b);
   let step = Infinity;
   for (let i = 1; i < offs.length; i++) { const d = offs[i] - offs[i - 1]; if (d > 1e-9) step = Math.min(step, d); }
   if (!isFinite(step)) step = 0.02;
-  const X = (o) => ((o + L) / (2 * L)) * VW, bw = Math.max(1, (step / (2 * L)) * VW - 2);
-  const max = Math.max(1, ...depth.map((d) => d[1]));
+  return { lo: offs[0] - step / 2, hi: offs[offs.length - 1] + step / 2, step };
+}
+// round price moves inside the view, at least 13% of the width apart, never at the very edges; the price wins
+function liqTicks(v0, v1, priceOff) {
+  const p0 = Math.exp(v0) - 1, p1 = Math.exp(v1) - 1, span = v1 - v0;
+  let st = 1;
+  for (const s of [0.01, 0.02, 0.05, 0.1, 0.15, 0.25, 0.5, 1]) if ((p1 - p0) / s <= 7) { st = s; break; }
+  const f = (t) => (Math.log(1 + t) - v0) / span;
+  const cand = [];
+  for (let k = Math.ceil(p0 / st - 1e-9); k * st <= p1 + 1e-9; k++) { const t = +(k * st).toFixed(4); if (t > -1) cand.push(t); }
+  cand.sort((a, b) => Math.abs(a) - Math.abs(b));
+  const kept = [];
+  for (const t of cand) {
+    const x = f(t);
+    if (x < 0.05 || x > 0.95 || (priceOff < 0 && x < 0.2) || (priceOff > 0 && x > 0.8)) continue;
+    if (kept.every((k) => Math.abs(f(k) - x) >= 0.13)) kept.push(t);
+  }
+  return kept.sort((a, b) => a - b);
+}
+function liqChart(p, w, id) {
+  const depth = ((p.shape && p.shape.depth) || []).filter((d) => Array.isArray(d) && isNum(d[0]) && isNum(d[1]));
+  if (!depth.length) { delete PZ[id]; return `<p class="empty" style="margin-top:8px">Liquidity map not read this pass (${DASH}).</p>`; }
+  const ext = liqExtent(depth), key = p.id, L = () => LIQ_SPANS[zget(id)];
+  // the centre may move inside the data; zoomed out past the data, the view holds still around the price
+  const lim = () => { const l = L(); if (2 * l < ext.hi - ext.lo - 1e-9) return [ext.lo + l, ext.hi - l]; const c = clamp(0, ext.hi - l, ext.lo + l); return [c, c]; };
+  const P = PZ[id] = {
+    key, p, w, depth, ex: ext, kind: 'liq', aria: ['Show lower prices', 'Show higher prices'], hint: '◂ drag ▸ · double-tap resets',
+    x: () => panGet(id, key, clamp(0, ...lim())), setX: (v) => panPut(id, key, v), lim,
+    span: () => 2 * L(), unit: (h) => (2 * L()) / Math.max(40, h.clientWidth),
+    vw: () => [P.x() - L(), P.x() + L()], ext: () => [ext.lo, ext.hi],
+    isDef: () => Math.abs(P.x() - clamp(0, ...lim())) < 1e-6,
+    rezoom: () => { if (panned(id, key)) P.setX(clamp(P.x(), ...lim())); },
+    inner: () => liqInner(id),
+  };
+  pzKeep(id);
+  const r = w && isNum(w.range) ? w.range : null, walls = (p.shape && p.shape.walls) || {};
+  const tot = sum(depth.map((d) => d[1]));
+  P.label = `Liquidity by price: ${pct(r != null ? sum(depth.filter(([o]) => Math.abs(o) <= r + 1e-9).map((d) => d[1])) / (p.tvlUsd || tot) : null)} of the pool sits inside the suggested range`;
+  return pzShell(id, 'liq')
+    + `<div class="legend" style="margin-top:8px"><span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span><span><i class="sw" style="background:#4B5563"></i>Outside it</span>`
+    + `<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>${isNum(walls.below) || isNum(walls.above) ? '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>' : ''}</div>`;
+}
+// the drawing inside the liquidity chart for its current view (redrawn on every frame of a drag)
+function liqInner(id) {
+  const P = PZ[id], { p, w, depth } = P, ext = P.ex, L = LIQ_SPANS[zget(id)], c = P.x(), v0 = c - L, v1 = c + L, VW = 480, VH = 120;
+  const r = w && isNum(w.range) ? w.range : null;
+  const X = (o) => ((o - v0) / (2 * L)) * VW, bw = Math.max(1, (ext.step / (2 * L)) * VW - 2);
+  // the bars fill the height for what is in view (zoomed in, the bars near the price stay readable); while a drag or a
+  // coast is running the scale eases towards it, so bars glide instead of jumping as taller ones come into view
+  const want = Math.max(1, ...depth.filter(([o]) => o >= v0 - ext.step / 2 && o <= v1 + ext.step / 2).map((d) => d[1]));
+  const moving = !reduced() && ((G && G.id === id && G.drag) || !!PZA[id]);
+  const max = P.ys = moving && isNum(P.ys) ? P.ys + (want - P.ys) * 0.3 : want;
   const inR = (o) => r != null && Math.abs(o) <= r + 1e-9;
   let pin = '', pout = '', hin = 0;
   for (const [o, v] of depth) {
-    if (v <= 0) continue;
+    if (v <= 0 || o < v0 - ext.step || o > v1 + ext.step) continue;
     const h = (v / max) * (VH - 4), x = X(o) - bw / 2, d = `M${x.toFixed(1)} ${VH}v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`;
     if (inR(o)) { pin += d; hin = Math.max(hin, h); } else pout += d;
   }
   let s = `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none" aria-hidden="true">`;
-  if (r != null) s += `<rect x="${X(-Math.min(r, L)).toFixed(1)}" y="0" width="${(X(Math.min(r, L)) - X(-Math.min(r, L))).toFixed(1)}" height="${VH}" fill="rgba(22,199,132,0.16)"/>`;
+  if (r != null) { const a = Math.max(-r, v0), b = Math.min(r, v1); if (b > a) s += `<rect x="${X(a).toFixed(1)}" y="0" width="${(X(b) - X(a)).toFixed(1)}" height="${VH}" fill="rgba(22,199,132,0.16)"/>`; }
   s += `<path fill="#3A4452" d="${pout}"/><path fill="#16C784" stroke="rgba(22,199,132,.45)" stroke-width="3" vector-effect="non-scaling-stroke" d="${pin}"/>`;
   const walls = (p.shape && p.shape.walls) || {};
-  for (const k of ['below', 'above']) if (isNum(walls[k]) && Math.abs(walls[k]) <= L) s += `<rect x="${(X(walls[k]) - 0.6).toFixed(1)}" y="0" width="1.2" height="${VH}" fill="#FAB219" opacity="0.7"/>`;
-  s += `<rect x="${(X(0) - 0.7).toFixed(1)}" y="0" width="1.4" height="${VH}" fill="#E6EDF3"/><rect x="0" y="${VH - 0.6}" width="${VW}" height="0.6" fill="#2B3542"/></svg>`;
+  for (const k of ['below', 'above']) if (isNum(walls[k]) && walls[k] >= v0 && walls[k] <= v1) s += `<rect x="${(X(walls[k]) - 0.6).toFixed(1)}" y="0" width="1.2" height="${VH}" fill="#FAB219" opacity="0.7"/>`;
+  if (0 >= v0 && 0 <= v1) s += `<rect x="${(X(0) - 0.7).toFixed(1)}" y="0" width="1.4" height="${VH}" fill="#E6EDF3"/>`;
+  s += `<rect x="0" y="${VH - 0.6}" width="${VW}" height="0.6" fill="#2B3542"/></svg>`;
   const pctX = (o) => ((X(o) / VW) * 100).toFixed(1) + '%';
   const tot = sum(depth.map((d) => d[1]));
-  for (const side of [-1, 1]) {
+  for (const side of [-1, 1]) { // each side's parked value, labelled near its middle (held inside the chart)
     const part = depth.filter(([o]) => !inR(o) && Math.sign(o) === side && o !== 0);
     const v = sum(part.map((d) => d[1]));
     if (v < tot * 0.05) continue;
-    const c = sum(part.map(([o, x]) => o * x)) / v;
-    s += `<span class="mlab" style="left:clamp(48px, ${pctX(c)}, calc(100% - 48px));top:${side < 0 ? 0 : 11}px">${usd(v)} parked</span>`;
+    const cen = sum(part.map(([o, x]) => o * x)) / v;
+    if (cen < v0 || cen > v1) continue; // that side's middle is off-screen (panned or zoomed in): no label pinned to an edge
+    s += `<span class="mlab" style="left:clamp(48px, ${pctX(cen)}, calc(100% - 48px));top:${side < 0 ? 0 : 11}px">${usd(v)} parked</span>`;
   }
-  const lps = p.shape && p.shape.lpsAtPrice;
-  const room = w && w.inRangeUsd;
-  s += `<span class="cpill" style="left:50%;top:${Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24)))}px">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
-  for (const t of LIQ_TICKS[L] || LIQ_TICKS[0.45]) s += `<span class="tick${t === 0 ? ' now' : ''}" style="left:${pctX(Math.log(1 + t))}">${t === 0 ? 'PRICE' : (t < 0 ? MINUS : '+') + +Math.abs(t * 100).toFixed(1) + '%'}</span>`;
-  const label = `Liquidity by price: ${pct(r != null ? sum(depth.filter(([o]) => inR(o)).map((d) => d[1])) / (p.tvlUsd || tot) : null)} of the pool sits inside the suggested range`;
-  return `<div class="liq" role="img" aria-label="${esc(label)}">${s}</div>`
-    + `<div class="legend" style="margin-top:8px"><span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span><span><i class="sw" style="background:#4B5563"></i>Outside it</span>`
-    + `<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>${isNum(walls.below) || isNum(walls.above) ? '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>' : ''}</div>`;
+  const lps = p.shape && p.shape.lpsAtPrice, room = w && w.inRangeUsd, px0 = X(0) / VW;
+  if (px0 >= 0.12 && px0 <= 0.88) s += `<span class="cpill" style="left:${pctX(0)};top:${Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24)))}px">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
+  const off = px0 < 0.04 ? -1 : px0 > 0.96 ? 1 : 0;
+  for (const t of liqTicks(v0, v1, off)) s += `<span class="tick${t === 0 ? ' now' : ''}" style="left:${pctX(Math.log(1 + t))}">${t === 0 ? 'PRICE' : (t < 0 ? MINUS : '+') + +Math.abs(t * 100).toFixed(1) + '%'}</span>`;
+  if (off) s += `<span class="tick now off ${off < 0 ? 'l">◂ PRICE' : 'r">PRICE ▸'}</span>`;
+  return s + pzEnds((ext.lo - v0) / (2 * L), (v1 - ext.hi) / (2 * L), 'NO DATA', 'NO DATA');
 }
 function checksLine(p) {
   const c = Array.isArray(p.checks) ? p.checks : [];
@@ -1114,7 +1216,7 @@ function renderBest() {
     + `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span><span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`
     + `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>${patternChip(p)}</div>`
     + dailyStrip(p, w) + gemNow(p, w)
-    + `</div><div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">LOG SCALE · ±${Math.round(LIQ_SPANS[zget('liq-best')] * 100)}%</span>${ztools('liq-best', p.id)}</div>${liqChart(p, w, LIQ_SPANS[zget('liq-best')])}</div></div>`
+    + `</div><div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">LOG SCALE · ±${Math.round(LIQ_SPANS[zget('liq-best')] * 100)}%</span>${ztools('liq-best', p.id)}</div>${liqChart(p, w, 'liq-best')}</div></div>`
     + checksLine(p)
     + `<div class="btns"><button type="button" class="btn" disabled>Paper-trade · Phase 1</button><button type="button" class="btn" disabled>Propose live · Phase 2</button>`
     + `<button type="button" class="btn" data-act="detail" data-id="${esc(p.id)}">Full breakdown</button></div>`;
@@ -1139,35 +1241,57 @@ const patternChip = (p) => (PATTERN_TXT[p.pattern] ? `<span class="chip p-${p.pa
 // one-off: the scanner's tag, or most of the biggest day's fees from a single transaction
 const oneOff = (p, w) => !!((w && w.gem && Array.isArray(w.gem.tags) && w.gem.tags.includes('one-off')) || (p.burst && isNum(p.burst.oneTrader) && p.burst.oneTrader >= 0.5));
 function dailyStrip(p, w, id = 'daily-best') {
-  const d = zslice((Array.isArray(p.daily) ? p.daily : []).filter((x) => x && isNum(x.t)), id);
+  const d = (Array.isArray(p.daily) ? p.daily : []).filter((x) => x && isNum(x.t));
   const v = d.map((x) => (isNum(x.feesPer1k) && x.feesPer1k >= 0 ? x.feesPer1k : null));
   const warn = oneOff(p, w) ? `<p class="oneoff">One-off: a single trader paid most of the top day’s fees. Don’t count on it again.</p>` : '';
-  if (!v.some(isNum)) return `<div class="daily"><span class="lbl">Fees per $1,000 · daily</span><p class="sub">${DASH} not read yet</p>${warn}</div>`;
-  const sorted = v.filter(isNum).sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)], top = sorted[sorted.length - 1];
-  const mx = top > 0 ? top : 1; // scale only: an all-zero month still draws its baseline
-  const iMax = top > 0 ? v.indexOf(top) : -1, Wd = 300, Ht = 44, bw = Wd / v.length;
-  let s = `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" role="img" aria-label="Fees per 1,000 dollars, one bar per day; the median is marked">`;
-  v.forEach((x, i) => { if (isNum(x)) s += `<rect x="${(i * bw + 0.4).toFixed(1)}" y="${(Ht - (x / mx) * (Ht - 2)).toFixed(1)}" width="${Math.max(0.6, bw - 0.8).toFixed(1)}" height="${((x / mx) * (Ht - 2)).toFixed(1)}" fill="${i === iMax ? '#E8B84A' : '#16C784'}"/>`; });
-  s += `<line class="median" x1="0" x2="${Wd}" y1="${(Ht - (med / mx) * (Ht - 2)).toFixed(1)}" y2="${(Ht - (med / mx) * (Ht - 2)).toFixed(1)}" stroke="#E6EDF3" stroke-dasharray="3 2" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>`;
-  return `<div class="daily chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">Fees per $1,000 · ${v.length} days</span><span class="lbl">${iMax >= 0 ? `median $${med.toFixed(2)} · max $${top.toFixed(2)} on ${dm(d[iMax].t)}` : `no fees in ${v.length} days`}</span>${ztools(id, p.id)}</div>${s}${warn}</div>`;
+  if (!v.some(isNum)) { delete PZ[id]; return `<div class="daily"><span class="lbl">Fees per $1,000 · daily</span><p class="sub">${DASH} not read yet</p>${warn}</div>`; }
+  const N = v.length, top = Math.max(...v.filter(isNum)), mx = top > 0 ? top : 1; // one scale for all the days: a drag never rescales
+  const seen = () => { // the days in view, their median and their highest day
+    const [a, b] = P.vw(), i0 = clamp(Math.round(a), 0, N - 1), i1 = clamp(Math.round(b), i0 + 1, N);
+    const sv = v.slice(i0, i1).filter(isNum).sort((x, y) => x - y), hi = sv.length ? sv[sv.length - 1] : 0;
+    return { i0, i1, med: sv.length ? sv[Math.floor(sv.length / 2)] : null, hi, iMax: hi > 0 ? i0 + v.slice(i0, i1).indexOf(hi) : -1 };
+  };
+  const P = pzTime(id, p.id, N, {
+    words: ['older', 'newer'], aria: ['Show older days', 'Show newer days'], hint: '◂ drag for older days',
+    inner: () => {
+      const [a, b] = P.vw(), len = b - a, Wd = 300, Ht = 44, bw = Wd / len, z = seen(), x0 = a * bw;
+      let s = `<svg viewBox="${x0.toFixed(2)} 0 ${Wd} ${Ht}" preserveAspectRatio="none" role="img" aria-label="Fees per 1,000 dollars, one bar per day; the median is marked">`;
+      v.forEach((x, i) => { if (isNum(x)) s += `<rect x="${(i * bw + 0.4).toFixed(1)}" y="${(Ht - (x / mx) * (Ht - 2)).toFixed(1)}" width="${Math.max(0.6, bw - 0.8).toFixed(1)}" height="${((x / mx) * (Ht - 2)).toFixed(1)}" fill="${i === z.iMax ? '#E8B84A' : '#16C784'}"/>`; });
+      if (z.med != null) { const y = (Ht - (z.med / mx) * (Ht - 2)).toFixed(1); s += `<line class="median" x1="${x0.toFixed(1)}" x2="${(x0 + Wd).toFixed(1)}" y1="${y}" y2="${y}" stroke="#E6EDF3" stroke-dasharray="3 2" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }
+      return s + '</svg>' + pzEnds(-a / len, (b - N) / len, 'NO OLDER DAYS', 'TODAY');
+    },
+    caps: () => {
+      const z = seen();
+      return [`Fees per $1,000 · ${z.i1 - z.i0 < N ? `${dm(d[z.i0].t)} → ${dm(d[z.i1 - 1].t)}` : N + ' days'}`,
+        z.iMax >= 0 ? `median $${z.med.toFixed(2)} · max $${z.hi.toFixed(2)} on ${dm(d[z.iMax].t)}` : `no fees in ${z.i1 - z.i0} days`];
+    },
+  });
+  return `<div class="daily chartbox" data-chartbox="${id}"><div class="pane-title">${pzCapsHtml(id)}${ztools(id, p.id)}</div>${pzShell(id, 'pz-bars')}${warn}</div>`;
 }
 
-// ---------- chart zoom and "open in a new window" ----------
-// liquidity: half-span of the price axis in log terms (±90% … ±6%, default ±45%); time charts: the latest 1/2^k of
-// the span; the scatter: its axes narrowed around the middle
+// ---------- chart zoom, pan and "open in a new window" ----------
+// liquidity: half-span of the price axis in log terms (±90% … ±6%, default ±45%), centred on the price until dragged;
+// time charts: the latest 1/2^k of the span, or an older stretch once dragged; the scatter: its axes narrowed around
+// the middle, then dragged in both directions. Zooming keeps the view's centre (a time chart showing the newest
+// point keeps showing it).
 const LIQ_SPANS = [0.9, 0.45, 0.25, 0.12, 0.06];
 const ZMAX = { liq: 4, time: 3, scatter: 3 }, ZDEF = { liq: 1, time: 0, scatter: 0 };
 const zkind = (id) => (id.startsWith('liq') ? 'liq' : id === 'scatter' ? 'scatter' : 'time');
-const zget = (id) => (S.zoom && isNum(S.zoom[id]) ? S.zoom[id] : ZDEF[zkind(id)]);
-const tfrac = (id) => Math.pow(0.5, zget(id));
-const zslice = (arr, id) => { if (!Array.isArray(arr)) return arr; const f = tfrac(id); if (f >= 1) return arr; return arr.slice(arr.length - Math.max(2, Math.ceil(arr.length * f))); };
-const zstart = (id, n) => (tfrac(id) >= 1 ? 0 : Math.max(0, n - Math.max(2, Math.ceil(n * tfrac(id)))));
+// a phone opens the daily fee strip on its latest 15 days, bars wide enough to tell apart: a drag shows the older ones
+const zdef = (id) => (id.startsWith('daily') && !SOLO && innerWidth < 600 ? 1 : ZDEF[zkind(id)]);
+const zget = (id) => (S.zoom && isNum(S.zoom[id]) ? S.zoom[id] : zdef(id));
+const tlenAt = (n, lv) => { const f = Math.pow(0.5, lv); return f >= 1 ? n : Math.min(n, Math.max(2, Math.ceil(n * f))); }; // index units in view
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+// a pan belongs to the pool (or replay) it was made on: another pool opens on its default view
+const panGet = (id, key, def) => { const s = S.pan && S.pan[id]; return s && s.k === key ? s.v : def; };
+const panPut = (id, key, v) => { (S.pan ||= {})[id] = { k: key, v }; };
+const panned = (id, key) => !!(S.pan && S.pan[id] && S.pan[id].k === key);
 function ztools(id, pool) {
   const lv = zget(id), k = zkind(id);
   return `<div class="ctools"><div class="zseg" role="group" aria-label="Zoom this chart">`
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="-1" aria-label="Zoom out" title="Zoom out"${lv <= 0 ? ' disabled' : ''}>−</button>`
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="1" aria-label="Zoom in" title="Zoom in"${lv >= ZMAX[k] ? ' disabled' : ''}>+</button></div>`
-    + (lv !== ZDEF[k] ? `<button type="button" class="zreset" data-act="zreset" data-chart="${id}" aria-label="Reset zoom" title="Reset zoom">reset</button>` : '')
+    + (lv !== zdef(id) || panned(id, pool || '') ? `<button type="button" class="zreset" data-act="zreset" data-chart="${id}" aria-label="Reset zoom" title="Reset zoom (or double-tap the chart)">reset</button>` : '')
     + `<button type="button" class="openwin" data-act="openchart" data-chart="${id}" data-pool="${esc(pool || '')}" aria-label="Open this chart in a new window" title="Open in a new window">`
     + `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 2h5v5M14 2 7.5 8.5M12 9.5V14H2V4h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
 }
@@ -1180,12 +1304,16 @@ function rerender(id) {
   if (SOLO) isolate();
 }
 function zoom(id, dir) {
-  const k = zkind(id), lv = Math.max(0, Math.min(ZMAX[k], zget(id) + dir));
+  const k = zkind(id), old = zget(id), lv = Math.max(0, Math.min(ZMAX[k], old + dir));
+  pzStop(id);
   (S.zoom ||= {})[id] = lv;
+  const P = PZ[id];
+  if (P && P.rezoom) { P.rezoom(old); if (P.isDef && P.isDef() && S.pan) delete S.pan[id]; }
   rerender(id);
   const b = $(`[data-act="zoom"][data-chart="${id}"][data-dir="${dir}"]`) || $(`[data-act="zoom"][data-chart="${id}"]:not([disabled])`);
   if (b && !b.disabled) b.focus({ preventScroll: true }); else { const o = $(`[data-act="zoom"][data-chart="${id}"]:not([disabled])`); if (o) o.focus({ preventScroll: true }); }
 }
+function zreset(id) { pzStop(id); if (S.zoom) delete S.zoom[id]; if (S.pan) delete S.pan[id]; rerender(id); }
 function openChart(id, pool) {
   const u = new URL(location.href);
   u.hash = '';
@@ -1193,8 +1321,230 @@ function openChart(id, pool) {
   if (pool) u.searchParams.set('pool', pool); else u.searchParams.delete('pool');
   u.searchParams.set('w', S.win);
   u.searchParams.set('z', String(zget(id)));
+  const pn = panned(id, pool || '') ? S.pan[id].v : null; // the window opens on the same stretch
+  if (pn != null) u.searchParams.set('pan', Array.isArray(pn) ? pn.map((x) => +x.toFixed(4)).join(',') : String(+pn.toFixed(4))); else u.searchParams.delete('pan');
   window.open(u.toString(), '_blank', 'noopener');
 }
+
+// ---------- pan: a drag or swipe moves the view, a flick coasts, a double-tap resets ----------
+// Every chart that pans registers here when it is drawn: PZ[id] = { x, setX, lim, span, unit, vw, ext, inner, ... }.
+// x is the view's position (higher = further right), lim its allowed range, unit the data units per CSS pixel.
+const PZ = {}, PZA = {};
+const pzHost = (id) => document.querySelector(`[data-pz="${id}"]`);
+const CHEV = (d) => `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="${d < 0 ? 'M7.5 2 3.5 6l4 4' : 'M4.5 2 8.5 6l-4 4'}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// hatch where the view runs past the data (while rubber-banding, or zoomed out past the map): never drawn bars
+const pzEnds = (fl, fr, lt, rt) => (fl > 0.002 ? `<div class="pz-end l" style="width:${Math.min(100, fl * 100).toFixed(1)}%">${fl > 0.2 ? `<span>${lt}</span>` : ''}</div>` : '')
+  + (fr > 0.002 ? `<div class="pz-end r" style="width:${Math.min(100, fr * 100).toFixed(1)}%">${fr > 0.2 ? `<span>${rt}</span>` : ''}</div>` : '');
+// time charts: the view is `len` index units ending `back` units before the newest point
+function pzTime(id, key, n, o) {
+  const len = () => tlenAt(n, zget(id));
+  const P = PZ[id] = {
+    key, n, kind: 'time', ...o,
+    x: () => n - panGet(id, key, 0), setX: (v) => panPut(id, key, n - v),
+    lim: () => [Math.min(len(), n), n], span: len, vw: () => [P.x() - len(), P.x()], ext: () => [0, n],
+    unit: (h) => len() / Math.max(40, h.clientWidth * (1 - (o.plot ? o.plot[0] + o.plot[1] : 0))),
+    isDef: () => Math.abs(panGet(id, key, 0)) < 1e-6,
+    rezoom: (old) => { const back = panGet(id, key, 0); if (!(back > 1e-6)) return; const l0 = tlenAt(n, old), l1 = len(); P.setX(clamp(n - back - l0 / 2 + l1 / 2, Math.min(l1, n), n)); },
+  };
+  pzKeep(id);
+  return P;
+}
+// a redraw (new data, another window) keeps a pan inside the limits, unless that chart is being dragged right now
+function pzKeep(id) {
+  const P = PZ[id];
+  if (!P || !panned(id, P.key) || (G && G.id === id)) return;
+  const [lo, hi] = P.lim();
+  if (P.x() < lo || P.x() > hi) P.setX(clamp(P.x(), lo, hi));
+  if (P.xy) { const [ly, hy] = P.limY(); if (P.y() < ly || P.y() > hy) P.setY(clamp(P.y(), ly, hy)); }
+  if (P.isDef()) delete S.pan[id];
+}
+function pzState(id) { // which edges hold more, and where the view sits in the data
+  const P = PZ[id], [lo, hi] = P.lim(), x = P.x(), e = (hi - lo) * 1e-4 + 1e-9, [v0, v1] = P.vw(), [d0, d1] = P.ext();
+  let bar = '';
+  if (v1 - v0 < d1 - d0 - 1e-9) { const a = clamp(v0, d0, d1), b = clamp(v1, d0, d1); bar = `left:${(((a - d0) / (d1 - d0)) * 100).toFixed(2)}%;width:${Math.max(2, ((b - a) / (d1 - d0)) * 100).toFixed(2)}%`; }
+  return { l: x > lo + e, r: x < hi - e, bar, view: x.toFixed(4) + ',' + (v1 - v0).toFixed(4) + (P.xy ? ',' + P.y().toFixed(4) : '') };
+}
+function pzHintHtml(id, st) { // once per device, on the first chart that can pan: "drag"
+  const P = PZ[id];
+  if (SOLO || P.xy || !(st.l || st.r) || store.get('lps.hint') === '1' || (S.hint && S.hint !== id)) return '';
+  if (!S.hint) { S.hint = id; S.hintEnd = Date.now() + 4200; setTimeout(pzHintDone, 4200); }
+  return Date.now() < S.hintEnd ? `<span class="pz-hint" aria-hidden="true">${esc(P.hint || '◂ drag ▸')}</span>` : '';
+}
+function pzHintDone() { S.hintEnd = 0; store.set('lps.hint', '1'); for (const h of $$('.pz-hint')) h.remove(); }
+function pzShell(id, cls = '', inset = null) { // the chart's host: drawing, edge buttons, the position bar
+  const P = PZ[id], st = pzState(id), wd = P.words || ['', ''];
+  return `<div class="pz ${cls}${P.xy ? ' pz-xy' : ''}" data-pz="${id}" data-view="${st.view}"${inset ? ` style="--pzl:${inset[0]}%;--pzr:${inset[1]}%"` : ''}>`
+    + `<div class="pz-c"${P.label ? ` role="img" aria-label="${esc(P.label)}"` : ''}>${P.inner()}</div>`
+    + (P.xy ? '' : `<button type="button" class="pz-edge l" data-act="pan" data-chart="${id}" data-dir="-1" aria-label="${P.aria[0]}"${st.l ? '' : ' hidden'}>${CHEV(-1)}${wd[0] ? `<span>${wd[0]}</span>` : ''}</button>`
+    + `<button type="button" class="pz-edge r" data-act="pan" data-chart="${id}" data-dir="1" aria-label="${P.aria[1]}"${st.r ? '' : ' hidden'}>${wd[1] ? `<span>${wd[1]}</span>` : ''}${CHEV(1)}</button>`)
+    + `<div class="pz-bar"${st.bar ? '' : ' hidden'}><i style="${st.bar}"></i></div>${pzHintHtml(id, st)}</div>`;
+}
+// a chart's captions that follow its view (the days shown, the visible max); P.caps() gives their texts
+const pzCapsHtml = (id) => PZ[id].caps().map((t, i) => (t == null ? '' : `<span class="lbl pz-cap${i + 1}">${esc(t)}</span>`)).join('');
+// a chart drawn into a box that stays (replay, lab, scatter): keep the host, so a drag in progress keeps going
+function pzMount(el, id, cls, inset) {
+  const h = el && el.querySelector(`:scope > [data-pz="${id}"]`);
+  if (h && h.classList.contains('pz-xy') === !!PZ[id].xy) { if (inset) { h.style.setProperty('--pzl', inset[0] + '%'); h.style.setProperty('--pzr', inset[1] + '%'); } pzRedraw(id); return; }
+  if (el) el.innerHTML = pzShell(id, cls, inset);
+}
+function pzCaps(id) {
+  const P = PZ[id], h = pzHost(id), box = h && h.closest('[data-chartbox]');
+  if (!P || !P.caps || !box) return;
+  P.caps().forEach((t, i) => { const c = box.querySelector(`.pz-cap${i + 1}`); if (c && t != null && c.textContent !== t) c.textContent = t; });
+}
+function pzRedraw(id) {
+  const P = PZ[id], h = pzHost(id);
+  if (!P || !h) return;
+  h.querySelector(':scope > .pz-c').innerHTML = P.inner();
+  const st = pzState(id), l = h.querySelector(':scope > .pz-edge.l'), r = h.querySelector(':scope > .pz-edge.r'), bar = h.querySelector(':scope > .pz-bar');
+  if (l && l.hidden === st.l) l.hidden = !st.l;
+  if (r && r.hidden === st.r) r.hidden = !st.r;
+  if (bar) { bar.hidden = !st.bar; if (st.bar) bar.firstElementChild.setAttribute('style', st.bar); }
+  h.dataset.view = st.view;
+  if (!h.classList.contains('still')) h.classList.add('still');
+  pzCaps(id);
+}
+const pzq = new Set();
+let pzRaf = 0;
+function pzDraw(id) { // at most one redraw per frame
+  pzq.add(id);
+  if (!pzRaf) pzRaf = requestAnimationFrame(() => { pzRaf = 0; const ids = [...pzq]; pzq.clear(); for (const k of ids) { try { pzRedraw(k); } catch (e) { console.error('chart ' + k + ' failed: ' + e.message); } } });
+}
+function pzStop(id) { if (PZA[id]) { cancelAnimationFrame(PZA[id]); delete PZA[id]; } }
+// at rest: inside the limits, back to "no pan" when it sits on the default view, the reset button shown or not
+function pzSettle(id) {
+  const P = PZ[id];
+  if (!P) return;
+  const [lo, hi] = P.lim(); P.setX(clamp(P.x(), lo, hi));
+  if (P.xy) { const [ly, hy] = P.limY(); P.setY(clamp(P.y(), ly, hy)); }
+  if (P.isDef() && S.pan) delete S.pan[id];
+  pzRedraw(id);
+  const box = document.querySelector(`[data-chartbox="${id}"]`), t = box && box.querySelector('.ctools');
+  if (t && (zget(id) !== zdef(id) || panned(id, P.key)) !== !!t.querySelector('.zreset')) {
+    const ow = t.querySelector('.openwin'), had = t.contains(document.activeElement);
+    t.outerHTML = ztools(id, ow ? ow.dataset.pool : '');
+    if (had) { const z = box.querySelector('.ctools [data-act="zoom"]:not([disabled])'); if (z) z.focus({ preventScroll: true }); }
+  }
+}
+function pzStep(id, dir) { // an edge button: half a view that way
+  const P = PZ[id];
+  if (!P) return;
+  pzStop(id);
+  const [lo, hi] = P.lim(), from = clamp(P.x(), lo, hi), to = clamp(from + dir * P.span() * 0.5, lo, hi);
+  const h0 = pzHost(id), had = !!h0 && h0.contains(document.activeElement);
+  const fin = () => { // the keyboard stays on an edge button; a button that has hidden itself hands over to the other one
+    pzSettle(id);
+    const h = pzHost(id), a = document.activeElement;
+    if (!h || !had || (a && h.contains(a) && !a.hidden)) return;
+    const b = h.querySelector(`:scope > .pz-edge[data-dir="${dir}"]:not([hidden])`) || h.querySelector(':scope > .pz-edge:not([hidden])');
+    if (b) b.focus({ preventScroll: true });
+  };
+  if (reduced()) { P.setX(to); fin(); return; }
+  let t0 = 0;
+  const tick = (ts) => {
+    if (!t0) t0 = ts;
+    const k = Math.min(1, (ts - t0) / 260), e = 1 - Math.pow(1 - k, 3);
+    P.setX(from + (to - from) * e); pzRedraw(id);
+    if (k < 1) PZA[id] = requestAnimationFrame(tick); else { delete PZA[id]; fin(); }
+  };
+  PZA[id] = requestAnimationFrame(tick);
+}
+// past an end the view follows the finger less and less (rubber band), then springs back on release
+const rubber = (x, lo, hi, dim) => { const b = (d) => (1 - 1 / ((d * 0.55) / dim + 1)) * dim; return x < lo ? lo - b(lo - x) : x > hi ? hi + b(x - hi) : x; };
+function pzCoast(id, vx, vy, host) { // a flick keeps moving and slows down; past an end it springs back
+  const P = PZ[id];
+  if (!P) return;
+  const fast = (v) => Math.abs(v) > 0.12;
+  let v = !reduced() && fast(vx) ? -vx * P.unit(host) : 0, w = P.xy && !reduced() && fast(vy) ? vy * P.unitY(host) : 0; // units per ms
+  const out = () => { const [lo, hi] = P.lim(); let o = P.x() < lo - 1e-9 || P.x() > hi + 1e-9; if (P.xy) { const [ly, hy] = P.limY(); o = o || P.y() < ly - 1e-9 || P.y() > hy + 1e-9; } return o; };
+  if (reduced() || (!v && !w && !out())) { pzSettle(id); return; }
+  let t0 = 0;
+  const axis = (get, set, lim, vel, span) => {
+    const [lo, hi] = lim(); let x = get();
+    return (dt) => {
+      if (vel.v) { x += vel.v * dt; vel.v *= Math.exp(-dt / 325); if (x < lo || x > hi) { x = clamp(x, lo, hi); vel.v = 0; } if (Math.abs(vel.v) * 16 < span * 0.0008) vel.v = 0; }
+      else if (x < lo || x > hi) { const tg = clamp(x, lo, hi); x = tg + (x - tg) * Math.exp(-dt / 70); if (Math.abs(x - tg) < span * 0.002) x = tg; }
+      set(x);
+      return !!vel.v || x < lo || x > hi;
+    };
+  };
+  const vX = { v }, vY = { v: w };
+  const ax = axis(P.x, P.setX, P.lim, vX, P.span()), ay = P.xy ? axis(P.y, P.setY, P.limY, vY, P.spanY()) : () => false;
+  const step = (ts) => {
+    const dt = t0 ? Math.min(40, ts - t0) : 16; t0 = ts;
+    const a = ax(dt), b = ay(dt);
+    pzRedraw(id);
+    if (a || b) PZA[id] = requestAnimationFrame(step); else { delete PZA[id]; pzSettle(id); }
+  };
+  PZA[id] = requestAnimationFrame(step);
+}
+let G = null, lastTap = null;
+document.addEventListener('pointerdown', (e) => {
+  const host = e.target.closest && e.target.closest('.pz');
+  if (!host || G || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  const id = host.dataset.pz, P = PZ[id];
+  if (!P) return;
+  pzStop(id); // a touch catches a coasting chart
+  G = { id, host, pid: e.pointerId, x0: e.clientX, y0: e.clientY, v0: P.x(), w0: P.xy ? P.y() : 0, drag: false, s: [], btn: !!e.target.closest('button') };
+}, { passive: true });
+document.addEventListener('pointermove', (e) => {
+  if (!G || e.pointerId !== G.pid) return;
+  const P = PZ[G.id];
+  if (!P || !G.host.isConnected) { G = null; return; }
+  const dx = e.clientX - G.x0, dy = e.clientY - G.y0;
+  if (!G.drag) {
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    if (P.xy ? Math.hypot(dx, dy) < 6 : ax < 6 && ay < 6) return;
+    if (!P.xy && ay >= ax) { G = null; return; } // mostly vertical: the page scrolls, the chart stays
+    G.drag = true; G.x0 = e.clientX; G.y0 = e.clientY; G.v0 = P.x(); G.w0 = P.xy ? P.y() : 0;
+    G.host.classList.add('dragging');
+    try { G.host.setPointerCapture(e.pointerId); } catch (er) { /* a synthetic pointer */ }
+    if (S.hintEnd) pzHintDone();
+    return;
+  }
+  const [lo, hi] = P.lim();
+  P.setX(rubber(G.v0 - dx * P.unit(G.host), lo, hi, P.span() * 0.3));
+  if (P.xy) { const [ly, hy] = P.limY(); P.setY(rubber(G.w0 + dy * P.unitY(G.host), ly, hy, P.spanY() * 0.3)); }
+  G.s.push([e.clientX, e.clientY, e.timeStamp]); if (G.s.length > 8) G.s.shift();
+  pzDraw(G.id);
+});
+function pzEnd(e) {
+  if (!G || e.pointerId !== G.pid) return;
+  const g = G; G = null;
+  if (!g.drag) { // a tap: two quick taps on the chart (not on a button) reset it
+    if (e.type !== 'pointerup' || g.btn) return;
+    if (lastTap && lastTap.id === g.id && e.timeStamp - lastTap.t < 380 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { lastTap = null; zreset(g.id); }
+    else lastTap = { id: g.id, t: e.timeStamp, x: e.clientX, y: e.clientY };
+    return;
+  }
+  g.host.classList.remove('dragging');
+  const stop = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; // the drag's own click doesn't press anything
+  addEventListener('click', stop, { capture: true, once: true });
+  setTimeout(() => removeEventListener('click', stop, { capture: true }), 0);
+  const s = g.s.filter((q) => e.timeStamp - q[2] < 100);
+  let vx = 0, vy = 0;
+  if (e.type === 'pointerup' && s.length >= 2) { const a = s[0], b = s[s.length - 1], dt = Math.max(8, b[2] - a[2]); vx = (b[0] - a[0]) / dt; vy = (b[1] - a[1]) / dt; }
+  if (pzRaf) { cancelAnimationFrame(pzRaf); pzRaf = 0; pzq.clear(); }
+  pzCoast(g.id, vx, vy, g.host);
+}
+document.addEventListener('pointerup', pzEnd);
+document.addEventListener('pointercancel', pzEnd);
+// a trackpad's sideways scroll (or shift + wheel) pans the chart under the pointer; up and down still scroll the page
+document.addEventListener('wheel', (e) => {
+  const host = e.target.closest && e.target.closest('.pz');
+  if (!host) return;
+  const id = host.dataset.pz, P = PZ[id];
+  if (!P) return;
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+  if (!d) return;
+  e.preventDefault();
+  pzStop(id);
+  const px2 = e.deltaMode === 1 ? d * 16 : e.deltaMode === 2 ? d * host.clientWidth : d, [lo, hi] = P.lim();
+  P.setX(clamp(P.x() + px2 * P.unit(host), lo, hi));
+  pzDraw(id);
+  clearTimeout(P.wt); P.wt = setTimeout(() => pzSettle(id), 220);
+}, { passive: false });
+
 // a window opened from a chart shows just that chart, from the same sealed data (the stored key opens it)
 const SOLO = /^[a-z-]{2,20}$/.test(QP.get('view') || '') ? QP.get('view') : null;
 const SOLO_POOL = SOLO ? QP.get('pool') : null;
@@ -1204,6 +1554,8 @@ function soloSetup() {
   if (WINS.includes(wq)) S.win = wq;
   const z = Number(QP.get('z'));
   if (isNum(z)) (S.zoom ||= {})[SOLO] = z;
+  const pn = (QP.get('pan') || '').split(',').filter(Boolean).map(Number);
+  if (pn.length && pn.every(isNum)) panPut(SOLO, SOLO_POOL || '', pn.length > 1 ? pn.slice(0, 2) : pn[0]);
   if (SOLO_POOL && (SOLO === 'liq-best' || SOLO === 'daily-best')) { S.bestSel = SOLO_POOL; S.bestExtra = SOLO_POOL; }
   if (SOLO_POOL && ['rp', 'rp-money', 'lab', 'liq-replay'].includes(SOLO)) S.replay = SOLO_POOL;
 }
@@ -1306,6 +1658,7 @@ function renderTable() {
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
   $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== L.pools.length ? ' (' + L.pools.length + ' IN ALL)' : ''}`;
   $('#all-more').innerHTML = rows.length > shown.length ? `<button type="button" class="btn more" data-act="more">Show all ${int(rows.length)}</button>` : '';
+  stickyHead($('#all-box'));
 }
 function setSort(k) {
   if (S.sort.k === k) S.sort.dir = -S.sort.dir; else S.sort = { k, dir: k === 'pair' || k === 'age' ? 1 : -1 };
@@ -1403,6 +1756,7 @@ function renderBt() {
       + `<td>${spark(r.b.series.net)}</td><td>${int(r.b.reranges)}</td><td>${pct(r.b.tir, { dp: 0 })}</td><td>${r.p ? gemPill(r.p) : DASH}</td></tr>`).join('')
     + `</tbody></table></div><p class="caption">Tap a row to open its replay. Sorted by backtest; the benchmark stays last.<span class="swipe"> Swipe the table for more columns.</span></p></div>`;
   drawScatter(rows);
+  stickyHead($('#bt-lead .tbl-box'));
   // A: replay (opens on a tap)
   const sel = S.replay && rows.find((r) => r.id === S.replay);
   if (sel) { $('#bt-replay').hidden = false; renderReplay(sel); } else $('#bt-replay').hidden = true;
@@ -1415,32 +1769,50 @@ function drawScatter(rows) {
   const pts2 = rows.filter((r) => isNum(r.b.forecastNet) && isNum(r.b.net)).map((r) => ({ r, x: r.b.forecastNet * 100, y: r.b.net * 100 }));
   const Wd = SOLO ? boxW(box, 260) : Math.min(boxW(box, 260), 640), Ht = Math.round(Math.min(Math.max(Wd * 0.72, 210), 300) * (SOLO ? 1.6 : 1));
   const L = 44, R = 14, T = 10, B = 32, pw = Wd - L - R, ph = Ht - T - B;
-  if (!pts2.length) { box.innerHTML = `<p class="empty">No forecasts to compare yet (${DASH}).</p>`; return; }
+  if (!pts2.length) { delete PZ.scatter; box.innerHTML = `<p class="empty">No forecasts to compare yet (${DASH}).</p>`; return; }
   const all = pts2.flatMap((p) => [p.x, p.y]);
-  let lo = Math.min(0, ...all), hi = Math.max(10, ...all);
-  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
-  { const zf = Math.pow(0.6, zget('scatter')), c = (lo + hi) / 2, h = ((hi - lo) / 2) * zf; lo = c - h; hi = c + h; } // zoom: narrower axes around the middle
-  const ticks = linTicks(lo, hi, 4); lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
-  const X = (v) => L + ((v - lo) / (hi - lo)) * pw, Y = (v) => T + ((hi - v) / (hi - lo)) * ph;
-  let s = `<svg viewBox="0 0 ${Wd} ${Ht}" style="max-width:${Wd}px" role="img" aria-label="Forecast net APR against backtested net APR for each pool"><defs><clipPath id="sc-clip"><rect x="${L}" y="${T}" width="${pw}" height="${ph}"/></clipPath></defs>`;
-  for (const v of ticks) {
-    s += `<line class="gridl" x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${T}" y2="${T + ph}"/><text x="${X(v).toFixed(1)}" y="${T + ph + 14}" text-anchor="middle">${v}</text>`;
-    s += `<line class="gridl" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${v}</text>`;
-  }
-  s += `<g clip-path="url(#sc-clip)"><path d="M${X(lo - 50)} ${Y(lo - 40)} L${X(hi + 50)} ${Y(hi + 60)} L${X(hi + 50)} ${Y(hi + 40)} L${X(lo - 50)} ${Y(lo - 60)}Z" fill="rgba(22,199,132,.12)"/>`
-    + `<line x1="${X(lo - 50)}" y1="${Y(lo - 50)}" x2="${X(hi + 50)}" y2="${Y(hi + 50)}" stroke="#16C784" stroke-dasharray="4 3"/></g>`;
-  s += `<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="none" stroke="#1A212A"/><text x="${L + pw / 2}" y="${Ht - 3}" text-anchor="middle">forecast net APR % →</text>`
-    + `<text transform="translate(11 ${T + ph / 2}) rotate(-90)" text-anchor="middle">backtest %</text><text x="${L + pw - 6}" y="${T + ph - 8}" text-anchor="end" class="t-acc">±10 pts band</text>`;
-  s += '<g clip-path="url(#sc-clip)">';
-  for (const o of pts2) {
-    const a = Math.abs(o.y - o.x), col = a <= 10 ? '#16C784' : a > 20 ? '#E2664C' : '#FAB219';
-    s += o.r.bench ? `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4" fill="#0C1015" stroke="#8B96A3" stroke-width="1.5"/>` : `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4.5" fill="${col}"/>`;
-  }
-  for (const o of spread(pts2.map((o) => ({ y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 8, T + ph)) {
-    const right = o.x < L + pw - 60;
-    s += `<text x="${(o.x + (right ? 7 : -7)).toFixed(1)}" y="${o.y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="${o.b ? 't-mut' : 't-fg'}">${esc(o.t)}</text>`;
-  }
-  box.innerHTML = s + '</g></svg>';
+  let lo0 = Math.min(0, ...all), hi0 = Math.max(10, ...all);
+  const pad = (hi0 - lo0) * 0.08; lo0 -= pad; hi0 += pad;
+  // zoom: narrower axes around the middle; zoomed in, a drag moves them both ways, never past the full view
+  const c0 = (lo0 + hi0) / 2, H0 = (hi0 - lo0) / 2, h = () => H0 * Math.pow(0.6, zget('scatter'));
+  const lim = () => [c0 - H0 + h(), c0 + H0 - h()], pan = () => panGet('scatter', '', [0, 0]);
+  const scale = (host) => Math.min(1, Math.max(40, host.clientWidth) / Wd); // the drawing is at most Wd wide
+  const P = PZ.scatter = {
+    key: '', xy: zget('scatter') > 0, kind: 'xy', aria: ['Show lower forecasts', 'Show higher forecasts'],
+    x: () => c0 + pan()[0], setX: (v) => panPut('scatter', '', [v - c0, pan()[1]]), lim, span: () => 2 * h(),
+    unit: (host) => (2 * h()) / (pw * scale(host)),
+    y: () => c0 + pan()[1], setY: (v) => panPut('scatter', '', [pan()[0], v - c0]), limY: lim, spanY: () => 2 * h(),
+    unitY: (host) => (2 * h()) / (ph * scale(host)),
+    vw: () => [P.x() - h(), P.x() + h()], ext: () => [lo0, hi0],
+    isDef: () => Math.abs(pan()[0]) < 1e-6 && Math.abs(pan()[1]) < 1e-6,
+    rezoom: () => { if (panned('scatter', '')) { const [a, b] = lim(); P.setX(clamp(P.x(), a, b)); P.setY(clamp(P.y(), a, b)); } },
+    inner: () => {
+      const zoomed = zget('scatter') > 0;
+      let xlo = P.x() - h(), xhi = P.x() + h(), ylo = P.y() - h(), yhi = P.y() + h(), xt = linTicks(xlo, xhi, 4), yt = linTicks(ylo, yhi, 4);
+      if (!zoomed) { xlo = ylo = Math.min(xlo, xt[0]); xhi = yhi = Math.max(xhi, xt[xt.length - 1]); yt = xt; } // the full view ends on round numbers
+      else { xt = xt.filter((v) => v >= xlo && v <= xhi); yt = yt.filter((v) => v >= ylo && v <= yhi); }
+      const X = (v) => L + ((v - xlo) / (xhi - xlo)) * pw, Y = (v) => T + ((yhi - v) / (yhi - ylo)) * ph, A = Math.min(xlo, ylo) - 50, Z = Math.max(xhi, yhi) + 50;
+      let g = `<svg viewBox="0 0 ${Wd} ${Ht}" style="max-width:${Wd}px" role="img" aria-label="Forecast net APR against backtested net APR for each pool"><defs><clipPath id="sc-clip"><rect x="${L}" y="${T}" width="${pw}" height="${ph}"/></clipPath></defs>`;
+      for (const v of xt) g += `<line class="gridl" x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${T}" y2="${T + ph}"/><text x="${X(v).toFixed(1)}" y="${T + ph + 14}" text-anchor="middle">${v}</text>`;
+      for (const v of yt) g += `<line class="gridl" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${v}</text>`;
+      g += `<g clip-path="url(#sc-clip)"><path d="M${X(A).toFixed(1)} ${Y(A + 10).toFixed(1)} L${X(Z).toFixed(1)} ${Y(Z + 10).toFixed(1)} L${X(Z).toFixed(1)} ${Y(Z - 10).toFixed(1)} L${X(A).toFixed(1)} ${Y(A - 10).toFixed(1)}Z" fill="rgba(22,199,132,.12)"/>`
+        + `<line x1="${X(A).toFixed(1)}" y1="${Y(A).toFixed(1)}" x2="${X(Z).toFixed(1)}" y2="${Y(Z).toFixed(1)}" stroke="#16C784" stroke-dasharray="4 3"/></g>`;
+      g += `<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="none" stroke="#1A212A"/><text x="${L + pw / 2}" y="${Ht - 3}" text-anchor="middle">forecast net APR % →</text>`
+        + `<text transform="translate(11 ${T + ph / 2}) rotate(-90)" text-anchor="middle">backtest %</text><text x="${L + pw - 6}" y="${T + ph - 8}" text-anchor="end" class="t-acc">±10 pts band</text>`;
+      g += '<g clip-path="url(#sc-clip)">';
+      for (const o of pts2) {
+        const a = Math.abs(o.y - o.x), col = a <= 10 ? '#16C784' : a > 20 ? '#E2664C' : '#FAB219';
+        g += o.r.bench ? `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4" fill="#0C1015" stroke="#8B96A3" stroke-width="1.5"/>` : `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4.5" fill="${col}"/>`;
+      }
+      for (const o of spread(pts2.map((o) => ({ y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 8, T + ph)) {
+        const right = o.x < L + pw - 60;
+        g += `<text x="${(o.x + (right ? 7 : -7)).toFixed(1)}" y="${o.y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="${o.b ? 't-mut' : 't-fg'}">${esc(o.t)}</text>`;
+      }
+      return g + '</g></svg>';
+    },
+  };
+  pzKeep('scatter');
+  pzMount(box, 'scatter', 'pz-sc');
 }
 function recentres(s) { const out = []; for (let i = 1; i < s.lo.length; i++) if (isNum(s.lo[i]) && isNum(s.lo[i - 1]) && s.lo[i] !== s.lo[i - 1]) out.push(i); return out; }
 function renderReplay(row) {
@@ -1467,19 +1839,48 @@ function renderReplay(row) {
     + `<div><span class="lbl">Fee share</span><span class="v">${pct(b.share)}</span><span class="s">of pool fees</span></div>`;
   // price pane, log scale
   $('#rp-tools1').outerHTML = `<span id="rp-tools1">${ztools('rp', row.id)}</span>`;
-  $('#rp-shape').innerHTML = p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · ±${Math.round(LIQ_SPANS[zget('liq-replay')] * 100)}%</span>${ztools('liq-replay', row.id)}</div>${liqChart(p, W(p), LIQ_SPANS[zget('liq-replay')])}</div>` : '';
+  $('#rp-shape').innerHTML = p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · ±${Math.round(LIQ_SPANS[zget('liq-replay')] * 100)}%</span>${ztools('liq-replay', row.id)}</div>${liqChart(p, W(p), 'liq-replay')}</div>` : '';
   $('#rp-tools2').outerHTML = `<span id="rp-tools2">${ztools('rp-money', row.id)}</span>`;
-  const i0 = Math.min(zstart('rp', n), cut - 1); // zoomed in: the latest part of the window, up to the scrubber
-  const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58, MR = 78, pw = Wd - ML - MR, X = (i) => ML + ((i - i0) / (n - i0)) * pw;
+  // the price pane (log scale) and the money pane (one $ axis) each drag along the window on their own
+  const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58, MR = 78, inset = [+((ML / Wd) * 100).toFixed(2), +((MR / Wd) * 100).toFixed(2)];
+  const tw = { plot: [ML / Wd, MR / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier' };
+  const P1 = pzTime('rp', row.id, n, { ...tw, inner: () => rpPrice(row, P1, Wd, ML, MR, cut, re, span) });
+  pzMount(pbox, 'rp', 'pz-line', inset);
+  const P2 = pzTime('rp-money', row.id, n, { ...tw, inner: () => rpMoney(row, P2, Wd, ML, MR, cut, span) });
+  pzMount($('#rp-money'), 'rp-money', 'pz-line', inset);
+  $('#rp-eq').innerHTML = `Lines end at the summary: fees <b>${usd(s.fees[cut])}</b> ${MINUS} LVR <b>${usd(Math.abs(s.lvr[cut]))}</b> ${MINUS} costs <b>${usd(Math.abs(s.costs[cut]))}</b> = net <b>${usd(net, { sign: true })}</b>.`;
+  $('#rp-when').textContent = `${dm(s.t[cut])} ${hm(s.t[cut])} · day ${days.toFixed(1)}`;
+  const rc = b.realCheck;
+  $('#rp-real').innerHTML = (rc && isNum(rc.positions) && rc.positions > 0
+    ? `Simulated fees checked against <b>${int(rc.positions)}</b> real in-range position${rc.positions === 1 ? '' : 's'}: <b>${int(rc.within2)}</b> within 2%, median ratio <b>${isNum(rc.median) ? rc.median.toFixed(2) + '×' : DASH}</b>.`
+    : `Real-position check: no in-range positions to compare this window (${DASH}).`)
+    + ` σ ${pct(b.sigma, { dp: 1 })}/day from ${b.sigmaFrom === 'market' ? 'the market price' : b.sigmaFrom === 'pool' ? 'the pool’s own prices' : DASH}.`;
+}
+// the stretch of a series in view: whole indices from just before a to just after b, inside 0..n
+const inView = (a, b, n) => { const j0 = clamp(Math.floor(a), 0, n); return [j0, clamp(Math.ceil(b), j0, n)]; };
+function dateTicksIn(t, n, a, b) { const out = [], j0 = clamp(Math.ceil(a - 1e-9), 0, t.length - 1), j1 = clamp(Math.floor(b + 1e-9), j0, t.length - 1), k = Math.max(1, Math.round((j1 - j0) / n)); for (let i = j0; i <= j1; i += k) out.push(i); return out; }
+// where a dragged view runs past the series: a quiet zone, never drawn data
+function svgEnds(X, a, b, n, top, bottom) {
+  let g = '';
+  if (a < -1e-6) g += `<rect x="${X(a).toFixed(1)}" y="${top}" width="${(X(0) - X(a)).toFixed(1)}" height="${bottom - top}" fill="rgba(139,150,163,.08)"/><line x1="${X(0).toFixed(1)}" x2="${X(0).toFixed(1)}" y1="${top}" y2="${bottom}" stroke="#2B3542" stroke-dasharray="3 3"/>`;
+  if (b > n + 1e-6) g += `<rect x="${X(n).toFixed(1)}" y="${top}" width="${(X(b) - X(n)).toFixed(1)}" height="${bottom - top}" fill="rgba(139,150,163,.08)"/><line x1="${X(n).toFixed(1)}" x2="${X(n).toFixed(1)}" y1="${top}" y2="${bottom}" stroke="#2B3542" stroke-dasharray="3 3"/>`;
+  return g;
+}
+function rpPrice(row, P, Wd, ML, MR, cut, re, span) {
+  const s = row.b.series, n = s.t.length - 1, pw = Wd - ML - MR, [a, b] = P.vw(), X = (i) => ML + ((i - a) / (b - a)) * pw;
   const H1 = Math.round(180 * TALL), T1 = 20, B1 = 20, ph = H1 - T1 - B1;
-  const vals = [...s.px.slice(i0), ...s.lo.slice(i0), ...s.hi.slice(i0)].filter((v) => isNum(v) && v > 0);
-  let lo = Math.min(...vals) * 0.985, hi = Math.max(...vals) * 1.015;
+  const [j0, j1] = inView(a, b, n), k1 = Math.min(cut, j1); // in view, drawn up to the scrubber
+  const pos = (v) => isNum(v) && v > 0;
+  let vals = [...s.px.slice(j0, j1 + 1), ...s.lo.slice(j0, j1 + 1), ...s.hi.slice(j0, j1 + 1)].filter(pos);
+  if (!vals.length) vals = [...s.px, ...s.lo, ...s.hi].filter(pos);
+  const lo = Math.min(...vals) * 0.985, hi = Math.max(...vals) * 1.015;
   const Y = (v) => T1 + ((Math.log(hi) - Math.log(v)) / (Math.log(hi) - Math.log(lo))) * ph;
-  let g = `<svg viewBox="0 0 ${Wd} ${H1}" role="img" aria-label="Price on a log scale with the simulated range band and re-centre markers">`;
+  let g = `<svg viewBox="0 0 ${Wd} ${H1}" role="img" aria-label="Price on a log scale with the simulated range band and re-centre markers"><defs><clipPath id="rp-clip"><rect x="${ML}" y="0" width="${pw}" height="${H1}"/></clipPath></defs>`;
   for (const v of logTicks(lo, hi)) { const y = Y(v); if (y < T1 - 1 || y > T1 + ph + 1) continue; g += `<line class="gridl" x1="${ML}" x2="${ML + pw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text x="${ML - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${px(v)}</text>`; }
-  let seg = i0;
-  for (let k = i0 + 1; k <= cut; k++) {
-    const last = k === cut || s.lo[k] !== s.lo[k - 1];
+  g += `<g clip-path="url(#rp-clip)">${svgEnds(X, a, b, n, T1, T1 + ph)}`;
+  let seg = j0;
+  for (let k = j0 + 1; k <= k1; k++) {
+    const last = k === k1 || s.lo[k] !== s.lo[k - 1];
     if (last && isNum(s.lo[k - 1]) && isNum(s.hi[k - 1])) {
       const yT = Y(s.hi[k - 1]), yB = Y(s.lo[k - 1]);
       g += `<rect x="${X(seg).toFixed(1)}" y="${yT.toFixed(1)}" width="${(X(k) - X(seg)).toFixed(1)}" height="${(yB - yT).toFixed(1)}" fill="rgba(22,199,132,.13)"/><path d="M${X(seg).toFixed(1)} ${yT.toFixed(1)}H${X(k).toFixed(1)}M${X(seg).toFixed(1)} ${yB.toFixed(1)}H${X(k).toFixed(1)}" stroke="rgba(22,199,132,.45)" fill="none"/>`;
@@ -1489,47 +1890,44 @@ function renderReplay(row) {
   let lastNum = -Infinity;
   const countAt = ML + pw + 8;
   re.forEach((ix, j) => {
-    if (ix <= i0) return;
+    if (ix <= j0 || ix > j1) return;
     const x = X(ix);
     g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${T1 - 4}" y2="${T1 + ph}" stroke="#16C784" stroke-opacity=".35" stroke-dasharray="2 3"/><path d="M${x.toFixed(1)} ${T1 - 13} l4 4 l-4 4 l-4 -4Z" fill="#16C784"/>`;
     const w = String(j + 1).length * 7 + 8;
     if (x - lastNum >= w + 4 && (pw < 500 || x + w < countAt)) { g += `<text x="${(x + 6).toFixed(1)}" y="${T1 - 5}" class="t-acc">${j + 1}</text>`; lastNum = x; }
   });
-  g += `<path d="${path(s.px, X, Y, cut, i0)}" fill="none" stroke="#E6EDF3" stroke-width="1.6" stroke-linejoin="round"/>`;
-  if (isNum(s.px[cut])) g += `<circle cx="${X(cut).toFixed(1)}" cy="${Y(s.px[cut]).toFixed(1)}" r="3" fill="#E6EDF3"/><text x="${(X(cut) + 7).toFixed(1)}" y="${(Y(s.px[cut]) + 3.5).toFixed(1)}" class="t-fg">${px(s.px[cut])}</text>`;
- if (pw >= 500) g += `<text x="${countAt}" y="${T1 - 5}" class="t-acc">${re.length} re-range${re.length === 1 ? '' : 's'}</text>`;
+  g += `<path d="${path(s.px, X, Y, k1, j0)}" fill="none" stroke="#E6EDF3" stroke-width="1.6" stroke-linejoin="round"/></g>`;
+  if (isNum(s.px[cut]) && cut >= a - 1e-9 && cut <= b + 1e-9) g += `<circle cx="${X(cut).toFixed(1)}" cy="${Y(s.px[cut]).toFixed(1)}" r="3" fill="#E6EDF3"/><text x="${(X(cut) + 7).toFixed(1)}" y="${(Y(s.px[cut]) + 3.5).toFixed(1)}" class="t-fg">${px(s.px[cut])}</text>`;
+  if (pw >= 500) g += `<text x="${countAt}" y="${T1 - 5}" class="t-acc">${re.length} re-range${re.length === 1 ? '' : 's'}</text>`;
   g += `<line class="axisl" x1="${ML}" x2="${ML + pw}" y1="${T1 + ph}" y2="${T1 + ph}"/>`;
-  for (const i of dateTicks(s.t, Math.max(2, Math.floor(pw / 90)), i0)) g += `<text x="${Math.min(X(i), Wd - 24).toFixed(1)}" y="${H1 - 5}" text-anchor="middle">${tLabel(s.t[i], span)}</text>`;
-  pbox.innerHTML = g + '</svg>';
-  // money pane: one $ axis
-  const i0m = Math.min(zstart('rp-money', n), cut - 1);
-  const mbox = $('#rp-money'), H2 = Math.round(200 * TALL), T2 = 10, B2 = 20, qh = H2 - T2 - B2;
+  for (const i of dateTicksIn(s.t, Math.max(2, Math.floor(pw / 90)), a, b)) g += `<text x="${clamp(X(i), ML + 12, Wd - 24).toFixed(1)}" y="${H1 - 5}" text-anchor="middle">${tLabel(s.t[i], span)}</text>`;
+  return g + '</svg>';
+}
+function rpMoney(row, P, Wd, ML, MR, cut, span) {
+  const s = row.b.series, n = s.t.length - 1, pw = Wd - ML - MR, [a, b] = P.vw(), X = (i) => ML + ((i - a) / (b - a)) * pw;
+  const H2 = Math.round(200 * TALL), T2 = 10, B2 = 20, qh = H2 - T2 - B2;
+  const [j0, j1] = inView(a, b, n), k1 = Math.min(cut, j1);
   let mn = 0, mx = 0;
-  for (const k of ['fees', 'lvr', 'costs', 'net']) for (const v of s[k].slice(i0m)) if (isNum(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
+  for (const k of ['fees', 'lvr', 'costs', 'net']) for (const v of s[k].slice(j0, j1 + 1)) if (isNum(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
   const yt = linTicks(mn, mx, 4); mn = Math.min(mn, yt[0]); mx = Math.max(mx, yt[yt.length - 1]);
   const Y2 = (v) => T2 + ((mx - v) / ((mx - mn) || 1)) * qh;
-  let m = `<svg viewBox="0 0 ${Wd} ${H2}" role="img" aria-label="Cumulative fees, LVR, costs and net in dollars versus holding">`;
+  let m = `<svg viewBox="0 0 ${Wd} ${H2}" role="img" aria-label="Cumulative fees, LVR, costs and net in dollars versus holding"><defs><clipPath id="rpm-clip"><rect x="${ML}" y="0" width="${pw}" height="${H2}"/></clipPath></defs>`;
   for (const v of yt) m += `<line class="gridl" x1="${ML}" x2="${ML + pw}" y1="${Y2(v).toFixed(1)}" y2="${Y2(v).toFixed(1)}"/><text x="${ML - 6}" y="${(Y2(v) + 3.5).toFixed(1)}" text-anchor="end">${v === 0 ? '$0' : usd(v, { sign: true })}</text>`;
-  m += `<line x1="${ML}" x2="${ML + pw}" y1="${Y2(0).toFixed(1)}" y2="${Y2(0).toFixed(1)}" stroke="#8B96A3" stroke-width="1.3" stroke-dasharray="5 4"/>`;
+  m += `<line x1="${ML}" x2="${ML + pw}" y1="${Y2(0).toFixed(1)}" y2="${Y2(0).toFixed(1)}" stroke="#8B96A3" stroke-width="1.3" stroke-dasharray="5 4"/><g clip-path="url(#rpm-clip)">${svgEnds(X, a, b, n, T2, T2 + qh)}`;
   const ser = [['fees', '#8CF0B0', 1.6, 't-pos', 'Fees', ''], ['lvr', '#E2664C', 1.6, 't-neg', 'LVR', ''], ['costs', '#D39A2C', 1.6, 't-cost', 'Costs', '1.5 2.5'], ['net', '#16C784', 2.8, 't-acc', 'NET', '']];
-  const area = path(s.net, X, Y2, cut, i0m);
-  if (area) m += `<path d="${area}L${X(cut).toFixed(1)} ${Y2(0).toFixed(1)}L${X(i0m).toFixed(1)} ${Y2(0).toFixed(1)}Z" fill="#16C784" fill-opacity=".08"/>`;
-  const labs = [{ y: Y2(0) + 3.5, t: 'HOLD $0', c: 't-mut' }];
+  const area = path(s.net, X, Y2, k1, j0);
+  if (area) m += `<path d="${area}L${X(k1).toFixed(1)} ${Y2(0).toFixed(1)}L${X(j0).toFixed(1)} ${Y2(0).toFixed(1)}Z" fill="#16C784" fill-opacity=".08"/>`;
+  const end = cut >= a - 1e-9 && cut <= b + 1e-9; // the summary labels sit at the scrubber, when it is in view
+  const labs = [{ y: Y2(0) + 3.5, t: 'HOLD $0', c: 't-mut' }], dots = [];
   for (const [k, col, wd, cls, name, dash] of ser) {
-    m += `<path d="${path(s[k], X, Y2, cut, i0m)}" fill="none" stroke="${col}" stroke-width="${wd}" stroke-linejoin="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
-    if (isNum(s[k][cut])) { m += `<circle cx="${X(cut).toFixed(1)}" cy="${Y2(s[k][cut]).toFixed(1)}" r="${k === 'net' ? 3.5 : 2.5}" fill="${col}"/>`; labs.push({ y: Y2(s[k][cut]) + 3.5, t: name + ' ' + usd(s[k][cut], { sign: true }), c: cls }); }
+    m += `<path d="${path(s[k], X, Y2, k1, j0)}" fill="none" stroke="${col}" stroke-width="${wd}" stroke-linejoin="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+    if (end && isNum(s[k][cut])) { dots.push(`<circle cx="${X(cut).toFixed(1)}" cy="${Y2(s[k][cut]).toFixed(1)}" r="${k === 'net' ? 3.5 : 2.5}" fill="${col}"/>`); labs.push({ y: Y2(s[k][cut]) + 3.5, t: name + ' ' + usd(s[k][cut], { sign: true }), c: cls }); }
   }
-  for (const l of spread(labs, 12, T2 + 4, H2 - B2 + 4)) m += `<text x="${(X(cut) + 7).toFixed(1)}" y="${l.y.toFixed(1)}" class="${l.c}">${esc(l.t)}</text>`;
+  m += '</g>' + dots.join('');
+  if (end) for (const l of spread(labs, 12, T2 + 4, H2 - B2 + 4)) m += `<text x="${(X(cut) + 7).toFixed(1)}" y="${l.y.toFixed(1)}" class="${l.c}">${esc(l.t)}</text>`;
   m += `<line class="axisl" x1="${ML}" x2="${ML + pw}" y1="${T2 + qh}" y2="${T2 + qh}"/>`;
-  for (const i of dateTicks(s.t, Math.max(2, Math.floor(pw / 90)), i0m)) m += `<text x="${Math.min(X(i), Wd - 24).toFixed(1)}" y="${H2 - 5}" text-anchor="middle">${tLabel(s.t[i], span)}</text>`;
-  mbox.innerHTML = m + '</svg>';
-  $('#rp-eq').innerHTML = `Lines end at the summary: fees <b>${usd(s.fees[cut])}</b> ${MINUS} LVR <b>${usd(Math.abs(s.lvr[cut]))}</b> ${MINUS} costs <b>${usd(Math.abs(s.costs[cut]))}</b> = net <b>${usd(net, { sign: true })}</b>.`;
-  $('#rp-when').textContent = `${dm(s.t[cut])} ${hm(s.t[cut])} · day ${days.toFixed(1)}`;
-  const rc = b.realCheck;
-  $('#rp-real').innerHTML = (rc && isNum(rc.positions) && rc.positions > 0
-    ? `Simulated fees checked against <b>${int(rc.positions)}</b> real in-range position${rc.positions === 1 ? '' : 's'}: <b>${int(rc.within2)}</b> within 2%, median ratio <b>${isNum(rc.median) ? rc.median.toFixed(2) + '×' : DASH}</b>.`
-    : `Real-position check: no in-range positions to compare this window (${DASH}).`)
-    + ` σ ${pct(b.sigma, { dp: 1 })}/day from ${b.sigmaFrom === 'market' ? 'the market price' : b.sigmaFrom === 'pool' ? 'the pool’s own prices' : DASH}.`;
+  for (const i of dateTicksIn(s.t, Math.max(2, Math.floor(pw / 90)), a, b)) m += `<text x="${clamp(X(i), ML + 12, Wd - 24).toFixed(1)}" y="${H2 - 5}" text-anchor="middle">${tLabel(s.t[i], span)}</text>`;
+  return m + '</svg>';
 }
 function renderLab(row) {
   const lab = $('#bt-lab'), b = row.b, p = row.p, n = b.series.t.length - 1;
@@ -1573,24 +1971,29 @@ function renderLab(row) {
   } else h += `<div class="pane lab-heat"><p class="empty">Width × trigger grid not in this pass (${DASH}).</p></div>`;
   lab.innerHTML = h + '</div>';
   // lines
-  const box = $('#lab-lines'), Wd = boxW(box), Ht = Math.round((Wd >= 600 ? 440 : 220) * (SOLO ? 1.4 : 1)), L = 52, R = 12, T = 10, B = 20, pw = Wd - L - R, ph = Ht - T - B;
-  const j0 = zstart('lab', n);
+  const box = $('#lab-lines'), Wd = boxW(box), L = 52, R = 12;
+  const PL = pzTime('lab', row.id, n, { plot: [L / Wd, R / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', inner: () => labLines(row, strats, PL, Wd, L, R) });
+  pzMount(box, 'lab', 'pz-line', [+((L / Wd) * 100).toFixed(2), +((R / Wd) * 100).toFixed(2)]);
+}
+function labLines(row, strats, P, Wd, L, R) {
+  const b = row.b, n = b.series.t.length - 1, Ht = Math.round((Wd >= 600 ? 440 : 220) * (SOLO ? 1.4 : 1)), T = 10, B = 20, pw = Wd - L - R, ph = Ht - T - B;
+  const [a, z] = P.vw(), [j0, j1] = inView(a, z, n);
   let mn = 0, mx = 0;
-  for (const st of strats) for (const v of st.series.slice(j0)) if (isNum(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
+  for (const st of strats) for (const v of st.series.slice(j0, j1 + 1)) if (isNum(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
   const yt = linTicks(mn, mx, 5); mn = Math.min(mn, yt[0]); mx = Math.max(mx, yt[yt.length - 1]);
-  const X = (i) => L + ((i - j0) / (n - j0)) * pw, Y = (v) => T + ((mx - v) / ((mx - mn) || 1)) * ph;
-  let s = `<svg viewBox="0 0 ${Wd} ${Ht}" role="img" aria-label="Cumulative net dollars versus holding for each strategy">`;
+  const X = (i) => L + ((i - a) / (z - a)) * pw, Y = (v) => T + ((mx - v) / ((mx - mn) || 1)) * ph;
+  let s = `<svg viewBox="0 0 ${Wd} ${Ht}" role="img" aria-label="Cumulative net dollars versus holding for each strategy"><defs><clipPath id="lab-clip"><rect x="${L}" y="0" width="${pw}" height="${Ht}"/></clipPath></defs>`;
   for (const v of yt) s += `<line class="gridl" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${v === 0 ? '$0' : usd(v, { sign: true })}</text>`;
-  s += `<line x1="${L}" x2="${L + pw}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8B96A3" stroke-width="1.3" stroke-dasharray="5 4"/>`;
+  s += `<line x1="${L}" x2="${L + pw}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#8B96A3" stroke-width="1.3" stroke-dasharray="5 4"/><g clip-path="url(#lab-clip)">${svgEnds(X, a, z, n, T, T + ph)}`;
   for (const st of strats.slice().reverse()) {
-    const col = SCOL[st.id] || 'var(--s6)', ours = st.id === 'ours';
-    s += `<path d="${path(st.series, X, Y, Math.min(n, st.series.length - 1), j0)}" fill="none" stroke="${col}" stroke-width="${ours ? 2.8 : 1.5}" stroke-linejoin="round"/>`;
-    const e = st.series[st.series.length - 1];
-    if (isNum(e)) s += `<circle cx="${X(st.series.length - 1).toFixed(1)}" cy="${Y(e).toFixed(1)}" r="${ours ? 3.5 : 2.5}" fill="${col}"/>`;
+    const col = SCOL[st.id] || 'var(--s6)', ours = st.id === 'ours', last = Math.min(n, st.series.length - 1);
+    s += `<path d="${path(st.series, X, Y, Math.min(last, j1), j0)}" fill="none" stroke="${col}" stroke-width="${ours ? 2.8 : 1.5}" stroke-linejoin="round"/>`;
+    const e = st.series[last];
+    if (isNum(e) && last >= a - 1e-9 && last <= z + 1e-9) s += `<circle cx="${X(last).toFixed(1)}" cy="${Y(e).toFixed(1)}" r="${ours ? 3.5 : 2.5}" fill="${col}"/>`;
   }
-  s += `<line class="axisl" x1="${L}" x2="${L + pw}" y1="${T + ph}" y2="${T + ph}"/>`;
-  for (const i of dateTicks(b.series.t, Math.max(2, Math.floor(pw / 90)), j0)) s += `<text x="${Math.min(X(i), Wd - 24).toFixed(1)}" y="${Ht - 5}" text-anchor="middle">${tLabel(b.series.t[i], b.series.t[n] - b.series.t[0])}</text>`;
-  box.innerHTML = s + '</svg>';
+  s += `</g><line class="axisl" x1="${L}" x2="${L + pw}" y1="${T + ph}" y2="${T + ph}"/>`;
+  for (const i of dateTicksIn(b.series.t, Math.max(2, Math.floor(pw / 90)), a, z)) s += `<text x="${clamp(X(i), L + 12, Wd - 24).toFixed(1)}" y="${Ht - 5}" text-anchor="middle">${tLabel(b.series.t[i], b.series.t[n] - b.series.t[0])}</text>`;
+  return s + '</svg>';
 }
 function openReplay(id) {
   stopPlay();
@@ -1641,16 +2044,24 @@ function renderHealth() {
   const cats = sl && sl.categories ? Object.entries(sl.categories).map(([k, v]) => esc(k) + ' ×' + int(v)).join(' · ') : '';
   dl += `<dt>Sealed log${cats ? '<small>' + cats + '</small>' : ''}</dt><dd>${sl ? `${int(sl.errors)} error${sl.errors === 1 ? '' : 's'} · ${int(sl.lines)} lines` : DASH}</dd>`;
   let bars = '';
-  const hh = S.hist && Array.isArray(S.hist.health) ? zslice(S.hist.health.slice(-48), 'health') : null;
+  const hh = S.hist && Array.isArray(S.hist.health) ? S.hist.health.slice(-48) : null;
   if (hh && hh.length) {
-    const Wd = 300, Ht = 44, bw = Wd / hh.length, mx = Math.max(1, ...hh.map((r) => (isNum(r[2]) ? r[2] : 0)));
-    let s = `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" role="img" aria-label="Scanner passes per hour over the last ${hh.length} hours">`;
-    hh.forEach((r, i) => {
-      const all = isNum(r[2]) ? r[2] : 0, ok = isNum(r[1]) ? r[1] : 0, x = (i * bw + 0.5).toFixed(1);
-      s += `<rect x="${x}" y="${(Ht - (all / mx) * Ht).toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${((all / mx) * Ht).toFixed(1)}" fill="#E2664C"/>`;
-      s += `<rect x="${x}" y="${(Ht - (ok / mx) * Ht).toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${((ok / mx) * Ht).toFixed(1)}" fill="#16C784"/>`;
+    const N = hh.length, mx = Math.max(1, ...hh.map((r) => (isNum(r[2]) ? r[2] : 0)));
+    const PH = pzTime('health', '', N, {
+      words: ['older', 'newer'], aria: ['Show older hours', 'Show newer hours'], hint: '◂ drag for older hours',
+      caps: () => [`Passes per hour · ${Math.round(PH.span())} h`],
+      inner: () => {
+        const [a, b] = PH.vw(), len = b - a, Wd = 300, Ht = 44, bw = Wd / len;
+        let s2 = `<svg viewBox="${(a * bw).toFixed(2)} 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" role="img" aria-label="Scanner passes per hour over the last ${N} hours">`;
+        hh.forEach((r, i2) => {
+          const all = isNum(r[2]) ? r[2] : 0, ok = isNum(r[1]) ? r[1] : 0, x = (i2 * bw + 0.5).toFixed(1);
+          s2 += `<rect x="${x}" y="${(Ht - (all / mx) * Ht).toFixed(1)}" width="${Math.max(0.5, bw - 1).toFixed(1)}" height="${((all / mx) * Ht).toFixed(1)}" fill="#E2664C"/>`;
+          s2 += `<rect x="${x}" y="${(Ht - (ok / mx) * Ht).toFixed(1)}" width="${Math.max(0.5, bw - 1).toFixed(1)}" height="${((ok / mx) * Ht).toFixed(1)}" fill="#16C784"/>`;
+        });
+        return s2 + '</svg>' + pzEnds(-a / len, (b - N) / len, 'NO OLDER HOURS', 'NOW');
+      },
     });
-    bars = `<div class="hbars chartbox" data-chartbox="health"><div class="pane-title"><span class="lbl">Passes per hour · ${hh.length} h</span><span class="lbl">max ${int(mx)}</span>${ztools('health', '')}</div>${s}</svg><div class="legend" style="margin-top:4px"><span><i class="sw" style="background:#16C784"></i>OK</span><span><i class="sw" style="background:#E2664C"></i>failed</span></div></div>`;
+    bars = `<div class="hbars chartbox" data-chartbox="health"><div class="pane-title">${pzCapsHtml('health')}<span class="lbl">max ${int(mx)}</span>${ztools('health', '')}</div>${pzShell('health', 'pz-bars')}<div class="legend" style="margin-top:6px"><span><i class="sw" style="background:#16C784"></i>OK</span><span><i class="sw" style="background:#E2664C"></i>failed</span></div></div>`;
   } else bars = `<p class="sub">Passes per hour: ${S.missing.hist ? 'history not published yet' : DASH}.</p>`;
   $('#health').innerHTML = `<h2 id="health-h" style="font:600 15px/1.25 var(--sans)">Scanner health</h2><dl>${dl}</dl>${bars}`;
 }
@@ -1661,10 +2072,7 @@ function openPair(key, opener) {
   if (!pairPools(key).length) return;
   S.pair = key; S.detail = null; S.opener = opener || null;
   renderPair();
-  $('#sheet').hidden = false;
-  document.documentElement.classList.add('modal-open');
-  $('#sheet-body').scrollTop = 0;
-  setTimeout(() => $('#sheet-close').focus({ preventScroll: true }), 0);
+  showSheet();
 }
 function renderPair() {
   const wk = S.win, L = S.live, pools = pairPools(S.pair), pr = PAIRS() && PAIRS()[S.pair];
@@ -1709,34 +2117,60 @@ function openDetail(id, opener) {
   if (!poolById(id)) return;
   S.detail = id; S.pair = null; S.opener = opener || null;
   renderDetail();
+  showSheet();
+}
+function showSheet() {
+  sheetReset();
   $('#sheet').hidden = false;
   document.documentElement.classList.add('modal-open');
   $('#sheet-body').scrollTop = 0;
+  stickyAll();
+  onScroll();
   setTimeout(() => $('#sheet-close').focus({ preventScroll: true }), 0);
 }
 function closeDetail() {
   if ($('#sheet').hidden) return;
   $('#sheet').hidden = true;
+  sheetReset();
   document.documentElement.classList.remove('modal-open');
   S.detail = null; S.pair = null;
   const o = S.opener; S.opener = null;
   if (o && document.contains(o)) o.focus({ preventScroll: true });
 }
 function miniLine(arr0, label, logScale, id, pool) {
-  const arr = zslice(arr0 || [], id);
-  const v = (arr || []).filter((x) => isNum(x) && (!logScale || x > 0));
-  if (v.length < 2) return `<div class="dsec"><span class="lbl">${esc(label)}</span><p class="sub">${DASH} not read</p></div>`;
+  const ok = (x) => isNum(x) && (!logScale || x > 0), arr = (arr0 || []).map((x) => (ok(x) ? x : null));
+  if (arr.filter(ok).length < 2) { delete PZ[id]; return `<div class="dsec"><span class="lbl">${esc(label)}</span><p class="sub">${DASH} not read</p></div>`; }
   const Wd = 300, Ht = 64, n = arr.length - 1, f = logScale ? Math.log : (x) => x;
-  const lo = f(Math.min(...v)), hi = f(Math.max(...v));
-  const X = (i) => 2 + (i / n) * (Wd - 4), Y = (x) => 4 + ((hi - f(x)) / ((hi - lo) || 1)) * (Ht - 8);
-  return `<div class="dsec chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">${esc(label)}</span><span class="lbl">${px(v[0])} → ${px(v[v.length - 1])}</span>${ztools(id, pool)}</div><svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" aria-hidden="true"><path d="${path(arr, X, Y, n)}" fill="none" stroke="#E6EDF3" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg></div>`;
+  const seen = () => { const [a, b] = P.vw(), [j0, j1] = inView(a, b, n); return arr.slice(j0, j1 + 1).filter(ok); };
+  const P = pzTime(id, pool, n, {
+    words: ['older', 'newer'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier',
+    caps: () => { const v = seen(); return [null, v.length ? `${px(v[0])} → ${px(v[v.length - 1])}` : DASH]; },
+    inner: () => {
+      const [a, b] = P.vw(), [j0, j1] = inView(a, b, n), v = seen();
+      if (!v.length) return pzEnds(-a / (b - a), (b - n) / (b - a), 'START', 'NOW');
+      const lo = f(Math.min(...v)), hi = f(Math.max(...v)); // fitted to the stretch in view
+      const X = (i) => 2 + ((i - a) / (b - a)) * (Wd - 4), Y = (x) => 4 + ((hi - f(x)) / ((hi - lo) || 1)) * (Ht - 8);
+      return `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" aria-hidden="true"><path d="${path(arr, X, Y, j1, j0)}" fill="none" stroke="#E6EDF3" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg>`
+        + pzEnds(-a / (b - a), (b - n) / (b - a), 'START', 'NOW');
+    },
+  });
+  return `<div class="dsec chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">${esc(label)}</span>${pzCapsHtml(id)}${ztools(id, pool)}</div>${pzShell(id, 'pz-line')}</div>`;
 }
 function miniBars(arr0, label, id, pool) {
-  const v = zslice(arr0 || [], id).map((x) => (isNum(x) && x >= 0 ? x : null));
-  if (!v.some(isNum)) return `<div class="dsec"><span class="lbl">${esc(label)}</span><p class="sub">${DASH} not read</p></div>`;
-  const Wd = 300, Ht = 64, mx = Math.max(...v.filter(isNum)) || 1, bw = Wd / v.length;
-  return `<div class="dsec chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">${esc(label)}</span><span class="lbl">max ${usd(mx)}</span>${ztools(id, pool)}</div><svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" aria-hidden="true">`
-    + v.map((x, i) => (isNum(x) ? `<rect x="${(i * bw + 0.5).toFixed(1)}" y="${(Ht - (x / mx) * Ht).toFixed(1)}" width="${Math.max(0.5, bw - 1).toFixed(1)}" height="${((x / mx) * Ht).toFixed(1)}" fill="#16C784"/>` : '')).join('') + '</svg></div>';
+  const v = (arr0 || []).map((x) => (isNum(x) && x >= 0 ? x : null));
+  if (!v.some(isNum)) { delete PZ[id]; return `<div class="dsec"><span class="lbl">${esc(label)}</span><p class="sub">${DASH} not read</p></div>`; }
+  const N = v.length, Wd = 300, Ht = 64, mx = Math.max(...v.filter(isNum)) || 1; // one scale for every bar: a drag never rescales
+  const P = pzTime(id, pool, N, {
+    words: ['older', 'newer'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier',
+    caps: () => { const [a, b] = P.vw(), i0 = clamp(Math.round(a), 0, N - 1), i1 = clamp(Math.round(b), i0 + 1, N), sv = v.slice(i0, i1).filter(isNum); return [null, `max ${usd(sv.length ? Math.max(...sv) : null)}`]; },
+    inner: () => {
+      const [a, b] = P.vw(), len = b - a, bw = Wd / len;
+      return `<svg viewBox="${(a * bw).toFixed(2)} 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" aria-hidden="true">`
+        + v.map((x, i) => (isNum(x) ? `<rect x="${(i * bw + 0.5).toFixed(1)}" y="${(Ht - (x / mx) * Ht).toFixed(1)}" width="${Math.max(0.5, bw - 1).toFixed(1)}" height="${((x / mx) * Ht).toFixed(1)}" fill="#16C784"/>` : '')).join('') + '</svg>'
+        + pzEnds(-a / len, (b - N) / len, 'START', 'NOW');
+    },
+  });
+  return `<div class="dsec chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">${esc(label)}</span>${pzCapsHtml(id)}${ztools(id, pool)}</div>${pzShell(id, 'pz-bars')}</div>`;
 }
 function renderDetail() {
   const p = poolById(S.detail);
@@ -1776,7 +2210,7 @@ function renderDetail() {
     ['LPs at the price', int(s2.lpsAtPrice)], ['Walls', `below ${s2.walls && isNum(s2.walls.below) ? rangeTxt(Math.abs(s2.walls.below)).replace('±', MINUS) : DASH} · above ${s2.walls && isNum(s2.walls.above) ? rangeTxt(s2.walls.above).replace('±', '+') : DASH}`],
     ['Token 0', tok(p.t0)], ['Token 1', tok(p.t1)],
   ];
-  $('#sheet-body').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · log · ±${Math.round(LIQ_SPANS[zget('liq-detail')] * 100)}%</span>${ztools('liq-detail', p.id)}</div>${liqChart(p, w, LIQ_SPANS[zget('liq-detail')])}</div>` // the shape first
+  $('#sheet-body').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · log · ±${Math.round(LIQ_SPANS[zget('liq-detail')] * 100)}%</span>${ztools('liq-detail', p.id)}</div>${liqChart(p, w, 'liq-detail')}</div>` // the shape first
     + `<div class="best-head"><div class="grow"><div class="tags">${tagsHtml(p, wk)}</div>`
     + `<p class="sentence" style="margin-top:8px">${w ? `${WIN_WORD[wk]} net APR <b class="${w.net < 0 ? 'neg' : ''}">${pct(w.net)}</b> at ${usdFull(L.ticket)} · fees ${pct(w.feeApr)} · LVR ${pct(w.lvr)}.` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + (w ? `<div class="dsec"><span class="lbl">Breakdown · ${WIN_LABEL[wk]}</span>${breakdown(w)}</div>` : '')
@@ -1786,9 +2220,10 @@ function renderDetail() {
     + (gem && ((gem.warnings || []).length || (gem.missing || []).length) ? `<div class="dsec"><span class="lbl">Warnings and missing inputs</span><ul class="plain">${(gem.warnings || []).map((x) => `<li>${esc(x)}</li>`).join('')}${(gem.missing || []).map((x) => `<li>${esc(x)} not read</li>`).join('')}</ul></div>` : '')
     + (w && Array.isArray(w.lenses) && w.lenses.length ? `<div class="dsec"><span class="lbl">Lenses</span><div class="tags">${w.lenses.map((l) => `<span class="tag">${esc(LENS_NAME[l] || l)}</span>`).join('')}</div></div>` : '')
     + `<div class="minis">${miniLine(w && w.spark && w.spark.px, `Price · ${WIN_LABEL[wk]} · log`, true, 'd-px', p.id)}${miniBars(w && w.spark && w.spark.fees, `LP fees · ${WIN_LABEL[wk]}`, 'd-fees', p.id)}`
-    + (hist && Array.isArray(hist.d) ? miniBars(hist.d.map((r) => r[2]), `LP fees per day · ${zslice(hist.d, 'd-day').length} d`, 'd-day', p.id) : '') + '</div>'
+    + (hist && Array.isArray(hist.d) ? miniBars(hist.d.map((r) => r[2]), `LP fees per day · ${hist.d.length} d`, 'd-day', p.id) : '') + '</div>'
     + `<div class="dsec"><span class="lbl">Checks</span>${checksLine(p).replace('class="checks"', 'class="checks" style="margin:0;border:0;padding:0"')}</div>`
     + `<div class="dsec"><span class="lbl">Pool facts</span><dl class="facts">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl></div>`;
+  if (!$('#sheet').hidden) stickyAll();
 }
 
 // ---------- jumps that land with the heading in view ----------
@@ -1809,6 +2244,130 @@ function jumpTo(sel) {
     if (n > 30) cancelSettle();
   }, 100);
 }
+
+// ---------- sticky table headers: a copy of a long table's header row sticks to the top while the table scrolls by ----------
+// The copy sits in a wrapper that ends with the table, so it never floats over what follows; it follows the table's
+// sideways scroll, and shows only while the real header is above the top edge.
+const STICKY_ROWS = 8;
+function stickyHead(box) {
+  if (!box || SOLO) return;
+  const tbl = box.querySelector('table'), th = tbl && tbl.tHead;
+  let wrap = box.parentElement && box.parentElement.classList.contains('shw') ? box.parentElement : null;
+  const rows = tbl && tbl.tBodies[0] ? tbl.tBodies[0].rows.length : 0;
+  if (!th || rows < STICKY_ROWS || !box.offsetParent) { const old = wrap && wrap.querySelector(':scope > .sh'); if (old) { old.hidden = true; old.classList.remove('on'); wrap.style.setProperty('--shh', '0px'); } return; }
+  if (!wrap) {
+    wrap = document.createElement('div'); wrap.className = 'shw';
+    wrap.style.marginTop = getComputedStyle(box).marginTop;
+    box.before(wrap); wrap.append(box);
+    box.addEventListener('scroll', onScroll, { passive: true });
+  }
+  let sh = wrap.querySelector(':scope > .sh');
+  if (!sh) { sh = document.createElement('div'); sh.className = 'sh'; sh.setAttribute('aria-hidden', 'true'); wrap.prepend(sh); }
+  const ws = [...th.rows[0].cells].map((c) => c.getBoundingClientRect().width), tw = tbl.getBoundingClientRect().width;
+  wrap.style.setProperty('--shh', th.getBoundingClientRect().height + 2 + 'px'); // the copy's height (with its borders); the table slides up under it
+  sh.innerHTML = `<div class="sh-in tbl-box"><table class="${esc(tbl.className)}" style="width:${tw}px;min-width:${tw}px;table-layout:fixed"><colgroup>${ws.map((w) => `<col style="width:${w}px">`).join('')}</colgroup><thead>${th.innerHTML}</thead></table></div>`;
+  for (const b of sh.querySelectorAll('button, [tabindex]')) b.tabIndex = -1; // keyboard users have the real header
+  sh.hidden = false;
+  stickySync();
+}
+function stickyAll() { for (const b of $$('#all-box, #bt-lead .tbl-box:not(.sh-in), #sheet-body .tbl-box:not(.sh-in)')) stickyHead(b); }
+function stickySync() {
+  for (const sh of $$('.sh')) {
+    const box = sh.parentElement.querySelector(':scope > .tbl-box'), th = box && box.querySelector('thead');
+    if (sh.hidden || !th || !box.offsetParent) { sh.classList.remove('on'); continue; }
+    const sc = sh.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : 0, r = th.getBoundingClientRect();
+    const on = r.top < top - 1 && box.getBoundingClientRect().bottom > top + 1;
+    if (sh.classList.contains('on') !== on) sh.classList.toggle('on', on);
+    const inn = sh.firstElementChild;
+    if (on && inn && Math.abs(inn.scrollLeft - box.scrollLeft) > 0.5) inn.scrollLeft = box.scrollLeft;
+  }
+}
+
+// ---------- back to top: a small round button once the page is a screen down ----------
+let scrollRaf = 0;
+function onScroll() {
+  if (scrollRaf) return;
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = 0;
+    const on = !SOLO && !$('#app').hidden && scrollY > innerHeight * 0.9;
+    const t = $('#totop');
+    if (t.classList.contains('on') !== on) t.classList.toggle('on', on);
+    stickySync();
+  });
+}
+function toTop() {
+  cancelSettle();
+  scrollTo({ top: 0, behavior: reduced() ? 'auto' : 'smooth' });
+  const r = $('#refresh'); // the keyboard lands at the top too
+  if (r && !r.hidden) r.focus({ preventScroll: true });
+}
+addEventListener('scroll', onScroll, { passive: true });
+$('#sheet-body').addEventListener('scroll', onScroll, { passive: true });
+
+// ---------- sheets: swipe down to close on a phone ----------
+// From the grab handle or the header, or anywhere in the content once it is scrolled to the top: the sheet follows the
+// finger down (a little give upwards), closes past a quarter of its height or on a quick flick, else springs back.
+// A sideways or upward swipe stays the content's own scroll. Under reduced motion it closes or settles at once.
+const SW = { on: false, off: 0 };
+const sheetCard = $('#sheet .sheet-card'), sheetScrim = $('#sheet .scrim'), sheetBody = $('#sheet-body');
+const phoneSheet = () => matchMedia('(max-width:700px)').matches;
+function sheetReset() { for (const a of sheetCard.getAnimations()) if (a.id === 'swipe') a.cancel(); sheetCard.style.transform = ''; sheetScrim.style.opacity = ''; sheetCard.classList.remove('swiping'); SW.off = 0; }
+function sheetFollow(dy) {
+  const off = dy > 0 ? dy : -Math.min(24, Math.sqrt(-dy) * 2.5); // rubber band upwards
+  SW.off = off;
+  sheetCard.style.transform = `translateY(${off.toFixed(1)}px)`;
+  sheetScrim.style.opacity = String(Math.max(0.2, 1 - Math.max(0, off) / Math.max(200, sheetCard.offsetHeight)));
+}
+function sheetRelease(v) { // v: px per ms, downwards positive
+  const h = sheetCard.offsetHeight, off = SW.off, go = off > Math.min(180, h * 0.25) || (v > 0.5 && off > 24);
+  sheetCard.classList.remove('swiping');
+  if (reduced()) { if (go) closeDetail(); else sheetReset(); return; }
+  const to = go ? h + 24 : 0, ms = go ? clamp((to - off) / Math.max(v, 1.4), 120, 260) : 240;
+  const a = sheetCard.animate([{ transform: `translateY(${off}px)` }, { transform: `translateY(${to}px)` }], { duration: ms, easing: go ? 'cubic-bezier(.4,0,1,1)' : 'cubic-bezier(.2,.9,.25,1.15)', fill: 'forwards' });
+  a.id = 'swipe';
+  sheetScrim.animate([{ opacity: sheetScrim.style.opacity || 1 }, { opacity: go ? 0 : 1 }], { duration: ms, fill: 'forwards' }).id = 'swipe';
+  a.onfinish = () => { if (go) closeDetail(); for (const x of sheetScrim.getAnimations()) if (x.id === 'swipe') x.cancel(); sheetReset(); };
+}
+sheetCard.addEventListener('touchstart', (e) => {
+  SW.on = false;
+  if (e.touches.length !== 1 || !phoneSheet() || e.target.closest('input, select, textarea')) return;
+  const head = !!e.target.closest('.grab, .sheet-head');
+  if (!head && sheetBody.scrollTop > 0) return;
+  const t = e.touches[0];
+  Object.assign(SW, { on: true, drag: false, x0: t.clientX, y0: t.clientY, off: 0, s: [[t.clientY, e.timeStamp]] });
+}, { passive: true });
+sheetCard.addEventListener('touchmove', (e) => {
+  if (!SW.on) return;
+  const t = e.touches[0], dx = t.clientX - SW.x0, dy = t.clientY - SW.y0;
+  if (!SW.drag) {
+    if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    if (dy <= 0 || Math.abs(dy) < Math.abs(dx) * 1.2) { SW.on = false; return; } // up or sideways: the content's own scroll
+    SW.drag = true; SW.y0 = t.clientY; sheetCard.classList.add('swiping');
+  }
+  if (e.cancelable) e.preventDefault();
+  sheetFollow(t.clientY - SW.y0);
+  SW.s.push([t.clientY, e.timeStamp]); if (SW.s.length > 8) SW.s.shift();
+}, { passive: false });
+function sheetEnd(e) {
+  if (!SW.on) return;
+  SW.on = false;
+  if (!SW.drag) return;
+  const s = SW.s.filter((q) => e.timeStamp - q[1] < 100), v = e.type === 'touchend' && s.length >= 2 ? (s[s.length - 1][0] - s[0][0]) / Math.max(8, s[s.length - 1][1] - s[0][1]) : 0;
+  sheetRelease(v);
+}
+sheetCard.addEventListener('touchend', sheetEnd);
+sheetCard.addEventListener('touchcancel', sheetEnd);
+// with a mouse (a narrow laptop window), the grab handle drags the same way
+sheetCard.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'mouse' || e.button !== 0 || !phoneSheet() || !e.target.closest('.grab')) return;
+  Object.assign(SW, { mouse: e.pointerId, y0: e.clientY, off: 0, s: [[e.clientY, e.timeStamp]] });
+  try { sheetCard.setPointerCapture(e.pointerId); } catch (er) { /* a synthetic pointer */ }
+  sheetCard.classList.add('swiping');
+});
+sheetCard.addEventListener('pointermove', (e) => { if (SW.mouse !== e.pointerId) return; sheetFollow(e.clientY - SW.y0); SW.s.push([e.clientY, e.timeStamp]); if (SW.s.length > 8) SW.s.shift(); });
+const sheetMouseEnd = (e) => { if (SW.mouse !== e.pointerId) return; SW.mouse = null; const s = SW.s.filter((q) => e.timeStamp - q[1] < 100); sheetRelease(e.type === 'pointerup' && s.length >= 2 ? (s[s.length - 1][0] - s[0][0]) / Math.max(8, s[s.length - 1][1] - s[0][1]) : 0); };
+sheetCard.addEventListener('pointerup', sheetMouseEnd);
+sheetCard.addEventListener('pointercancel', sheetMouseEnd);
 
 // ---------- events ----------
 function setWin(wk) {
@@ -1832,7 +2391,9 @@ document.addEventListener('click', (e) => {
     case 'tab': setBestSel(el.dataset.id, false); break;
     case 'pair': openPair(el.dataset.key, el); break;
     case 'zoom': zoom(el.dataset.chart, Number(el.dataset.dir)); break;
-    case 'zreset': if (S.zoom) delete S.zoom[el.dataset.chart]; rerender(el.dataset.chart); break;
+    case 'zreset': zreset(el.dataset.chart); break;
+    case 'pan': pzStep(el.dataset.chart, Number(el.dataset.dir)); break;
+    case 'totop': toTop(); break;
     case 'openchart': openChart(el.dataset.chart, el.dataset.pool); break;
     case 'pair-row': pairRowToCard(el.dataset.id); break;
     case 'refresh': manualRefresh(); break;
@@ -1886,8 +2447,14 @@ setInterval(renderFresh, 15e3);
 let lastW = innerWidth, rt = 0;
 addEventListener('resize', () => {
   if (innerWidth === lastW) return;
+  const crossed = (lastW < 600) !== (innerWidth < 600); // the daily strip's default view changes at 600 px
   lastW = innerWidth; clearTimeout(rt);
-  rt = setTimeout(() => { if (S.live && S.bt) { try { renderBt(); } catch (e) { console.error('panel bt failed: ' + e.message); } } }, 120);
+  rt = setTimeout(() => {
+    if (!S.live) return;
+    try { if (S.bt) renderBt(); if (crossed) { renderBest(); if (S.detail) renderDetail(); } } catch (e) { console.error('panel failed on resize: ' + e.message); }
+    if (SOLO) isolate();
+    stickyAll(); onScroll();
+  }, 120);
 });
 window.LPS = Object.freeze({ build: BUILD, refresh: () => refresh() });
 boot();

@@ -5,7 +5,7 @@
 //   node tools/site-test.mjs                         Chromium, widths 360…1920 plus reduced motion
 //   node tools/site-test.mjs --browser webkit --device "iPhone 15"     phone = that device; laptop 1440
 //   node tools/site-test.mjs --shots <dir>           also save full-page screenshots (cut into parts)
-//   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states clicks motion
+//   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan sheets sticky top zoomfit rows refresh clicks motion
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
@@ -42,8 +42,8 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,rows,refresh,clicks,motion').split(',');
-const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1440, 1920];
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,pan,sheets,sticky,top,zoomfit,rows,refresh,clicks,motion').split(',');
+const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
 // ---------- results: names and short reasons only ----------
@@ -523,6 +523,425 @@ async function testCharts(browser) {
   await fresh.ctx.close();
 }
 
+// ---------- 4f. pan and zoom: drag, rubber band, flick, edge buttons, double-tap, wheel, pop-out windows ----------
+// Each chart that pans carries data-view="<position>,<view width>[,<y>]" on its host [data-pz]: the checks read it.
+const pzView = (page, id) => page.evaluate((id) => { const h = document.querySelector(`[data-pz="${id}"]`); if (!h) return null; const [c, w, y] = h.dataset.view.split(',').map(Number); return { c, w, y }; }, id);
+async function pzBox(page, id) {
+  await page.evaluate((id) => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector(`[data-pz="${id}"]`).scrollIntoView({ block: 'center' }); }, id);
+  await sleep(80);
+  return page.locator(`[data-pz="${id}"]`).boundingBox();
+}
+// a mouse drag across a chart (pointer events, as a finger gives them): dx, dy in px; `up: false` keeps the button down
+async function pzDrag(page, id, dx, { dy = 0, steps = 10, ms = 16, y = 0.5, up = true, settle = 650, hold = 0 } = {}) {
+  const b = await pzBox(page, id), x0 = b.x + b.width / 2, y0 = b.y + b.height * y;
+  await page.mouse.move(x0, y0); await page.mouse.down();
+  for (let i = 1; i <= steps; i++) { await page.mouse.move(x0 + (dx * i) / steps, y0 + (dy * i) / steps); await sleep(ms); }
+  if (hold) await sleep(hold); // the finger stops before it lifts: no flick
+  if (up) { await page.mouse.up(); await sleep(settle); }
+}
+const pzClick = (page, sel) => page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
+const near = (a, b, e = 1e-3) => Math.abs(a - b) <= e;
+async function testPan(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    // the liquidity chart: at its default view the map fits, so a drag only stretches past the data and springs back
+    const ta = await p.$eval('[data-pz="liq-best"]', (h) => getComputedStyle(h).touchAction);
+    ok(`pan ${tag}: charts pan sideways and leave vertical swipes and pinch to the page (touch-action ${ta})`, /pan-y/.test(ta) && /pinch-zoom/.test(ta));
+    let v = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: the liquidity chart opens on the price, ±45% wide`, near(v.c, 0) && near(v.w, 0.9), JSON.stringify(v));
+    await pzDrag(p, 'liq-best', 140, { up: false });
+    await sleep(60);
+    const mid = await pzView(p, 'liq-best'), hatch = await p.$$eval('[data-pz="liq-best"] .pz-end', (e) => e.length);
+    await p.mouse.up(); await sleep(700);
+    v = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: past the data a drag rubber-bands over a "no data" hatch, then springs back`, mid.c < -0.01 && hatch > 0 && near(v.c, 0), `${mid.c} ${hatch} ${v.c}`);
+    // + twice: two zoom steps around the view's centre
+    await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
+    const z1 = await pzView(p, 'liq-best');
+    await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
+    const z2 = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: + pressed twice zooms twice (±25%, then ±12%)`, near(z1.w, 0.5) && near(z2.w, 0.24), `${z1.w} ${z2.w}`);
+    ok(`pan ${tag}: zoomed in, edge buttons show more on both sides`, (await p.$$('[data-pz="liq-best"] > .pz-edge:not([hidden])')).length === 2);
+    // a slow drag pans by the distance dragged; no coasting after a slow release
+    await pzDrag(p, 'liq-best', -100, { steps: 12, ms: 30, settle: 50, hold: 160 });
+    const d1 = await pzView(p, 'liq-best'); await sleep(400);
+    const d2 = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: dragging left shows higher prices, by the distance dragged`, d1.c > 0.02 && d1.c < 0.2 && near(d1.c, d2.c, 2e-3), `${d1.c} ${d2.c}`);
+    ok(`pan ${tag}: a panned chart shows "reset"`, await p.isVisible('[data-chartbox="liq-best"] [data-act="zreset"]'));
+    // zoom keeps the view's centre
+    await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
+    const z3 = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: + zooms around the view's centre, not back to the price`, near(z3.w, 0.12) && near(z3.c, d2.c, 2e-3), `${z3.c} vs ${d2.c}`);
+    await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(120);
+    // an edge button moves half a view
+    const e0 = await pzView(p, 'liq-best');
+    await pzClick(p, '[data-pz="liq-best"] > .pz-edge.l'); await sleep(450);
+    const e1 = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: the ◂ edge button moves half a view towards lower prices`, e1.c < e0.c - 0.05, `${e0.c} → ${e1.c}`);
+    // a flick coasts on after the release and slows down
+    await pzDrag(p, 'liq-best', 160, { steps: 5, ms: 8, settle: 0 });
+    const f0 = await pzView(p, 'liq-best'); await sleep(250);
+    const f1 = await pzView(p, 'liq-best'); await sleep(900);
+    const f2 = await pzView(p, 'liq-best');
+    const lo = await p.evaluate(() => -0.45 + 0.12); // the left limit at ±12% for a ±45% map
+    ok(`pan ${tag}: a flick coasts after the release, then stops inside the data`, f1.c < f0.c - 1e-3 && f2.c >= lo - 1e-3 && near(f2.c, (await pzView(p, 'liq-best')).c), `${f0.c} ${f1.c} ${f2.c}`);
+    // a mostly vertical drag doesn't pan
+    const s0 = await pzView(p, 'liq-best');
+    await pzDrag(p, 'liq-best', 8, { dy: 90, settle: 300 });
+    ok(`pan ${tag}: a mostly vertical swipe leaves the chart alone`, near((await pzView(p, 'liq-best')).c, s0.c));
+    // a sideways wheel (trackpad) pans; an up-down wheel doesn't
+    const b = await pzBox(p, 'liq-best');
+    await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await p.mouse.wheel(0, 120); await sleep(300);
+    const w0 = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: an up-down wheel over a chart doesn't pan it`, near(w0.c, s0.c));
+    await p.evaluate(() => { const h = document.querySelector('[data-pz="liq-best"]'), r = h.getBoundingClientRect(); h.dispatchEvent(new WheelEvent('wheel', { deltaX: 80, deltaY: 2, clientX: r.left + r.width / 2, clientY: r.top + 60, bubbles: true, cancelable: true })); });
+    await sleep(350);
+    ok(`pan ${tag}: a sideways wheel (trackpad) pans`, (await pzView(p, 'liq-best')).c > w0.c + 1e-3);
+    // a double-tap returns to the default view
+    const c = await pzBox(p, 'liq-best');
+    await p.mouse.click(c.x + c.width / 2, c.y + 70); await sleep(90); await p.mouse.click(c.x + c.width / 2, c.y + 70); await sleep(300);
+    v = await pzView(p, 'liq-best');
+    ok(`pan ${tag}: a double-tap resets zoom and pan`, near(v.c, 0) && near(v.w, 0.9) && !(await p.isVisible('[data-chartbox="liq-best"] [data-act="zreset"]')), JSON.stringify(v));
+    // the daily strip: the newest day shows by default; a drag shows older days; "older" and "newer" edge buttons
+    let dv = await pzView(p, 'daily-best');
+    const days = await p.evaluate(() => document.querySelectorAll('[data-pz="daily-best"] rect').length);
+    ok(`pan ${tag}: the daily strip shows the newest day by default (${phone ? '15' : '30'} of ${days} days)`, near(dv.c, days) && near(dv.w, phone ? 15 : 30), JSON.stringify(dv));
+    if (!phone) { await pzClick(p, '[data-act="zoom"][data-chart="daily-best"][data-dir="1"]'); await sleep(150); dv = await pzView(p, 'daily-best'); }
+    ok(`pan ${tag}: …with a "◂ older" button and no "newer" one`, (await p.isVisible('[data-pz="daily-best"] > .pz-edge.l')) && !(await p.isVisible('[data-pz="daily-best"] > .pz-edge.r')) && /older/i.test(await p.innerText('[data-pz="daily-best"] > .pz-edge.l')));
+    const cap0 = await p.innerText('[data-chartbox="daily-best"] .pane-title');
+    await pzDrag(p, 'daily-best', 150);
+    const dv2 = await pzView(p, 'daily-best'), cap1 = await p.innerText('[data-chartbox="daily-best"] .pane-title');
+    ok(`pan ${tag}: dragging the strip right shows older days, and its labels follow`, dv2.c < dv.c - 1 && cap1 !== cap0 && /→/.test(cap1) && (await p.isVisible('[data-pz="daily-best"] > .pz-edge.r')), `${dv.c} → ${dv2.c}`);
+    for (let k = 0; k < 6 && (await p.isVisible('[data-pz="daily-best"] > .pz-edge.l')); k++) { await pzClick(p, '[data-pz="daily-best"] > .pz-edge.l'); await sleep(380); }
+    dv = await pzView(p, 'daily-best');
+    ok(`pan ${tag}: "◂ older" pans step by step back to the first day, then hides`, near(dv.c, dv.w) && !(await p.isVisible('[data-pz="daily-best"] > .pz-edge.l')), JSON.stringify(dv));
+    // the detail panel's time charts pan once zoomed in
+    await p.click('#best [data-act="detail"]');
+    await p.waitForSelector('#sheet:not([hidden])');
+    const bad = [];
+    for (const id of await p.$$eval('#sheet [data-pz]', (h) => h.map((x) => x.dataset.pz).filter((x) => x !== 'liq-detail'))) {
+      if (!(await p.isEnabled(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`))) continue;
+      await p.evaluate((id) => document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`).click(), id); await sleep(120);
+      const a = await pzView(p, id);
+      await pzDrag(p, id, 120, { y: 0.4 });
+      const z = await pzView(p, id);
+      if (!(z.c < a.c - 0.01)) bad.push(id);
+    }
+    ok(`pan ${tag}: every time chart in the detail panel drags to earlier data once zoomed in`, bad.length === 0, bad.join(','));
+    await p.click('#sheet-close');
+    // replay, strategy lab and the scatter
+    await p.click('#bt-lead tr.row'); await sleep(900);
+    const bt = [];
+    for (const id of ['rp', 'rp-money', 'lab']) {
+      await pzClick(p, `[data-act="zoom"][data-chart="${id}"][data-dir="1"]`); await sleep(150);
+      const a = await pzView(p, id);
+      await pzDrag(p, id, 120, { y: 0.45 });
+      if (!((await pzView(p, id)).c < a.c - 0.01)) bt.push(id);
+    }
+    ok(`pan ${tag}: the replay's price, money and strategy-lab charts drag to earlier data`, bt.length === 0, bt.join(','));
+    await pzClick(p, '[data-act="zoom"][data-chart="scatter"][data-dir="1"]'); await sleep(150);
+    const sc0 = await pzView(p, 'scatter');
+    ok(`pan ${tag}: a zoomed scatter takes drags both ways (touch-action pinch-zoom)`, (await p.$eval('[data-pz="scatter"]', (h) => getComputedStyle(h).touchAction)) === 'pinch-zoom');
+    await pzDrag(p, 'scatter', -60, { dy: -50, steps: 8 });
+    const sc1 = await pzView(p, 'scatter');
+    ok(`pan ${tag}: …and moves right and up, inside the full view`, sc1.c > sc0.c + 0.1 && sc1.y < sc0.y - 0.1, `${JSON.stringify(sc0)} ${JSON.stringify(sc1)}`);
+    // pop-out window: it opens on the same zoom and pan, and drags and zooms there too
+    await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
+    await pzDrag(p, 'liq-best', -60, { steps: 12, ms: 30, hold: 160 });
+    const here = await pzView(p, 'liq-best');
+    await pzClick(p, '[data-act="openchart"][data-chart="liq-best"]');
+    const u = await p.evaluate(() => window.__opened.slice(-1)[0]);
+    ok(`pan ${tag}: "open in a new window" carries the zoom and the pan`, /[?&]z=2(&|$)/.test(u) && /[?&]pan=-?\d/.test(u), u.replace(/^.*\?/, '').slice(0, 80));
+    const w2 = await t.ctx.newPage();
+    await w2.goto(u);
+    await w2.waitForSelector('.solo-box [data-pz="liq-best"]', { timeout: 20000 });
+    await sleep(300);
+    const s1 = await pzView(w2, 'liq-best');
+    ok(`pan ${tag}: the window opens on that very view`, near(s1.c, here.c, 2e-3) && near(s1.w, here.w), `${JSON.stringify(s1)} vs ${JSON.stringify(here)}`);
+    for (let k = 0; k < 2; k++) { await w2.click('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(150); }
+    const s2 = await pzView(w2, 'liq-best');
+    await pzDrag(w2, 'liq-best', 120, { y: 0.4 });
+    const s3 = await pzView(w2, 'liq-best');
+    ok(`pan ${tag}: in the window + zooms step after step and a drag pans`, near(s2.w, 0.12) && s3.c < s2.c - 0.01, `${s2.w} ${s2.c}→${s3.c}`);
+    ok(`pan ${tag}: …no sideways scroll there`, (await w2.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0);
+    await w2.close();
+    ok(`pan ${tag}: no NaN`, noJunk(await bodyText(p)));
+    ok(`pan ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    if (SHOTS) {
+      await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(200);
+      await snap(p, `pan-${tag}-liq-zoomed`, '[data-chartbox="liq-best"]');
+      await snap(p, `pan-${tag}-daily`, '[data-chartbox="daily-best"]');
+    }
+    await t.ctx.close();
+  }
+  // reduced motion: no coasting and no animated steps
+  const r = await openUnlocked(browser, 'default', { phone: true, reducedMotion: 'reduce' }), p = r.page;
+  await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
+  await pzDrag(p, 'liq-best', 160, { steps: 5, ms: 8, settle: 0 });
+  const a = await pzView(p, 'liq-best'); await sleep(300);
+  ok('pan: under reduced motion a flick stops where the finger lifts', near((await pzView(p, 'liq-best')).c, a.c));
+  await pzClick(p, '[data-pz="liq-best"] > .pz-edge.r:not([hidden])');
+  await sleep(30);
+  ok('pan: under reduced motion an edge button jumps at once', (await pzView(p, 'liq-best')).c > a.c + 0.05 && (await p.evaluate(() => document.getAnimations().length)) === 0);
+  ok('pan: reduced motion, no page errors', r.errors.length === 0, r.errors[0]);
+  await r.ctx.close();
+}
+
+// ---------- 4g. sheets: swipe down to close on a phone ----------
+// touch events are made in the page (Playwright has no touch drag); a mouse on the grab handle is the fallback
+async function swipe(page, sel, dy, { ms = 16, steps = 10, dx = 0, at = 0.5 } = {}) {
+  return page.evaluate(async ({ sel, dy, ms, steps, dx, at }) => {
+    const el = document.querySelector(sel), r = el.getBoundingClientRect(), x0 = r.left + r.width / 2, y0 = r.top + Math.min(r.height * at, 40);
+    const target = document.elementFromPoint(x0, y0) || el;
+    let T;
+    try { T = (x, y) => new Touch({ identifier: 7, target, clientX: x, clientY: y, pageX: x, pageY: y }); T(0, 0); } catch (e) { return 'no-touch'; }
+    const fire = (type, x, y) => { const t = T(x, y); target.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
+    fire('touchstart', x0, y0);
+    for (let i = 1; i <= steps; i++) { await new Promise((r2) => setTimeout(r2, ms)); fire('touchmove', x0 + (dx * i) / steps, y0 + (dy * i) / steps); }
+    fire('touchend', x0 + dx, y0 + dy);
+    return 'touch';
+  }, { sel, dy, ms, steps, dx, at });
+}
+// a pull: touch events where the browser can make them, else a mouse drag on the grab handle (WebKit has no Touch())
+async function pull(page, sel, dy, o = {}) {
+  const how = await swipe(page, sel, dy, o);
+  if (how !== 'no-touch') return how;
+  if (sel !== '#sheet .grab') return 'none';
+  const { ms = 16, steps = 10 } = o, b = await page.locator(sel).boundingBox(), x = b.x + b.width / 2, y = b.y + b.height / 2;
+  await page.mouse.move(x, y); await page.mouse.down();
+  for (let i = 1; i <= steps; i++) { await page.mouse.move(x, y + (dy * i) / steps); await sleep(ms); }
+  await page.mouse.up();
+  return 'mouse';
+}
+async function testSheets(browser) {
+  const t = await openUnlocked(browser, 'default', { phone: true }), p = t.page;
+  const open = async () => { await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#best [data-act="detail"]').click(); }); await p.waitForSelector('#sheet:not([hidden])'); await sleep(320); };
+  const isOpen = () => p.isVisible('#sheet');
+  const ty = () => p.$eval('#sheet .sheet-card', (c) => new DOMMatrix(getComputedStyle(c).transform).m42);
+  await open();
+  const g = await p.$eval('#sheet .grab', (e) => { const r = e.getBoundingClientRect(); return { h: r.height, w: r.width, top: r.top, ta: getComputedStyle(e).touchAction }; });
+  ok('sheets phone: a grab handle tops the sheet', g.h >= 16 && g.top >= 0 && g.top < 40 && g.ta === 'none', JSON.stringify(g));
+  ok('sheets phone: the close button stays', await p.isVisible('#sheet-close'));
+  if (SHOTS) await p.screenshot({ path: path.join(SHOTS, 'sheet-phone-handle.png') });
+  // a short, slow pull springs back
+  let how = await pull(p, '#sheet .grab', 50, { ms: 40, steps: 6 });
+  await sleep(450);
+  ok(`sheets phone: a short slow pull springs back (${how})`, (await isOpen()) && (await ty()) === 0);
+  // mid-pull the sheet follows the finger (mouse on the handle: the same code path past the first move)
+  const gb = await p.locator('#sheet .grab').boundingBox(), gx = gb.x + gb.width / 2, gy = gb.y + gb.height / 2;
+  await p.mouse.move(gx, gy); await p.mouse.down();
+  for (let i = 1; i <= 8; i++) { await p.mouse.move(gx, gy + i * 15); await sleep(20); }
+  const mid = await ty();
+  if (SHOTS) await p.screenshot({ path: path.join(SHOTS, 'sheet-phone-mid-swipe.png') });
+  for (let i = 7; i >= 0; i--) { await p.mouse.move(gx, gy + i * 15); await sleep(40); }
+  await sleep(150); await p.mouse.up(); await sleep(450);
+  ok('sheets phone: the sheet follows the finger down, then springs back when let go near the top', mid > 100 && mid < 140 && (await isOpen()) && (await ty()) === 0, String(mid));
+  // a long pull from the handle closes it
+  how = await pull(p, '#sheet .grab', 320);
+  await sleep(500);
+  ok(`sheets phone: a long pull down closes the sheet (${how})`, !(await isOpen()));
+  // from the content: only when it is scrolled to the top (touch only: a mouse doesn't drag content)
+  await open();
+  await p.$eval('#sheet-body', (b) => { b.scrollTop = 300; });
+  await sleep(100);
+  how = await pull(p, '#sheet-body', 260, { at: 0.5 });
+  await sleep(500);
+  if (how === 'none') ok('sheets phone: pulls inside the content (no synthetic touch in this browser: skipped)', true);
+  else {
+    ok('sheets phone: a pull inside scrolled content doesn\'t close (it scrolls)', await isOpen());
+    await p.$eval('#sheet-body', (b) => { b.scrollTop = 0; });
+    await sleep(100);
+    await pull(p, '#sheet-body', 260, { at: 0.5 });
+    await sleep(500);
+    ok('sheets phone: …at the top of the content, the same pull closes it', !(await isOpen()));
+    await open();
+    await pull(p, '#sheet-body', 30, { dx: 200, at: 0.5 });
+    await sleep(450);
+    ok('sheets phone: a sideways swipe doesn\'t close it', await isOpen());
+  }
+  // a quick flick closes even when short
+  if (!(await isOpen())) await open();
+  await pull(p, '#sheet .grab', 70, { ms: 8, steps: 4 });
+  await sleep(500);
+  ok('sheets phone: a quick short flick down closes it', !(await isOpen()));
+  // the pair view is the same sheet
+  await p.evaluate(() => document.querySelector('#best h2 button[data-act="pair"]').click());
+  await p.waitForSelector('#sheet:not([hidden])'); await sleep(320);
+  await pull(p, '#sheet .grab', 320);
+  await sleep(500);
+  ok('sheets phone: the pair view closes with a swipe as well', !(await isOpen()));
+  ok('sheets phone: no page errors', t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+  // reduced motion: closes at once, nothing animates
+  const r = await openUnlocked(browser, 'default', { phone: true, reducedMotion: 'reduce' });
+  await r.page.click('#best [data-act="detail"]'); await r.page.waitForSelector('#sheet:not([hidden])');
+  await pull(r.page, '#sheet .grab', 320);
+  await sleep(40);
+  ok('sheets: under reduced motion a swipe closes at once, unanimated', !(await r.page.isVisible('#sheet')) && (await r.page.evaluate(() => document.getAnimations().length)) === 0);
+  await r.ctx.close();
+  // a laptop's side panel has no handle and ignores swipes
+  const l = await openUnlocked(browser, 'default', { width: 1440 });
+  await l.page.click('#best [data-act="detail"]'); await l.page.waitForSelector('#sheet:not([hidden])');
+  ok('sheets laptop: the side panel has no grab handle', !(await l.page.isVisible('#sheet .grab')));
+  await swipe(l.page, '#sheet-body', 320, { at: 0.2 });
+  await sleep(400);
+  ok('sheets laptop: …and a swipe doesn\'t close it', await l.page.isVisible('#sheet'));
+  await l.ctx.close();
+}
+
+// ---------- 4h. sticky table headers and back to top ----------
+const STICKY = (sel) => {
+  const box = document.querySelector(sel), sh = box.parentElement.querySelector(':scope > .sh'), real = [...box.querySelectorAll('thead th')], copy = sh ? [...sh.querySelectorAll('th')] : [];
+  const sc = box.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : 0;
+  const on = !!sh && sh.classList.contains('on') && getComputedStyle(sh.firstElementChild).display !== 'none';
+  const cr = on ? sh.firstElementChild.getBoundingClientRect() : null, br = box.getBoundingClientRect();
+  const vw = sh ? sh.firstElementChild.getBoundingClientRect() : br;
+  // every column the user can see lines up with the real one under it
+  let mis = 0;
+  if (on) real.forEach((th, i) => { const a = th.getBoundingClientRect(), b = copy[i] && copy[i].getBoundingClientRect(); if (!b) { mis++; return; } const seen = Math.min(a.right, vw.right) - Math.max(a.left, vw.left) > 4; if (seen && (Math.abs(a.left - b.left) > 1 || Math.abs(a.width - b.width) > 1)) mis++; });
+  return { on, top: cr ? cr.top - top : null, bottom: cr ? cr.bottom : null, boxBottom: br.bottom, mis, cols: real.length };
+};
+async function testSticky(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); });
+    await sleep(150);
+    let s = await p.evaluate(STICKY, '#all-box');
+    ok(`sticky ${tag}: no header copy at the top of the page`, !s.on);
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
+    await sleep(200);
+    s = await p.evaluate(STICKY, '#all-box');
+    ok(`sticky ${tag}: inside All pools the header row sticks to the top, columns aligned (${s.cols})`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
+    const hit = await p.evaluate(() => { const r = document.querySelector('#all .sh .sh-in').getBoundingClientRect(), e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e && !!e.closest('.sh'); });
+    ok(`sticky ${tag}: …on top of the rows, not under them`, hit);
+    await p.evaluate(() => { const b = document.querySelector('#all-box'); b.scrollLeft = Math.min(260, b.scrollWidth - b.clientWidth); });
+    await sleep(200);
+    s = await p.evaluate(STICKY, '#all-box');
+    ok(`sticky ${tag}: …and follows the table's sideways scroll`, s.on && s.mis === 0, JSON.stringify(s));
+    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `sticky-${tag}.png`) });
+    // a sort from the stuck header works and the header stays
+    const before = await p.getAttribute('#all-tbl thead th:nth-child(3)', 'aria-sort');
+    await p.evaluate(() => document.querySelector('#all .sh button[data-k="net"]').click());
+    await sleep(250);
+    ok(`sticky ${tag}: sorting from the stuck header sorts the table`, before === 'none' && (await p.getAttribute('#all-tbl thead th:nth-child(3)', 'aria-sort')) !== 'none' && (await p.evaluate(STICKY, '#all-box')).on);
+    // at the end of the table it leaves with the table: never over what follows
+    await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom - 30); });
+    await sleep(200);
+    s = await p.evaluate(STICKY, '#all-box');
+    ok(`sticky ${tag}: at the table's end the header goes with it, never past it`, !s.on || s.bottom <= s.boxBottom + 1, JSON.stringify(s));
+    await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom + 40); });
+    await sleep(200);
+    ok(`sticky ${tag}: past the table no header copy is left behind`, !(await p.evaluate(STICKY, '#all-box')).on);
+    await p.evaluate(() => scrollTo(0, 0)); await sleep(200);
+    ok(`sticky ${tag}: back at the top it is gone (not stuck)`, !(await p.evaluate(STICKY, '#all-box')).on);
+    // the detail panel's long "every window" table sticks inside the panel's own scroll
+    await p.click('#best [data-act="detail"]');
+    await p.waitForSelector('#sheet:not([hidden])'); await sleep(320);
+    const wsel = '#sheet-body .tbl-box:not(.sh-in) > .wtbl';
+    await p.evaluate((sel) => { const b = document.querySelector('#sheet-body'), tb = document.querySelector(sel).closest('.tbl-box'), r = tb.querySelector('tbody tr:nth-child(8)').getBoundingClientRect(); b.scrollTop += r.top - b.getBoundingClientRect().top - 40; }, wsel);
+    await sleep(200);
+    const ws = await p.evaluate((sel) => { const tb = document.querySelector(sel).closest('.tbl-box'); tb.id ||= 'wtbl-box'; return '#' + tb.id; }, wsel);
+    s = await p.evaluate(STICKY, ws);
+    ok(`sticky ${tag}: in the detail panel the window table's header sticks to the panel's top`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
+    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `sticky-sheet-${tag}.png`) });
+    await p.click('#sheet-close');
+    ok(`sticky ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+const TOTOP = () => { const b = document.querySelector('#totop'), r = b.getBoundingClientRect(), cs = getComputedStyle(b); return { on: cs.visibility === 'visible' && +cs.opacity > 0, w: r.width, h: r.height, inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, y: scrollY, label: b.getAttribute('aria-label') }; };
+async function testTop(browser) {
+  for (const [tag, o] of [['phone', { phone: true }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page;
+    let b = await p.evaluate(TOTOP);
+    ok(`top ${tag}: no ↑ button at the top of the page`, !b.on);
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 0.5); });
+    await sleep(350);
+    ok(`top ${tag}: …nor half a screen down`, !(await p.evaluate(TOTOP)).on);
+    await p.evaluate(() => scrollTo(0, innerHeight * 1.6));
+    await sleep(350);
+    b = await p.evaluate(TOTOP);
+    ok(`top ${tag}: after a screen a round ↑ button appears, 44×44, inside the screen`, b.on && b.w >= 44 && b.h >= 44 && b.inside && b.label === 'Back to top', JSON.stringify(b));
+    if (SHOTS && tag !== 'phone reduced') await p.screenshot({ path: path.join(SHOTS, `totop-${tag}.png`) });
+    await p.click('#totop');
+    if (/reduced/.test(tag)) { await sleep(60); ok(`top ${tag}: under reduced motion it jumps to the top at once`, (await p.evaluate(() => scrollY)) === 0); }
+    else { await p.waitForFunction(() => scrollY === 0, null, { timeout: 4000 }).catch(() => {}); ok(`top ${tag}: it scrolls smoothly back to the top`, (await p.evaluate(() => scrollY)) === 0); }
+    await sleep(350);
+    ok(`top ${tag}: …and hides again`, !(await p.evaluate(TOTOP)).on);
+    ok(`top ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4i. zoom robustness: every zoom level and both pan ends, at every width, never break the layout ----------
+const CHART_AUDIT = (id) => {
+  const box = document.querySelector(`[data-chartbox="${id}"]`), host = box && box.querySelector(`[data-pz="${id}"]`);
+  if (!box || !host) return { missing: true };
+  const hr = host.getBoundingClientRect(), out = { hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth, w: Math.round(hr.width), over: [], outside: [], junk: /\bNaN\b|\bundefined\b|\bInfinity\b/.test(box.textContent) };
+  const head = box.querySelector(':scope > .chart-head, :scope > .pane-title');
+  const parts = head ? [...head.children].filter((e) => e.getBoundingClientRect().width > 0) : [];
+  const ctl = head ? [...head.querySelectorAll('.zseg, .zreset, .openwin')] : [];
+  const items = [...parts.filter((e) => !e.classList.contains('ctools')), ...ctl];
+  for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+    const a = items[i].getBoundingClientRect(), b = items[j].getBoundingClientRect();
+    if (a.right - 1 > b.left && b.right - 1 > a.left && a.bottom - 1 > b.top && b.bottom - 1 > a.top) out.over.push((items[i].className || items[i].tagName) + '×' + (items[j].className || items[j].tagName));
+  }
+  const ticks = [...host.querySelectorAll('.tick')].map((e) => e.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+  for (const r of ticks) if (r.left < hr.left - 1 || r.right > hr.right + 1) out.outside.push('tick');
+  for (let i = 1; i < ticks.length; i++) if (ticks[i].left < ticks[i - 1].right - 1 && Math.abs(ticks[i].top - ticks[i - 1].top) < 4) out.over.push('tick×tick');
+  for (const e of host.querySelectorAll(':scope > .pz-edge:not([hidden]), .mlab, .cpill')) { const r = e.getBoundingClientRect(); if (r.left < hr.left - 1 || r.right > hr.right + 1) out.outside.push(e.className.split(' ')[0]); }
+  return out;
+};
+async function testZoomFit(browser) {
+  const widths = DEVICE ? [0, 1300, 1440, 1920] : [360, 390, 430, 768, 1300, 1440, 1920];
+  const bad = [];
+  let checks = 0;
+  for (const w of widths) {
+    const still = w && w !== 390 && w !== 1440; // reduced motion at the other widths: edge steps land at once (and that mode is covered too)
+    const t = await openUnlocked(browser, 'default', w ? { width: w, height: 900, reducedMotion: still ? 'reduce' : 'no-preference' } : { phone: true }), p = t.page, tag = (w ? 'w' + w : 'phone') + (still ? ' reduced' : '');
+    for (const id of ['liq-best', 'daily-best']) {
+      const look = async (when) => {
+        const a = await p.evaluate(CHART_AUDIT, id);
+        checks++;
+        if (a.missing || a.hscroll > 0 || a.over.length || a.outside.length || a.junk) bad.push(`${tag} ${id} ${when}: ${a.missing ? 'missing' : [a.hscroll > 0 ? 'page scrolls sideways' : '', ...a.over, ...a.outside, a.junk ? 'NaN' : ''].filter(Boolean).join(' ')}`);
+        return a;
+      };
+      const w0 = (await look('default')).w;
+      for (let k = 0; k < 5 && (await p.isEnabled(`[data-act="zoom"][data-chart="${id}"][data-dir="-1"]`)); k++) { await pzClick(p, `[data-act="zoom"][data-chart="${id}"][data-dir="-1"]`); await sleep(90); await look('out ' + k); }
+      for (let k = 0; k < 6 && (await p.isEnabled(`[data-act="zoom"][data-chart="${id}"][data-dir="1"]`)); k++) {
+        await pzClick(p, `[data-act="zoom"][data-chart="${id}"][data-dir="1"]`); await sleep(90);
+        const a = await look('in ' + k);
+        if (a.w !== w0) bad.push(`${tag} ${id}: the chart changed width when zoomed (${w0} → ${a.w})`);
+        for (const side of ['l', 'r']) {
+          for (let s = 0; s < 8 && (await p.isVisible(`[data-pz="${id}"] > .pz-edge.${side}`)); s++) { await pzClick(p, `[data-pz="${id}"] > .pz-edge.${side}`); await sleep(still ? 40 : 320); }
+          await look(`in ${k} at the ${side === 'l' ? 'left' : 'right'} end`);
+        }
+      }
+      if (SHOTS && !still) await snap(p, `zoomfit-${tag}-${id}-max`, `[data-chartbox="${id}"]`);
+      await pzClick(p, `[data-act="zreset"][data-chart="${id}"]`).catch(() => {});
+      await sleep(120);
+    }
+    if (t.errors.length) bad.push(`${tag}: page error ${t.errors[0]}`);
+    await t.ctx.close();
+  }
+  ok(`zoomfit: every zoom level and both pan ends keep the layout whole (${checks} views, widths ${widths.map((x) => x || 'phone').join('/')})`, bad.length === 0, bad.slice(0, 3).join(' | '));
+  // the detail panel's charts at their deepest zoom, phone and laptop, plus reduced motion
+  for (const [tag, o] of [['phone', { phone: true }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page;
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])');
+    for (const id of await p.$$eval('#sheet [data-pz]', (h) => h.map((x) => x.dataset.pz))) {
+      for (let k = 0; k < 6 && (await p.isEnabled(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`)); k++) { await p.evaluate((id) => document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`).click(), id); await sleep(80); }
+    }
+    const a = await p.evaluate(() => { const b = document.querySelector('#sheet-body'); return { hs: b.scrollWidth - b.clientWidth, txt: b.innerText }; });
+    const over = [];
+    for (const id of await p.$$eval('#sheet [data-pz]', (h) => h.map((x) => x.dataset.pz))) { const c = await p.evaluate(CHART_AUDIT, id); if (c.over.length || c.outside.length) over.push(id + ' ' + [...c.over, ...c.outside].join(' ')); }
+    ok(`zoomfit ${tag}: the detail panel at full zoom: no sideways scroll, nothing overlapping`, a.hs <= 0 && over.length === 0 && noJunk(a.txt), `${a.hs}px ${over.slice(0, 2).join(' | ')}`);
+    if (SHOTS && tag === 'phone') await p.screenshot({ path: path.join(SHOTS, 'zoomfit-sheet-phone.png') });
+    await t.ctx.close();
+  }
+}
+
 // ---------- 4e. every way into a pool lands on its liquidity shape ----------
 async function testRows(browser) {
   for (const phone of [true, false]) {
@@ -654,7 +1073,7 @@ async function testClicks(browser) {
       if (sig === 'refresh') await sleep(1600); // the button ignores taps within 1.5 s of the last // lock is a danger control: tested on its own
       done.add(sig);
       const real = sig.replace(/~2$/, ''); // "~2": the same control pressed a second time
-      if (!(await press(p, real))) { bad.push(sig + ' not found'); continue; }
+      if (!(await press(p, real))) { if (!/^pan:/.test(sig)) bad.push(sig + ' not found'); continue; } // an edge button shows only while there is more that way: testPan presses them
       const act = real.split(':')[0];
       const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '') + (e.dataset.chart ? ':' + e.dataset.chart : '') + (e.dataset.dir ? ':' + e.dataset.dir : '')) === sig && !e.disabled && e.offsetParent !== null), real);
       if (act === 'lens' || act === 'chain') {
@@ -676,7 +1095,7 @@ async function testClicks(browser) {
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
       if (act === 'win') good = good && (await p.getAttribute(`#winseg [data-w="${real.split(':')[1]}"]`, 'aria-pressed')) === 'true';
-      if (act === 'sort') good = good && (await p.$$('#all thead th[aria-sort="ascending"], #all thead th[aria-sort="descending"]')).length === 1;
+      if (act === 'sort') good = good && (await p.$$('#all-tbl thead th[aria-sort="ascending"], #all-tbl thead th[aria-sort="descending"]')).length === 1;
       if (!good) bad.push(sig);
       // put filters back so later controls see the full table
       if (act === 'lens' || act === 'chain') { await handle.asElement().selectOption('all'); await sleep(150); }
@@ -721,12 +1140,12 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, rows: testRows, refresh: testRefresh, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, sheets: testSheets, sticky: testSticky, top: testTop, zoomfit: testZoomFit, rows: testRows, refresh: testRefresh, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;
     const s = Date.now();
-    try { await groups[g](browser); } catch (e) { ok(`${g}: ran to the end`, false, String(e.message).split('\n')[0].slice(0, 160)); }
+    try { await groups[g](browser); } catch (e) { if (process.env.ST_DEBUG) console.error(e.stack); ok(`${g}: ran to the end`, false, String(e.message).split('\n')[0].slice(0, 160)); }
     console.log(`  · ${g} ${((Date.now() - s) / 1000).toFixed(1)} s`);
   }
 } finally {
