@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-32teLbtkCUc3Ff5CWVEbOrPk0TPNAM9SmxehnsH7vlM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ehbTwVCUG85uOYLXV18r4er0bkd/jmhIzec/c+KTo3c='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -528,7 +528,29 @@ button.ring:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .wi.g{color:var(--accent)}.wi.a{color:var(--warn)}.wi.r{color:var(--bad)}
 .whyb{min-height:44px;padding:0 4px;border:0;background:transparent;display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--fg2);font:600 10px/1 var(--mono)}
 .whyb:hover .wi{transform:scale(1.15)}
+.sc-key{display:flex;align-items:center;gap:6px;margin:4px 0 0;font:500 11px/1.4 var(--mono);color:var(--fg2)}
+.sc-key i{flex:none;width:14px;height:8px;border-radius:2px;background:rgba(22,199,132,.25);border-top:1px dashed #16C784}
+/* chain marks and edge stripes (CHAINS in the script holds the colours) */
+.cg{display:inline-grid;place-items:center;width:12px;height:12px;flex:none;vertical-align:-2px;border-radius:50%}
+.cg::before{content:"";display:block}
+.cg-eth::before{width:8px;height:12px;background:var(--cc);clip-path:polygon(50% 0,100% 55%,50% 100%,0 55%)}
+.cg-base{background:var(--cc)}.cg-base::before{width:7px;height:2px;border-radius:1px;background:#fff}
+.cg-bnb::before{width:8px;height:8px;background:var(--cc);transform:rotate(45deg)}
+.cg-arb{background:#1B2A3E;box-shadow:inset 0 0 0 1.5px var(--cc)}.cg-arb::before{width:2px;height:6px;background:var(--cc);transform:rotate(25deg)}
+.cg-unk{border-radius:3px;box-shadow:inset 0 0 0 1.5px var(--cc)}
+.pm .cg,.mc-name .m .cg,.lbl .cg{margin-right:4px}
+.ttl>.cg{margin-right:2px}
+.tab .tp .cg{width:10px;height:10px}.tab .tp .cg-eth::before{width:7px;height:10px}.tab .tp .cg-bnb::before{width:7px;height:7px}
+.chs{box-shadow:inset 3px 0 0 var(--cc)}
+td.pool.chs{box-shadow:inset 3px 0 0 var(--cc),1px 0 0 var(--line)}
+.mc.self.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 0 0 1px rgba(22,199,132,.35)}
+.best.chs{box-shadow:inset 3px 0 0 var(--cc),0 0 0 1px rgba(22,199,132,.12),0 0 24px rgba(22,199,132,.08)}
+.ch-key{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font:500 11px/1.3 var(--mono);color:var(--fg2)}
+.ch-key>span{display:inline-flex;align-items:center;gap:4px;min-height:24px}
 .whyb .more{color:var(--muted)}
+.whyb .m2{display:none}
+/* a narrow phone shows two icons and the count of the rest, so Pool, Gem, Net APR and Why fit without a sideways scroll */
+@media (max-width:400px){.why-icons .wi:nth-child(n+3),.whyb .m3{display:none}.whyb .m2{display:inline}}
 td.why,th.why{text-align:left}
 td.why{padding-top:0;padding-bottom:0}
 .why-key{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin-top:6px}
@@ -551,7 +573,11 @@ td.why{padding-top:0;padding-bottom:0}
 @keyframes starPop{0%{transform:scale(1)}45%{transform:scale(1.45)}100%{transform:scale(1)}}
 .tbl{min-width:0}
 td.pool{min-width:150px;max-width:230px}
-@media (max-width:400px){td.pool .tag{white-space:normal}td.pool{min-width:112px!important}}
+@media (max-width:400px){td.pool .tag{white-space:normal}td.pool{min-width:112px!important}
+  /* Pool, Gem, Net APR and Why fit a 360 px phone whatever its fonts: slimmer cells, and a pair name longer than the room
+     left ends in … (its title holds it whole) */
+  .tbl td{padding-left:4px!important;padding-right:4px!important}.tbl th button{padding:4px!important}
+  .pcell .pn2{max-width:calc(100vw - 255px)}}
 @media (max-width:520px){
   td.pool{min-width:118px;max-width:150px;padding-left:0}
   .tbl th button{padding:4px 6px}
@@ -771,7 +797,7 @@ a.ext svg{width:10px;height:10px;flex:none}
           <ul class="qlist" id="q-list" role="listbox" aria-label="Suggestions" hidden></ul></div>
       </div>
     </div>
-    <div class="why-key"><button type="button" class="linkbtn" id="why-tog" data-act="legend" aria-expanded="false" aria-controls="why-legend">What the “Why” icons mean</button></div>
+    <div class="why-key"><button type="button" class="linkbtn" id="why-tog" data-act="legend" aria-expanded="false" aria-controls="why-legend">What the “Why” icons mean</button><span class="ch-key" id="ch-key" role="note" aria-label="Chain marks"></span></div>
     <div class="why-legend" id="why-legend" hidden></div>
     <div class="tbl-box" id="all-box"><table class="tbl" id="all-tbl"><thead></thead><tbody></tbody></table></div>
     <p class="swipe">Swipe the table sideways for more columns; tap a row for its full breakdown, ☆ to keep it.</p>
@@ -852,7 +878,7 @@ a.ext svg{width:10px;height:10px;flex:none}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.4.0';
+const BUILD = 'v0.4.1';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -934,8 +960,24 @@ function px(x) {
   return x.toExponential(2);
 }
 const ageTxt = (ms) => (ms < 48 * H ? (ms / H).toFixed(1) + ' h' : (ms / D).toFixed(1) + ' d');
-const chainShort = (c) => ({ ethereum: 'ETH', base: 'BASE' }[c] || String(c || DASH).toUpperCase());
-const chainLong = (c) => ({ ethereum: 'ETHEREUM', base: 'BASE' }[c] || String(c || DASH).toUpperCase());
+// chains: a colour and a mark each, here only (owner's pick "A · colour stripe + chain glyph", 7 Nov 2026). The colour
+// draws a 3 px edge on the pool's row or card, the mark (a shape, so it reads without colour too) sits by its name.
+// A chain not listed here is grey with a plain square mark.
+const CHAINS = {
+  ethereum: { name: 'Ethereum', short: 'ETH', c: '#8A9EF5', g: 'eth' },   // lavender diamond
+  base: { name: 'Base', short: 'BASE', c: '#2F6BFF', g: 'base' },         // blue disc with a white bar
+  bsc: { name: 'BNB Chain', short: 'BNB', c: '#F0B90B', g: 'bnb' },       // yellow square turned 45°
+  arbitrum: { name: 'Arbitrum', short: 'ARB', c: '#28A0F0', g: 'arb' },   // ring
+};
+const CHAIN_ALIAS = { bnb: 'bsc', binance: 'bsc', 'bnb-chain': 'bsc', arb: 'arbitrum', 'arbitrum-one': 'arbitrum', eth: 'ethereum', mainnet: 'ethereum' };
+const CHAIN_UNKNOWN = '#6B7684';
+const chainOf = (c) => { const k = String(c || '').toLowerCase(), x = CHAINS[CHAIN_ALIAS[k] || k]; return x || { name: c ? String(c).charAt(0).toUpperCase() + String(c).slice(1) : 'Unknown chain', short: String(c || DASH).toUpperCase(), c: CHAIN_UNKNOWN, g: 'unk' }; };
+const chainShort = (c) => chainOf(c).short;
+const chainLong = (c) => chainOf(c).name.toUpperCase();
+const chainCol = (c) => `--cc:${chainOf(c).c}`; // the edge stripe's colour (style="…" on a row or card with class chs)
+const chainMark = (c, deco = false) => { const x = chainOf(c); return `<i class="cg cg-${x.g}" style="--cc:${x.c}"${deco ? ' aria-hidden="true"' : ` role="img" aria-label="${esc(x.name)}" title="${esc(x.name)}"`}></i>`; };
+// the key under the All pools filters: every chain in this pass, in the map's order, then any other
+const chainKey = (pools) => { const ids = [...new Set(pools.map((p) => { const k = String(p.chain || '').toLowerCase(); return CHAIN_ALIAS[k] || k; }))]; ids.sort((a, b) => ((k) => (k in CHAINS ? Object.keys(CHAINS).indexOf(k) : 99))(a) - ((k) => (k in CHAINS ? Object.keys(CHAINS).indexOf(k) : 99))(b)); return ids.map((c) => `<span>${chainMark(c, true)}${esc(chainOf(c).name)}</span>`).join(''); };
 const sum = (a) => a.reduce((s, x) => s + (isNum(x) ? x : 0), 0);
 
 // ---------- state ----------
@@ -986,6 +1028,8 @@ const GLOSS = {
   v4: ['Uniswap v4', 'Works like v3, but every pool lives in one contract and a pool can carry a hook (extra code). Native ETH trades without wrapping.'],
   ethereum: ['Ethereum', 'The pool lives on Ethereum mainnet: the deepest markets, but every transaction costs more gas, so re-centring is dearer.'],
   base: ['Base', 'The pool lives on Base, a cheaper network that settles on Ethereum. Gas costs cents or less, so re-centring is cheap.'],
+  bsc: ['BNB Chain', 'The pool lives on BNB Chain, a separate, cheap network. Gas costs cents, so re-centring is cheap.'],
+  arbitrum: ['Arbitrum', 'The pool lives on Arbitrum, a cheaper network that settles on Ethereum. Gas costs cents or less, so re-centring is cheap.'],
   gem: ['Gem score', 'How good this pool looks for a new LP right now, 0–100: yield now, how few LPs share the price, trader flow and staying power. 60 or more is a gem.'],
   lvr: ['LVR', 'Loss-versus-rebalancing: what arbitrage traders take from LPs each time the price moves. The fees have to beat it.'],
   net: ['Net APR', 'The yearly return on the example ticket after LVR, re-centring swaps and gas: what you would keep, not the headline fee rate.'],
@@ -1044,7 +1088,7 @@ const term = (k, label) => (GLOSS[k] ? `<button type="button" class="term" data-
 // a tag, chip or badge that explains itself: it keeps its small look, the button around it is 44 px tall
 const termB = (k, inner, cls = '') => (GLOSS[k] ? `<button type="button" class="termb${cls ? ' ' + cls : ''}" data-act="term" data-term="${k}" aria-expanded="false" aria-controls="pop" aria-label="${esc(plain(inner) + ' · ' + GLOSS[k][0])}: what is it?">${inner}</button>` : inner);
 const termPop = (k) => (GLOSS[k] ? `<span class="lbl">${esc(GLOSS[k][0])}</span><p class="gl">${esc(GLOSS[k][1])}</p>` : '');
-const chainTerm = (c) => (c === 'base' || c === 'ethereum' ? c : '');
+const chainTerm = (c) => { const k = String(c || '').toLowerCase(), x = CHAIN_ALIAS[k] || k; return x in CHAINS ? x : ''; };
 
 // ---------- pairs: derived from the pools' tokens until live.json carries them (WETH and ETH are one pair) ----------
 const symN = (s) => { const u = String(s || '').toUpperCase(); return u === 'ETH' ? 'WETH' : u; };
@@ -1279,14 +1323,44 @@ async function unlocked() {
   await refresh();
   startTimer();
 }
-const APP_TEMPLATE = $('#app').innerHTML;
-async function lockDevice() {
-  stopTimer(); stopPlay();
-  closeDetail();
-  S.key = null; S.live = S.hist = S.bt = null; S.t = {}; S.missing = {}; S.failing = null; S.rendered = false; S.replay = null;
-  S.seenPrev = undefined; S.hl = null; S.labRow = null; clearTimeout(nextTimer); Q.open = false; Q.items = [];
-  await idbDel('main');
+// the page as it loads, before any data: signing out puts every part that shows data back to this
+const APP_TEMPLATE = $('#app').innerHTML, SHEET_HEAD = $('#sheet .sheet-head').innerHTML, SUBHEAD = $('#subhead').innerHTML, TITLE0 = document.title;
+// what names a pool (pair names, pool and token addresses): after a sign-out none of it may be left anywhere in the page
+function lockWords(L) {
+  const w = new Set();
+  for (const p of (L && L.pools) || []) for (const x of [p.pair, p.id, p.t0 && p.t0.addr, p.t1 && p.t1.addr]) if (typeof x === 'string' && x.length >= 3) w.add(x.toLowerCase());
+  return [...w];
+}
+function wipeData(words) {
   $('#app').innerHTML = APP_TEMPLATE;
+  $('#sheet .sheet-head').innerHTML = SHEET_HEAD; sheetChain(null); $('#sheet-body').innerHTML = ''; $('#sheet-body').scrollTop = 0;
+  $('#subhead').innerHTML = SUBHEAD;
+  const pop = $('#pop'); pop.hidden = true; pop.innerHTML = '';
+  $('#foot-r').textContent = ''; $('#refresh-msg').textContent = ''; $('#banner').textContent = '';
+  document.title = TITLE0;
+  if (!words.length) return;
+  // a last sweep: any text, attribute or form value that still names a pool is emptied
+  const hit = (v) => { const t = String(v || '').toLowerCase(); return !!t && words.some((x) => t.includes(x)); };
+  const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n; (n = tw.nextNode());) if (!n.parentElement.closest('script, style') && hit(n.nodeValue)) n.nodeValue = '';
+  for (const el of document.body.querySelectorAll('*')) {
+    for (const a of [...el.attributes]) if (hit(a.value)) el.removeAttribute(a.name);
+    if ('value' in el && el.tagName !== 'BUTTON' && hit(el.value)) el.value = '';
+  }
+}
+async function lockDevice() {
+  const words = lockWords(S.live);
+  stopTimer(); stopPlay();
+  closeDetail(); popClose();
+  for (const k of Object.keys(PZA)) pzStop(k);
+  for (const k of Object.keys(PZ)) delete PZ[k];
+  G = null; PIN = null; lastTap = null; PTS.clear();
+  S.key = null; S.live = S.hist = S.bt = null; S.t = {}; S.missing = {}; S.sideErr = {}; S.failing = null; S.rendered = false; S.replay = null;
+  S.seenPrev = undefined; S.hl = null; S.labRow = null; clearTimeout(nextTimer); Q.open = false; Q.items = []; Q.q = ''; Q.act = -1;
+  S.detail = S.pair = S.opener = S.popFor = S.simFor = S.cut = null; S.filt.q = ''; S.showAll = false; S.pan = {}; S.zoom = {};
+  delete S.bestSel; delete S.bestExtra;
+  await idbDel('main');
+  wipeData(words);
   $('#ribbon').hidden = true; $('#loaderr').hidden = true;
   showLock();
   lockMsg('Signed out on this device: the key was removed from this browser.');
@@ -1718,8 +1792,10 @@ function renderBest() {
   if (!p) p = best;
   if (p && !list.includes(p)) list.unshift(p); // opened from the pair view: it gets a tab of its own
   const tabs = list.length ? `<div class="tabs" role="tablist" aria-label="Top ${list.length} pools, ${WIN_LABEL[wk]}">`
-    + list.map((x, i) => `<button type="button" role="tab" class="tab" data-act="tab" data-id="${esc(x.id)}" aria-selected="${x === p}" tabindex="${x === p || (!p && i === 0) ? 0 : -1}"><span class="tp"><span class="tn">${esc(x.pair)}</span>${tabTags(x)}</span></button>`).join('')
+    + list.map((x, i) => `<button type="button" role="tab" class="tab" data-act="tab" data-id="${esc(x.id)}" aria-selected="${x === p}" tabindex="${x === p || (!p && i === 0) ? 0 : -1}"><span class="tp">${chainMark(x.chain)}<span class="tn">${esc(x.pair)}</span>${tabTags(x)}</span></button>`).join('')
     + '</div>' : '';
+  el.classList.toggle('chs', !!p);
+  if (p) el.style.setProperty('--cc', chainOf(p.chain).c); else el.style.removeProperty('--cc');
   if (!p) {
     const hidTop = topTen(wk, true).filter(hideStable).length;
     el.innerHTML = `<div class="lbl acc">BEST FIND NOW · TOP ${list.length} · ${WIN_LABEL[wk]}${hidTop ? `<span class="hidn"> · ${hidTxt(hidTop, true)}</span>` : ''}</div>${tabs}<h2 id="best-h" style="margin-top:6px;font:700 18px/1.3 var(--sans)">No gem in the ${WIN_WORD[wk]} window</h2>`
@@ -1737,7 +1813,7 @@ function renderBest() {
   const hidTop = topTen(wk, true).filter(hideStable).length;
   el.innerHTML = `<div class="lbl acc">TOP ${list.length} · ${WIN_LABEL[wk]} · TAP A POOL${hidTop ? `<span class="hidn"> · ${hidTxt(hidTop, true)}</span>` : ''}</div>${tabs}<div class="best-head"><div class="grow">`
     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
-    + `<div class="ttl"><h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
+    + `<div class="ttl">${chainMark(p.chain)}<h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
     + `<div class="lbl best-meta">${metaTerms(p)} · ${term('range', rangeTxt(w.range))}</div>`
     + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + `<div class="best-body"><div class="best-l">`
@@ -2075,7 +2151,7 @@ document.addEventListener('pointerdown', (e) => {
   if (G && G.host === host && G.pid !== e.pointerId && e.pointerType !== 'mouse') { pinStart(e); return; }
   if (G) return;
   pzStop(id); // a touch catches a coasting chart
-  G = { id, host, pid: e.pointerId, x0: e.clientX, y0: e.clientY, v0: P.x(), w0: P.xy ? P.y() : 0, drag: false, s: [], btn: !!e.target.closest('button') };
+  G = { id, host, pid: e.pointerId, x0: e.clientX, y0: e.clientY, v0: P.x(), w0: P.xy ? P.y() : 0, drag: false, s: [[e.clientX, e.clientY, e.timeStamp]], btn: !!e.target.closest('button') };
 }, { passive: true });
 document.addEventListener('pointermove', (e) => {
   const pt = PTS.get(e.pointerId);
@@ -2089,11 +2165,12 @@ document.addEventListener('pointermove', (e) => {
     const ax = Math.abs(dx), ay = Math.abs(dy);
     if (P.xy ? Math.hypot(dx, dy) < 6 : ax < 6 && ay < 6) return;
     if (!P.xy && ay >= ax) { G = null; return; } // mostly vertical: the page scrolls, the chart stays
-    G.drag = true; G.x0 = e.clientX; G.y0 = e.clientY; G.v0 = P.x(); G.w0 = P.xy ? P.y() : 0;
+    // the view follows the finger from where it touched down: a busy phone hands over its moves in batches (one per
+    // frame), and a quick swipe whose first batch already crossed the threshold still pans by its whole length
+    G.drag = true;
     G.host.classList.add('dragging');
     try { G.host.setPointerCapture(e.pointerId); } catch (er) { /* a synthetic pointer */ }
     if (S.hintEnd) S.hintKill = true; // hidden by .dragging; removed once the drag ends
-    return;
   }
   const [lo, hi] = P.lim();
   P.setX(rubber(G.v0 - dx * P.unit(G.host), lo, hi, P.span() * RUB));
@@ -2264,8 +2341,8 @@ function renderNext() {
   const watch = ranked.filter((p) => !isGem(p, wk)).length;
   const rows = ranked.map((p) => {
     const w = W(p, wk);
-    return `<div class="nb-row" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<span class="nb-main"><span class="pn">${esc(p.pair)}</span>`
-      + `<span class="nb-meta"><span class="lbl">${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
+    return `<div class="nb-row chs" style="${chainCol(p.chain)}" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<span class="nb-main"><span class="pn">${esc(p.pair)}</span>`
+      + `<span class="nb-meta"><span class="lbl">${chainMark(p.chain)}${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
   }).join('');
   $('#next').innerHTML = `<div class="sec-head"><h2 id="next-h">Next best</h2><span class="sub" style="margin:0">${int(gems)} gem${gems === 1 ? '' : 's'} ≥ ${gemAt()} · ${int(watch)} on watch · ${WIN_WORD[wk]} net at ${usdFull(L.ticket)}${hid ? `<span class="hidn"> · ${hidTxt(hid)}</span>` : ''}</span></div>`
     + (rows || `<p class="empty" style="margin:0 12px 12px">No other scored pool in the ${WIN_WORD[wk]} window.</p>`)
@@ -2330,10 +2407,11 @@ function renderTable() {
   }).join('') + '</tr>';
   const fresh = L.pools.filter(isNew).length;
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td class="pool"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${feeTxt(p.feeTier)} · ${chainShort(p.chain)} v${esc(p.v)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
+    + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · v${esc(p.v)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
     + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
+  $('#ch-key').innerHTML = chainKey(L.pools);
   $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== L.pools.length ? ' (' + L.pools.length + ' IN ALL)' : ''}${fresh ? ` · ${fresh} NEW` : ''}${hid ? ' · ' + hidTxt(hid, true) : ''}`;
   $('#all-more').innerHTML = rows.length > shown.length ? `<button type="button" class="btn more" data-act="more">Show all ${int(rows.length)}</button>` : '';
   stickyHead($('#all-box'));
@@ -2422,7 +2500,7 @@ function renderBt() {
   const bias = diffs.length ? sum(diffs) / diffs.length : null;
   const worst = withF.slice().sort((a, b) => Math.abs(b.b.net - b.b.forecastNet) - Math.abs(a.b.net - a.b.forecastNet))[0];
   lead.innerHTML = `<div class="sub-card"><div class="sub-head"><div><h3>Leaderboard</h3><div class="lbl" style="margin-top:3px">FORECAST VS BACKTEST · NET APR · ${WIN_LABEL[S.win]}</div></div></div>`
-    + `<div class="calib"><div class="chartbox" data-chartbox="scatter"><div class="pane-title"><span class="lbl">Forecast vs backtest</span>${ztools('scatter', '')}</div><div class="chart" id="bt-scatter"></div></div><div class="kpis">`
+    + `<div class="calib"><div class="chartbox" data-chartbox="scatter"><div class="pane-title"><span class="lbl">Forecast vs backtest</span>${ztools('scatter', '')}</div><div class="chart" id="bt-scatter"></div><p class="sc-key"><i aria-hidden="true"></i>±10 pts band: the backtest within 10 points of the forecast</p></div><div class="kpis">`
     + `<div class="kpi"><span class="v acc">${within} / ${withF.length}</span><span class="d">pools within ±10 pts of the forecast</span></div>`
     + `<div class="kpi"><span class="v">${pts(med).replace('+', '')}</span><span class="d">median miss</span></div>`
     + `<div class="kpi"><span class="v">${pts(bias)}</span><span class="d">average bias (backtest − forecast)${isNum(bias) ? (bias < -0.02 ? ': the scanner runs optimistic' : bias > 0.02 ? ': the scanner runs cautious' : '') : ''}</span></div>`
@@ -2479,13 +2557,16 @@ function drawScatter(rows) {
       g += `<g clip-path="url(#sc-clip)"><path d="M${X(A).toFixed(1)} ${Y(A + 10).toFixed(1)} L${X(Z).toFixed(1)} ${Y(Z + 10).toFixed(1)} L${X(Z).toFixed(1)} ${Y(Z - 10).toFixed(1)} L${X(A).toFixed(1)} ${Y(A - 10).toFixed(1)}Z" fill="rgba(22,199,132,.12)"/>`
         + `<line x1="${X(A).toFixed(1)}" y1="${Y(A).toFixed(1)}" x2="${X(Z).toFixed(1)}" y2="${Y(Z).toFixed(1)}" stroke="#16C784" stroke-dasharray="4 3"/></g>`;
       g += `<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="none" stroke="#1A212A"/><text x="${L + pw / 2}" y="${Ht - 3}" text-anchor="middle">forecast net APR % →</text>`
-        + `<text transform="translate(11 ${T + ph / 2}) rotate(-90)" text-anchor="middle">backtest %</text><text x="${L + pw - 6}" y="${T + ph - 8}" text-anchor="end" class="t-acc">±10 pts band</text>`;
+        + `<text transform="translate(11 ${T + ph / 2}) rotate(-90)" text-anchor="middle">backtest %</text>`; // the band's key sits under the chart
       g += '<g clip-path="url(#sc-clip)">';
       for (const o of pts2) {
         const a = Math.abs(o.y - o.x), col = a <= 10 ? '#16C784' : a > 20 ? '#E2664C' : '#FAB219';
         g += o.r.bench ? `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4" fill="#0C1015" stroke="#8B96A3" stroke-width="1.5"/>` : `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4.5" fill="${col}"/>`;
       }
-      for (const o of spread(pts2.map((o) => ({ y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 8, T + ph)) {
+      // labels: only for dots in view, one per 11 px line; a label pushed out of the plot is left off (its dot stays), so
+      // no label is ever drawn over another or past the axes
+      const vis = pts2.filter((o) => X(o.x) >= L && X(o.x) <= L + pw && Y(o.y) >= T && Y(o.y) <= T + ph);
+      for (const o of spread(vis.map((o) => ({ y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 9, T + ph - 2).filter((o) => o.y >= T + 9 && o.y <= T + ph - 2)) {
         const right = o.x < L + pw - 60;
         g += `<text x="${(o.x + (right ? 7 : -7)).toFixed(1)}" y="${o.y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="${o.b ? 't-mut' : 't-fg'}">${esc(o.t)}</text>`;
       }
@@ -2805,6 +2886,7 @@ function renderPair() {
   $('#sheet-kicker').textContent = `PAIR VIEW · ${WIN_LABEL[wk]}`;
   $('#sheet-pair').hidden = true; $('#sheet-star').innerHTML = ''; renderSim(null);
   $('#sheet-title').textContent = name;
+  sheetChain(null);
   $('#sheet-meta').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${[...new Set(pools.map((p) => chainLong(p.chain)))].join(' + ')} · ${usd(totVol)} ${WIN_WORD[wk]} volume${hid ? ' · ' + hidTxt(hid) : ''}`;
   const label = (p) => `${feeTxt(p.feeTier)} · v${esc(p.v)} · ${chainShort(p.chain)}${p.t1 && p.t1.sym === 'ETH' ? ' · ETH' : ''}`;
   const bar = totVol > 0 ? `<div class="pv-bar" role="img" aria-label="How the pair's ${WIN_WORD[wk]} volume splits across its pools">`
@@ -2845,6 +2927,15 @@ function showSheet() {
   stickyAll();
   onScroll();
   setTimeout(() => $('#sheet-close').focus({ preventScroll: true }), 0);
+}
+// the detail header carries the pool's chain: its mark before the name, its colour on the header's edge (none for a pair)
+function sheetChain(c) {
+  const head = $('#sheet .sheet-head'), old = head.querySelector('.ttl > .cg');
+  if (old) old.remove();
+  head.classList.toggle('chs', !!c);
+  if (!c) { head.style.removeProperty('--cc'); return; }
+  head.style.setProperty('--cc', chainOf(c).c);
+  $('#sheet-title').insertAdjacentHTML('beforebegin', chainMark(c));
 }
 function closeDetail() {
   if ($('#sheet').hidden) return;
@@ -2936,6 +3027,7 @@ function renderDetail() {
   const L = S.live, wk = S.win, w = W(p, wk);
   $('#sheet-kicker').textContent = `POOL DETAIL · ${WIN_LABEL[wk]}${p.id === L.bench ? ' · BENCHMARK' : ''}`;
   $('#sheet-title').textContent = p.pair;
+  sheetChain(p.chain);
   $('#sheet-star').innerHTML = starBtn(p);
   $('#sheet-meta').innerHTML = metaTerms(p);
   $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p);
@@ -3295,7 +3387,7 @@ function whyCell(p, w) {
   const ks = whyKeys(p, w);
   if (!ks.length) return `<span class="muted">${DASH}</span>`;
   const names = ks.map((k) => WI[k][1]), shown = ks.slice(0, 3);
-  return `<button type="button" class="whyb" data-act="why" data-id="${esc(p.id)}" aria-haspopup="true" aria-expanded="false" aria-label="Why it stands out: ${esc(names.join(', '))}" title="${esc(names.join(' · '))}"><span class="why-icons">${shown.map(wiSvg).join('')}</span>${ks.length > 3 ? `<span class="more">+${ks.length - 3}</span>` : ''}</button>`;
+  return `<button type="button" class="whyb" data-act="why" data-id="${esc(p.id)}" aria-haspopup="true" aria-expanded="false" aria-label="Why it stands out: ${esc(names.join(', '))}" title="${esc(names.join(' · '))}"><span class="why-icons">${shown.map(wiSvg).join('')}</span>${ks.length > 3 ? `<span class="more m3">+${ks.length - 3}</span>` : ''}${ks.length > 2 ? `<span class="more m2">+${ks.length - 2}</span>` : ''}</button>`;
 }
 const whyPop = (p) => `<span class="lbl">Why ${esc(p.pair)} stands out · ${WIN_LABEL[S.win]}</span>` + whyKeys(p, W(p)).map((k) => `<div class="why-row">${wiSvg(k)}<span><b>${WI[k][1]}.</b> ${WI[k][2]}</span></div>`).join('');
 const whyLegend = () => Object.keys(WI).map((k) => `<div>${wiSvg(k)}<span><b>${WI[k][1]}</b>: ${WI[k][2]}</span></div>`).join('');
@@ -3380,7 +3472,7 @@ function mcVal(p, mi) {
   const cls = mi === 0 && isNum(v) && v < 0 ? ' neg' : mi === 2 && isGem(p) ? ' gold' : '';
   return `<span class="v${cls}">${fmt(v)}</span><span class="k">${k}</span>`;
 }
-const mcMeta = (p) => `${feeTxt(p.feeTier)} · ${chainShort(p.chain)} v${esc(p.v)}`;
+const mcMeta = (p) => `${chainMark(p.chain)}${feeTxt(p.feeTier)} · v${esc(p.v)}`;
 function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } = {}) {
   const uv = p.verified === false, meta = mcMeta(p);
   const name = self ? `<div class="mc-name"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></div>`
@@ -3389,7 +3481,7 @@ function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } =
   const cover = mode === 'sim' ? `<button type="button" class="mc-cover" data-act="sim-cycle" aria-label="Show the next figure on every card (now ${SIM_M[mi][0]})"></button>` : '';
   const foot = mode === 'sim' ? termB(self ? 'thispool' : uv ? 'unverified' : REL_TERM[rel], `<span class="mc-rel${self ? ' g0' : uv ? ' uv' : rel === 0 ? ' g0' : ''}">${self ? 'this pool' : uv ? 'unverified' : REL[rel] || ''}</span>`, 'mc-relb')
     : `<span class="mc-rel"><span class="why-icons">${whyKeys(p, W(p)).slice(0, 4).map(wiSvg).join('') || DASH}</span></span>`;
-  return `<div class="mc${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i}">${cover}${name}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}</div>`;
+  return `<div class="mc chs${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i};${chainCol(p.chain)}">${cover}${name}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}</div>`;
 }
 const NAV = (d) => `<button type="button" class="mc-nav ${d < 0 ? 'l' : 'r'}" data-act="mc-scroll" data-dir="${d}" tabindex="-1" aria-label="Scroll the cards ${d < 0 ? 'back' : 'on'}">${CHEV(d)}</button>`;
 const mcStrip = (id, cards, enter) => `<div class="mc-wrap">${NAV(-1)}<div class="mc-track${enter ? ' enter' : ''}" id="${id}">${cards}</div>${NAV(1)}</div>`;

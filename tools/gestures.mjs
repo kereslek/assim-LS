@@ -12,8 +12,31 @@ export const FINGERS = async ({ pts, steps = 10, ms = 16, end = 'pointerup' }) =
   if (end) pts.forEach((q, i) => fire(end, i, q.x1, q.y1));
   return tgt.every(Boolean);
 };
-// where a chart host sits on screen, scrolled to the middle first
-export const HOST_BOX = ({ id, root = '' }) => { window.dispatchEvent(new WheelEvent('wheel')); const h = document.querySelector(`${root} [data-pz="${id}"]`); if (!h) return null; h.scrollIntoView({ block: 'center' }); const r = h.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+// where an element sits on screen once it has been scrolled to the middle and stopped moving: a scroll can fold the
+// detail panel's top or slide the bar away a frame or two later (and a slow browser draws a frame every 100–260 ms),
+// so the box is read once it is the same over two drawn frames
+// (self-contained: page.evaluate sends the function's source alone)
+export const STILL_BOX = async ({ sel, id, root = '', ms = 2000 }) => {
+  window.dispatchEvent(new WheelEvent('wheel'));
+  const el = document.querySelector(sel || `${root} [data-pz="${id}"]`);
+  if (!el) return null;
+  el.scrollIntoView({ block: 'center' });
+  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  const box = () => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+  // an animation on it or around it (the panel's top folding slides its content up over 220 ms) is still moving it, even
+  // in the frames before the animation has started
+  const sliding = () => document.getAnimations().some((x) => x.playState !== 'finished' && x.playState !== 'idle' && x.effect && x.effect.target && x.effect.target.contains && x.effect.target.contains(el));
+  let a = box(), same = 0;
+  for (const t0 = performance.now(); performance.now() - t0 < ms && (same < 2 || sliding());) {
+    await frame();
+    const b = box();
+    if (Math.abs(b.x - a.x) < 0.5 && Math.abs(b.y - a.y) < 0.5 && Math.abs(b.w - a.w) < 0.5 && Math.abs(b.h - a.h) < 0.5) same++;
+    else { same = 0; a = b; }
+  }
+  return a;
+};
+// where a chart host sits on screen, scrolled to the middle first: page.evaluate(HOST_BOX, { id, root })
+export const HOST_BOX = STILL_BOX;
 // two fingers `d0` px apart around (fx, fy) of a host box, spread by `k`, their middle moved by (mx, my)
 export const pinchPts = (b, k, { fx = 0.5, fy = 0.5, d0 = 80, mx = 0, my = 0 } = {}) => {
   const cx = b.x + b.w * fx, cy = b.y + b.h * fy;

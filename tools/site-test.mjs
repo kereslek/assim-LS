@@ -22,7 +22,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { writeFixtures, makeData, oldDepth, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR } from './fixtures/make-fixture.mjs';
 import { TEXT_OVERLAP } from './overlap.mjs';
-import { FINGERS, HOST_BOX, pinchPts } from './gestures.mjs';
+import { FINGERS, HOST_BOX, STILL_BOX, pinchPts } from './gestures.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = path.join(ROOT, 'site', 'app', 'index.html');
@@ -92,6 +92,8 @@ async function newPage(browser, { phone = false, width = 390, height = 860, redu
   await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
   await ctx.addInitScript(() => document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a && !window.__allowExt) { e.preventDefault(); (window.__opened ||= []).push(a.href); } }, true)); // explorer links: recorded, never followed
   const page = await ctx.newPage();
+  // ST_CPU=6 (Chromium only, local): a slow device, to shake out checks that assume a frame every 16 ms
+  if (process.env.ST_CPU && BROWSER === 'chromium') { const cdp = await ctx.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: +process.env.ST_CPU }); }
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror ' + String(e.message).split('\n')[0].slice(0, 120)));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push('console ' + m.text().slice(0, 120)); });
@@ -146,9 +148,34 @@ async function testUnlock(browser) {
   await page.reload();
   await waitApp(page);
   ok('unlock: the device stays unlocked after a reload', await page.isVisible('#app'));
+  // use the page the way the live audit does first: a pool's detail with its similar pools, a note, the search list,
+  // a favourite, another best-find tab, the backtest; then sign out: nothing that names a pool may be left anywhere
+  // (text, titles, attributes, form values, the tab title), in the main view, the closed panel or the strips
+  await page.evaluate(() => document.querySelector('#best [data-act="detail"]').click());
+  await page.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+  await page.evaluate(() => { const b = document.querySelector('#sim [data-act]'); if (b) b.click(); });
+  await sleep(150);
+  await page.evaluate(() => { const b = document.querySelector('#sheet [data-act="fav"]'); if (b) b.click(); });
+  await page.click('#sheet-close'); await sleep(200);
+  await page.evaluate(() => { const b = document.querySelector('#best [data-act="tab"]:not([aria-selected="true"])'); if (b) b.click(); });
+  await page.evaluate(() => { const b = document.querySelector('#all tbody .whyb'); if (b) b.click(); }); await sleep(150);
+  await page.evaluate(() => document.querySelector('#bt-lead tr.row').click()); await sleep(300);
+  await page.fill('#f-q', FXD.live.pools[0].pair.split('/')[0].slice(0, 3)); await sleep(250);
+  const NAMES = [...new Set(FXD.live.pools.flatMap((x) => [x.pair, x.id]))];
+  const leftover = (page) => page.evaluate((names) => {
+    const low = names.map((x) => x.toLowerCase()), hits = new Set(), hit = (v, where) => { const t = String(v || '').toLowerCase(); if (t && low.some((x) => t.includes(x))) hits.add(where); };
+    hit(document.title, 'title');
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n; (n = tw.nextNode());) if (!n.parentElement.closest('script, style')) hit(n.nodeValue, 'text in ' + (n.parentElement.closest('[id]') || {}).id);
+    for (const el of document.body.querySelectorAll('*')) { for (const a of el.attributes) hit(a.value, a.name + ' on ' + (el.closest('[id]') || {}).id); if ('value' in el && el.tagName !== 'BUTTON') hit(el.value, 'value of ' + el.id); }
+    return [...hits];
+  }, NAMES);
+  const before = await leftover(page);
   await page.click('#lockbtn');
   await page.waitForSelector('#lockscreen:not([hidden])');
+  const left = await leftover(page);
   ok('lock: "Sign out on this device" removes every number', (await page.textContent('#lockbtn')) === 'Sign out on this device' && !(await page.isVisible('#app')) && !(await domText(page)).includes('VELNA'));
+  ok(`lock: after sign-out nothing names a pool anywhere in the page: text, titles, attributes, form values, the tab title (${before.length} places before)`, before.length >= 3 && left.length === 0, left.slice(0, 4).join(', '));
   await page.reload();
   await page.waitForSelector('#lockscreen:not([hidden])');
   ok('lock: after a reload the device asks again', await page.isVisible('#pass'));
@@ -554,11 +581,12 @@ async function testCharts(browser) {
 
 // ---------- 4f. pan and zoom: drag, rubber band, flick, edge buttons, double-tap, wheel, pop-out windows ----------
 // Each chart that pans carries data-view="<position>,<view width>[,<y>]" on its host [data-pz]: the checks read it.
-const pzView = (page, id) => page.evaluate((id) => { const h = document.querySelector(`[data-pz="${id}"]`); if (!h) return null; const [c, w, y] = h.dataset.view.split(',').map(Number); return { c, w, y }; }, id);
+// The page draws a chart's view in the next animation frame (and writes data-view then), so every read waits for one.
+// WebKit on a CI runner paints a frame every 50–260 ms (software rendering at the phone's 3× pixels; Chromium keeps
+// 16 ms): checks wait for frames and for the page's own state, never for a fixed time.
+const pzView = (page, id) => page.evaluate(async (id) => { await new Promise((r) => requestAnimationFrame(() => r())); const h = document.querySelector(`[data-pz="${id}"]`); if (!h) return null; const [c, w, y] = h.dataset.view.split(',').map(Number); return { c, w, y }; }, id);
 async function pzBox(page, id) {
-  await page.evaluate((id) => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector(`[data-pz="${id}"]`).scrollIntoView({ block: 'center' }); }, id);
-  await sleep(80);
-  return page.locator(`[data-pz="${id}"]`).boundingBox();
+  return page.evaluate(STILL_BOX, { sel: `[data-pz="${id}"]` }).then((b) => b && { x: b.x, y: b.y, width: b.w, height: b.h });
 }
 // a mouse drag across a chart (pointer events, as a finger gives them): dx, dy in px; `up: false` keeps the button down
 async function pzDrag(page, id, dx, { dy = 0, steps = 10, ms = 16, y = 0.5, up = true, settle = 650, hold = 0 } = {}) {
@@ -568,16 +596,23 @@ async function pzDrag(page, id, dx, { dy = 0, steps = 10, ms = 16, y = 0.5, up =
   if (hold) await sleep(hold); // the finger stops before it lifts: no flick
   if (up) { await page.mouse.up(); if (settle) { await sleep(Math.min(settle, 250)); await pzSettled(page, id); } }
 }
-// wait until a chart's view has come to rest (CI browsers can draw slowly: never trust a fixed sleep for motion)
-async function pzSettled(page, id, ms = 3000) {
-  let a = await pzView(page, id);
-  for (const t0 = Date.now(); Date.now() - t0 < ms;) {
-    await sleep(150);
-    const b = await pzView(page, id);
-    if (a && b && b.c === a.c && b.w === a.w && b.y === a.y) return b;
-    a = b;
-  }
-  return a;
+// wait until a chart's view has come to rest: the same over 3 drawn frames and at least 200 ms (a coast or a spring-back
+// moves it every frame; an edge button's first frame is its start)
+async function pzSettled(page, id, ms = 4000) {
+  return page.evaluate(async ({ id, ms }) => {
+    const rd = () => { const h = document.querySelector(`[data-pz="${id}"]`); return h ? h.dataset.view : null; };
+    const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    const t0 = performance.now();
+    let a = (await frame(), rd()), same = 0, since = performance.now();
+    while (performance.now() - t0 < ms) {
+      await frame(); await new Promise((r) => setTimeout(r, 25));
+      const b = rd();
+      if (b !== a) { a = b; same = 0; since = performance.now(); } else if (++same >= 3 && performance.now() - since >= 200) break;
+    }
+    if (a == null) return null;
+    const [c, w, y] = a.split(',').map(Number);
+    return { c, w, y };
+  }, { id, ms });
 }
 const wheel = (page, id, dx, dy) => page.evaluate(({ id, dx, dy }) => { const h = document.querySelector(`[data-pz="${id}"]`), r = h.getBoundingClientRect(); h.dispatchEvent(new WheelEvent('wheel', { deltaX: dx, deltaY: dy, clientX: r.left + r.width / 2, clientY: r.top + 60, bubbles: true, cancelable: true })); }, { id, dx, dy });
 const pzClick = (page, sel) => page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
@@ -1194,27 +1229,34 @@ async function testSticky(browser) {
   }
 }
 const TOTOP = () => { const b = document.querySelector('#totop'), r = b.getBoundingClientRect(), cs = getComputedStyle(b); return { on: cs.visibility === 'visible' && +cs.opacity > 0, w: r.width, h: r.height, inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, y: scrollY, label: b.getAttribute('aria-label') }; };
+// the button follows the scroll in the next drawn frame and fades in .18 s: wait for that many frames (a slow WebKit draws
+// one every 100–260 ms), then for the state, up to 3 s
+const frames = (page, n = 3) => page.evaluate(async (n) => { for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); }, n);
+async function totopIs(page, on) {
+  await frames(page);
+  await page.waitForFunction((on) => { const b = document.querySelector('#totop'), cs = getComputedStyle(b); return (cs.visibility === 'visible' && +cs.opacity > 0.98) === on || (!on && cs.visibility === 'hidden'); }, on, { timeout: 3000 }).catch(() => {});
+  return page.evaluate(TOTOP);
+}
 async function testTop(browser) {
   for (const [tag, o] of [['phone', { phone: true }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
     const t = await openUnlocked(browser, 'default', o), p = t.page;
     let b = await p.evaluate(TOTOP);
     ok(`top ${tag}: no ↑ button at the top of the page`, !b.on);
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 0.5); });
-    await sleep(350);
+    await sleep(350); await frames(p);
     ok(`top ${tag}: …nor half a screen down`, !(await p.evaluate(TOTOP)).on);
     await p.evaluate(() => scrollTo(0, innerHeight * 1.6));
-    await sleep(350);
-    b = await p.evaluate(TOTOP);
+    b = await totopIs(p, true);
     ok(`top ${tag}: after a screen a round ↑ button appears, 44×44, inside the screen`, b.on && b.w >= 44 && b.h >= 44 && b.inside && b.label === 'Back to top', JSON.stringify(b));
     if (SHOTS && tag !== 'phone reduced') await p.screenshot({ path: path.join(SHOTS, `totop-${tag}.png`) });
     await p.click('#totop');
     if (/reduced/.test(tag)) { await sleep(60); ok(`top ${tag}: under reduced motion it jumps to the top at once`, (await p.evaluate(() => scrollY)) === 0); }
     else { await p.waitForFunction(() => scrollY === 0, null, { timeout: 4000 }).catch(() => {}); ok(`top ${tag}: it scrolls smoothly back to the top`, (await p.evaluate(() => scrollY)) === 0); }
-    await sleep(350);
-    ok(`top ${tag}: …and hides again`, !(await p.evaluate(TOTOP)).on);
+    ok(`top ${tag}: …and hides again`, !(await totopIs(p, false)).on);
     // at the very bottom of the page the button covers no control (the footer keeps room for it)
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, document.documentElement.scrollHeight); });
-    await sleep(400);
+    await totopIs(p, true);
+    await p.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await frames(p); // the bar on top slid away: the bottom again
     const under = await p.evaluate(() => { const a = document.querySelector('#totop').getBoundingClientRect(); return [...document.querySelectorAll('button, a[href], select, input, [data-act]')].filter((e) => e.id !== 'totop' && e.offsetParent !== null).filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && a.left < r.right && r.left < a.right && a.top < r.bottom && r.top < a.bottom; }).map((e) => e.id || e.dataset.act || e.tagName); });
     ok(`top ${tag}: at the bottom of the page it covers no control`, (await p.evaluate(TOTOP)).on && under.length === 0, under.join(','));
     ok(`top ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
