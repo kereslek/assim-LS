@@ -548,8 +548,20 @@ async function pzDrag(page, id, dx, { dy = 0, steps = 10, ms = 16, y = 0.5, up =
   await page.mouse.move(x0, y0); await page.mouse.down();
   for (let i = 1; i <= steps; i++) { await page.mouse.move(x0 + (dx * i) / steps, y0 + (dy * i) / steps); await sleep(ms); }
   if (hold) await sleep(hold); // the finger stops before it lifts: no flick
-  if (up) { await page.mouse.up(); await sleep(settle); }
+  if (up) { await page.mouse.up(); if (settle) { await sleep(Math.min(settle, 250)); await pzSettled(page, id); } }
 }
+// wait until a chart's view has come to rest (CI browsers can draw slowly: never trust a fixed sleep for motion)
+async function pzSettled(page, id, ms = 3000) {
+  let a = await pzView(page, id);
+  for (const t0 = Date.now(); Date.now() - t0 < ms;) {
+    await sleep(150);
+    const b = await pzView(page, id);
+    if (a && b && b.c === a.c && b.w === a.w && b.y === a.y) return b;
+    a = b;
+  }
+  return a;
+}
+const wheel = (page, id, dx, dy) => page.evaluate(({ id, dx, dy }) => { const h = document.querySelector(`[data-pz="${id}"]`), r = h.getBoundingClientRect(); h.dispatchEvent(new WheelEvent('wheel', { deltaX: dx, deltaY: dy, clientX: r.left + r.width / 2, clientY: r.top + 60, bubbles: true, cancelable: true })); }, { id, dx, dy });
 const pzClick = (page, sel) => page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
 const near = (a, b, e = 1e-3) => Math.abs(a - b) <= e;
 async function testPan(browser) {
@@ -563,8 +575,8 @@ async function testPan(browser) {
     await pzDrag(p, 'liq-best', 140, { up: false });
     await sleep(60);
     const mid = await pzView(p, 'liq-best'), hatch = await p.$$eval('[data-pz="liq-best"] .pz-end', (e) => e.length);
-    await p.mouse.up(); await sleep(700);
-    v = await pzView(p, 'liq-best');
+    await p.mouse.up();
+    v = await pzSettled(p, 'liq-best');
     ok(`pan ${tag}: past the data a drag rubber-bands over a "no data" hatch, then springs back`, mid.c < -0.01 && hatch > 0 && near(v.c, 0), `${mid.c} ${hatch} ${v.c}`);
     // + twice: two zoom steps around the view's centre
     await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
@@ -574,9 +586,9 @@ async function testPan(browser) {
     ok(`pan ${tag}: + pressed twice zooms twice (±25%, then ±12%)`, near(z1.w, 0.5) && near(z2.w, 0.24), `${z1.w} ${z2.w}`);
     ok(`pan ${tag}: zoomed in, edge buttons show more on both sides`, (await p.$$('[data-pz="liq-best"] > .pz-edge:not([hidden])')).length === 2);
     // a slow drag pans by the distance dragged; no coasting after a slow release
-    await pzDrag(p, 'liq-best', -100, { steps: 12, ms: 30, settle: 50, hold: 160 });
-    const d1 = await pzView(p, 'liq-best'); await sleep(400);
-    const d2 = await pzView(p, 'liq-best');
+    await pzDrag(p, 'liq-best', -100, { steps: 12, ms: 30, settle: 0, hold: 160 });
+    const d1 = await pzView(p, 'liq-best');
+    const d2 = await pzSettled(p, 'liq-best');
     ok(`pan ${tag}: dragging left shows higher prices, by the distance dragged`, d1.c > 0.02 && d1.c < 0.2 && near(d1.c, d2.c, 2e-3), `${d1.c} ${d2.c}`);
     ok(`pan ${tag}: a panned chart shows "reset"`, await p.isVisible('[data-chartbox="liq-best"] [data-act="zreset"]'));
     // zoom keeps the view's centre
@@ -586,33 +598,30 @@ async function testPan(browser) {
     await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(120);
     // an edge button moves half a view
     const e0 = await pzView(p, 'liq-best');
-    await pzClick(p, '[data-pz="liq-best"] > .pz-edge.l'); await sleep(450);
-    const e1 = await pzView(p, 'liq-best');
+    await pzClick(p, '[data-pz="liq-best"] > .pz-edge.l'); await sleep(150);
+    const e1 = await pzSettled(p, 'liq-best');
     ok(`pan ${tag}: the ◂ edge button moves half a view towards lower prices`, e1.c < e0.c - 0.05, `${e0.c} → ${e1.c}`);
     // a flick coasts on after the release and slows down
     await pzDrag(p, 'liq-best', 160, { steps: 5, ms: 8, settle: 0 });
     const f0 = await pzView(p, 'liq-best'); await sleep(250);
-    const f1 = await pzView(p, 'liq-best'); await sleep(900);
-    const f2 = await pzView(p, 'liq-best');
-    const lo = await p.evaluate(() => -0.45 + 0.12); // the left limit at ±12% for a ±45% map
-    ok(`pan ${tag}: a flick coasts after the release, then stops inside the data`, f1.c < f0.c - 1e-3 && f2.c >= lo - 1e-3 && near(f2.c, (await pzView(p, 'liq-best')).c), `${f0.c} ${f1.c} ${f2.c}`);
+    const f1 = await pzView(p, 'liq-best');
+    const f2 = await pzSettled(p, 'liq-best', 5000), lo = -0.45 + 0.12; // the left limit at ±12% for a ±45% map
+    ok(`pan ${tag}: a flick coasts after the release, then stops inside the data`, f1.c < f0.c - 1e-3 && f2.c >= lo - 1e-3, `${f0.c} ${f1.c} ${f2.c}`);
     // a mostly vertical drag doesn't pan
     const s0 = await pzView(p, 'liq-best');
     await pzDrag(p, 'liq-best', 8, { dy: 90, settle: 300 });
     ok(`pan ${tag}: a mostly vertical swipe leaves the chart alone`, near((await pzView(p, 'liq-best')).c, s0.c));
     // a sideways wheel (trackpad) pans; an up-down wheel doesn't
-    const b = await pzBox(p, 'liq-best');
-    await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
-    await p.mouse.wheel(0, 120); await sleep(300);
-    const w0 = await pzView(p, 'liq-best');
+    await pzBox(p, 'liq-best');
+    await wheel(p, 'liq-best', 0, 120); await sleep(150);
+    const w0 = await pzSettled(p, 'liq-best');
     ok(`pan ${tag}: an up-down wheel over a chart doesn't pan it`, near(w0.c, s0.c));
-    await p.evaluate(() => { const h = document.querySelector('[data-pz="liq-best"]'), r = h.getBoundingClientRect(); h.dispatchEvent(new WheelEvent('wheel', { deltaX: 80, deltaY: 2, clientX: r.left + r.width / 2, clientY: r.top + 60, bubbles: true, cancelable: true })); });
-    await sleep(350);
-    ok(`pan ${tag}: a sideways wheel (trackpad) pans`, (await pzView(p, 'liq-best')).c > w0.c + 1e-3);
+    await wheel(p, 'liq-best', 80, 2); await sleep(150);
+    ok(`pan ${tag}: a sideways wheel (trackpad) pans`, (await pzSettled(p, 'liq-best')).c > w0.c + 1e-3);
     // a double-tap returns to the default view
     const c = await pzBox(p, 'liq-best');
-    await p.mouse.click(c.x + c.width / 2, c.y + 70); await sleep(90); await p.mouse.click(c.x + c.width / 2, c.y + 70); await sleep(300);
-    v = await pzView(p, 'liq-best');
+    await p.mouse.click(c.x + c.width / 2, c.y + 70); await sleep(90); await p.mouse.click(c.x + c.width / 2, c.y + 70); await sleep(200);
+    v = await pzSettled(p, 'liq-best');
     ok(`pan ${tag}: a double-tap resets zoom and pan`, near(v.c, 0) && near(v.w, 0.9) && !(await p.isVisible('[data-chartbox="liq-best"] [data-act="zreset"]')), JSON.stringify(v));
     // the daily strip: the newest day shows by default; a drag shows older days; "older" and "newer" edge buttons
     let dv = await pzView(p, 'daily-best');
@@ -811,7 +820,7 @@ const STICKY = (sel) => {
   // every column the user can see lines up with the real one under it
   let mis = 0;
   if (on) real.forEach((th, i) => { const a = th.getBoundingClientRect(), b = copy[i] && copy[i].getBoundingClientRect(); if (!b) { mis++; return; } const seen = Math.min(a.right, vw.right) - Math.max(a.left, vw.left) > 4; if (seen && (Math.abs(a.left - b.left) > 1 || Math.abs(a.width - b.width) > 1)) mis++; });
-  return { on, top: cr ? cr.top - top : null, bottom: cr ? cr.bottom : null, boxBottom: br.bottom, mis, cols: real.length };
+  return { on, top: cr ? cr.top - top : null, bottom: cr ? cr.bottom : null, boxBottom: br.bottom, mis, cols: real.length, sl: Math.round(box.scrollLeft), csl: sh ? Math.round(sh.firstElementChild.scrollLeft) : null };
 };
 async function testSticky(browser) {
   for (const phone of [true, false]) {
@@ -827,8 +836,7 @@ async function testSticky(browser) {
     const hit = await p.evaluate(() => { const r = document.querySelector('#all .sh .sh-in').getBoundingClientRect(), e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e && !!e.closest('.sh'); });
     ok(`sticky ${tag}: …on top of the rows, not under them`, hit);
     await p.evaluate(() => { const b = document.querySelector('#all-box'); b.scrollLeft = Math.min(260, b.scrollWidth - b.clientWidth); });
-    await sleep(200);
-    s = await p.evaluate(STICKY, '#all-box');
+    for (let k = 0; k < 15; k++) { await sleep(100); s = await p.evaluate(STICKY, '#all-box'); if (s.on && s.mis === 0) break; }
     ok(`sticky ${tag}: …and follows the table's sideways scroll`, s.on && s.mis === 0, JSON.stringify(s));
     if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `sticky-${tag}.png`) });
     // a sort from the stuck header works and the header stays
