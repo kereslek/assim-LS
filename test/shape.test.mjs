@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { liquidityMap, valueInRange, ticksForLog, logForTicks, MIN_TICK, MAX_TICK } from '../lib/v3math.mjs';
-import { bandStats, hollowness, depthHistogram, nearestWalls, wallSigma, shapeTag, strandedDays, depthProfile, depthFields, DEPTH } from '../lib/shape.mjs';
+import { bandStats, hollowness, depthHistogram, nearestWalls, wallSigma, shapeTag, strandedDays, depthProfile, depthFields, fullRangeLayer, DEPTH } from '../lib/shape.mjs';
 
 const shapeOf = (positions, tick = 0) => {
   const m = liquidityMap(poolFrom(positions, tick));
@@ -74,7 +74,9 @@ test('stranded days: a window needs at least half its days, missing is not zero'
 });
 
 // ---------- the wider liquidity chart (depthProfile): ±45% fine bins as before, coarser to about ±64%, far bins
-// doubling out to the last tick (at most ×10 / ÷10), then beyond ----------
+// doubling out to the last tick, then beyond. These first tests run it with the options of the version before the
+// whole field (far bins capped at ×10 / ÷10, no full-range layer) and show it is unchanged; the whole field follows. ----------
+const OLD = { far: Math.LN10, wide: null };
 // Made-up maps at two prices: one at tick 0 (18 decimals) and one far from it (6 decimals), so offsets
 // and values are checked away from the easy case.
 const at = (positions, tick) => positions.map((q) => ({ lo: q.lo + tick, hi: q.hi + tick, L: q.L }));
@@ -90,6 +92,8 @@ const edgesOf = (b, tick) => [tick + ticksForLog(b.a), tick + ticksForLog(b.b)];
 const OUTER = 0.6375, LN10 = Math.LN10;
 // the far ladder past ±0.6375: widths 0.075, 0.15, 0.3, 0.6, then cut at ln 10
 const LADDER = [0.7125, 0.8625, 1.1625, 1.7625, LN10];
+// the whole field's ladder: the same widths doubling on with no cap (the last bin is cut at the tick limit, ±88.72 from tick 0)
+const WHOLE_LADDER = [0.7125, 0.8625, 1.1625, 1.7625, 2.9625, 5.3625, 10.1625, 19.7625, 38.9625, 77.3625];
 // The coarse bins exactly as the first wider chart computed them (copied from that code), to show they are unchanged.
 const oldCoarse = (segs, sp, d1, tick) => {
   const half = ticksForLog(0.45), cw = (4 * half) / 48, cl = logForTicks(cw), v = (a, b) => bandStats(segs, sp, d1, a, b, tick).inside;
@@ -97,10 +101,10 @@ const oldCoarse = (segs, sp, d1, tick) => {
     ...[1, 2, 3, 4, 5].map((j) => [0.45 + (j - 0.5) * cl, v(tick + half + (j - 1) * cw, tick + half + j * cw)])];
 };
 
-test('depth profile: the ±45% bins are the old histogram exactly; coarse bins as before; far bins and beyond hold the rest', () => {
+test('depth profile (old options): the ±45% bins are the old histogram exactly; coarse bins as before; far bins and beyond hold the rest', () => {
   for (const [tick, d1] of CASES) {
     const sp = spAt(tick), m = liquidityMap(poolFrom(at(widePositions, tick), tick));
-    const prof = depthProfile(m.segments, sp, d1, tick);
+    const prof = depthProfile(m.segments, sp, d1, tick, OLD);
     const old = depthHistogram(m.segments, sp, d1, tick);
     assert.deepEqual(prof.hist, old, 'the fine part is depthHistogram itself');
     const nc = DEPTH.coarseBins, nf = DEPTH.fineBins, nfar = LADDER.length; // the thin full range reaches past the cap both ways
@@ -180,9 +184,10 @@ test('regression: parked, above, band9 and walls are computed exactly as before 
         assert.ok(rel(h.hollow, g.parked, 1e-12) && rel(h.aboveShare, g.above, 1e-12) && rel(b9.inside / b9.total, g.band9, 1e-12), `tick ${tick}`);
         assert.deepEqual(walls, g.walls);
       }
-      // the profile's own histogram finds the very same walls
-      const prof = depthProfile(m.segments, sp, d1, tick);
+      // the profile's own histogram finds the very same walls, with or without the full-range layer taken off the bars
+      const prof = depthProfile(m.segments, sp, d1, tick, OLD);
       assert.deepEqual(nearestWalls(prof.hist), walls);
+      assert.deepEqual(nearestWalls(depthProfile(m.segments, sp, d1, tick).hist), walls);
       // live.json's ±45% bars are byte for byte what the scan published before (the old formula, copied)
       const per1 = 2250, rnd = (x, n) => (Number.isFinite(x) ? Number(x.toPrecision(n)) : null), hist = depthHistogram(m.segments, sp, d1, tick);
       const before = hist.buckets.map((v, i) => [rnd(-hist.span + (i + 0.5) * hist.bucketLog, 4), rnd(v * per1, 5)]);
@@ -220,11 +225,17 @@ test('planted fault: an unread chunk gives null bins and a null beyond, never 0'
   });
   assert.ok(nulls >= 15 && nums >= 40 && fakeZero >= 2, `${nulls} null, ${nums} read, ${fakeZero} naive drops`);
   assert.equal(prof.beyond.above, null, 'past the unread chunk is unknown');
-  assert.ok(prof.beyond.below > 0, 'the other side was read in full');
+  assert.equal(prof.beyond.below, 0, 'the other side was read in full: its bins reach its last tick, so beyond is a real 0');
+  assert.equal(prof.fullRange.v, null, 'with a chunk unread the full-range layer is not measured');
+  // the read side's bins hold everything (no layer taken off): their sum is the whole read side of the map
+  const readBelow = m.segments.reduce((a, x) => a + (x.L > 0n && x.lo < tick ? valueInRange(x.L, x.lo, Math.min(x.hi, tick), sp, d1) : 0), 0);
+  assert.ok(rel(prof.bins.filter((b) => b.b <= 1e-12).reduce((a, b) => a + b.v, 0), readBelow, 1e-9));
   // the USD fields keep null as null
   const f = depthFields(prof, 2);
   assert.equal(f.beyond.above, null);
-  assert.ok(f.beyond.below > 0);
+  assert.equal(f.beyond.below, 0);
+  assert.equal(f.fullRangeUsd, null);
+  assert.equal(f.fullRangeSpan, null);
   assert.equal(f.depth.filter(([, v]) => v === null).length, nulls);
   assert.equal(f.depth.filter(([, v]) => v === 0).length, 0, 'no unread bin turned into 0');
   // a chunk below the price hides the bins from it outwards on that side only
@@ -236,7 +247,7 @@ test('planted fault: an unread chunk gives null bins and a null beyond, never 0'
   assert.ok(blind.bins.every((b) => b.v === null) && blind.beyond.below === null && blind.beyond.above === null);
 });
 
-test('planted fault: an unread chunk in the far zone runs that side to ×10 as null; read naively it reads as the map ending', () => {
+test('planted fault: an unread chunk in the far zone runs that side to the tick limit as null; read naively it reads as the map ending', () => {
   // no full range; a wall at +1.0..+1.1 log sits in an unread chunk, a smaller one at +0.75..+0.80 is read
   const tick = 0, sp = 1, d1 = 18, chunk = [9500, 12000];
   const positions = [...strandedPositions, { lo: 7500, hi: 8000, L: 10n ** 20n }, { lo: 10000, hi: 11000, L: 5n * 10n ** 20n }];
@@ -244,10 +255,10 @@ test('planted fault: an unread chunk in the far zone runs that side to ×10 as n
   read.ticks = read.ticks.filter((t) => !(t.tick >= chunk[0] && t.tick < chunk[1]));
   const m = liquidityMap(read);
   const prof = depthProfile(m.segments, sp, d1, tick, { unread: [chunk] });
-  // that side runs to the cap: where its last tick is, nobody knows
-  assert.ok(rel(prof.span[1], LN10, 1e-12), `span ${prof.span}`);
+  // that side runs to the cap, the tick limit itself: where its last tick is, nobody knows
+  assert.ok(rel(prof.span[1], logForTicks(MAX_TICK), 1e-12), `span ${prof.span}`);
   const farUp = prof.bins.filter((b) => b.a >= OUTER - 1e-9);
-  assert.equal(farUp.length, LADDER.length);
+  assert.equal(farUp.length, WHOLE_LADDER.length + 1, 'the uncapped ladder, the last bin cut at the tick limit');
   assert.ok(farUp.every((b) => (edgesOf(b, tick)[1] > chunk[0] ? b.v === null : Number.isFinite(b.v))), 'null from the chunk outwards, read before it');
   assert.ok(farUp.some((b) => b.v === null) && farUp.some((b) => Number.isFinite(b.v) && b.v > 0), 'the +0.75 wall is read, the +1.0 one unknown');
   assert.equal(prof.beyond.above, null);
@@ -264,7 +275,14 @@ test('depth fields: past the last tick is a real 0; no map or no price gives no 
   // the price 1000 ticks under the top: the bins past MAX_TICK hold a real 0 (no tick exists there), not null
   const tick = MAX_TICK - 1000, sp = spAt(tick);
   const m = liquidityMap(poolFrom([{ lo: -887220, hi: 887220, L: 10n ** 18n }], tick));
-  const prof = depthProfile(m.segments, sp, 0, tick);
+  // the whole field: the only position is full range, so it is all layer; the bars are real zeros and stop at the coarse edge
+  const whole = depthFields(depthProfile(m.segments, sp, 0, tick), 1);
+  assert.equal(whole.depth.length, DEPTH.fineBins + 2 * DEPTH.coarseBins);
+  assert.ok(whole.depth.every(([, v]) => v === 0) && whole.beyond.below === 0 && whole.beyond.above === 0);
+  assert.ok(rel(whole.fullRangeUsd, Number(valueInRange(10n ** 18n, -887220, 887220, sp, 0).toPrecision(5)), 1e-12));
+  assert.deepEqual(whole.fullRangeSpan, [Number(logForTicks(-887220 - tick).toPrecision(6)), Number(logForTicks(887220 - tick).toPrecision(6))]);
+  // the old options, as before
+  const prof = depthProfile(m.segments, sp, 0, tick, OLD);
   const past = prof.bins.filter((b) => edgesOf(b, tick)[0] >= MAX_TICK);
   assert.ok(past.length >= 20 && past.every((b) => b.v === 0), `${past.length} bins past the top`);
   assert.equal(prof.beyond.above, 0);
@@ -277,8 +295,135 @@ test('depth fields: past the last tick is a real 0; no map or no price gives no 
   assert.deepEqual(f.depthEdges.slice(0, 6), [-2.30259, -1.7625, -1.1625, -0.8625, -0.7125, -0.6375]);
   assert.ok(f.depthEdges.every((e, i) => i === 0 || e > f.depthEdges[i - 1]), 'edges ascend');
   assert.deepEqual(f.depthStep, { fine: 0.01875, coarse: 0.0375, edge: 0.45 });
-  const none = { depth: [], depthSpan: null, depthEdges: null, depthStep: null, beyond: { below: null, above: null } };
+  assert.equal(f.fullRangeUsd, null, 'old options: no layer measured');
+  const none = { depth: [], depthSpan: null, depthEdges: null, depthStep: null, beyond: { below: null, above: null }, fullRangeUsd: null, fullRangeSpan: null };
   assert.deepEqual(depthFields(null, 2), none, 'map unread');
   assert.deepEqual(depthFields(prof, null), none, 'token1 unpriced');
   assert.deepEqual(depthFields(prof, NaN), none);
+});
+
+// ---------- the whole field (owner's pick "A · Whole field, grouped", 7 Nov 2026): bins out to the furthest tick with no
+// ×10 cap, and the full-range layer published on its own instead of smeared over the far bins ----------
+// walls at +3.0..+3.5 and −8.0..−7.0 log, the stranded walls near the price, and a thin full range
+const wholePositions = [...strandedPositions, { lo: 30000, hi: 35000, L: 10n ** 19n }, { lo: -80000, hi: -70000, L: 5n * 10n ** 18n }, { lo: -887220, hi: 887220, L: 10n ** 18n }];
+const mapValue = (m, sp, d1) => m.segments.reduce((a, x) => a + (x.L > 0n ? valueInRange(x.L, x.lo, x.hi, sp, d1) : 0), 0);
+// a constant-liquidity layer's share of its value between log offsets a < b, for a layer over [lo, hi] (the page's formula)
+const layerShare = (a, b, lo, hi) => {
+  const part = (x, y) => (y <= 0 ? Math.exp(y / 2) - Math.exp(x / 2) : x >= 0 ? Math.exp(-x / 2) - Math.exp(-y / 2) : part(x, 0) + part(0, y));
+  const x = Math.max(a, lo), y = Math.min(b, hi);
+  return y > x ? part(x, y) / part(lo, hi) : 0;
+};
+
+test('whole field: bins from the lowest to the highest tick, doubling with no cap; beyond a real 0; bins + layer = the map', () => {
+  for (const [tick, d1] of CASES) {
+    const sp = spAt(tick), m = liquidityMap(poolFrom(at(wholePositions, tick), tick));
+    const prof = depthProfile(m.segments, sp, d1, tick);
+    // −8.0 log needs the ladder to 10.1625 below; +3.5 needs it to 5.3625 above
+    const below = WHOLE_LADDER.slice(0, 7), above = WHOLE_LADDER.slice(0, 6);
+    assert.equal(prof.bins.length, 58 + below.length + above.length);
+    assert.ok(prof.bins.length <= 100, 'about 100 bins at most');
+    below.forEach((e, k) => assert.ok(rel(-prof.edges[below.length - 1 - k], e, 1e-12), `edge below ${k}`));
+    above.forEach((e, k) => assert.ok(rel(prof.edges[prof.edges.length - above.length + k], e, 1e-12), `edge above ${k}`));
+    assert.ok(rel(prof.span[0], -10.1625, 1e-12) && rel(prof.span[1], 5.3625, 1e-12));
+    for (let k = 1; k < prof.bins.length; k++) assert.ok(Math.abs(prof.bins[k].a - prof.bins[k - 1].b) < 1e-12 && prof.bins[k].o > prof.bins[k - 1].o);
+    assert.deepEqual(prof.beyond, { below: 0, above: 0 }, 'the bins reach both last ticks: beyond is a real 0');
+    // the layer is the thin full range, exactly
+    const Lfr = 10n ** 18n;
+    assert.ok(rel(prof.fullRange.v, valueInRange(Lfr, -887220 + tick, 887220 + tick, sp, d1), 1e-12));
+    assert.ok(rel(prof.fullRange.a, logForTicks(-887220), 1e-12) && rel(prof.fullRange.b, logForTicks(887220), 1e-12));
+    // every bin against an independent sum with the layer taken off (bandStats clips each segment its own way)
+    const inside = (a, b) => bandStats(m.segments, sp, d1, a, b, tick).inside;
+    prof.bins.forEach((b, k) => {
+      const [x, y] = edgesOf(b, tick);
+      assert.ok(rel(b.v, inside(x, y) - valueInRange(Lfr, x, y, sp, d1), 1e-9) || Math.abs(b.v) < 1e-9 * prof.fullRange.v, `bin ${k}: ${b.v}`);
+      assert.ok(b.v >= -1e-9 * prof.fullRange.v, `bin ${k} not negative`);
+    });
+    // nothing lost, nothing counted twice
+    const sum = prof.bins.reduce((a, b) => a + b.v, 0) + prof.beyond.below + prof.beyond.above + prof.fullRange.v;
+    assert.ok(rel(sum, mapValue(m, sp, d1), 1e-9), `bins + beyond + layer ${sum} vs map ${mapValue(m, sp, d1)}`);
+    // the far walls land in their bins
+    const v = (lo, hi, L) => valueInRange(L, lo + tick, hi + tick, sp, d1);
+    const binAt = (o) => prof.bins.find((b) => b.a <= o && o < b.b);
+    assert.ok(binAt(3.2).v >= v(30000, 35000, 10n ** 19n) * (1 - 1e-9) && binAt(3.2).a === prof.edges.at(-2), 'the +3.0..+3.5 wall is in the last bin above');
+    assert.ok(binAt(-7.5).v >= v(-80000, -70000, 5n * 10n ** 18n) * (1 - 1e-9) && binAt(-7.5).a === prof.edges[0], 'the −8..−7 wall is in the first bin below');
+  }
+});
+
+test('whole field: the layer comes off each bar exactly (old bar = new bar + the layer\'s share); walls, parked and band9 unchanged', () => {
+  for (const [tick, d1] of CASES) {
+    for (const positions of [widePositions, wholePositions]) {
+      const sp = spAt(tick), m = liquidityMap(poolFrom(at(positions, tick), tick));
+      const now = depthProfile(m.segments, sp, d1, tick), old = depthProfile(m.segments, sp, d1, tick, { far: Infinity, wide: null });
+      assert.ok(now.fullRange.v > 0);
+      // same edges as far as the new bins go (the old ones run on to the tick limit, smeared with the layer)
+      const lo = now.fullRange.a, hi = now.fullRange.b;
+      const off = old.bins.findIndex((b) => Math.abs(b.a - now.bins[0].a) < 1e-12);
+      assert.ok(off >= 0);
+      now.bins.forEach((b, k) => {
+        const o = old.bins[off + k], [x, y] = edgesOf(b, tick);
+        assert.ok(Math.abs(o.a - b.a) < 1e-12 && Math.abs(o.b - b.b) < 1e-12, `edges of bin ${k}`);
+        const share = valueInRange(10n ** 18n, Math.max(x, tick - 887220 + 0), Math.min(y, tick + 887220), sp, d1);
+        assert.ok(rel(b.v + (y > tick - 887220 && x < tick + 887220 ? share : 0), o.v, 1e-9), `bin ${k}: ${b.v} + layer = ${o.v}`);
+        // the page's formula from log offsets alone gives the same share (to the tick's rounding)
+        assert.ok(Math.abs(now.fullRange.v * layerShare(b.a, b.b, lo, hi) - share) <= 1e-3 * now.fullRange.v * Math.max(layerShare(b.a, b.b, lo, hi), 1e-6) + 1e-12 * now.fullRange.v, `formula, bin ${k}`);
+      });
+      // the walls are found on the whole map's histogram, as before
+      assert.deepEqual(nearestWalls(now.hist), nearestWalls(depthHistogram(m.segments, sp, d1, tick)));
+    }
+  }
+});
+
+test('planted fault: left in the bars, a full-range position smears over far bins out to the tick limit', () => {
+  const tick = 0, sp = 1, d1 = 18;
+  const m = liquidityMap(poolFrom(widePositions, tick)); // walls end at +0.90 and −0.70; a thin full range
+  const now = depthProfile(m.segments, sp, d1, tick);
+  const smeared = depthProfile(m.segments, sp, d1, tick, { wide: null }); // the fault: no layer
+  assert.deepEqual(now.span.map((x) => Number(x.toFixed(4))), [-0.7125, 1.1625], 'with the layer the bins stop where the walls end');
+  assert.ok(rel(smeared.span[1], logForTicks(MAX_TICK), 1e-12) && rel(smeared.span[0], -logForTicks(-MIN_TICK), 1e-12), 'without it they run to the tick limit');
+  const tail = smeared.bins.filter((b) => b.a >= 1.1625 - 1e-9 || b.b <= -0.7125 + 1e-9);
+  assert.ok(tail.length >= 15 && tail.every((b) => b.v > 0), `${tail.length} far bins hold nothing but slices of the full range`);
+  assert.equal(smeared.fullRange.v, null);
+  assert.ok(now.bins.length < smeared.bins.length);
+});
+
+test('full-range layer: what spans ±5 log counts; one-sided width, gaps and lower levels do not', () => {
+  const T = (r) => Math.round(ticksForLog(r));
+  const layerOf = (positions, tick = 0) => fullRangeLayer(liquidityMap(poolFrom(positions, tick)).segments, tick);
+  // a position from −6 to +7 log (not MIN..MAX) is a layer of its own, over exactly its range
+  const a = layerOf([{ lo: -T(6), hi: T(7), L: 3n }, { lo: -600, hi: 600, L: 50n }]);
+  assert.deepEqual(a, { L: 3n, lo: -T(6), hi: T(7) });
+  // wide on one side only: no layer
+  assert.equal(layerOf([{ lo: -T(6), hi: T(2), L: 3n }]).L, 0n);
+  assert.equal(layerOf([{ lo: -T(4), hi: 887220, L: 3n }]).L, 0n);
+  // a stretch with no liquidity inside ±5 log: nothing spans it, however big the sides
+  assert.equal(layerOf([{ lo: -887220, hi: -T(2), L: 9n }, { lo: -T(1), hi: 887220, L: 9n }]).L, 0n);
+  // a full range plus a ±7 log position: the level present everywhere within ±5 log is both, out to ±7 log;
+  // the full range past ±7 log stays in the bars (exact either way: bars + layer = the map)
+  const b = layerOf([{ lo: -887220, hi: 887220, L: 2n }, { lo: -T(7), hi: T(7), L: 5n }]);
+  assert.deepEqual(b, { L: 7n, lo: -T(7), hi: T(7) });
+  // a stack covering ±5 log counts at its lowest level
+  assert.deepEqual(layerOf([{ lo: -T(6), hi: T(1), L: 4n }, { lo: -T(1), hi: T(6), L: 6n }]), { L: 4n, lo: -T(6), hi: T(6) });
+  // the price near the bottom tick: the band is clipped at the usable edge, the full range still found
+  const low = MIN_TICK + 2000;
+  assert.equal(layerOf([{ lo: -887220, hi: 887220, L: 2n }], low).L, 2n);
+  // nothing at all
+  assert.equal(fullRangeLayer([], 0).L, 0n);
+  assert.equal(fullRangeLayer(liquidityMap(poolFrom([{ lo: -887220, hi: 887220, L: 2n }], 0)).segments, 0, { wide: null }).L, 0n);
+});
+
+test('whole field: size stays within +1 KB a pool (worst case: liquidity out to both tick limits)', () => {
+  const worst = [{ lo: -887220, hi: -12000, L: 10n ** 18n }, { lo: 12000, hi: 887220, L: 10n ** 18n }, { lo: -600, hi: 600, L: 10n ** 20n }, ...strandedPositions];
+  for (const [tick, d1] of CASES) {
+    for (const positions of [worst, wholePositions, widePositions, strandedPositions]) {
+      const sp = spAt(tick), m = liquidityMap(poolFrom(at(positions, tick), tick));
+      const size = (o) => JSON.stringify(depthFields(depthProfile(m.segments, sp, d1, tick, o), 2250)).length;
+      assert.ok(size({}) - size(OLD) <= 1024, `+${size({}) - size(OLD)} bytes`);
+    }
+    const m = liquidityMap(poolFrom(at(worst, tick), tick));
+    const f = depthFields(depthProfile(m.segments, spAt(tick), d1, tick), 2250);
+    assert.ok(f.depth.length >= 78 && f.depth.length <= 82, `${f.depth.length} bars`);
+    assert.equal(f.fullRangeUsd, 0, 'no layer: a real 0');
+    assert.equal(f.fullRangeSpan, null);
+    assert.deepEqual(f.beyond, { below: 0, above: 0 });
+  }
 });

@@ -60,31 +60,34 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
   assert.ok(snaps.v === 1 && Object.keys(snaps.pools).length === live.pools.length);
   assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'out', 'shortlist.json'), 'utf8')).ids.length >= 1);
   for (const f of fs.readdirSync(path.join(dir, 'out', 'data'))) assert.ok(!fs.readFileSync(path.join(dir, 'out', 'data', f), 'utf8').includes('2718'), `${f} is sealed`);
-  // the liquidity chart's bins (docs/DATA.md): ±45% as before, coarser out to ±0.6375, far bins doubling out to ×10 / ÷10
-  // (every fake pool has a thin full range), then one beyond bucket a side; all of it together is the whole map
-  const EDGES_FAR = [-2.30259, -1.7625, -1.1625, -0.8625, -0.7125, -0.6375];
+  // the liquidity chart's bins (docs/DATA.md): the whole field. ±45% fine bins, coarser out to ±0.6375, far bins doubling out
+  // to the furthest tick with no cap; every fake pool's thin full range is the layer (fullRangeUsd), off the bars; beyond
+  // a real 0 (the bars reach both last ticks); bars + beyond + layer = the whole map
   for (const p of live.pools) {
     const s = p.shape;
-    assert.equal(s.depth.length, 68, p.pair);
-    assert.deepEqual(s.depthSpan, [-2.30259, 2.30259]);
-    assert.equal(s.depthEdges.length, 69);
-    assert.deepEqual(s.depthEdges.slice(0, 6), EDGES_FAR);
-    assert.deepEqual(s.depthEdges.slice(-6), EDGES_FAR.map((x) => -x).reverse());
+    assert.ok(s.depth.length >= 58 && s.depth.length <= 100, `${p.pair}: ${s.depth.length} bars`);
+    assert.equal(s.depthEdges.length, s.depth.length + 1);
+    assert.ok(s.depthEdges.every((e, i) => i === 0 || e > s.depthEdges[i - 1]), 'edges ascend');
+    assert.ok([-0.6375, -0.45, 0.45, 0.6375].every((e) => s.depthEdges.includes(e)), 'fine and coarse edges as before');
+    assert.deepEqual(s.depthSpan, [s.depthEdges[0], s.depthEdges.at(-1)]);
     assert.deepEqual(s.depthStep, { fine: 0.01875, coarse: 0.0375, edge: 0.45 });
     assert.ok(s.depth.every(([o, v], i) => o > s.depthEdges[i] && o < s.depthEdges[i + 1] && Number.isFinite(v) && v >= 0), p.pair);
-    assert.ok(s.beyond.below >= 0 && s.beyond.above >= 0);
-    const all = s.depth.reduce((a, d) => a + d[1], 0) + s.beyond.below + s.beyond.above;
-    assert.ok(Math.abs(all / p.mapUsd - 1) < 1e-4, `${p.pair}: bars + beyond ${all} vs map ${p.mapUsd}`);
+    assert.deepEqual(s.beyond, { below: 0, above: 0 }, `${p.pair}: the bars reach both last ticks`);
+    assert.ok(s.fullRangeUsd > 0 && s.fullRangeSpan[0] < -5 && s.fullRangeSpan[1] > 5, `${p.pair}: the full range is its own layer`);
+    const all = s.depth.reduce((a, d) => a + d[1], 0) + s.beyond.below + s.beyond.above + s.fullRangeUsd;
+    assert.ok(Math.abs(all / p.mapUsd - 1) < 1e-4, `${p.pair}: bars + beyond + layer ${all} vs map ${p.mapUsd}`);
   }
   // the fake world parks a wall at +60..+90%: it was in beyond, now it is on the far bars
   const one = live.pools.find((p) => p.pair === 'ONE/WETH').shape, onFar = one.depth.filter(([o]) => o > 0.45).reduce((a, d) => a + d[1], 0);
   assert.ok(onFar > 0.5 * (onFar + one.beyond.above) && one.beyond.above < onFar, `far bars ${onFar} vs beyond ${one.beyond.above}`);
-  // regression: the wider chart left parked, above, band9, walls and the ±45% bars exactly as the scan published
-  // them before it (golden values from that scan of the same fake world; fine = a hash of the ±45% bars)
+  // regression: the wider chart and the whole field left parked, above, band9 and walls exactly as the scan published
+  // them before (golden values from that scan of the same fake world). fine = a hash of the ±45% bars: it changed once,
+  // on purpose, when the whole field took the full-range layer off the bars (was b9e1b949…, 6492e4ff…, dc034ec3…;
+  // test/shape.test.mjs shows old bar = new bar + the layer's share, bar by bar)
   const GOLD = {
-    'ONE/WETH': { parked: 0.9771239018035686, above: 1, band9: 0.008468288551747008, walls: { below: 0.009375, above: 0.009375 }, fine: 'b9e1b94925c76411' },
-    'UNI/WETH': { parked: 0, above: null, band9: 0.6464305135146509, walls: { below: 0.009375, above: 0.009375 }, fine: '6492e4ff967a1c32' },
-    'ETH/ONE': { parked: 0, above: null, band9: 0.3953119424674881, walls: { below: 0.009375, above: 0.009375 }, fine: 'dc034ec3a670351b' },
+    'ONE/WETH': { parked: 0.9771239018035686, above: 1, band9: 0.008468288551747008, walls: { below: 0.009375, above: 0.009375 }, fine: '7734c5ff7732a539' },
+    'UNI/WETH': { parked: 0, above: null, band9: 0.6464305135146509, walls: { below: 0.009375, above: 0.009375 }, fine: '7e1d12d1a132bf24' },
+    'ETH/ONE': { parked: 0, above: null, band9: 0.3953119424674881, walls: { below: 0.009375, above: 0.009375 }, fine: 'e72dcebe5f585626' },
   };
   const hash = (x) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex').slice(0, 16);
   for (const [pair, g] of Object.entries(GOLD)) {

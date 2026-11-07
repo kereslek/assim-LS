@@ -93,23 +93,30 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
     band9: <0..1>,              // share of value within ±9%
     lpsAtPrice: <n|null>,
     depth: [[<log offset of the bin's centre>, <usd|null>], ...],   // the liquidity chart's bars, ascending (lib/shape.mjs
-                                //   depthProfile): 48 fine bins across ±0.45, the same bars as before, then 5 coarser bins
-                                //   a side out to ±0.6375 as before, then up to 5 "far" bins a side, each twice as wide as
-                                //   the one before, out to the side's furthest initialized tick, at most ±ln 10 (price ×10 /
-                                //   ÷10): 58 to 68 bars; a null bar = that stretch of the map was not read (never 0);
-                                //   [] = no map this pass, or token1 unpriced
+                                //   depthProfile): the pool's whole LP field, full-range layer left out (fullRangeUsd).
+                                //   48 fine bins across ±0.45 and 5 coarser bins a side out to ±0.6375 (same edges as
+                                //   before), then "far" bins a side, each twice as wide as the one before, out to the side's
+                                //   furthest initialized tick with no cap (the last one cut at the tick limit): 58 to about
+                                //   82 bars; a null bar = that stretch of the map was not read (never 0); [] = no map this
+                                //   pass, or token1 unpriced
     depthEdges: [<log offset>, ...]|null,   // every bar's edges, ascending, one more than the bars: bar i spans depthEdges[i]
-                                //   to depthEdges[i + 1] (draw widths from these: the far bars are 0.075, 0.15, 0.3, 0.6 and
-                                //   the rest to ln 10 wide); e.g. [−2.30259, −1.7625, −1.1625, −0.8625, −0.7125, −0.6375, −0.6,
-                                //   …, 0.6375, 0.7125, 0.8625, 1.1625, 1.7625, 2.30259]; null when depth is []
+                                //   to depthEdges[i + 1] (draw widths from these: the far bars are 0.075, 0.15, 0.3, 0.6, 1.2,
+                                //   2.4, … wide); e.g. [−10.1625, −5.3625, −2.9625, −1.7625, −1.1625, −0.8625, −0.7125,
+                                //   −0.6375, −0.6, …, 0.6375, 0.7125, 0.8625, 1.1625, 1.7625, 2.9625, 5.3625]; null when depth is []
     depthSpan: [<min log offset>, <max log offset>]|null,   // the bars' outer edges = depthEdges' first and last: from
-                                //   [−0.6375, 0.6375] (price −47% / +89%) for a map that ends inside them, out to
-                                //   [−2.30259, 2.30259] (÷10 / ×10); per side and per pool; null when depth is []
+                                //   [−0.6375, 0.6375] (price −47% / +89%) for a map that ends inside them, out to the tick
+                                //   limits (about ±88.7 from a price near tick 0); per side and per pool; null when depth is []
     depthStep: { fine: 0.01875, coarse: 0.0375, edge: 0.45 }|null,   // kept for the first readers: bar widths in log price, fine
                                 //   inside ±edge, coarse from there to ±0.6375 (the far bars' widths are in depthEdges only)
-    beyond: { below: <usd|null>, above: <usd|null> },   // everything past depthSpan on that side, out to the last tick: a bucket
-                                //   to label ("$1.2M further down"), not a bar; 0 (real) when the bars reach the side's last
-                                //   tick; null = not read, or no map
+    beyond: { below: <usd|null>, above: <usd|null> },   // everything past depthSpan on that side: 0 (real) when the bars reach
+                                //   the side's last tick, which, uncapped, they always do; null = that side has an unread
+                                //   stretch, or no map
+    fullRangeUsd: <usd|null>,   // the full-range layer the bars leave out: the liquidity present at every tick within ±5 log
+                                //   of the price (full-range positions, or a stack of wide positions covering that stretch),
+                                //   as far out as the liquidity stays at that level; 0 (real) = none; null = not measured (an
+                                //   unread stretch: the bars then hold everything), or no map, or token1 unpriced
+    fullRangeSpan: [<min log offset>, <max log offset>]|null,   // the layer's extent (about ±88.7 for MIN..MAX positions near
+                                //   tick 0); null when fullRangeUsd is 0 or null
     walls: { below: <log offset|null>, above: <log offset|null> }   // found on the ±0.45 fine bars only, as before
   },
   w: { "24h": Window|null, "7d": Window|null, "30d": Window|null },
@@ -122,7 +129,7 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
 }
 ```
 
-**The liquidity chart's bins.** The bars plus both `beyond` buckets add up to `mapUsd` (each value is rounded to 5 significant digits). The ±0.45 bars, the coarse bars to ±0.6375, `parked`, `above`, `band9` and `walls` are computed exactly as before the chart was widened (`test/shape.test.mjs`, `test/scan-outputs.test.mjs`). Past ±0.6375 the far bars run, on each side, until the side's furthest initialized tick is inside the last one, or to ±ln 10: a pool whose liquidity ends at +0.80 has two far bars above (to 0.8625) and `beyond.above` = 0, a real 0; a pool with liquidity past ×10 (a full-range position, say) gets all five a side, with what lies past ×10 in `beyond`. The edges are the same for every pool (only how many far bars each side has differs), and the page can zoom out to `depthSpan` without a "no data" stretch: past it there is either `beyond` or nothing at all. The scanner reads each map in full or not at all, so today a pool has either every bar or none; `depthProfile` already takes a list of unread tick chunks for a partial read. An unread chunk hides itself and everything past it on its side (the map is walked out from the price), so those bars and that side's `beyond` are `null`, and that side's far bars run out to ±ln 10 (where its last tick is, nobody knows); a chunk that holds the price hides every bar. A bar past the last tick a pool can use is a real 0. Size: about 9 KB more in the sealed `live.json` for about 100 pools (MOCKUP · MADE-UP NUMBERS measurement).
+**The liquidity chart's bins: the whole field (owner's pick "A · Whole field, grouped", 7 Nov 2026).** The bars, both `beyond` buckets and `fullRangeUsd` add up to `mapUsd` (each value is rounded to 5 significant digits). `parked`, `above`, `band9` and `walls` are computed exactly as before (`test/shape.test.mjs`, `test/scan-outputs.test.mjs`), and the bar edges inside ±0.6375 are the same as before. The full-range layer comes off every bar: old bar = new bar + the layer's share of that bar, bar by bar (tested), so the ±0.45 bars of a pool with full-range positions are lower than before by exactly that share. The layer is constant liquidity, so its share of `fullRangeUsd` between log offsets a < b inside `fullRangeSpan` [lo, hi] is part(a, b) ÷ part(lo, hi), where part(x, y) = e^(y/2) − e^(x/2) for y ≤ 0 and e^(−x/2) − e^(−y/2) for x ≥ 0 (split at 0 otherwise); in dollars per unit of log price that is a density ∝ e^(−\|x\|/2), flat in liquidity terms, so the page can draw it as a flat layer under the bars. Past ±0.6375 the far bars run, on each side, until the side's furthest initialized tick (of what is left after the layer) is inside the last one: a pool whose liquidity ends at +0.80 has two far bars above (to 0.8625) and `beyond.above` = 0; a wall at −8 log gets the bars out to −10.1625; a pool with only full-range positions keeps the 58 bars, all real zeros, and the layer holds everything. Without a cap the bars always reach the last tick, so `beyond` is a real 0 whenever the side was read. The edges follow one ladder for every pool (only how many far bars each side has, and where the last one is cut at the tick limit, differ). The level that counts as the layer is the lowest liquidity within ±5 log of the price, out as far as the liquidity stays at least that high: a full range plus a ±7-log position gives one layer at their sum out to ±7 log, and the full range past ±7 log stays on the bars (exact either way). One-sided wide positions, or any stretch with no liquidity within ±5 log, give no layer (`fullRangeUsd` = 0). The scanner reads each map in full or not at all, so today a pool has either every bar or none; `depthProfile` already takes a list of unread tick chunks for a partial read. An unread chunk hides itself and everything past it on its side (the map is walked out from the price), so those bars and that side's `beyond` are `null`, and that side's far bars run out to the tick limit (where its last tick is, nobody knows); a chunk that holds the price hides every bar; with any unread chunk the layer is not measured (`fullRangeUsd` null, the bars hold everything). A bar past the last tick a pool can use is a real 0. Size (made-up maps, `test/shape.test.mjs`): with a full-range layer the depth fields shrink (about 1.7 KB vs 1.8 KB a pool, fewer far bars); the worst case, liquidity out to both tick limits with no layer, is 80 bars and +296 bytes a pool; the test holds it under +1 KB. Options `{ far: Math.LN10, wide: null }` reproduce the chart before the whole field exactly (tested).
 
 ### Window
 
