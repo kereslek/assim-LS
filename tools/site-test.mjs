@@ -5,7 +5,7 @@
 //   node tools/site-test.mjs                         Chromium, widths 360…1920 plus reduced motion
 //   node tools/site-test.mjs --browser webkit --device "iPhone 15"     phone = that device; laptop 1440
 //   node tools/site-test.mjs --shots <dir>           also save full-page screenshots (cut into parts)
-//   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan sheets sticky top zoomfit rows refresh clicks motion
+//   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets sticky top zoomfit rows refresh clicks motion
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
@@ -18,7 +18,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures, FIXTURE_PASSPHRASE } from './fixtures/make-fixture.mjs';
+import { writeFixtures, makeData, FIXTURE_PASSPHRASE } from './fixtures/make-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = path.join(ROOT, 'site', 'app', 'index.html');
@@ -42,7 +42,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,pan,sheets,sticky,top,zoomfit,rows,refresh,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,pan,depth,sheets,sticky,top,zoomfit,rows,refresh,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -564,20 +564,24 @@ async function pzSettled(page, id, ms = 3000) {
 const wheel = (page, id, dx, dy) => page.evaluate(({ id, dx, dy }) => { const h = document.querySelector(`[data-pz="${id}"]`), r = h.getBoundingClientRect(); h.dispatchEvent(new WheelEvent('wheel', { deltaX: dx, deltaY: dy, clientX: r.left + r.width / 2, clientY: r.top + 60, bubbles: true, cancelable: true })); }, { id, dx, dy });
 const pzClick = (page, sel) => page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
 const near = (a, b, e = 1e-3) => Math.abs(a - b) <= e;
+const SPAN = 0.6375; // the fixture's depthSpan: 48 fine bars across ±0.45, five coarse ones a side out to ±0.6375
 async function testPan(browser) {
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
-    // the liquidity chart: at its default view the map fits, so a drag only stretches past the data and springs back
+    // the liquidity chart: the bars reach ±64% (coarser past ±45%), so at its ±45% default a drag shows more; past the
+    // last bars it rubber-bands over a "no data" hatch, then springs back to the data's edge
     const ta = await p.$eval('[data-pz="liq-best"]', (h) => getComputedStyle(h).touchAction);
     ok(`pan ${tag}: charts pan sideways and leave vertical swipes and pinch to the page (touch-action ${ta})`, /pan-y/.test(ta) && /pinch-zoom/.test(ta));
     let v = await pzView(p, 'liq-best');
     ok(`pan ${tag}: the liquidity chart opens on the price, ±45% wide`, near(v.c, 0) && near(v.w, 0.9), JSON.stringify(v));
-    await pzDrag(p, 'liq-best', 140, { up: false });
+    const edge0 = -SPAN + 0.45; // the view's centre can go no lower
+    await pzDrag(p, 'liq-best', phone ? 140 : 260, { up: false });
     await sleep(60);
     const mid = await pzView(p, 'liq-best'), hatch = await p.$$eval('[data-pz="liq-best"] .pz-end', (e) => e.length);
     await p.mouse.up();
     v = await pzSettled(p, 'liq-best');
-    ok(`pan ${tag}: past the data a drag rubber-bands over a "no data" hatch, then springs back`, mid.c < -0.01 && hatch > 0 && near(v.c, 0), `${mid.c} ${hatch} ${v.c}`);
+    ok(`pan ${tag}: the bars past ±45% are reachable, and past them a drag rubber-bands over a "no data" hatch, then springs back`, mid.c < edge0 - 0.005 && hatch > 0 && near(v.c, edge0, 2e-3), `${mid.c} ${hatch} ${v.c}`);
+    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
     // + twice: two zoom steps around the view's centre
     await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
     const z1 = await pzView(p, 'liq-best');
@@ -605,7 +609,7 @@ async function testPan(browser) {
     await pzDrag(p, 'liq-best', 160, { steps: 5, ms: 8, settle: 0 });
     const f0 = await pzView(p, 'liq-best'); await sleep(250);
     const f1 = await pzView(p, 'liq-best');
-    const f2 = await pzSettled(p, 'liq-best', 5000), lo = -0.45 + 0.12; // the left limit at ±12% for a ±45% map
+    const f2 = await pzSettled(p, 'liq-best', 5000), lo = -SPAN + 0.12; // the left limit at ±12% for the map's span
     ok(`pan ${tag}: a flick coasts after the release, then stops inside the data`, f1.c < f0.c - 1e-3 && f2.c >= lo - 1e-3, `${f0.c} ${f1.c} ${f2.c}`);
     // a mostly vertical drag doesn't pan
     const s0 = await pzView(p, 'liq-best');
@@ -706,6 +710,55 @@ async function testPan(browser) {
   ok('pan: under reduced motion an edge button jumps at once', (await pzView(p, 'liq-best')).c > a.c + 0.05 && (await p.evaluate(() => document.getAnimations().length)) === 0);
   ok('pan: reduced motion, no page errors', r.errors.length === 0, r.errors[0]);
   await r.ctx.close();
+}
+
+// ---------- 4f2. the liquidity chart's wider bins: depthStep, depthSpan, unread bars, beyond buckets ----------
+async function testDepth(browser) {
+  const { live } = makeData({ now: Date.now() });
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const pick = async (pair) => { await p.evaluate((pair) => { window.dispatchEvent(new WheelEvent('wheel')); [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.querySelector('.tn').textContent === pair).click(); }, pair); await sleep(150); };
+    const look = () => p.evaluate(() => {
+      const h = document.querySelector('[data-pz="liq-best"]'), hr = h.getBoundingClientRect();
+      const bars = [...h.querySelectorAll('svg path')].map((x) => x.getAttribute('d')).join('');
+      const widths = [...bars.matchAll(/h(\d+(?:\.\d+)?)v/g)].map((m) => +m[1]);
+      return { view: h.dataset.view, edges: [...h.querySelectorAll(':scope > .pz-edge:not([hidden])')].length, by: [...h.querySelectorAll('.bylab')].map((e) => { const r = e.getBoundingClientRect(); return { t: e.textContent, inside: r.left >= hr.left - 1 && r.right <= hr.right + 1 }; }),
+        mlab: [...h.querySelectorAll('.mlab')].map((e) => e.textContent), widths, legend: h.closest('[data-chartbox]').querySelector('.legend').innerText, unread: h.querySelectorAll('rect.unread').length };
+    });
+    let a = await look();
+    ok(`depth ${tag}: the default view is ±45% around the price, with more to see both ways`, /^0\.0000,0\.9000$/.test(a.view) && a.edges === 2, a.view + ' ' + a.edges);
+    ok(`depth ${tag}: the legend names what lies past the bars, in dollars`, /Past the bars: \$[\d.]+[KM]? further down · \$[\d.]+[KM]? further up/.test(a.legend), a.legend.slice(-60));
+    await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(150);
+    a = await look();
+    const ws = [...new Set(a.widths.map((x) => Math.round(x)))].sort((x, y) => x - y);
+    ok(`depth ${tag}: zoomed out to ±90%, both "beyond" buckets are labelled at the data's edges, inside the chart`, a.by.length === 2 && a.by.every((b) => /beyond/.test(b.t) && b.inside), JSON.stringify(a.by));
+    ok(`depth ${tag}: …and the coarse bars past ±45% are drawn twice as wide as the fine ones`, ws.length >= 2 && Math.abs(ws[ws.length - 1] / ws[0] - 2) < 0.35, ws.join(','));
+    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
+    // KOVA: 40% of its parked value above sits past ±45%; the "parked" label reads the fine bars only
+    await pick('KOVA/WETH');
+    const kid = await p.getAttribute('#best [data-act="detail"]', 'data-id'), kp = live.pools.find((x) => x.id === kid);
+    const r30 = kp.w['30d'].range, fineUp = kp.shape.depth.filter(([o, v]) => o > r30 + 1e-9 && o <= 0.45 && v != null).reduce((s2, d) => s2 + d[1], 0);
+    const allUp = kp.shape.depth.filter(([o, v]) => o > r30 + 1e-9 && v != null).reduce((s2, d) => s2 + d[1], 0);
+    a = await look();
+    const parsed = (txt) => { const m = /\$([\d.]+)([KM]?)/.exec(txt || ''); return m ? +m[1] * ({ K: 1e3, M: 1e6 }[m[2]] || 1) : null; };
+    const up = parsed(a.mlab.find((x) => /parked/.test(x) && a.mlab.length) && a.mlab[a.mlab.length - 1]);
+    ok(`depth ${tag}: the default view's "parked" label counts the ±45% bars only (KOVA)`, up != null && Math.abs(up - fineUp) / fineUp < 0.06 && Math.abs(up - allUp) / allUp > 0.15, `${up} vs fine ${Math.round(fineUp)} / all ${Math.round(allUp)}`);
+    for (let k = 0; k < 6 && (await p.isVisible('[data-pz="liq-best"] > .pz-edge.r')); k++) { await pzClick(p, '[data-pz="liq-best"] > .pz-edge.r'); await sleep(phone ? 380 : 380); }
+    a = await look();
+    ok(`depth ${tag}: panned to the right end the view stops at the last bar (+${SPAN})`, near(+a.view.split(',')[0], SPAN - 0.45, 2e-3), a.view);
+    // QUARX: its map is unread from the fourth coarse bar up: a hatch and "— beyond", never a bar of 0
+    await p.fill('#f-q', 'QUARX'); await sleep(300);
+    await p.click('#all tbody tr.row td:nth-child(3)');
+    await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    await p.evaluate(() => document.querySelector('#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="-1"]').click()); await sleep(150);
+    for (let k = 0; k < 6 && (await p.isVisible('[data-pz="liq-detail"] > .pz-edge.r')); k++) { await p.evaluate(() => document.querySelector('[data-pz="liq-detail"] > .pz-edge.r').click()); await sleep(380); }
+    const q = await p.evaluate(() => { const h = document.querySelector('[data-pz="liq-detail"]'); return { unread: h.querySelectorAll('rect.unread').length, by: [...h.querySelectorAll('.bylab')].map((e) => e.textContent), legend: h.closest('[data-chartbox]').querySelector('.legend').innerText }; });
+    ok(`depth ${tag}: unread bars are hatched and the unread "beyond" reads —, never 0`, q.unread === 2 && q.by.some((x) => /^— beyond/.test(x)) && /Not read/.test(q.legend) && !/\$0 /.test(q.by.join(' ')), JSON.stringify(q));
+    await p.click('#sheet-close'); await p.fill('#f-q', '');
+    // old data without depthStep/depthSpan still draws (the closest spacing, half a bin past the outer bars)
+    ok(`depth ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
 }
 
 // ---------- 4g. sheets: swipe down to close on a phone ----------
@@ -914,7 +967,7 @@ const CHART_AUDIT = (id) => {
   const ticks = [...host.querySelectorAll('.tick')].map((e) => e.getBoundingClientRect()).sort((a, b) => a.left - b.left);
   for (const r of ticks) if (r.left < hr.left - 1 || r.right > hr.right + 1) out.outside.push('tick');
   for (let i = 1; i < ticks.length; i++) if (ticks[i].left < ticks[i - 1].right - 1 && Math.abs(ticks[i].top - ticks[i - 1].top) < 4) out.over.push('tick×tick');
-  for (const e of host.querySelectorAll(':scope > .pz-edge:not([hidden]), .mlab, .cpill')) { const r = e.getBoundingClientRect(); if (r.left < hr.left - 1 || r.right > hr.right + 1) out.outside.push(e.className.split(' ')[0]); }
+  for (const e of host.querySelectorAll(':scope > .pz-edge:not([hidden]), .mlab, .cpill, .bylab')) { const r = e.getBoundingClientRect(); if (r.left < hr.left - 1 || r.right > hr.right + 1) out.outside.push(e.className.split(' ')[0]); }
   return out;
 };
 async function testZoomFit(browser) {
@@ -1164,7 +1217,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, sheets: testSheets, sticky: testSticky, top: testTop, zoomfit: testZoomFit, rows: testRows, refresh: testRefresh, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, sheets: testSheets, sticky: testSticky, top: testTop, zoomfit: testZoomFit, rows: testRows, refresh: testRefresh, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;

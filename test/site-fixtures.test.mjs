@@ -31,12 +31,38 @@ test('live.json has every field of the contract', () => {
   assert.ok(live.pools.length >= 100, 'enough pools to page the table');
 });
 
+test('the top strip: gas against its own range, three prices, all made up', () => {
+  const m = live.market;
+  keys(m, ['t', 'gas', 'px'], 'market');
+  assert.equal(m.t, live.t);
+  keys(m.gas, ['gwei', 'p10', 'p50', 'p90', 'band', 'basis', 'histDays', 'source', 'hist'], 'gas');
+  assert.ok(m.gas.p10 < m.gas.p50 && m.gas.p50 < m.gas.p90 && m.gas.gwei > 0 && m.gas.gwei < 1, 'sub-gwei gas, ordered percentiles');
+  assert.ok(['cheap', 'normal', 'busy', 'expensive'].includes(m.gas.band));
+  assert.ok(m.gas.hist.length >= 12 && m.gas.hist.length <= 168 && m.gas.hist.every((r) => r.length === 3 && r[0] % 3600e3 === 0 && r[1] > 0));
+  for (const c of ['ETH', 'BTC', 'SOL']) { keys(m.px[c], ['usd', 'ch24', 'src'], c); assert.ok(m.px[c].usd > 0 && Math.abs(m.px[c].ch24) < 0.2); }
+  assert.ok(m.px.ETH.ch24 > 0 && m.px.BTC.ch24 < 0, 'one price up, one down');
+});
+
 test('every pool and window follows the contract and adds up', () => {
   let windows = 0;
   for (const p of live.pools) {
     keys(p, ['id', 'chain', 'v', 'pair', 't0', 't1', 'feeTier', 'dynamicFee', 'lpKeeps', 'hooks', 'verified', 'firstSeen', 'createdAt', 'pairAgeDays', 'young',
       'tvlUsd', 'mapUsd', 'aggUsd', 'price', 'marketRatio', 'offMarket', 'shape', 'w', 'checks', 'gemFirstAt'], p.pair);
-    keys(p.shape, ['tag', 'parked', 'above', 'band9', 'lpsAtPrice', 'depth', 'walls'], p.pair + ' shape');
+    keys(p.shape, ['tag', 'parked', 'above', 'band9', 'lpsAtPrice', 'depth', 'depthSpan', 'depthStep', 'beyond', 'walls'], p.pair + ' shape');
+    // the scanner's bins (lib/shape.mjs depthFields): 48 fine across ±edge, 5 coarse a side out to depthSpan, ascending
+    const sh = p.shape;
+    if (sh.depth.length) {
+      assert.equal(sh.depth.length, 58, p.pair + ' bars');
+      assert.deepEqual(sh.depthStep, { fine: 0.01875, coarse: 0.0375, edge: 0.45 });
+      assert.deepEqual(sh.depthSpan, [-0.6375, 0.6375]);
+      assert.equal(sh.depth.filter(([o]) => Math.abs(o) < sh.depthStep.edge).length, 48, 'fine bars inside the edge');
+      for (let i = 1; i < sh.depth.length; i++) assert.ok(sh.depth[i][0] > sh.depth[i - 1][0], 'ascending');
+      const read = sh.depth.every(([, v]) => v !== null) && numOrNull(sh.beyond.below) && sh.beyond.below !== null && sh.beyond.above !== null;
+      if (read) assert.ok(close(sh.depth.reduce((a, d) => a + d[1], 0) + sh.beyond.below + sh.beyond.above, p.mapUsd, 2e-3), `${p.pair}: bars + beyond = mapUsd`);
+    } else {
+      assert.equal(sh.depthSpan, null); assert.equal(sh.depthStep, null);
+      assert.deepEqual(sh.beyond, { below: null, above: null });
+    }
     assert.ok(['served', 'mixed', 'stranded', 'one-sided'].includes(p.shape.tag));
     // the bars reach ±45%, or out to depthSpan where the data carries one (coarser bins past ±45%); an unread bin is null
     const reach = Array.isArray(p.shape.depthSpan) ? Math.max(-p.shape.depthSpan[0], p.shape.depthSpan[1]) : 0.45;
@@ -86,6 +112,11 @@ test('the cases the page must handle are all present', () => {
   assert.ok(pools.some((p) => p.mapUsd === null && p.tvlUsd !== null), 'an unread map');
   assert.ok(pools.some((p) => p.lpKeeps === null), 'an unread protocol cut');
   assert.ok(pools.some((p) => Object.values(p.w).some((w) => w && w.sigma === null)), 'an unread volatility');
+  const quarx = pools.find((p) => p.t0.sym === 'QUARX');
+  assert.ok(quarx.shape.depth.slice(-2).every(([, v]) => v === null) && quarx.shape.beyond.above === null, 'an unread stretch of a map: null bars and beyond, never 0');
+  const kova = pools.find((p) => p.t0.sym === 'KOVA');
+  const far = kova.shape.depth.filter(([o]) => o > 0.45), fine = kova.shape.depth.filter(([o]) => Math.abs(o) < 0.45);
+  assert.ok(Math.max(...far.map((d) => d[1])) > Math.max(...fine.map((d) => d[1])) / 4, 'a far wall in the coarse bins');
   const fresh = pools.find((p) => p.w['30d'] === null && p.w['7d'] && p.w['24h']);
   assert.ok(fresh, 'a fresh pool with only the 24h and 7d windows');
   assert.ok(fresh.w['7d'].partial);
@@ -164,6 +195,8 @@ test('sealed case folders: the dummy passphrase opens them; stale, missing and r
     assert.equal(read('amber', 'live').t, NOW - 20 * 60e3);
     assert.ok(!fs.existsSync(path.join(dir, 'nofiles', 'history.json')) && !fs.existsSync(path.join(dir, 'nofiles', 'backtest.json')));
     assert.throws(() => open(read('rekeyed', 'live'), aes));
+    const nm = JSON.parse(open(read('nomarket', 'live'), aes));
+    assert.ok(nm.next === null && nm.market.gas.gwei === null && nm.market.gas.band === null && nm.market.px.SOL.usd === null && nm.market.px.BTC.ch24 === null, 'nomarket: unread, never 0');
     assert.equal(JSON.parse(open(read('rekeyed', 'history'), aes)).v, 1);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

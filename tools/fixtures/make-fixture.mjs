@@ -14,13 +14,15 @@
 //   nogems   no pool reaches the gem bar in any window; no backtests yet
 //   nofiles  lock.json and live.json only (history and backtest not published yet)
 //   rekeyed  live.json sealed under another passphrase than lock.json (the page must show nothing)
+//   nomarket the default data, but the top strip's gas, one price, one 24 h change and the next pass unread (null,
+//            never 0): the page must show dashes
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newLockFile, unlock, seal, ITERATIONS } from '../../lib/lock.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -347,6 +349,8 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
   }
   const r2 = rng(seed + 99);
   for (const p of pools) addDaily(r2, p, now);
+  const r3 = rng(seed + 501); // its own stream: the published bins never shift the draws above
+  for (const p of pools) publishDepth(r3, p);
   const byGem = (a, b) => (b.w[DEFAULT_WINDOW]?.gem?.total ?? -1) - (a.w[DEFAULT_WINDOW]?.gem?.total ?? -1);
   pools.sort(byGem);
   const bench = pools.find((p) => p._spec.bench);
@@ -402,11 +406,78 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     bench: bench.id,
     pools: pools.map(({ _spec, ...p }) => p),
     pairs,
+    market: makeMarket(rng(seed + 777), now),
   };
 
   const history = makeHistory(r, pools, now);
   const backtest = mode === 'nogems' ? { v: 1, t: now, ticket: TICKET, provisional: true, pools: {} } : makeBacktest(r, pools, now);
   return { live, history, backtest };
+}
+
+// ---------- the liquidity chart's published bins (lib/shape.mjs depthFields) ----------
+// 48 fine bins across ±0.45 log (the same bars as the old 0.02 grid, re-binned without losing a dollar), then 5 coarse
+// bins a side, twice as wide, out to ±0.6375, and a `beyond` bucket each side; bars plus beyond add up to mapUsd.
+// KOVA (one-sided above) has a far wall in the coarse bins and nothing at all below (real zeros); QUARX's map is unread from its
+// fourth coarse bin up (null bars and a null beyond: never 0).
+export const DEPTH_FINE = 0.45, DEPTH_FINE_BINS = 48, DEPTH_COARSE_BINS = 5;
+const FSTEP = (2 * DEPTH_FINE) / DEPTH_FINE_BINS, CSTEP = 2 * FSTEP, OUTER = DEPTH_FINE + DEPTH_COARSE_BINS * CSTEP;
+function publishDepth(r, p) {
+  const old = p.shape.depth;
+  if (!old.length) { Object.assign(p.shape, { depthSpan: null, depthStep: null, beyond: { below: null, above: null } }); return; }
+  const fine = Array(DEPTH_FINE_BINS).fill(0);
+  for (const [o, v] of old) {
+    const a = o - 0.01, b = o + 0.01;
+    for (let i = 0; i < DEPTH_FINE_BINS; i++) { const x = -DEPTH_FINE + i * FSTEP, ov = Math.min(b, x + FSTEP) - Math.max(a, x); if (ov > 0) fine[i] += (v * ov) / 0.02; }
+  }
+  const tot = old.reduce((s, d) => s + d[1], 0), rest = Math.max(0, (p.mapUsd ?? tot / 0.95) - tot);
+  const sym = p.t0.sym, oneUp = p.shape.tag === 'one-sided' && (p.shape.above ?? 1) > 0.5;
+  let moved = 0; // KOVA: 40% of what is parked above ±9% really sits further out (band9 and parked stay as they are)
+  if (sym === 'KOVA') fine.forEach((v, i) => { if (-DEPTH_FINE + (i + 0.5) * FSTEP > 0.09) { moved += v * 0.4; fine[i] = v * 0.6; } });
+  const side = (s) => { // s = -1 below, +1 above: five coarse bars fading outwards, then the bucket beyond
+    const share = oneUp ? (s > 0 ? 1 : 0) : 0.5, pot = rest * share + (s > 0 ? moved : 0);
+    if (!(pot > 0)) return { bars: Array(DEPTH_COARSE_BINS).fill(0), beyond: 0 };
+    let w = Array.from({ length: DEPTH_COARSE_BINS }, (_, j) => Math.pow(0.72, j) * between(r, 0.6, 1.4));
+    if (sym === 'KOVA' && s > 0) w = w.map((x, j) => x + (j === 2 ? 6 : 0)); // a far wall, about +68% in price
+    const sw = w.reduce((a, x) => a + x, 0), inBars = pot * (sym === 'KOVA' && s > 0 ? 0.85 : 0.6);
+    return { bars: w.map((x) => (x / sw) * inBars), beyond: pot - inBars };
+  };
+  const lo = side(-1), hi = side(1);
+  if (sym === 'QUARX') { hi.bars[3] = null; hi.bars[4] = null; hi.beyond = null; } // an unread chunk hides itself and all past it
+  const usd = (v) => (v == null ? null : sig(v, 5));
+  const at = (x) => sig(x, 4);
+  p.shape.depth = [
+    ...lo.bars.map((v, k) => [at(-DEPTH_FINE - (DEPTH_COARSE_BINS - k - 0.5) * CSTEP), usd(v)]),
+    ...fine.map((v, i) => [at(-DEPTH_FINE + (i + 0.5) * FSTEP), usd(v)]),
+    ...hi.bars.map((v, j) => [at(DEPTH_FINE + (j + 0.5) * CSTEP), usd(v)]),
+  ];
+  p.shape.depthSpan = [at(-OUTER), at(OUTER)];
+  p.shape.depthStep = { fine: at(FSTEP), coarse: at(CSTEP), edge: DEPTH_FINE };
+  p.shape.beyond = { below: usd(lo.beyond), above: usd(hi.beyond) };
+}
+
+// ---------- the top strip (lib/market.mjs): gas against its own week, three prices with their 24 h change ----------
+function makeMarket(r, now) {
+  const hour = Math.floor(now / H) * H, hist = [];
+  for (let i = 155; i >= 0; i--) { // 6.5 days of hourly means: quiet nights, busier afternoons, one spike
+    const day = Math.sin(((hour - i * H) / D) * 2 * Math.PI), spike = i === 40 ? 6 : 1;
+    hist.push([hour - i * H, sig((0.32 + 0.18 * day) * spike * between(r, 0.7, 1.35), 4), 1 + Math.floor(r() * 4)]);
+  }
+  const sorted = hist.map((x) => x[1]).sort((a, b) => a - b), q = (p) => sig(sorted[Math.round((sorted.length - 1) * p)], 4);
+  const gwei = sig(q(0.5) * 1.08, 2), band = gwei < q(0.25) ? 'cheap' : gwei <= q(0.6) ? 'normal' : gwei <= q(0.9) ? 'busy' : 'expensive';
+  return {
+    t: now,
+    gas: { gwei, p10: q(0.1), p50: q(0.5), p90: q(0.9), band, basis: 'history', histDays: 6.5, source: 'feeHistory', hist },
+    px: { ETH: { usd: 3400, ch24: 0.0123, src: 'defillama' }, BTC: { usd: 96240, ch24: -0.0041, src: 'defillama' }, SOL: { usd: 182.4, ch24: 0.031, src: 'coingecko' } },
+  };
+}
+// the same pass with the strip's reads failed: missing is never zero
+function unreadMarket(data) {
+  const live = structuredClone(data.live);
+  live.next = null;
+  live.market.gas = { gwei: null, p10: null, p50: null, p90: null, band: null, basis: null, histDays: 0, source: null, hist: [] };
+  live.market.px.SOL = { usd: null, ch24: null, src: null };
+  live.market.px.BTC.ch24 = null;
+  return { ...data, live };
 }
 
 // 30 days of fees per $1,000 and net, plus the shape of the fee stream (pattern, burst) and the gem's tags.
@@ -623,6 +694,7 @@ function aged(data, ageMs) {
   const shift = (x) => (isNum(x) ? x - ageMs : x);
   const live = structuredClone(data.live);
   live.t = shift(live.t); live.next = shift(live.next);
+  if (live.market) live.market.t = shift(live.market.t);
   live.health.loop.watchdogLast = shift(live.health.loop.watchdogLast);
   for (const p of live.pools) p.gemFirstAt = shift(p.gemFirstAt);
   return { live, history: { ...data.history, t: shift(data.history.t) }, backtest: { ...data.backtest, t: shift(data.backtest.t) } };
@@ -643,6 +715,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'nofiles'), keys, data, now, ['live']);
   const other = unlock(newLockFile('a different made-up passphrase', 1000), 'a different made-up passphrase').aes;
   sealCase(path.join(outDir, 'rekeyed'), keys, data, now, ['live', 'history', 'backtest'], other);
+  sealCase(path.join(outDir, 'nomarket'), keys, unreadMarket(data), now);
   return { outDir, cases: CASES, passphrase: FIXTURE_PASSPHRASE };
 }
 

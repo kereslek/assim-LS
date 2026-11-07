@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-obOoRAH5/JsEyzULp2uE1+S27DLZulquRM5I0YIIOtc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Cwc1EuZWG8xR55AlwBE+a7daFjKiw/SlLtAmuYwTaYc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -260,6 +260,8 @@ button.tile:hover{border-color:var(--line3)}
 .liq .cpill{position:absolute;transform:translateX(-50%);white-space:nowrap;padding:2px 5px;border-radius:4px;background:var(--surface);border:1px solid var(--line2);font:600 10px/1.2 var(--mono);color:var(--fg)}
 .liq .tick{position:absolute;top:142px;transform:translateX(-50%);font:500 10px/1.2 var(--mono);color:var(--muted);white-space:nowrap}
 .liq .tick.now{color:var(--fg);font-weight:600}
+.liq .bylab{position:absolute;top:24px;z-index:1;padding:1px 5px;border-radius:4px;border:1px dashed var(--line3);background:var(--pzf,var(--surface));font:600 10px/1.2 var(--mono);color:var(--fg2);white-space:nowrap;pointer-events:none}
+.sw.hatch{background:repeating-linear-gradient(135deg,rgba(139,150,163,.5) 0 2px,transparent 2px 5px);border:1px solid var(--line3)}
 .checks{display:flex;gap:8px;align-items:flex-start;margin-top:14px;padding-top:12px;border-top:1px solid var(--grid);font-size:12px;line-height:1.5;color:var(--fg2)}
 .checks b{color:var(--fg);font-weight:600}
 .ck-ok{color:var(--fg2)}.ck-bad{color:var(--neg);font-weight:600}.ck-null{color:var(--warn)}
@@ -577,7 +579,7 @@ footer .btn{font-family:var(--sans)}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.2.1';
+const BUILD = 'v0.2.2';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1039,19 +1041,25 @@ function breakdown(w) {
     + `<span><i class="sw" style="background:var(--gas)"></i>Gas ${pct(g)}</span><span>${n >= 0 ? 'fees ' + pct(f) + ' in all' : 'net <b class="neg">' + pct(n) + '</b>'}</span></div></div>`;
 }
 const LIQ_L = 0.45;
-// the map's own edges: half a bin past the outermost bins (the scanner reads about ±45%; nothing is drawn beyond it)
-function liqExtent(depth) {
+// the map's own edges and bar widths: the scanner's depthSpan and depthStep (fine bars inside ±edge, coarser ones out
+// to the span); older data without them: half a bin past the outermost bins, every bar as wide as the closest spacing
+function liqExtent(sh, depth) {
+  const st = sh && sh.depthStep, sp = sh && sh.depthSpan;
+  if (st && isNum(st.fine) && st.fine > 0 && Array.isArray(sp) && isNum(sp[0]) && isNum(sp[1]) && sp[1] > sp[0]) {
+    const coarse = isNum(st.coarse) && st.coarse > 0 ? st.coarse : st.fine, edge = isNum(st.edge) && st.edge > 0 ? st.edge : Infinity;
+    return { lo: sp[0], hi: sp[1], step: st.fine, edge, w: (o) => (Math.abs(o) > edge + 1e-9 ? coarse : st.fine) };
+  }
   const offs = depth.map((d) => d[0]).sort((a, b) => a - b);
   let step = Infinity;
   for (let i = 1; i < offs.length; i++) { const d = offs[i] - offs[i - 1]; if (d > 1e-9) step = Math.min(step, d); }
   if (!isFinite(step)) step = 0.02;
-  return { lo: offs[0] - step / 2, hi: offs[offs.length - 1] + step / 2, step };
+  return { lo: offs[0] - step / 2, hi: offs[offs.length - 1] + step / 2, step, edge: Infinity, w: () => step };
 }
 // round price moves inside the view, at least 13% of the width apart, never at the very edges; the price wins
 function liqTicks(v0, v1, priceOff) {
   const p0 = Math.exp(v0) - 1, p1 = Math.exp(v1) - 1, span = v1 - v0;
   let st = 1;
-  for (const s of [0.01, 0.02, 0.05, 0.1, 0.15, 0.25, 0.5, 1]) if ((p1 - p0) / s <= 7) { st = s; break; }
+  for (const s of [0.01, 0.02, 0.05, 0.1, 0.15, 0.25, 0.5, 1, 2, 5]) if ((p1 - p0) / s <= 7) { st = s; break; }
   const f = (t) => (Math.log(1 + t) - v0) / span;
   const cand = [];
   for (let k = Math.ceil(p0 / st - 1e-9); k * st <= p1 + 1e-9; k++) { const t = +(k * st).toFixed(4); if (t > -1) cand.push(t); }
@@ -1065,13 +1073,15 @@ function liqTicks(v0, v1, priceOff) {
   return kept.sort((a, b) => a - b);
 }
 function liqChart(p, w, id) {
-  const depth = ((p.shape && p.shape.depth) || []).filter((d) => Array.isArray(d) && isNum(d[0]) && isNum(d[1]));
+  // a null bar is a stretch of the map that wasn't read: hatched, never drawn as 0
+  const all = ((p.shape && p.shape.depth) || []).filter((d) => Array.isArray(d) && isNum(d[0]) && (isNum(d[1]) || d[1] === null));
+  const depth = all.filter((d) => isNum(d[1])), unread = all.filter((d) => d[1] === null);
   if (!depth.length) { delete PZ[id]; return `<p class="empty" style="margin-top:8px">Liquidity map not read this pass (${DASH}).</p>`; }
-  const ext = liqExtent(depth), key = p.id, L = () => LIQ_SPANS[zget(id)];
+  const ext = liqExtent(p.shape, all), key = p.id, L = () => LIQ_SPANS[zget(id)];
   // the centre may move inside the data; zoomed out past the data, the view holds still around the price
   const lim = () => { const l = L(); if (2 * l < ext.hi - ext.lo - 1e-9) return [ext.lo + l, ext.hi - l]; const c = clamp(0, ext.hi - l, ext.lo + l); return [c, c]; };
   const P = PZ[id] = {
-    key, p, w, depth, ex: ext, kind: 'liq', aria: ['Show lower prices', 'Show higher prices'], hint: '◂ drag ▸ · double-tap resets',
+    key, p, w, depth, unread, ex: ext, kind: 'liq', aria: ['Show lower prices', 'Show higher prices'], hint: '◂ drag ▸ · double-tap resets',
     x: () => panGet(id, key, clamp(0, ...lim())), setX: (v) => panPut(id, key, v), lim,
     span: () => 2 * L(), unit: (h) => (2 * L()) / Math.max(40, h.clientWidth),
     vw: () => [P.x() - L(), P.x() + L()], ext: () => [ext.lo, ext.hi],
@@ -1083,28 +1093,39 @@ function liqChart(p, w, id) {
   const r = w && isNum(w.range) ? w.range : null, walls = (p.shape && p.shape.walls) || {};
   const tot = sum(depth.map((d) => d[1]));
   P.label = `Liquidity by price: ${pct(r != null ? sum(depth.filter(([o]) => Math.abs(o) <= r + 1e-9).map((d) => d[1])) / (p.tvlUsd || tot) : null)} of the pool sits inside the suggested range`;
+  const by = (p.shape && p.shape.beyond) || {}, byTxt = [['below', 'further down'], ['above', 'further up']].filter(([k]) => by[k] !== 0 && by[k] !== undefined).map(([k, t]) => `${usd(by[k])} ${t}`);
   return pzShell(id, 'liq')
     + `<div class="legend" style="margin-top:8px"><span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span><span><i class="sw" style="background:#4B5563"></i>Outside it</span>`
-    + `<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>${isNum(walls.below) || isNum(walls.above) ? '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>' : ''}</div>`;
+    + `<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>${isNum(walls.below) || isNum(walls.above) ? '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>' : ''}`
+    + (unread.length ? '<span><i class="sw hatch"></i>Not read</span>' : '')
+    + (byTxt.length ? `<span title="Liquidity past the chart’s last bars, out to the pool’s last tick">Past the bars: ${byTxt.join(' · ')}</span>` : '') + '</div>';
 }
 // the drawing inside the liquidity chart for its current view (redrawn on every frame of a drag)
 function liqInner(id) {
-  const P = PZ[id], { p, w, depth } = P, ext = P.ex, L = LIQ_SPANS[zget(id)], c = P.x(), v0 = c - L, v1 = c + L, VW = 480, VH = 120;
+  const P = PZ[id], { p, w, depth, unread } = P, ext = P.ex, L = LIQ_SPANS[zget(id)], c = P.x(), v0 = c - L, v1 = c + L, VW = 480, VH = 120;
   const r = w && isNum(w.range) ? w.range : null;
-  const X = (o) => ((o - v0) / (2 * L)) * VW, bw = Math.max(1, (ext.step / (2 * L)) * VW - 2);
+  const X = (o) => ((o - v0) / (2 * L)) * VW;
+  // a coarse bar covers more price than a fine one: heights are value per fine-bar width, so a wide bar isn't drawn taller
+  const dens = (o, v) => (v * ext.step) / ext.w(o);
   // the bars fill the height for what is in view (zoomed in, the bars near the price stay readable); while a drag or a
   // coast is running the scale eases towards it, so bars glide instead of jumping as taller ones come into view
-  const want = Math.max(1, ...depth.filter(([o]) => o >= v0 - ext.step / 2 && o <= v1 + ext.step / 2).map((d) => d[1]));
+  const want = Math.max(1, ...depth.filter(([o]) => o >= v0 - ext.w(o) / 2 && o <= v1 + ext.w(o) / 2).map(([o, v]) => dens(o, v)));
   const moving = !reduced() && ((G && G.id === id && G.drag) || !!PZA[id]);
   const max = P.ys = moving && isNum(P.ys) ? P.ys + (want - P.ys) * 0.3 : want;
   const inR = (o) => r != null && Math.abs(o) <= r + 1e-9;
   let pin = '', pout = '', hin = 0;
+  const edges = (o) => { const hw = ext.w(o) / 2, a = X(o - hw), b = X(o + hw), g = Math.min(2, (b - a) * 0.2); return [a + g / 2, Math.max(1, b - a - g)]; };
   for (const [o, v] of depth) {
-    if (v <= 0 || o < v0 - ext.step || o > v1 + ext.step) continue;
-    const h = (v / max) * (VH - 4), x = X(o) - bw / 2, d = `M${x.toFixed(1)} ${VH}v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`;
+    const hw = ext.w(o) / 2;
+    if (v <= 0 || o + hw < v0 || o - hw > v1) continue;
+    const h = (dens(o, v) / max) * (VH - 4), [x, bw] = edges(o), d = `M${x.toFixed(1)} ${VH}v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`;
     if (inR(o)) { pin += d; hin = Math.max(hin, h); } else pout += d;
   }
   let s = `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none" aria-hidden="true">`;
+  if (unread.length) { // unread stretches: a hatch over their width, never a bar of 0
+    s += `<defs><pattern id="nr-${id}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.32)"/></pattern></defs>`;
+    for (const [o] of unread) { const hw = ext.w(o) / 2; if (o + hw < v0 || o - hw > v1) continue; const a = X(o - hw), b = X(o + hw); s += `<rect class="unread" x="${a.toFixed(1)}" y="0" width="${(b - a).toFixed(1)}" height="${VH}" fill="url(#nr-${id})"/>`; }
+  }
   if (r != null) { const a = Math.max(-r, v0), b = Math.min(r, v1); if (b > a) s += `<rect x="${X(a).toFixed(1)}" y="0" width="${(X(b) - X(a)).toFixed(1)}" height="${VH}" fill="rgba(22,199,132,0.16)"/>`; }
   s += `<path fill="#3A4452" d="${pout}"/><path fill="#16C784" stroke="rgba(22,199,132,.45)" stroke-width="3" vector-effect="non-scaling-stroke" d="${pin}"/>`;
   const walls = (p.shape && p.shape.walls) || {};
@@ -1112,9 +1133,9 @@ function liqInner(id) {
   if (0 >= v0 && 0 <= v1) s += `<rect x="${(X(0) - 0.7).toFixed(1)}" y="0" width="1.4" height="${VH}" fill="#E6EDF3"/>`;
   s += `<rect x="0" y="${VH - 0.6}" width="${VW}" height="0.6" fill="#2B3542"/></svg>`;
   const pctX = (o) => ((X(o) / VW) * 100).toFixed(1) + '%';
-  const tot = sum(depth.map((d) => d[1]));
-  for (const side of [-1, 1]) { // each side's parked value, labelled near its middle (held inside the chart)
-    const part = depth.filter(([o]) => !inR(o) && Math.sign(o) === side && o !== 0);
+  const tot = sum(depth.filter(([o]) => Math.abs(o) <= ext.edge + 1e-9).map((d) => d[1]));
+  for (const side of [-1, 1]) { // each side's parked value on the fine bars (±45%), labelled near its middle (held inside the chart)
+    const part = depth.filter(([o]) => !inR(o) && Math.sign(o) === side && o !== 0 && Math.abs(o) <= ext.edge + 1e-9);
     const v = sum(part.map((d) => d[1]));
     if (v < tot * 0.05) continue;
     const cen = sum(part.map(([o, x]) => o * x)) / v;
@@ -1122,10 +1143,20 @@ function liqInner(id) {
     s += `<span class="mlab" style="left:clamp(48px, ${pctX(cen)}, calc(100% - 48px));top:${side < 0 ? 0 : 11}px">${usd(v)} parked</span>`;
   }
   const lps = p.shape && p.shape.lpsAtPrice, room = w && w.inRangeUsd, px0 = X(0) / VW;
-  if (px0 >= 0.12 && px0 <= 0.88) s += `<span class="cpill" style="left:${pctX(0)};top:${Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24)))}px">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
+  // near an edge the pill hangs off the price line towards the middle, so it never leaves the chart
+  if (px0 >= 0.04 && px0 <= 0.96) s += `<span class="cpill" style="left:${pctX(0)};top:${Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24)))}px${px0 < 0.3 ? ';transform:translateX(-6px)' : px0 > 0.7 ? ';transform:translateX(calc(6px - 100%))' : ''}">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
   const off = px0 < 0.04 ? -1 : px0 > 0.96 ? 1 : 0;
   for (const t of liqTicks(v0, v1, off)) s += `<span class="tick${t === 0 ? ' now' : ''}" style="left:${pctX(Math.log(1 + t))}">${t === 0 ? 'PRICE' : (t < 0 ? MINUS : '+') + +Math.abs(t * 100).toFixed(1) + '%'}</span>`;
   if (off) s += `<span class="tick now off ${off < 0 ? 'l">◂ PRICE' : 'r">PRICE ▸'}</span>`;
+  // the beyond buckets: what sits past the last bars, a label at the map's edge (never a bar)
+  const by = (p.shape && p.shape.beyond) || {};
+  for (const [k, e, dir] of [['below', ext.lo, -1], ['above', ext.hi, 1]]) {
+    const v = by[k];
+    if (v === 0 || v === undefined || !isFinite(e) || e < v0 || e > v1) continue;
+    const f = (e - v0) / (2 * L), out = dir > 0 ? f <= 0.7 : f >= 0.3; // past the edge when there is room, else just inside it
+    const pos = (dir > 0) === out ? `left:${(f * 100).toFixed(1)}%` : `right:${((1 - f) * 100).toFixed(1)}%`;
+    s += `<span class="bylab ${dir > 0 ? 'r' : 'l'}" style="${pos}" title="Liquidity past the chart’s last bars, out to the pool’s last tick">${dir < 0 ? '◂ ' : ''}${isNum(v) ? usd(v) : DASH} beyond${dir > 0 ? ' ▸' : ''}</span>`;
+  }
   return s + pzEnds((ext.lo - v0) / (2 * L), (v1 - ext.hi) / (2 * L), 'NO DATA', 'NO DATA');
 }
 function checksLine(p) {
@@ -1577,10 +1608,11 @@ function shapeSpark(p, w) {
   const depth = ((p.shape && p.shape.depth) || []).filter((d) => isNum(d[0]) && isNum(d[1]) && Math.abs(d[0]) <= LIQ_L + 1e-9);
   if (!depth.length) return '<svg width="72" height="22" viewBox="0 0 96 24" aria-hidden="true"><rect x="0" y="23" width="96" height="1" fill="#2B3542"/></svg>';
   const r = w && isNum(w.range) ? w.range : null, max = Math.max(1, ...depth.map((d) => d[1]));
+  const st = p.shape.depthStep && isNum(p.shape.depthStep.fine) ? p.shape.depthStep.fine : 0.02, bw = Math.max(1, (93 * st) / (2 * LIQ_L) - 0.4);
   let pin = '', pout = '';
   for (const [o, v] of depth) {
-    const h = Math.max(1, (v / max) * 22), x = ((o + LIQ_L) / (2 * LIQ_L)) * 93;
-    const d = `M${x.toFixed(1)} 24v${(-h).toFixed(1)}h2.4v${h.toFixed(1)}z`;
+    const h = Math.max(1, (v / max) * 22), x = 1.5 + ((o + LIQ_L) / (2 * LIQ_L)) * 93 - bw / 2;
+    const d = `M${x.toFixed(1)} 24v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`;
     if (r != null && Math.abs(o) <= r + 1e-9) pin += d; else pout += d;
   }
   return `<svg width="72" height="22" viewBox="0 0 96 24" preserveAspectRatio="none" role="img" aria-label="Liquidity shape: ${esc(p.shape.tag)}"><path fill="#4B5563" d="${pout}"/><path fill="#16C784" d="${pin}"/><rect x="47.5" y="0" width="1" height="24" fill="#E6EDF3"/></svg>`;
