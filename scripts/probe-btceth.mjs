@@ -263,6 +263,20 @@ for (const net of Object.keys(CHAINS)) {
   for (const t of toks) { const v = word(b[k++]); if (v != null && v < 80n) dec.set(t, Number(v)); }
   for (const p of mine.filter((x) => x.kind !== 'v4' && x.t0)) { p.bal0 = word(b[k++]); p.bal1 = word(b[k++]); }
   for (const p of mine.filter((x) => x.gauge)) { p.rewardRate = word(b[k++]); p.periodFinish = word(b[k++]); if (p.slipDiag) p.slipDiag.rewardRate = p.rewardRate != null; }
+  // gauges that answer no rewardRate() (the newer Aero factory): the other standard reads, this epoch (weeks start Thursday 00:00 UTC)
+  const epoch = Math.floor(Date.now() / 1000 / 604800) * 604800;
+  const odd = mine.filter((x) => x.gauge && x.rewardRate == null);
+  if (odd.length) {
+    const planC = odd.flatMap((p) => [call(p.gauge, 'rewardRateByEpoch(uint256)', [{ t: 'uint', v: epoch }]), call(p.gauge, 'left()'), call(p.gauge, 'rewardToken()'), call(p.gauge, 'voter()')]);
+    let c;
+    try { c = await mc(planC, tag); } catch (e) { note(`rpc ${net}`, e); c = new Array(planC.length).fill(null); }
+    let j = 0;
+    for (const p of odd) {
+      const rr = word(c[j++]), left = word(c[j++]), rt = word(c[j++]), vo = word(c[j++]);
+      Object.assign(p.slipDiag, { byEpoch: rr != null, left: left != null, rewardToken: rt != null ? toAddress(rt) : null, voter: vo != null ? toAddress(vo) : null });
+      if (rr != null) { p.rewardRate = rr; p.periodFinish = BigInt(epoch + 604800); p.rewardToken = rt != null ? lower(toAddress(rt)) : null; }
+    }
+  }
   for (const p of mine) { p.d0 = dec.get(p.t0) ?? null; p.d1 = dec.get(p.t1) ?? null; }
   // phase C: the liquidity within ±9% (a few bitmap words around the price)
   const mapIn = mine.filter((p) => p.tickSpacing > 0 && p.tick != null && p.L != null);
@@ -323,13 +337,16 @@ for (const p of all) {
 const aeroJ = await gt(`/simple/networks/base/token_price/${AERO}`);
 const aeroUsd = num(aeroJ?.data?.attributes?.token_prices?.[AERO]);
 const nowS = Math.floor(Date.now() / 1000);
+const otherReward = [...new Set(all.filter((p) => p.rewardToken && !(p.net === 'base' && p.rewardToken === AERO)).map((p) => `${p.net}:${p.rewardToken}`))];
+const rewardUsd = new Map([[`base:${AERO}`, aeroUsd]]);
+for (const k of otherReward.slice(0, 4)) { const [n, t] = k.split(':'); rewardUsd.set(k, num((await gt(`/simple/networks/${n}/token_price/${t}`))?.data?.attributes?.token_prices?.[t])); }
+for (const p of all.filter((x) => x.kind === 'slip')) p.stakedShare = p.stakedL != null && p.L > 0n ? Number(p.stakedL) / Number(p.L) : null;
 for (const p of all.filter((x) => x.rewardRate != null)) {
-  const live = p.periodFinish != null && Number(p.periodFinish) > nowS;
-  p.emitYearUsd = live && isNum(aeroUsd) ? (Number(p.rewardRate) / 1e18) * YEAR * aeroUsd : live ? null : 0;
+  const live = p.periodFinish != null && Number(p.periodFinish) > nowS, px = rewardUsd.get(`${p.net}:${p.rewardToken ?? AERO}`) ?? null;
+  p.emitYearUsd = live && isNum(px) ? (Number(p.rewardRate) / 1e18) * YEAR * px : live ? null : 0;
   p.emitApr9 = isNum(p.emitYearUsd) && p.stakedL != null && p.stakedL > 0n && p.unit9 > 0 ? p.emitYearUsd / (Number(p.stakedL) * p.unit9) : null;
   // staked liquidity unread: a floor, as if all the active liquidity were staked
   if (p.emitApr9 == null && p.stakedL == null && isNum(p.emitYearUsd) && p.L > 0n && p.unit9 > 0) { p.emitApr9 = p.emitYearUsd / (Number(p.L) * p.unit9); p.emitFloor = true; }
-  p.stakedShare = p.stakedL != null && p.L > 0n ? Number(p.stakedL) / Number(p.L) : null;
 }
 
 // ---------- 5. BTC/ETH volatility and LVR (CoinGecko, cross-checked against a pool's own daily prices)
@@ -449,8 +466,12 @@ sections.push({ short: 'Checks', title: 'Checks', lines: [
   `BTC/ETH venues (GeckoTerminal dex ids): ${[...new Set(pairs.map((p) => `${p.net}:${p.dex}`))].join(', ')}`,
   ...(() => { // Aerodrome-type CL pools by factory: which reads answered (counts only)
     const by = new Map();
-    for (const p of all.filter((x) => x.slipDiag)) { const k = `${p.net} factory ${p.slipDiag.factory}`; const a = by.get(k) || { n: 0, uf: 0, pg: 0, vg: 0, st: 0, rr: 0, dex: new Set() }; a.n++; a.uf += p.slipDiag.unstakedFee; a.pg += p.slipDiag.poolGauge; a.vg += p.slipDiag.voterGauge; a.st += p.slipDiag.staked; a.rr += !!p.slipDiag.rewardRate; a.dex.add(p.dex); by.set(k, a); }
-    return [...by].map(([k, a]) => `CL ${k} (${[...a.dex].join(', ')}): ${a.n} pools; unstakedFee read ${a.uf}, pool gauge ${a.pg}, voter gauge ${a.vg}, stakedLiquidity read ${a.st}, rewardRate read ${a.rr}`);
+    for (const p of all.filter((x) => x.slipDiag)) {
+      const d = p.slipDiag, k = `${p.net} factory ${d.factory}`, a = by.get(k) || { n: 0, uf: 0, pg: 0, vg: 0, st: 0, rr: 0, be: 0, lf: 0, rt: new Set(), vo: new Set(), dex: new Set() };
+      a.n++; a.uf += d.unstakedFee; a.pg += d.poolGauge; a.vg += d.voterGauge; a.st += d.staked; a.rr += !!d.rewardRate; a.be += !!d.byEpoch; a.lf += !!d.left; a.dex.add(p.dex);
+      if (d.rewardToken) a.rt.add(d.rewardToken); if (d.voter) a.vo.add(d.voter); by.set(k, a);
+    }
+    return [...by].map(([k, a]) => `CL ${k} (${[...a.dex].join(', ')}): ${a.n} pools; unstakedFee read ${a.uf}, pool gauge ${a.pg}, voter gauge ${a.vg}, stakedLiquidity read ${a.st}, rewardRate read ${a.rr}, rewardRateByEpoch read ${a.be}, left read ${a.lf}${a.rt.size ? `, reward token ${[...a.rt].join(' ')}` : ''}${a.vo.size ? `, gauge voter ${[...a.vo].join(' ')}` : ''}`);
   })(),
 ] });
 
