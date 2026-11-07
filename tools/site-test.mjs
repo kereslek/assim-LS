@@ -888,6 +888,11 @@ async function testTop(browser) {
     else { await p.waitForFunction(() => scrollY === 0, null, { timeout: 4000 }).catch(() => {}); ok(`top ${tag}: it scrolls smoothly back to the top`, (await p.evaluate(() => scrollY)) === 0); }
     await sleep(350);
     ok(`top ${tag}: …and hides again`, !(await p.evaluate(TOTOP)).on);
+    // at the very bottom of the page the button covers no control (the footer keeps room for it)
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, document.documentElement.scrollHeight); });
+    await sleep(400);
+    const under = await p.evaluate(() => { const a = document.querySelector('#totop').getBoundingClientRect(); return [...document.querySelectorAll('button, a[href], select, input, [data-act]')].filter((e) => e.id !== 'totop' && e.offsetParent !== null).filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && a.left < r.right && r.left < a.right && a.top < r.bottom && r.top < a.bottom; }).map((e) => e.id || e.dataset.act || e.tagName); });
+    ok(`top ${tag}: at the bottom of the page it covers no control`, (await p.evaluate(TOTOP)).on && under.length === 0, under.join(','));
     ok(`top ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
