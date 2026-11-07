@@ -154,6 +154,91 @@ const ENUM = () => {
   return { layer: layerId, overlay: layer !== document.body, controls: out };
 };
 const HSCROLL = () => document.documentElement.scrollWidth - document.documentElement.clientWidth;
+// a chart host's view ("<position>,<width>[,<y>]"): compared in memory, never printed
+const VIEW = (id) => { const h = document.querySelector(`[data-pz="${id}"]`); return h ? h.dataset.view : null; };
+const STUCK = () => { // the All pools header copy: shown at the top, columns over the real ones
+  const box = document.querySelector('#all-box'), sh = box && box.parentElement.querySelector(':scope > .sh');
+  if (!sh || !sh.classList.contains('on')) return { on: false };
+  const real = [...box.querySelectorAll('thead th')], copy = [...sh.querySelectorAll('th')], vw = sh.firstElementChild.getBoundingClientRect();
+  let mis = 0;
+  real.forEach((th, i) => { const a = th.getBoundingClientRect(), b = copy[i] && copy[i].getBoundingClientRect(); if (!b) { mis++; return; } if (Math.min(a.right, vw.right) - Math.max(a.left, vw.left) > 4 && Math.abs(a.left - b.left) > 1) mis++; });
+  return { on: true, top: Math.abs(vw.top) <= 1, mis };
+};
+
+// ---------- 2b. gestures: zoom twice, drag, double-tap, swipe a sheet closed, sticky header, back to top ----------
+// Each step is a check, or a skip when the live data doesn't have that part (a pool with no liquidity map, say).
+async function gestures(page, R, tag, errTotal) {
+  const n = { run: 0, skip: 0 }, e0 = errTotal();
+  const run = (name, cond) => { n.run++; R.ok(name, cond); };
+  const skip = () => { n.skip++; };
+  const box = async (sel) => { await page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector(sel).scrollIntoView({ block: 'center' }); }, sel); await sleep(150); return page.locator(sel).first().boundingBox(); };
+  const drag = async (sel, dx) => { const b = await box(sel), x = b.x + b.width / 2, y = b.y + Math.min(b.height / 2, 70); await page.mouse.move(x, y); await page.mouse.down(); for (let i = 1; i <= 10; i++) { await page.mouse.move(x + (dx * i) / 10, y); await sleep(20); } await sleep(150); await page.mouse.up(); await sleep(500); };
+  const press = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel); if (!b || b.disabled) return false; window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
+  // the depth chart: + twice, a drag, a double-tap back to the start
+  const liq = await page.evaluate(() => { const h = document.querySelector('#best [data-pz^="liq"]'); return h ? h.dataset.pz : null; });
+  if (liq) {
+    const v0 = await page.evaluate(VIEW, liq), w = (v) => Number(String(v).split(',')[1]), c = (v) => Number(String(v).split(',')[0]);
+    await press(`[data-act="zoom"][data-chart="${liq}"][data-dir="1"]`); await sleep(250);
+    const v1 = await page.evaluate(VIEW, liq);
+    await press(`[data-act="zoom"][data-chart="${liq}"][data-dir="1"]`); await sleep(250);
+    const v2 = await page.evaluate(VIEW, liq);
+    run('gestures: + pressed twice zooms the depth chart twice', w(v1) < w(v0) && w(v2) < w(v1));
+    await drag(`[data-pz="${liq}"]`, -120);
+    run('gestures: dragging the depth chart sideways moves its view', c(await page.evaluate(VIEW, liq)) !== c(v2));
+    const b = await box(`[data-pz="${liq}"]`);
+    await page.mouse.click(b.x + b.width / 2, b.y + Math.min(b.height / 2, 70)); await sleep(90); await page.mouse.click(b.x + b.width / 2, b.y + Math.min(b.height / 2, 70)); await sleep(400);
+    run('gestures: a double-tap resets the depth chart', (await page.evaluate(VIEW, liq)) === v0);
+  } else skip();
+  // the daily fee strip: zoomed in, a drag to the right shows older days
+  if (await page.evaluate(() => !!document.querySelector('#best [data-pz="daily-best"]'))) {
+    await press('[data-act="zoom"][data-chart="daily-best"][data-dir="1"]'); await sleep(250);
+    const d0 = await page.evaluate(VIEW, 'daily-best');
+    await drag('[data-pz="daily-best"]', 140);
+    run('gestures: dragging the daily strip shows older days', Number(String(await page.evaluate(VIEW, 'daily-best')).split(',')[0]) < Number(String(d0).split(',')[0]));
+    await press('[data-act="zreset"][data-chart="daily-best"]'); await sleep(200);
+  } else skip();
+  // the detail sheet: on a phone, a swipe down on its handle closes it
+  if (await press('#best [data-act="detail"]')) {
+    await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {});
+    await sleep(400);
+    if (await page.isVisible('#sheet .grab')) {
+      const how = await page.evaluate(async () => {
+        const el = document.querySelector('#sheet .grab'), r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+        let T;
+        try { T = (yy) => new Touch({ identifier: 5, target: el, clientX: x, clientY: yy }); T(y); } catch (e) { return 'mouse'; }
+        const fire = (type, yy) => el.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [T(yy)], changedTouches: [T(yy)], bubbles: true, cancelable: true }));
+        fire('touchstart', y);
+        for (let i = 1; i <= 10; i++) { await new Promise((r2) => setTimeout(r2, 16)); fire('touchmove', y + i * 32); }
+        fire('touchend', y + 320);
+        return 'touch';
+      });
+      if (how === 'mouse') { const g = await page.locator('#sheet .grab').boundingBox(); await page.mouse.move(g.x + g.width / 2, g.y + 8); await page.mouse.down(); for (let i = 1; i <= 10; i++) { await page.mouse.move(g.x + g.width / 2, g.y + 8 + i * 32); await sleep(16); } await page.mouse.up(); }
+      await sleep(600);
+      run('gestures: a swipe down closes the detail sheet', !(await page.isVisible('#sheet')));
+    } else skip();
+    if (await page.isVisible('#sheet')) { await page.click('#sheet-close').catch(() => {}); await sleep(300); }
+  } else skip();
+  // the All pools header sticks while its rows scroll by, and leaves at the top
+  if ((await page.$$('#all-tbl tbody tr.row')).length >= 12) {
+    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr.row:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
+    await sleep(350);
+    const s = await page.evaluate(STUCK);
+    run('gestures: the All pools header sticks to the top, columns aligned', s.on && s.top && s.mis === 0);
+    await page.evaluate(() => scrollTo(0, 0)); await sleep(350);
+    run('gestures: …and is gone back at the top', !(await page.evaluate(STUCK)).on);
+  } else skip();
+  // back to top
+  await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
+  await sleep(450);
+  const on = () => page.evaluate(() => { const b = document.querySelector('#totop'); if (!b) return false; const cs = getComputedStyle(b), r = b.getBoundingClientRect(); return cs.visibility === 'visible' && +cs.opacity > 0 && r.width >= 44 && r.height >= 44 && r.bottom <= innerHeight && r.right <= innerWidth; });
+  run('gestures: a screen down, the ↑ back-to-top button shows (44 px, on screen)', await on());
+  await page.click('#totop').catch(() => {});
+  await page.waitForFunction(() => scrollY === 0, null, { timeout: 5000 }).catch(() => {});
+  await sleep(400);
+  run('gestures: ↑ scrolls back to the top and hides', (await page.evaluate(() => scrollY)) === 0 && !(await on()));
+  run('gestures: no page or console errors', errTotal() === e0);
+  console.log(`[${tag}] gestures: ${n.run} checks run, ${n.skip} skipped (not in this data)`);
+}
 const JUNK = () => /\bNaN\b|\bundefined\b|\bInfinity\b|\[object /.test(document.body.innerText);
 
 // ---------- 2. one profile ----------
@@ -275,6 +360,17 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     R.ok('clicks: no horizontal scroll after any click', hscrollAfter === 0);
     R.ok('clicks: no overlay left stuck open', stuck === 0);
 
+    // gestures, from a fresh view of the page (the stored key opens it again without the passphrase)
+    t = Date.now();
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('#app:not([hidden])', { timeout: 60000 });
+      await page.waitForFunction(() => { const b = document.querySelector('#best'); return b && b.children.length > 0; }, null, { timeout: 30000 });
+      await sleep(800);
+      await gestures(page, R, tag, errTotal);
+    } catch (e) { console.log(`[${tag}] gestures step stopped: ${errName(e)}`); R.ok('gestures: ran to the end', false); }
+    T.gestures = secs(t);
+
     // close anything open, then "lock this device"
     t = Date.now();
     for (let k = 0; k < 3 && (await page.evaluate(ENUM)).overlay; k++) { await page.keyboard.press('Escape'); await sleep(300); }
@@ -321,8 +417,10 @@ if (!PASS) { console.log('FAIL the LOCK_PASSPHRASE secret is not set'); process.
 const D = recorder('deploy');
 const want = await waitDeploy(D);
 let failed = D.print();
+// LA_PHONE_BROWSER=chromium: a local fixture run on a machine without WebKit (never for the live page)
+const PHONE_BROWSER = process.env.LA_PHONE_BROWSER && /^http:\/\/127\.0\.0\.1[:/]/.test(PAGE_URL) ? process.env.LA_PHONE_BROWSER : 'webkit';
 const PROFILES = {
-  phone: ['webkit (iPhone 15)', 'webkit', (() => { const d = { ...pw.devices['iPhone 15'] }; delete d.defaultBrowserType; return d; })()],
+  phone: [`${PHONE_BROWSER} (iPhone 15)`, PHONE_BROWSER, (() => { const d = { ...pw.devices['iPhone 15'] }; delete d.defaultBrowserType; return d; })()],
   laptop: ['chromium (1440×900)', 'chromium', { viewport: { width: 1440, height: 900 } }],
 };
 for (const k of PROFILE === 'all' ? ['phone', 'laptop'] : [PROFILE]) {
