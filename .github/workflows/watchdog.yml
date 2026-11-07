@@ -1,11 +1,13 @@
 name: watchdog
 # The backup route for the always-on loop: if no loop run is queued or in progress and the readable t of
 # live.json on the data branch is older than 20 minutes (or the file is missing), start the loop in live
-# mode. Disabled for now: the schedule stays commented out until the live pass is wired in; dispatch it
-# by hand with dry_run to see what it would do (yes/no). Public log: counts, minutes and yes/no only.
+# mode on BRANCH (the default branch, the one loop.yml dispatches its successor on), with by=watchdog: the
+# loop then records that start as health.loop.watchdogLast in the sealed live.json (scripts/loop.mjs).
+# Scheduled runs act for real; a manual dispatch is a dry run unless dry_run is unticked.
+# Public log: counts, minutes and yes/no only.
 on:
-  # schedule:
-  #   - cron: '7,17,27,37,47,57 * * * *'
+  schedule:
+    - cron: '7-59/10 * * * *'   # every 10 min at :07, :17, ... (clear of the loop's :23 backup cron)
   workflow_dispatch:
     inputs:
       dry_run:
