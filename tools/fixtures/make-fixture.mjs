@@ -14,15 +14,19 @@
 //   nogems   no pool reaches the gem bar in any window; no backtests yet
 //   nofiles  lock.json and live.json only (history and backtest not published yet)
 //   rekeyed  live.json sealed under another passphrase than lock.json (the page must show nothing)
-//   nomarket the default data, but the top strip's gas, one price, one 24 h change and the next pass unread (null,
-//            never 0): the page must show dashes
+//   nomarket the default data, but the top strip's gas, one price, one 24 h change, the next pass and the watchdog's
+//            last restart unread (null, never 0): the page must show dashes
+//   olddepth the default data as older scanners published it: a third of the pools without depthEdges and the full-range
+//            layer (depthStep and depthSpan only), a third with ±45% fine bars and nothing else (the first contract)
+//   long     the default data at its widest: long tickers, billion-dollar pools, five-digit APRs, four-digit gas,
+//            six-figure prices (real names and numbers run longer than the fixtures: the overlap audit reads this case)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newLockFile, unlock, seal, ITERATIONS } from '../../lib/lock.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -158,6 +162,18 @@ const PAIR_EXTRAS = [
   { base: 'VELNA', quote: 'WETH', chain: 'ethereum', v: 3, fee: 0.003, shape: 'served', tvl: 3.6e6, inside9: 2.2e6, lps: 22,
     sigma: 0.034, volDay: 420e3, ageDays: 380, pairAgeDays: 412, persistence: 0.2, markout: 0.45, traders7d: 200, usd: 0.85,
     vmul: { '24h': 1.6, '7d': 0.9, '30d': 1 }, smul: { '24h': 1.3, '7d': 1.05, '30d': 1 } },
+];
+
+// More pools for the stablecoin-pairs switch: a second NUMA/USDC pool (a pair view of a starred stablecoin pair hides the
+// other), and TOVI/MUNT, whose quote token is a stablecoin by its address only. Last too, so no earlier draw moves.
+export const STABLE_PROBE_ADDR = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'; // USDC on Base
+const STABLE_EXTRAS = [
+  { base: 'NUMA', quote: 'USDC', chain: 'base', v: 3, fee: 0.0005, shape: 'served', tvl: 2.6e6, inside9: 1.5e6, lps: 19,
+    sigma: 0.028, volDay: 900e3, ageDays: 210, pairAgeDays: 600, persistence: 0.3, markout: 0.45, traders7d: 180, usd: 1.92,
+    vmul: { '24h': 1.2, '7d': 1, '30d': 1 }, smul: { '24h': 0.9, '7d': 1, '30d': 1 } },
+  { base: 'TOVI', quote: 'MUNT', chain: 'base', v: 3, fee: 0.003, shape: 'mixed', tvl: 1.7e6, inside9: 420e3, lps: 9,
+    sigma: 0.03, volDay: 140e3, ageDays: 160, pairAgeDays: 160, persistence: 0.5, markout: 0.4, traders7d: 70, usd: 0.64,
+    vmul: { '24h': 1.1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 } },
 ];
 
 const SYL = ['AR', 'BO', 'CU', 'DA', 'EL', 'FI', 'GO', 'HU', 'IX', 'JA', 'KE', 'LU', 'MO', 'NI', 'OR', 'PA', 'QI', 'RU',
@@ -308,9 +324,11 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     USDC: { sym: 'USDC', addr: hex(r, 40), dec: 6, usd: 1 },
   };
   quotes.ETH = { sym: 'ETH', addr: '0x' + '0'.repeat(40), dec: 18, usd: 3400 }; // native ETH (v4), the same pair as WETH
+  // a ticker that says nothing, at the real address of USDC on Base (public): only the page's address list marks it a stablecoin
+  quotes.MUNT = { sym: 'MUNT', addr: STABLE_PROBE_ADDR, dec: 6, usd: 1 };
   const taken = new Set(HEROES.map((h) => h.base + '/' + h.quote));
   const addrs = {}, tokAddr = (sym, fresh) => (addrs[sym] ||= fresh); // the random draw happens either way, so later pools don't shift
-  const specs = [...HEROES, ...makeRandomSpecs(r, 120 - HEROES.length, taken), ...PAIR_EXTRAS];
+  const specs = [...HEROES, ...makeRandomSpecs(r, 120 - HEROES.length, taken), ...PAIR_EXTRAS, ...STABLE_EXTRAS];
   const pools = specs.map((spec) => {
     const q = quotes[spec.quote];
     const young = spec.ageDays < 30;
@@ -409,51 +427,80 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     market: makeMarket(rng(seed + 777), now),
   };
 
-  const history = makeHistory(r, pools, now);
+  const history = makeHistory(rng(seed + 1401), pools, now); // its own stream: 14 and 90 days of rows
   const backtest = mode === 'nogems' ? { v: 1, t: now, ticket: TICKET, provisional: true, pools: {} } : makeBacktest(r, pools, now);
   return { live, history, backtest };
 }
 
-// ---------- the liquidity chart's published bins (lib/shape.mjs depthFields) ----------
-// 48 fine bins across ±0.45 log (the same bars as the old 0.02 grid, re-binned without losing a dollar), then 5 coarse
-// bins a side, twice as wide, out to ±0.6375, and a `beyond` bucket each side; bars plus beyond add up to mapUsd.
-// KOVA (one-sided above) has a far wall in the coarse bins and nothing at all below (real zeros); QUARX's map is unread from its
-// fourth coarse bin up (null bars and a null beyond: never 0).
+// ---------- the liquidity chart's published bins (lib/shape.mjs depthProfile / depthFields) ----------
+// 48 fine bins across ±0.45 log, then 5 coarse bins a side, twice as wide, out to ±0.6375, then "far" bins doubling in width
+// (0.075, 0.15, 0.3, …) out to the side's furthest liquidity, with no cap but the tick limit (about ±88.72 in log price);
+// `depthEdges` holds every bar's edges. Full-range liquidity is a layer of its own (`fullRangeUsd`, over `fullRangeSpan`),
+// taken out of every bar, so the far bars stop where the rest of the liquidity ends. Then `beyond` a side: a real 0 (the
+// bars reach the side's last tick), null where the map wasn't read. Bars + beyond + fullRangeUsd add up to mapUsd.
+// - Five heroes and about a quarter of the rest hold full-range liquidity (a few: a stack of wide positions, a narrower layer).
+// - ORVO has a stray position near ×200 (far bars out to +5.36); KOVA (one-sided above) has a far wall in the coarse bins
+//   and nothing at all below (real zeros, no far bars); QUARX's map is unread from its fourth coarse bin up: null bars, the
+//   side's far bars out to the tick limit all null, a null beyond, and no layer (it can't be measured with a chunk unread).
 export const DEPTH_FINE = 0.45, DEPTH_FINE_BINS = 48, DEPTH_COARSE_BINS = 5;
-const FSTEP = (2 * DEPTH_FINE) / DEPTH_FINE_BINS, CSTEP = 2 * FSTEP, OUTER = DEPTH_FINE + DEPTH_COARSE_BINS * CSTEP;
+export const LOG_MAX = 887272 * Math.log(1.0001); // the tick limit as a log offset (≈ 88.72)
+export const DEPTH_FAR = (() => { const e = []; for (let x = 0.6375, w = 0.075; x < LOG_MAX - 1e-9; w *= 2) e.push((x = Math.min(LOG_MAX, x + w))); return e; })(); // far edges
+export const FULL_RANGE = ['UNI', 'NUMA', 'SOLVA', 'SELT', 'VELNA']; // heroes holding full-range positions (plus about a quarter of the rest)
+const FSTEP = (2 * DEPTH_FINE) / DEPTH_FINE_BINS, CSTEP = 2 * FSTEP;
+const eint = (a, b) => (a >= 0 ? 2 * (Math.exp(-a / 2) - Math.exp(-b / 2)) : b <= 0 ? 2 * (Math.exp(b / 2) - Math.exp(a / 2)) : eint(a, 0) + eint(0, b)); // ∫ e^(−|x|/2)
 function publishDepth(r, p) {
   const old = p.shape.depth;
-  if (!old.length) { Object.assign(p.shape, { depthSpan: null, depthStep: null, beyond: { below: null, above: null } }); return; }
+  const sym = p.t0.sym, frDraw = r(), frPick = FULL_RANGE.includes(sym) || frDraw < 0.25, spanDraw = [r(), r()];
+  const nfDraw = [r(), r()]; // how far each side's liquidity reaches (drawn for every pool: the stream never shifts)
+  if (!old.length) { Object.assign(p.shape, { depthEdges: null, depthSpan: null, depthStep: null, beyond: { below: null, above: null }, fullRangeUsd: null, fullRangeSpan: null }); return; }
   const fine = Array(DEPTH_FINE_BINS).fill(0);
   for (const [o, v] of old) {
     const a = o - 0.01, b = o + 0.01;
     for (let i = 0; i < DEPTH_FINE_BINS; i++) { const x = -DEPTH_FINE + i * FSTEP, ov = Math.min(b, x + FSTEP) - Math.max(a, x); if (ov > 0) fine[i] += (v * ov) / 0.02; }
   }
-  const tot = old.reduce((s, d) => s + d[1], 0), rest = Math.max(0, (p.mapUsd ?? tot / 0.95) - tot);
-  const sym = p.t0.sym, oneUp = p.shape.tag === 'one-sided' && (p.shape.above ?? 1) > 0.5;
+  const tot = old.reduce((s, d) => s + d[1], 0), mapUsd = p.mapUsd ?? tot / 0.95, rest = Math.max(0, mapUsd - tot);
+  const oneUp = p.shape.tag === 'one-sided' && (p.shape.above ?? 1) > 0.5;
+  const unreadUp = sym === 'QUARX';
+  const fr = frPick && !unreadUp && sym !== 'KOVA' && !oneUp ? Math.min(rest * 0.6, mapUsd * (0.02 + 0.04 * frDraw)) : 0;
+  const frSpan = !(fr > 0) ? null : FULL_RANGE.includes(sym) || spanDraw[0] < 0.6 ? [-LOG_MAX, LOG_MAX] : [-(1.5 + 2.5 * spanDraw[0]), 1.5 + 2.5 * spanDraw[1]];
   let moved = 0; // KOVA: 40% of what is parked above ±9% really sits further out (band9 and parked stay as they are)
   if (sym === 'KOVA') fine.forEach((v, i) => { if (-DEPTH_FINE + (i + 0.5) * FSTEP > 0.09) { moved += v * 0.4; fine[i] = v * 0.6; } });
-  const side = (s) => { // s = -1 below, +1 above: five coarse bars fading outwards, then the bucket beyond
-    const share = oneUp ? (s > 0 ? 1 : 0) : 0.5, pot = rest * share + (s > 0 ? moved : 0);
-    if (!(pot > 0)) return { bars: Array(DEPTH_COARSE_BINS).fill(0), beyond: 0 };
+  const side = (s, u) => { // s = -1 below, +1 above: five coarse bars, then the far bars as far as the side's liquidity reaches
+    const share = oneUp ? (s > 0 ? 1 : 0) : 0.5, pot = (rest - fr) * share + (s > 0 ? moved : 0);
+    const nf = !(pot > 0) ? 0 : sym === 'KOVA' ? 1 : sym === 'ORVO' && s > 0 ? 6 : u < 0.3 ? 0 : u < 0.55 ? 1 : u < 0.75 ? 2 : u < 0.9 ? 3 : 4;
+    const edges = [DEPTH_FINE, ...Array.from({ length: DEPTH_COARSE_BINS }, (_, j) => DEPTH_FINE + (j + 1) * CSTEP), ...DEPTH_FAR.slice(0, nf)];
+    if (!(pot > 0)) return { edges, bars: Array(DEPTH_COARSE_BINS).fill(0), beyond: 0 };
     let w = Array.from({ length: DEPTH_COARSE_BINS }, (_, j) => Math.pow(0.72, j) * between(r, 0.6, 1.4));
     if (sym === 'KOVA' && s > 0) w = w.map((x, j) => x + (j === 2 ? 6 : 0)); // a far wall, about +68% in price
-    const sw = w.reduce((a, x) => a + x, 0), inBars = pot * (sym === 'KOVA' && s > 0 ? 0.85 : 0.6);
-    return { bars: w.map((x) => (x / sw) * inBars), beyond: pot - inBars };
+    for (let k = 0; k < nf; k++) w.push(Math.pow(0.6, k + 1) * 0.5 * between(r, 0.6, 1.4) + (sym === 'ORVO' && s > 0 && k === 5 ? 0.4 : 0));
+    const sw = w.reduce((a, x) => a + x, 0);
+    return { edges, bars: w.map((x) => (x / sw) * pot), beyond: 0 };
   };
-  const lo = side(-1), hi = side(1);
-  if (sym === 'QUARX') { hi.bars[3] = null; hi.bars[4] = null; hi.beyond = null; } // an unread chunk hides itself and all past it
+  const lo = side(-1, nfDraw[0]), hi = side(1, nfDraw[1]);
+  if (unreadUp) { // an unread chunk hides itself and all past it: the side's far bars run out to the tick limit, all unread
+    hi.edges = [...hi.edges.slice(0, DEPTH_COARSE_BINS + 1), ...DEPTH_FAR];
+    hi.bars = [...hi.bars.slice(0, 3), ...Array(2 + DEPTH_FAR.length).fill(null)];
+    hi.beyond = null;
+  }
   const usd = (v) => (v == null ? null : sig(v, 5));
-  const at = (x) => sig(x, 4);
+  const at = (x) => sig(x, 4), edge = (x) => sig(x, 6);
+  const mid = (e, j) => (e[j] + e[j + 1]) / 2;
   p.shape.depth = [
-    ...lo.bars.map((v, k) => [at(-DEPTH_FINE - (DEPTH_COARSE_BINS - k - 0.5) * CSTEP), usd(v)]),
+    ...lo.bars.map((v, j) => [at(-mid(lo.edges, j)), usd(v)]).reverse(),
     ...fine.map((v, i) => [at(-DEPTH_FINE + (i + 0.5) * FSTEP), usd(v)]),
-    ...hi.bars.map((v, j) => [at(DEPTH_FINE + (j + 0.5) * CSTEP), usd(v)]),
+    ...hi.bars.map((v, j) => [at(mid(hi.edges, j)), usd(v)]),
   ];
-  p.shape.depthSpan = [at(-OUTER), at(OUTER)];
+  p.shape.depthEdges = [...lo.edges.slice(1).reverse().map((x) => edge(-x)), ...Array.from({ length: DEPTH_FINE_BINS + 1 }, (_, i) => edge(-DEPTH_FINE + i * FSTEP)), ...hi.edges.slice(1).map(edge)];
+  p.shape.depthSpan = [p.shape.depthEdges[0], p.shape.depthEdges[p.shape.depthEdges.length - 1]];
   p.shape.depthStep = { fine: at(FSTEP), coarse: at(CSTEP), edge: DEPTH_FINE };
   p.shape.beyond = { below: usd(lo.beyond), above: usd(hi.beyond) };
+  p.shape.fullRangeUsd = unreadUp ? null : fr > 0 ? usd(fr) : 0; // null: not measured (a chunk unread); 0: none
+  p.shape.fullRangeSpan = frSpan && frSpan.map(edge);
 }
+export const fullRangeIn = (fr, span, a, b) => { // the layer's value between offsets a < b (as the page draws it)
+  const [la, lb] = span || [-LOG_MAX, LOG_MAX], x = Math.max(a, la), y = Math.min(b, lb);
+  return y > x ? (fr * eint(x, y)) / eint(la, lb) : 0;
+};
 
 // ---------- the top strip (lib/market.mjs): gas against its own week, three prices with their 24 h change ----------
 function makeMarket(r, now) {
@@ -471,13 +518,78 @@ function makeMarket(r, now) {
   };
 }
 // the same pass with the strip's reads failed: missing is never zero
+export function oldDepth(data) {
+  const live = structuredClone(data.live);
+  live.pools.forEach((p, i) => {
+    const sh = p.shape;
+    if (!sh.depth.length || i % 3 === 0) return;
+    delete sh.depthEdges; delete sh.fullRangeUsd; delete sh.fullRangeSpan; // the second contract: steps and span only
+    if (i % 3 === 2) { // the first: the fine bars, nothing about where they end
+      sh.depth = sh.depth.filter(([o]) => Math.abs(o) < DEPTH_FINE);
+      delete sh.depthStep; delete sh.depthSpan; delete sh.beyond;
+    } else { // its coarse bars only: far bars and the layer did not exist yet
+      sh.depth = sh.depth.filter(([o]) => Math.abs(o) < 0.6375 + 1e-9);
+      sh.depthSpan = [-0.6375, 0.6375];
+    }
+  });
+  return { ...data, live };
+}
 function unreadMarket(data) {
   const live = structuredClone(data.live);
   live.next = null;
   live.market.gas = { gwei: null, p10: null, p50: null, p90: null, band: null, basis: null, histDays: 0, source: null, hist: [] };
   live.market.px.SOL = { usd: null, ch24: null, src: null };
   live.market.px.BTC.ch24 = null;
+  live.health.loop.watchdogLast = null; // the watchdog never had to start a loop: a dash, never a time or 0
   return { ...data, live };
+}
+
+// the same pass at its widest: every text the page prints as long as real data makes it (the layout must hold)
+export const LONG_PAD = 'WMWMWMWMWMWM';
+export function longCase(data) {
+  const live = structuredClone(data.live), bt = structuredClone(data.backtest), hist = structuredClone(data.history);
+  const grow = (s) => (s.length >= 11 || /[<>]/.test(s) ? s : (s + LONG_PAD).slice(0, 11));
+  const QUOTE = { WETH: 'WSTETHW', USDC: 'USDC.EWM', ETH: 'ETH' };
+  const BIG = 997; // money: $1M pools become about $1B
+  const money = (x) => (isNum(x) ? sig(x * BIG, 6) : x);
+  for (const p of live.pools) {
+    p.t0.sym = grow(p.t0.sym); p.t1.sym = QUOTE[p.t1.sym] || grow(p.t1.sym);
+    p.pair = p.t0.sym + '/' + p.t1.sym;
+    for (const k of ['tvlUsd', 'mapUsd', 'aggUsd']) p[k] = money(p[k]);
+    const sh = p.shape;
+    sh.depth = sh.depth.map(([o, v]) => [o, money(v)]);
+    if (sh.beyond) sh.beyond = { below: money(sh.beyond.below), above: money(sh.beyond.above) };
+    if (isNum(sh.fullRangeUsd)) sh.fullRangeUsd = money(sh.fullRangeUsd);
+    if (isNum(sh.lpsAtPrice)) sh.lpsAtPrice = sh.lpsAtPrice * 137 + 1;
+    for (const wk of WINDOWS) {
+      const w = p.w[wk];
+      if (!w) continue;
+      for (const k of ['volUsd', 'lpFeesUsd', 'protocolFeesUsd', 'inRangeUsd']) w[k] = money(w[k]);
+      for (const k of ['swaps', 'traders']) if (isNum(w[k])) w[k] = w[k] * 1009;
+      for (const k of ['feeApr', 'net', 'aggApr']) if (isNum(w[k])) w[k] = sig(w[k] * 97, 5); // −4,567% and 12,345% APRs
+    }
+    for (const c of p.checks) c.label = c.label + ' (long label)';
+    p.daily = p.daily.map((d) => ({ ...d, feesPer1k: isNum(d.feesPer1k) ? sig(d.feesPer1k * 37, 4) : d.feesPer1k, net: isNum(d.net) ? sig(d.net * 97, 4) : d.net }));
+  }
+  for (const pr of Object.values(live.pairs)) {
+    pr.label = pr.label.split('/').map((x) => QUOTE[x] || grow(x)).join('/');
+    for (const w of Object.values(pr.w)) { w.volUsd = money(w.volUsd); w.lpFeesUsd = money(w.lpFeesUsd); for (const r of w.rows) if (isNum(r.net)) r.net = sig(r.net * 97, 5); }
+  }
+  live.chains = live.chains.map((c) => ({ ...c, pools: c.pools * 97, unread: c.unread * 311, gasUsd: c.gasUsd * 113 }));
+  live.next = live.t + 123 * 60e3;
+  live.market.gas = { ...live.market.gas, gwei: 1234, p10: 456, p50: 789, p90: 1111, band: 'expensive', histDays: 6.5 };
+  live.market.px = { ETH: { usd: 12345.6, ch24: -0.1234, src: 'defillama' }, BTC: { usd: 123456.78, ch24: 0.1987, src: 'defillama' }, SOL: { usd: 1234.5, ch24: -0.0999, src: 'coingecko' } };
+  live.health.sealedLog = { lines: 1234567, errors: 12345, categories: { timeout: 1234, HTTP: 5678, parse: 99 } };
+  for (const e of Object.values(bt.pools)) for (const b of Object.values(e)) {
+    if (!b) continue;
+    for (const k of ['fees', 'lvr', 'costs', 'net']) b.series[k] = b.series[k].map((x) => money(x));
+    for (const st of b.strategies) { st.netUsd = money(st.netUsd); st.series = st.series.map((x) => money(x)); st.net = sig(st.net * 97, 5); }
+    b.net = sig(b.net * 97, 5); if (isNum(b.forecastNet)) b.forecastNet = sig(b.forecastNet * 97, 5);
+    for (const k of ['netUsd', 'feesUsd', 'lvrUsd', 'costsUsd', 'entryUsd']) b[k] = money(b[k]);
+    b.grid.net = b.grid.net.map((row) => row.map((x) => (isNum(x) ? sig(x * 97, 5) : x)));
+  }
+  for (const h of Object.values(hist.pools)) { h.d = h.d.map((r) => [r[0], r[1], money(r[2]), money(r[3]), r[4]]); h.h = h.h.map((r) => [r[0], r[1], r[2], money(r[3]), r[4]]); }
+  return { live, history: hist, backtest: bt };
 }
 
 // 30 days of fees per $1,000 and net, plus the shape of the fee stream (pattern, burst) and the gem's tags.
@@ -533,33 +645,40 @@ function makeChecks(r, spec, pool) {
 }
 
 function makeHistory(r, pools, now) {
+  // history.json (lib/charts.mjs): hourly rows for 14 days, daily rows for 90, from the pool's first row on (no row before
+  // it existed); each row's lpFeesUsd (and the daily volUsd) covers the time since the row before, so the first row's are
+  // null. Some pools carry a gap the backfill hasn't filled (the next row covers it all), an unread row (its fees and the
+  // next row's are null) and a row a few minutes off its mark.
   const out = { v: 1, t: now, pools: {}, health: [] };
-  const hourNow = Math.floor(now / H) * H;
-  for (const p of pools.slice(0, 60)) {
+  const hourNow = Math.floor(now / H) * H, dayNow = Math.floor(now / D) * D;
+  pools.slice(0, 60).forEach((p, k) => {
     const spec = p._spec;
-    const sigma = spec.sigma ?? 0.02;
-    const hours = Math.min(168, Math.floor(spec.ageDays * 24));
-    const days = Math.min(30, Math.floor(spec.ageDays));
-    const h = [];
-    let lp = 0;
+    const sigma = spec.sigma ?? 0.02, rate = isNum(p.lpKeeps) ? spec.fee * p.lpKeeps : null;
+    const series = (n, step, t0, perStep, lpStep, gap, unread, off) => {
+      const rows = [];
+      let lp = 0;
+      for (let i = n; i >= 0; i--) {
+        lp += lpStep * gauss(r);
+        const f = perStep == null ? null : perStep * between(r, 0.3, 1.8);
+        if (gap && i <= gap[0] && i > gap[1]) continue; // missing rows: the next row's fees cover them
+        const t = t0 - i * step + (off && i === off ? 4 * 60e3 : 0);
+        rows.push([t, lp, f]);
+      }
+      return rows.map((row, i) => { // the price walks into today's price
+        const prev = rows[i - 1], span = prev ? (row[0] - prev[0]) / step : 0;
+        const bad = unread != null && (i === unread || i === unread + 1);
+        return [row[0], sig(p.price * Math.exp(row[1] - lp), 6), !prev || bad || row[2] == null ? null : sig(row[2] * span, 4)];
+      });
+    };
     const feeH = p.w['7d']?.lpFeesUsd != null ? p.w['7d'].lpFeesUsd / (p.w['7d'].days * 24) : null;
-    for (let i = 0; i < hours; i++) {
-      h.unshift([hourNow - i * H, sig(p.price * Math.exp(lp), 6), sig(1e18 * between(r, 0.8, 1.2), 4),
-        feeH == null ? null : sig(feeH * between(r, 0.3, 1.8), 4), p.shape.parked == null ? null : sig(clamp(p.shape.parked + between(r, -0.03, 0.03)), 3)]);
-      lp += (sigma / Math.sqrt(24)) * gauss(r);
-    }
-    const d = [];
-    lp = 0;
     const feeD = p.w['30d']?.lpFeesUsd != null ? p.w['30d'].lpFeesUsd / p.w['30d'].days : feeH != null ? feeH * 24 : null;
-    const volD = p.w['30d']?.volUsd != null ? p.w['30d'].volUsd / p.w['30d'].days : spec.volDay;
-    const dayNow = Math.floor(now / D) * D;
-    for (let i = 0; i < days; i++) {
-      d.unshift([dayNow - i * D, sig(p.price * Math.exp(lp), 6), feeD == null ? null : sig(feeD * between(r, 0.4, 1.7), 4),
-        Math.round(volD * between(r, 0.4, 1.7)), p.shape.parked == null ? null : sig(clamp(p.shape.parked + between(r, -0.05, 0.05)), 3)]);
-      lp += sigma * gauss(r);
-    }
+    const hours = Math.min(14 * 24, Math.floor(spec.ageDays * 24)), days = Math.min(90, Math.floor(spec.ageDays));
+    const h = series(hours, H, hourNow, feeH, sigma / Math.sqrt(24), k % 7 === 3 ? [60, 54] : null, k % 11 === 5 ? hours - 30 : null, k % 5 === 1 ? 20 : 0)
+      .map((x) => [x[0], x[1], sig(1e18 * between(r, 0.8, 1.2), 4), x[2], p.shape.parked == null ? null : sig(clamp(p.shape.parked + between(r, -0.03, 0.03)), 3)]);
+    const d = series(days, D, dayNow, feeD, sigma, k % 7 === 3 ? [20, 17] : null, k % 11 === 5 ? days - 12 : null, 0)
+      .map((x) => [x[0], x[1], x[2], x[2] == null || !rate ? null : Math.round(x[2] / rate), p.shape.parked == null ? null : sig(clamp(p.shape.parked + between(r, -0.05, 0.05)), 3)]);
     out.pools[p.id] = { h, d };
-  }
+  });
   for (let i = 47; i >= 0; i--) {
     const passes = 9 + (r() < 0.3 ? 1 : 0) - (i === 30 ? 6 : 0);
     out.health.push([hourNow - i * H, passes - (r() < 0.12 ? 1 : 0), passes, Math.round(between(r, 3, 9))]);
@@ -716,6 +835,8 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   const other = unlock(newLockFile('a different made-up passphrase', 1000), 'a different made-up passphrase').aes;
   sealCase(path.join(outDir, 'rekeyed'), keys, data, now, ['live', 'history', 'backtest'], other);
   sealCase(path.join(outDir, 'nomarket'), keys, unreadMarket(data), now);
+  sealCase(path.join(outDir, 'long'), keys, longCase(data), now);
+  sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
   return { outDir, cases: CASES, passphrase: FIXTURE_PASSPHRASE };
 }
 

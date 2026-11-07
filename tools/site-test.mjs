@@ -6,7 +6,8 @@
 //   node tools/site-test.mjs --browser webkit --device "iPhone 15"     phone = that device; laptop 1440
 //   node tools/site-test.mjs --shots <dir>           also save full-page screenshots (cut into parts)
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
-//                                                    sticky top zoomfit rows refresh market fav table similar highlight search links locknote clicks motion
+//                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
+//                                                    search links terms fold locknote clicks motion history stable
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
@@ -19,7 +20,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures, makeData, FIXTURE_PASSPHRASE } from './fixtures/make-fixture.mjs';
+import { writeFixtures, makeData, oldDepth, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR } from './fixtures/make-fixture.mjs';
+import { TEXT_OVERLAP } from './overlap.mjs';
+import { FINGERS, HOST_BOX, pinchPts } from './gestures.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PAGE = path.join(ROOT, 'site', 'app', 'index.html');
@@ -43,9 +46,14 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,states,tabs,daily,pairs,charts,pan,depth,sheets,sticky,top,zoomfit,rows,refresh,market,fav,table,similar,highlight,search,links,locknote,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,highlight,search,links,terms,fold,locknote,clicks,motion').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
+
+// the same made-up pass the page reads (pool ids, shapes and history rows don't depend on the time it is made at)
+const FXD = makeData({ now: Date.now() });
+const poolOf = (id) => FXD.live.pools.find((x) => x.id === id);
+const bestId = (page) => page.getAttribute('#best [data-act="detail"]', 'data-id');
 
 // ---------- results: names and short reasons only ----------
 const results = [];
@@ -73,7 +81,10 @@ function serve() {
 let ORIGIN = '';
 const url = (c, q = '') => `${ORIGIN}/app/index.html?base=/fx/${c}/${q}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null } = {}) {
+// Most groups read every pool, so their pages start with the stablecoin-pairs switch on; `stableDefault: true` leaves the
+// page's own default (off), and the stable group and the overlap walk use it.
+async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false } = {}) {
+  if (!stableDefault) storage = { 'lps.stable': '1', ...(storage || {}) };
   const base = phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: phone ? { width: 390, height: 844 } : { width, height } }; // phone = 390 px here, the device in Actions
   if (BROWSER !== 'chromium') delete base.defaultBrowserType;
   const ctx = await browser.newContext({ ...base, reducedMotion });
@@ -137,7 +148,7 @@ async function testUnlock(browser) {
   ok('unlock: the device stays unlocked after a reload', await page.isVisible('#app'));
   await page.click('#lockbtn');
   await page.waitForSelector('#lockscreen:not([hidden])');
-  ok('lock: "lock this device" removes every number', !(await page.isVisible('#app')) && !(await domText(page)).includes('VELNA'));
+  ok('lock: "Sign out on this device" removes every number', (await page.textContent('#lockbtn')) === 'Sign out on this device' && !(await page.isVisible('#app')) && !(await domText(page)).includes('VELNA'));
   await page.reload();
   await page.waitForSelector('#lockscreen:not([hidden])');
   ok('lock: after a reload the device asks again', await page.isVisible('#pass'));
@@ -151,7 +162,7 @@ const AUDIT = () => {
   const vis = (el) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
   const inScroll = (el) => !!el.closest('.tbl-box, .heat-box, .sheet-body, .tabs');
   const name = (el) => (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '')) + ' "' + (el.textContent || '').trim().slice(0, 24) + '"';
-  for (const el of document.querySelectorAll('#app *, header *, footer *, #banner')) {
+  for (const el of document.querySelectorAll('#app *, header *, #subhead *, footer *, #banner')) {
     if (!vis(el) || (el.closest('svg') && el.tagName.toLowerCase() !== 'svg')) continue; // an svg's own box counts, its insides don't
     const r = el.getBoundingClientRect();
     if (!inScroll(el) && (r.right > vw + 1 || r.left < -1)) out.offRight.push(name(el));
@@ -159,12 +170,13 @@ const AUDIT = () => {
     if (own) {
       const cs = getComputedStyle(el), fs = parseFloat(cs.fontSize), mono = /mono/i.test(cs.fontFamily);
       if (fs < 10 || (fs < 12 && !mono)) out.small.push(name(el) + ' ' + fs + 'px');
-      if ((cs.overflow === 'hidden' || cs.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 1 && !(el.classList.contains('pn') && el.textContent.length > 16)) out.clipped.push(name(el));
+      const srOnly = r.width <= 1 && r.height <= 1 && cs.overflow === 'hidden'; // read aloud only: a visually hidden label
+      if (!srOnly && (cs.overflow === 'hidden' || cs.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 1 && !((el.classList.contains('pn') || (el.classList.contains('pn2') && el.title)) && el.textContent.length > 16)) out.clipped.push(name(el)); // a long pair name ends in … (its title holds it whole)
     }
     if (el.matches('button, select, input, [role="button"]') && el.getBoundingClientRect().height < 43.5) out.short.push(name(el) + ' ' + Math.round(r.height) + 'px');
   }
   // labels and headings must not be hidden under something else
-  const labels = [...document.querySelectorAll('#app .lbl, #app h2, #app h3, #app .chip, header .lbl, header h1')].filter((el) => vis(el) && !el.closest('tbody, .tbl-box'));
+  const labels = [...document.querySelectorAll('#app .lbl, #app h2, #app h3, #app .chip, header .lbl, header h1, #subhead .lbl')].filter((el) => vis(el) && !el.closest('tbody, .tbl-box'));
   for (const el of labels) {
     el.scrollIntoView({ block: 'center', inline: 'nearest' });
     const r = el.getBoundingClientRect(), x = Math.min(vw - 1, Math.max(0, r.left + Math.min(r.width / 2, 6))), y = r.top + r.height / 2;
@@ -502,8 +514,10 @@ async function testCharts(browser) {
     ok(`charts ${tag}: + zooms in around the price (±25% then ±12%)`, s1 === '25' && s2 === '12', `${s1} ${s2}`);
     ok(`charts ${tag}: …keeps the focus on the button for the keyboard`, (await p.evaluate(() => document.activeElement && document.activeElement.dataset.act)) === 'zoom');
     await press('[data-act="zreset"][data-chart="liq-best"]'); await sleep(100);
-    await press('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(100);
-    ok(`charts ${tag}: reset, then − zooms out to ±90%`, (await span()) === '90');
+    const sp0 = poolOf(await bestId(p)).shape.depthSpan, ws = [(await pzView(p, 'liq-best')).w];
+    for (let k = 0; k < 8 && (await p.isEnabled('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]')); k++) { await press('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(100); ws.push((await pzView(p, 'liq-best')).w); }
+    const capW = await p.evaluate(() => document.querySelector('[data-chartbox="liq-best"] .pz-cap1').textContent);
+    ok(`charts ${tag}: reset, then − steps out (at most ×4 a press) to the whole field, no further (${capW})`, ws.length >= 2 && ws.slice(1).every((w, i) => w > ws[i] && w / ws[i] <= 4.01) && near(ws.at(-1), sp0[1] - sp0[0], 2e-3) && /[÷−].*…\s×/.test(capW), ws.map((w) => w.toFixed(3)).join('→') + ' ' + capW);
     // the detail panel's charts
     await p.click('#best [data-act="detail"]');
     await p.waitForSelector('#sheet:not([hidden])');
@@ -568,7 +582,6 @@ async function pzSettled(page, id, ms = 3000) {
 const wheel = (page, id, dx, dy) => page.evaluate(({ id, dx, dy }) => { const h = document.querySelector(`[data-pz="${id}"]`), r = h.getBoundingClientRect(); h.dispatchEvent(new WheelEvent('wheel', { deltaX: dx, deltaY: dy, clientX: r.left + r.width / 2, clientY: r.top + 60, bubbles: true, cancelable: true })); }, { id, dx, dy });
 const pzClick = (page, sel) => page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
 const near = (a, b, e = 1e-3) => Math.abs(a - b) <= e;
-const SPAN = 0.6375; // the fixture's depthSpan: 48 fine bars across ±0.45, five coarse ones a side out to ±0.6375
 async function testPan(browser) {
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
@@ -585,16 +598,16 @@ async function testPan(browser) {
       if (await p.$(`[data-act="zreset"][data-chart="${hid}"]`)) { await pzClick(p, `[data-act="zreset"][data-chart="${hid}"]`); await sleep(200); }
     } else ok(`pan ${tag}: the one-time "drag" hint shows on the first chart that can pan`, false, 'no hint');
     const ta = await p.$eval('[data-pz="liq-best"]', (h) => getComputedStyle(h).touchAction);
-    ok(`pan ${tag}: charts pan sideways and leave vertical swipes and pinch to the page (touch-action ${ta})`, /pan-y/.test(ta) && /pinch-zoom/.test(ta));
+    ok(`pan ${tag}: charts take sideways drags and pinches, vertical swipes stay the page's (touch-action ${ta})`, ta === 'pan-y');
     let v = await pzView(p, 'liq-best');
     ok(`pan ${tag}: the liquidity chart opens on the price, ±45% wide`, near(v.c, 0) && near(v.w, 0.9), JSON.stringify(v));
-    const edge0 = -SPAN + 0.45; // the view's centre can go no lower
+    const SP = poolOf(await bestId(p)).shape.depthSpan, edge0 = SP[0] + 0.45; // the view's centre can go no lower
     await pzDrag(p, 'liq-best', phone ? 140 : 260, { up: false });
     await sleep(60);
-    const mid = await pzView(p, 'liq-best'), hatch = await p.$$eval('[data-pz="liq-best"] .pz-end', (e) => e.length);
+    const mid = await pzView(p, 'liq-best'), end = await p.$$eval('[data-pz="liq-best"] .pz-end', (e) => e.map((x) => x.className + '|' + x.textContent).join());
     await p.mouse.up();
     v = await pzSettled(p, 'liq-best');
-    ok(`pan ${tag}: the bars past ±45% are reachable, and past them a drag rubber-bands over a "no data" hatch, then springs back`, mid.c < edge0 - 0.005 && hatch > 0 && near(v.c, edge0, 2e-3), `${mid.c} ${hatch} ${v.c}`);
+    ok(`pan ${tag}: the bars past ±45% are reachable, and past the map's end a drag rubber-bands over a plain end (nothing lies beyond: no hatch, no "no data"), then springs back`, mid.c < edge0 - 0.005 && /pz-end l none\|$/.test(end) && near(v.c, edge0, 2e-3), `${mid.c} ${end} ${v.c}`);
     if (await p.$('[data-act="zreset"][data-chart="liq-best"]')) { await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150); }
     // + twice: two zoom steps around the view's centre
     await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(120);
@@ -623,7 +636,7 @@ async function testPan(browser) {
     await pzDrag(p, 'liq-best', 160, { steps: 5, ms: 8, settle: 0 });
     const f0 = await pzView(p, 'liq-best'); await sleep(250);
     const f1 = await pzView(p, 'liq-best');
-    const f2 = await pzSettled(p, 'liq-best', 5000), lo = -SPAN + 0.12; // the left limit at ±12% for the map's span
+    const f2 = await pzSettled(p, 'liq-best', 5000), lo = SP[0] + 0.12; // the left limit at ±12% for the map's span
     ok(`pan ${tag}: a flick coasts after the release, then stops inside the data`, f1.c < f0.c - 1e-3 && f2.c >= lo - 1e-3, `${f0.c} ${f1.c} ${f2.c}`);
     // a mostly vertical drag doesn't pan
     const s0 = await pzView(p, 'liq-best');
@@ -680,7 +693,7 @@ async function testPan(browser) {
     ok(`pan ${tag}: the replay's price, money and strategy-lab charts drag to earlier data`, bt.length === 0, bt.join(','));
     await pzClick(p, '[data-act="zoom"][data-chart="scatter"][data-dir="1"]'); await sleep(150);
     const sc0 = await pzView(p, 'scatter');
-    ok(`pan ${tag}: a zoomed scatter takes drags both ways (touch-action pinch-zoom)`, (await p.$eval('[data-pz="scatter"]', (h) => getComputedStyle(h).touchAction)) === 'pinch-zoom');
+    ok(`pan ${tag}: a zoomed scatter takes drags and pinches both ways (touch-action none)`, (await p.$eval('[data-pz="scatter"]', (h) => getComputedStyle(h).touchAction)) === 'none');
     await pzDrag(p, 'scatter', -60, { dy: -50, steps: 8 });
     const sc1 = await pzView(p, 'scatter');
     ok(`pan ${tag}: …and moves right and up, inside the full view`, sc1.c > sc0.c + 0.1 && sc1.y < sc0.y - 0.1, `${JSON.stringify(sc0)} ${JSON.stringify(sc1)}`);
@@ -726,53 +739,288 @@ async function testPan(browser) {
   await r.ctx.close();
 }
 
-// ---------- 4f2. the liquidity chart's wider bins: depthStep, depthSpan, unread bars, beyond buckets ----------
+// ---------- 4f2. the liquidity chart's whole field: depthEdges, far bars, the full-range layer, unread bars, beyond ----------
+// The bars are checked against an independent reading of the data: each bar spans its own depthEdges and its height is its
+// own value per fine-bar width (the scanner took the full-range layer out of it); the layer is a thin flat band under the
+// bars, across its span, as thick as its dollars at the price (constant liquidity: ∝ e^(−|x|/2)) on the bars' scale, 2 to 12
+// units; a real 0 past the bars draws nothing and an unread stretch is hatched.
+const eInt = (a, b) => (b <= a ? 0 : a >= 0 ? 2 * (Math.exp(-a / 2) - Math.exp(-b / 2)) : b <= 0 ? 2 * (Math.exp(b / 2) - Math.exp(a / 2)) : eInt(a, 0) + eInt(0, b));
+function liqExpect(pool, view) { // what the page should draw for this view: [{ x, y, w, h }] in the chart's 480 × 120 box
+  const sh = pool.shape, E = sh.depthEdges, step = sh.depthStep.fine, [v0, v1] = view, X = (o) => ((o - v0) / (v1 - v0)) * 480;
+  const fr = sh.fullRangeUsd > 0 ? sh.fullRangeUsd : 0, [la, lb] = sh.fullRangeSpan || [0, 0], c = fr ? fr / eInt(la, lb) : 0;
+  const bars = sh.depth.map(([o, v], i) => ({ a: E[i], b: E[i + 1], v })).filter((b) => b.b > v0 && b.a < v1);
+  const dens = (b) => (b.v * step) / (b.b - b.a);
+  const max = Math.max(1, ...bars.filter((b) => b.v != null).map(dens));
+  const hb = fr && Math.min(v1, lb) > Math.max(v0, la) ? Math.min(12, Math.max(2, ((c * step) / max) * 116)) : 0;
+  const out = bars.filter((b) => b.v > 0).map((b) => { const full = X(b.b) - X(b.a), g = Math.min(2, full * 0.2); return { x: X(b.a) + g / 2, y: 120 - hb, w: Math.max(1, full - g), h: Math.max(1.5, (dens(b) / max) * (116 - hb)) }; });
+  out.band = hb ? { x: X(Math.max(v0, la)), w: X(Math.min(v1, lb)) - X(Math.max(v0, la)), h: hb } : null;
+  return out;
+}
+const LIQ_LOOK = (id) => {
+  const h = document.querySelector(`[data-pz="${id}"]`), hr = h.getBoundingClientRect(), d = [...h.querySelectorAll('.pz-c svg path')].map((x) => x.getAttribute('d')).join('');
+  return { view: h.dataset.view, edges: [...h.querySelectorAll(':scope > .pz-edge:not([hidden])')].length,
+    bars: [...d.matchAll(/M(-?[\d.]+) (-?[\d.]+)v(-?[\d.]+)h([\d.]+)v/g)].map((m) => ({ x: +m[1], y: +m[2], h: -m[3], w: +m[4] })),
+    band: [...h.querySelectorAll('.pz-c svg rect.fr')].map((r) => ({ x: +r.getAttribute('x'), y: +r.getAttribute('y'), w: +r.getAttribute('width'), h: +r.getAttribute('height') }))[0] || null,
+    by: [...h.querySelectorAll('.bylab')].map((e) => { const r = e.getBoundingClientRect(); return { t: e.textContent, inside: r.left >= hr.left - 1 && r.right <= hr.right + 1, shown: e.style.visibility !== 'hidden' }; }),
+    mlab: [...h.querySelectorAll('.mlab')].map((e) => e.textContent), legend: h.closest('[data-chartbox]').querySelector('.legend').innerText,
+    unread: h.querySelectorAll('rect.unread').length, hatch: h.querySelectorAll('.pz-end').length, fr: h.querySelectorAll('rect.fr').length,
+    frlab: [...h.querySelectorAll('.frlab')].map((e) => e.style.visibility === 'hidden' ? '' : e.textContent).join(''), cap: h.closest('[data-chartbox]').querySelector('.pz-cap1').textContent,
+    ticks: [...h.querySelectorAll('.tick')].map((e) => e.textContent) };
+};
+function barsMatch(got, want, band) { // every expected bar drawn where its edges say, on the band, as wide and as tall (0.16 of the box's units)
+  const bad = [], used = new Set();
+  if (want.band || band) { // the full-range band: under the bars, flat, across the layer's span in view
+    const e = want.band;
+    if (!e || !band || Math.abs(band.x - e.x) > 0.16 || Math.abs(band.w - e.w) > 0.16 || Math.abs(band.h - e.h) > 0.16 || Math.abs(band.y + band.h - 120) > 0.16) bad.push(`band ${JSON.stringify(e)} got ${JSON.stringify(band)}`);
+  }
+  for (const e of want) { // the closest unused bar at that spot (zoomed far out, bars sit a fraction of a unit apart)
+    const g = got.filter((b) => !used.has(b) && Math.abs(b.x - e.x) < 0.16).sort((p, q) => Math.abs(p.h - e.h) + Math.abs(p.w - e.w) - Math.abs(q.h - e.h) - Math.abs(q.w - e.w))[0];
+    if (g) used.add(g);
+    if (!g || Math.abs(g.w - e.w) > 0.16 || Math.abs(g.h - e.h) > 0.16 || Math.abs(g.y - e.y) > 0.16) bad.push(`x ${e.x.toFixed(1)} w ${e.w.toFixed(1)} h ${e.h.toFixed(1)} got ${g ? `w ${g.w} h ${g.h}` : 'none'}`);
+  }
+  return { ok: !bad.length && got.length === want.length, why: `${got.length}/${want.length} bars · ${bad.slice(0, 2).join(' | ')}` };
+}
+const viewOf = (a) => { const [c, w] = a.view.split(',').map(Number); return [c - w / 2, c + w / 2]; };
+async function zoomAllOut(p, id, root = '') {
+  const ws = [];
+  for (let k = 0; k < 10; k++) {
+    const go = await p.evaluate(({ id, root }) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(`${root} [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`); if (!b || b.disabled) return false; b.click(); return true; }, { id, root });
+    if (!go) break;
+    await sleep(120); ws.push(+(await p.getAttribute(`[data-pz="${id}"]`, 'data-view')).split(',')[1]);
+  }
+  return ws;
+}
+async function openPool(p, sel) { // a pool's detail panel through the table's search (a pair name or the start of its id)
+  await fillQ(p, sel); await sleep(250);
+  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#all tbody tr.row td:nth-child(3)').click(); });
+  await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+}
+async function closePool(p) { await p.click('#sheet-close'); await sleep(120); await fillQ(p, ''); }
 async function testDepth(browser) {
-  const { live } = makeData({ now: Date.now() });
+  const { live } = FXD;
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
     const pick = async (pair) => { await p.evaluate((pair) => { window.dispatchEvent(new WheelEvent('wheel')); [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.querySelector('.tn').textContent === pair).click(); }, pair); await sleep(150); };
-    const look = () => p.evaluate(() => {
-      const h = document.querySelector('[data-pz="liq-best"]'), hr = h.getBoundingClientRect();
-      const bars = [...h.querySelectorAll('svg path')].map((x) => x.getAttribute('d')).join('');
-      const widths = [...bars.matchAll(/h(\d+(?:\.\d+)?)v/g)].map((m) => +m[1]);
-      return { view: h.dataset.view, edges: [...h.querySelectorAll(':scope > .pz-edge:not([hidden])')].length, by: [...h.querySelectorAll('.bylab')].map((e) => { const r = e.getBoundingClientRect(); return { t: e.textContent, inside: r.left >= hr.left - 1 && r.right <= hr.right + 1 }; }),
-        mlab: [...h.querySelectorAll('.mlab')].map((e) => e.textContent), widths, legend: h.closest('[data-chartbox]').querySelector('.legend').innerText, unread: h.querySelectorAll('rect.unread').length };
-    });
+    const look = (id = 'liq-best') => p.evaluate(LIQ_LOOK, id);
+    const bp = poolOf(await bestId(p)), sp = bp.shape.depthSpan;
     let a = await look();
     ok(`depth ${tag}: the default view is ±45% around the price, with more to see both ways`, /^0\.0000,0\.9000$/.test(a.view) && a.edges === 2, a.view + ' ' + a.edges);
-    ok(`depth ${tag}: the legend names what lies past the bars, in dollars`, /Past the bars: \$[\d.]+[KM]? further down · \$[\d.]+[KM]? further up/.test(a.legend), a.legend.slice(-60));
-    await pzClick(p, '[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]'); await sleep(150);
+    let m = barsMatch(a.bars, liqExpect(bp, viewOf(a)), a.band);
+    ok(`depth ${tag}: at ±45% every bar sits on its own edges at its own value per width, on a thin flat full-range band under them (${bp.pair})`, m.ok && !!a.band, m.why);
+    ok(`depth ${tag}: the full-range layer is drawn and named (legend and label), and nothing is "past the bars" when both sides end at a real 0`, a.fr === 1 && /Full range \$[\d.]+[KM]?/.test(a.legend) && !/Past the bars/.test(a.legend) && a.by.length === 0, a.legend.replace(/\n/g, ' / ').slice(-90) + ' ' + a.fr);
+    const ws = await zoomAllOut(p, 'liq-best');
     a = await look();
-    const ws = [...new Set(a.widths.map((x) => Math.round(x)))].sort((x, y) => x - y);
-    ok(`depth ${tag}: zoomed out to ±90%, both "beyond" buckets are labelled at the data's edges, inside the chart`, a.by.length === 2 && a.by.every((b) => /beyond/.test(b.t) && b.inside), JSON.stringify(a.by));
-    ok(`depth ${tag}: …and the coarse bars past ±45% are drawn twice as wide as the fine ones`, ws.length >= 2 && Math.abs(ws[ws.length - 1] / ws[0] - 2) < 0.35, ws.join(','));
+    ok(`depth ${tag}: − steps out to the whole field (${a.cap}): every bar, no hatch, no "beyond" label`, near(+a.view.split(',')[1], sp[1] - sp[0], 2e-3) && near(+a.view.split(',')[0], (sp[0] + sp[1]) / 2, 2e-3) && a.hatch === 0 && a.by.length === 0 && ws.length >= 1, a.view + ' ' + a.hatch + ' ' + JSON.stringify(a.by));
+    m = barsMatch(a.bars, liqExpect(bp, viewOf(a)), a.band);
+    const wr = Math.max(...a.bars.map((b) => b.w)) / Math.min(...a.bars.map((b) => b.w));
+    ok(`depth ${tag}: …the far bars are as wide as their edges (widest ${wr.toFixed(0)}× the narrowest), drawn by value per width, the band across the whole field`, m.ok && wr > 8, m.why);
+    ok(`depth ${tag}: …on a log axis marked as moves of the price (${a.ticks.join(' ')})`, a.ticks.includes('PRICE') && a.ticks.some((x) => /^×\d/.test(x)), a.ticks.join(' '));
+    // past the right end a drag rubber-bands over a plain end: nothing lies beyond (a real 0), never "no data"
+    await pzDrag(p, 'liq-best', -160, { up: false }); await sleep(60);
+    const endR = await p.$$eval('[data-pz="liq-best"] .pz-end.r', (e) => e.map((x) => x.className + '|' + x.textContent).join());
+    await p.mouse.up(); await pzSettled(p, 'liq-best');
+    ok(`depth ${tag}: past the end of the field a drag shows a plain end (no hatch: nothing is there)`, endR === 'pz-end r none|', endR);
     await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
     // KOVA: 40% of its parked value above sits past ±45%; the "parked" label reads the fine bars only
     await pick('KOVA/WETH');
-    const kid = await p.getAttribute('#best [data-act="detail"]', 'data-id'), kp = live.pools.find((x) => x.id === kid);
+    const kp = poolOf(await bestId(p));
     const r30 = kp.w['30d'].range, fineUp = kp.shape.depth.filter(([o, v]) => o > r30 + 1e-9 && o <= 0.45 && v != null).reduce((s2, d) => s2 + d[1], 0);
     const allUp = kp.shape.depth.filter(([o, v]) => o > r30 + 1e-9 && v != null).reduce((s2, d) => s2 + d[1], 0);
     a = await look();
-    const parsed = (txt) => { const m = /\$([\d.]+)([KM]?)/.exec(txt || ''); return m ? +m[1] * ({ K: 1e3, M: 1e6 }[m[2]] || 1) : null; };
-    const up = parsed(a.mlab.find((x) => /parked/.test(x) && a.mlab.length) && a.mlab[a.mlab.length - 1]);
+    const parsed = (txt) => { const mm = /\$([\d.]+)([KM]?)/.exec(txt || ''); return mm ? +mm[1] * ({ K: 1e3, M: 1e6 }[mm[2]] || 1) : null; };
+    const up = parsed(a.mlab[a.mlab.length - 1]);
     ok(`depth ${tag}: the default view's "parked" label counts the ±45% bars only (KOVA)`, up != null && Math.abs(up - fineUp) / fineUp < 0.06 && Math.abs(up - allUp) / allUp > 0.15, `${up} vs fine ${Math.round(fineUp)} / all ${Math.round(allUp)}`);
-    for (let k = 0; k < 6 && (await p.isVisible('[data-pz="liq-best"] > .pz-edge.r')); k++) { await pzClick(p, '[data-pz="liq-best"] > .pz-edge.r'); await sleep(phone ? 380 : 380); }
+    ok(`depth ${tag}: no layer drawn where the pool has none (KOVA: fullRangeUsd 0)`, a.fr === 0 && !/Full range/.test(a.legend), a.legend.slice(-60));
+    for (let k = 0; k < 6 && (await p.isVisible('[data-pz="liq-best"] > .pz-edge.r')); k++) { await pzClick(p, '[data-pz="liq-best"] > .pz-edge.r'); await sleep(380); }
     a = await look();
-    ok(`depth ${tag}: panned to the right end the view stops at the last bar (+${SPAN})`, near(+a.view.split(',')[0], SPAN - 0.45, 2e-3), a.view);
-    // QUARX: its map is unread from the fourth coarse bar up: a hatch and "— beyond", never a bar of 0
-    await fillQ(p, 'QUARX'); await sleep(300);
-    await p.click('#all tbody tr.row td:nth-child(3)');
-    await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
-    await p.evaluate(() => document.querySelector('#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="-1"]').click()); await sleep(150);
-    for (let k = 0; k < 6 && (await p.isVisible('[data-pz="liq-detail"] > .pz-edge.r')); k++) { await p.evaluate(() => document.querySelector('[data-pz="liq-detail"] > .pz-edge.r').click()); await sleep(380); }
-    const q = await p.evaluate(() => { const h = document.querySelector('[data-pz="liq-detail"]'); return { unread: h.querySelectorAll('rect.unread').length, by: [...h.querySelectorAll('.bylab')].map((e) => e.textContent), legend: h.closest('[data-chartbox]').querySelector('.legend').innerText }; });
-    ok(`depth ${tag}: unread bars are hatched and the unread "beyond" reads —, never 0`, q.unread === 2 && q.by.some((x) => /^— beyond/.test(x)) && /Not read/.test(q.legend) && !/\$0 /.test(q.by.join(' ')), JSON.stringify(q));
-    await p.click('#sheet-close'); await fillQ(p, '');
-    // old data without depthStep/depthSpan still draws (the closest spacing, half a bin past the outer bars)
-    ok(`depth ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    ok(`depth ${tag}: panned to the right end the view stops at the last bar (+${kp.shape.depthSpan[1]})`, near(+a.view.split(',')[0], kp.shape.depthSpan[1] - 0.45, 2e-3), a.view);
+    // QUARX: unread from its fourth coarse bar up: hatched out to the tick limit, "not read beyond", never a bar of 0, no layer
+    const qp = live.pools.find((x) => x.t0.sym === 'QUARX');
+    await openPool(p, 'QUARX');
+    await zoomAllOut(p, 'liq-detail', '#sheet');
+    a = await look('liq-detail');
+    const nulls = qp.shape.depth.filter((d) => d[1] === null).length;
+    ok(`depth ${tag}: unread bars are hatched (${a.unread} of ${nulls}) and the unread "beyond" says so, never $0; no layer where it couldn't be measured`, a.unread === nulls && a.by.some((x) => /not read beyond/.test(x.t)) && /Not read/.test(a.legend) && !/\$0 /.test(a.by.map((x) => x.t).join(' ')) && a.fr === 0 && /×10/.test(a.cap), JSON.stringify({ u: a.unread, by: a.by, cap: a.cap }));
+    m = barsMatch(a.bars, liqExpect(qp, viewOf(a)), a.band);
+    ok(`depth ${tag}: …its read bars still sit on their edges at ×${a.cap.split('×').pop()}`, m.ok, m.why);
+    await pzDrag(p, 'liq-detail', -160, { up: false }); await sleep(60);
+    const endQ = await p.$$eval('[data-pz="liq-detail"] .pz-end.r', (e) => e.map((x) => x.className + '|' + x.textContent).join());
+    await p.mouse.up(); await sleep(400);
+    ok(`depth ${tag}: …past its unread end a drag shows the hatch, marked "not read" (never "no data")`, endQ === 'pz-end r|NOT READ' || endQ === 'pz-end r|', endQ);
+    await closePool(p);
+    // ORVO: a stray position near ×200: the whole field reaches it, and its far bar shows (a sliver at least)
+    const op = live.pools.find((x) => x.t0.sym === 'ORVO');
+    await openPool(p, 'ORVO');
+    await zoomAllOut(p, 'liq-detail', '#sheet');
+    a = await look('liq-detail');
+    m = barsMatch(a.bars, liqExpect(op, viewOf(a)), a.band);
+    ok(`depth ${tag}: a stray far position stretches the field (${a.cap}) and its bar is drawn out to the end`, /×2\d\d$/.test(a.cap) && m.ok && a.bars.some((b) => b.x + b.w > 470), a.cap + ' ' + m.why);
+    await closePool(p);
+    ok(`depth ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
     await t.ctx.close();
   }
+  // older scanners' data: without depthEdges and the layer (steps and span), or with the ±45% bars only: still drawn, no hatch
+  const od = await openUnlocked(browser, 'olddepth', { width: 1440 }), p = od.page;
+  const oldPools = oldDepth(FXD).live.pools, res = [], genOf = (x) => (x.shape.depthEdges ? 'edges' : x.shape.depthStep ? 'steps' : 'fine only');
+  const picks = ['edges', 'steps', 'fine only'].flatMap((g) => oldPools.filter((x) => x.shape.depth.length && genOf(x) === g).slice(0, 2));
+  for (const op of picks) {
+    await openPool(p, op.id.slice(0, 12));
+    await zoomAllOut(p, 'liq-detail', '#sheet');
+    const a = await p.evaluate(LIQ_LOOK, 'liq-detail');
+    const gen = op.shape.depthEdges ? 'edges' : op.shape.depthStep ? 'steps' : 'fine only', ws2 = a.bars.map((b) => b.w);
+    const exp = gen === 'edges' ? op.shape.depthSpan[1] - op.shape.depthSpan[0] : gen === 'steps' ? 1.275 : null;
+    res.push({ sym: op.t0.sym.slice(0, 8), gen, ok: a.bars.length > 20 && a.hatch === 0 && (exp == null || near(+a.view.split(',')[1], exp, 2e-3)) && (gen !== 'steps' || Math.max(...ws2) / Math.min(...ws2) > 1.7), view: a.view });
+    await closePool(p);
+  }
+  ok(`depth: older data still draws (${[...new Set(res.map((r) => r.gen))].join(', ')}): bars, the map's own extent, no hatch`, res.every((r) => r.ok) && new Set(res.map((r) => r.gen)).size === 3, JSON.stringify(res.filter((r) => !r.ok)));
+  ok('depth: older data, no page errors, no NaN', od.errors.length === 0 && noJunk(await bodyText(p)), od.errors[0]);
+  await od.ctx.close();
+}
+
+// ---------- 4f3. history.json: LP fees per hour (14 days) and per day (90 days) ----------
+// Each row's fees cover the time since the row before: a bar spans that stretch at fees ÷ its hours or days (a gap the
+// backfill hasn't filled is one wide bar at its average), the first row draws nothing, an unread row is hatched; the
+// view pans and zooms in time and zooming out stops at the rows' own span.
+const RATE_LOOK = (id) => {
+  const h = document.querySelector(`[data-pz="${id}"]`), box = h.closest('[data-chartbox]');
+  return { view: h.dataset.view, rects: [...h.querySelectorAll('.pz-c svg > rect:not(.unread)')].map((r) => ({ x: +r.getAttribute('x'), w: +r.getAttribute('width'), h: +r.getAttribute('height') })),
+    unread: h.querySelectorAll('.pz-c svg > rect.unread').length, title: box.querySelector('.pane-title > .lbl').textContent, cap: (box.querySelector('.pz-cap2') || {}).textContent || '',
+    out: box.querySelector('[data-act="zoom"][data-dir="-1"]').disabled };
+};
+function rateExpect(rows, vi, unit, view) {
+  const t0 = rows[0][0], U = (t) => (t - t0) / unit, bars = [];
+  for (let i = 1; i < rows.length; i++) { const a = rows[i - 1][0], b = rows[i][0], v = rows[i][vi]; bars.push({ a: U(a), b: U(b), r: typeof v === 'number' ? v / ((b - a) / unit) : null }); }
+  const mx = Math.max(...bars.filter((x) => x.r != null).map((x) => x.r)), [c, len] = view, v0 = c - len;
+  const seen = bars.filter((x) => x.b >= v0 && x.a <= c);
+  return { n: U(rows.at(-1)[0]), unread: seen.filter((x) => x.r == null).length, max: Math.max(...seen.filter((x) => x.r != null).map((x) => x.r)),
+    bars: seen.filter((x) => x.r > 0).map((x) => { const full = ((x.b - x.a) / len) * 300; return { x: ((x.a - v0) / len) * 300, w: Math.max(0.4, full - Math.min(1, full * 0.25)), h: (x.r / mx) * 64 }; }) };
+}
+function rectsMatch(got, want) {
+  const bad = [], used = new Set();
+  for (const e of want) {
+    const g = got.filter((b) => !used.has(b) && Math.abs(b.x - e.x) < 0.02).sort((p, q) => Math.abs(p.h - e.h) - Math.abs(q.h - e.h))[0];
+    if (g) used.add(g);
+    if (!g || Math.abs(g.w - e.w) > 0.02 || Math.abs(g.h - e.h) > 0.06) bad.push(`x ${e.x.toFixed(2)} w ${e.w.toFixed(2)} h ${e.h.toFixed(2)} got ${g ? `w ${g.w} h ${g.h}` : 'none'}`);
+  }
+  return { ok: !bad.length && got.length === want.length, why: `${got.length}/${want.length} · ${bad.slice(0, 2).join(' | ')}` };
+}
+const money = (txt) => { const m = /\$([\d.,]+)([KMB]?)/.exec(txt || ''); return m ? +m[1].replace(/,/g, '') * ({ K: 1e3, M: 1e6, B: 1e9 }[m[2]] || 1) : null; };
+async function testHistory(browser) {
+  const H = 3600e3, D = 24 * H, ents = Object.entries(FXD.history.pools);
+  const gapP = ents.find(([, e]) => e.d.length >= 80 && e.d.some((r, i) => i && r[0] - e.d[i - 1][0] > 1.5 * D) && e.h.some((r, i) => i && r[0] - e.h[i - 1][0] > 1.5 * H));
+  const nrP = ents.find(([, e]) => e.h.slice(1).some((r) => r[3] === null) && e.h.length > 300);
+  for (const phone of [false, true]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    for (const [id, e] of [gapP, nrP]) {
+      await openPool(p, id.slice(0, 12));
+      for (const [cid, rows, vi, unit, word, days] of [['d-hr', e.h, 3, H, 'hour', 14], ['d-day', e.d, 2, D, 'day', 90]]) {
+        let a = await p.evaluate(RATE_LOOK, cid);
+        const view = a.view.split(',').map(Number), x = rateExpect(rows, vi, unit, view), m = rectsMatch(a.rects, x.bars);
+        const lv = phone && cid === 'd-hr' ? 2 : 1; // a phone opens the hourly fees on their latest 7 days
+        ok(`history ${tag}: fees per ${word} over ${days} days, one bar per row at fees ÷ the ${word}s since the row before (${a.title})`, new RegExp(`per ${word} · ${days} d$`).test(a.title) && near(view[1], x.n / lv, 0.02) && m.ok, a.title + ' ' + a.view + ' ' + m.why);
+        ok(`history ${tag}: …unread rows hatched (${x.unread}), the first row and gaps never drawn as 0, its max ${a.cap} the data's`, a.unread === x.unread && Math.abs(money(a.cap) - x.max) / x.max < 0.06, `${a.unread}/${x.unread} ${a.cap} vs ${x.max.toFixed(2)}`);
+        if (lv === 1) {
+          ok(`history ${tag}: …zoomed all the way out it shows the whole span and − stops there`, a.out && near(view[1], x.n, 0.02), a.view);
+        } else {
+          await zoomAllOut(p, cid, '#sheet');
+          a = await p.evaluate(RATE_LOOK, cid);
+          ok(`history ${tag}: …− shows the rest of the span, then stops at it`, a.out && near(+a.view.split(',')[1], x.n, 0.02), a.view);
+          await p.evaluate((cid) => document.querySelector(`#sheet [data-act="zreset"][data-chart="${cid}"]`).click(), cid); await sleep(120); // zoom is kept per chart
+        }
+      }
+      await closePool(p);
+    }
+    ok(`history ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4f4. the stablecoin-pairs switch: off by default, those pairs hidden everywhere but favourites and the benchmark ----------
+// Fixture pairs quoted in USDC (and TOVI/MUNT, whose quote is a stablecoin by its address only) are the stablecoin pairs.
+const isStableFx = (p) => p.t1.sym === 'USDC' || p.t1.addr === STABLE_PROBE_ADDR;
+const SEEN_LISTS = () => ({
+  tabs: [...document.querySelectorAll('#best [role="tab"] .tn')].map((e) => e.textContent), kick: document.querySelector('#best .lbl.acc').textContent,
+  next: [...document.querySelectorAll('#next .nb-row .pn')].map((e) => e.textContent), nextSub: document.querySelector('#next .sub').textContent,
+  rows: [...document.querySelectorAll('#all tbody tr.row .pn2')].map((e) => e.textContent), count: document.querySelector('#all-count').textContent,
+  sw: document.querySelector('#f-stab').getAttribute('aria-checked'), swText: document.querySelector('#f-stab').textContent.trim(), n: document.querySelector('#f-stab-n').textContent,
+  fav: [...document.querySelectorAll('#fav .mc .n')].map((e) => e.textContent), bench: document.querySelector('#bench').textContent,
+});
+async function testStable(browser) {
+  const pools = FXD.live.pools, stab = pools.filter(isStableFx), N = stab.length, isStPair = (name) => /\/(USDC|MUNT)$/.test(name);
+  for (const phone of [false, true]) {
+    const tag = phone ? 'phone' : 'laptop';
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, stableDefault: true }), p = t.page;
+    await p.click('[data-act="more"]').catch(() => {}); await sleep(150);
+    let a = await p.evaluate(SEEN_LISTS);
+    ok(`stable ${tag}: the switch is off by default, a switch for assistive tech, and says how many pairs it hides (${a.n})`, a.sw === 'false' && /Off/.test(a.swText) && a.n === `${N} hidden` && (await p.getAttribute('#f-stab', 'role')) === 'switch', JSON.stringify([a.sw, a.swText, a.n, N]));
+    ok(`stable ${tag}: All pools lists no stablecoin pair, and counts them hidden`, a.rows.length === pools.length - N && !a.rows.some(isStPair) && a.count.includes(`${N} HIDDEN · STABLECOIN PAIRS OFF`), `${a.rows.length}/${pools.length - N} ${a.count}`);
+    ok(`stable ${tag}: Next best and the best-find tabs list none, with the hidden count`, a.next.length > 0 && !a.next.some(isStPair) && /hidden · stablecoin pairs off/.test(a.nextSub) && a.tabs.length > 0 && !a.tabs.some(isStPair) && /HIDDEN · STABLECOIN PAIRS OFF/.test(a.kick), JSON.stringify({ next: a.next, tabs: a.tabs, kick: a.kick }));
+    ok(`stable ${tag}: the benchmark stays (${a.bench.slice(0, 20)})`, /UNI\/WETH/.test(a.bench));
+    // a stablecoin known only by its address (TOVI/MUNT: MUNT sits at USDC's address on Base)
+    await fillQ(p, 'TOVI');
+    ok(`stable ${tag}: a pair whose stablecoin is known by its contract address only is hidden too`, (await p.$$('#all tbody tr.row')).length === 0);
+    await fillQ(p, '');
+    // the search's suggestions leave them out and say so
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
+    await p.click('#f-q'); await p.keyboard.type('usdc', { delay: 15 }); await sleep(250);
+    const q = await p.evaluate(() => ({ opts: [...document.querySelectorAll('#q-list .qopt')].map((e) => e.textContent), note: (document.querySelector('#q-list .qnote') || {}).textContent || '', open: !document.querySelector('#q-list').hidden }));
+    ok(`stable ${tag}: search suggestions leave stablecoin pairs out and say how many (${q.note})`, q.open && !q.opts.some((x) => /USDC/i.test(x)) && new RegExp(`^${N - 1} hidden · stablecoin pairs off$`).test(q.note), JSON.stringify(q));
+    await p.keyboard.press('Escape'); await p.fill('#f-q', ''); await p.$eval('#f-q', (e) => e.blur()); await sleep(150);
+    // similar pools under the best find's detail
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    const sim = await p.evaluate(() => ({ cards: [...document.querySelectorAll('#sim .mc .n')].map((e) => e.textContent), head: document.querySelector('#sim .mc-head').textContent }));
+    ok(`stable ${tag}: similar pools leave them out, with the hidden count`, sim.cards.length > 1 && !sim.cards.some(isStPair) && /hidden · stablecoin pairs off/.test(sim.head), JSON.stringify(sim).slice(0, 160));
+    await p.click('#sheet-close'); await sleep(120);
+    // the info note
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-stab').scrollIntoView({ block: 'center' }); });
+    await p.click('#all .ibtn'); await sleep(150);
+    const note = await p.evaluate(() => !document.querySelector('#pop').hidden && document.querySelector('#pop').textContent);
+    ok(`stable ${tag}: its ⓘ explains the switch in plain words`, /Stablecoin pairs/.test(note || '') && /favourites always show/i.test(note || '') && /this device/.test(note || ''), String(note).slice(0, 80));
+    await p.keyboard.press('Escape'); await sleep(100);
+    if (!phone) await auditAt(p, 'stable-off-w1440');
+    // switch on: they all come back; kept on this device; the keyboard stays on the switch
+    await p.click('#f-stab'); await sleep(300);
+    const st = await p.evaluate(() => ({ ls: localStorage.getItem('lps.stable'), focus: document.activeElement && document.activeElement.id }));
+    await p.click('[data-act="more"]').catch(() => {}); await sleep(150);
+    a = await p.evaluate(SEEN_LISTS);
+    ok(`stable ${tag}: switched on, every pool is listed again (${a.n}), kept on this device, focus stays on the switch`, a.sw === 'true' && /On/.test(a.swText) && a.rows.length === pools.length && a.rows.some(isStPair) && !/HIDDEN/.test(a.count) && st.ls === '1' && st.focus === 'f-stab', JSON.stringify([a.sw, a.rows.length, a.count, st]));
+    await p.reload(); await waitApp(p); await sleep(200);
+    ok(`stable ${tag}: …and stays on after a reload`, (await p.getAttribute('#f-stab', 'aria-checked')) === 'true');
+    await p.click('#f-stab'); await sleep(250);
+    ok(`stable ${tag}: switched off again, they hide again`, (await p.getAttribute('#f-stab', 'aria-checked')) === 'false' && (await p.evaluate(() => localStorage.getItem('lps.stable'))) === '0');
+    ok(`stable ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    await t.ctx.close();
+  }
+  // a starred stablecoin pair always shows: in All pools, the tabs and the favourites strip; its pair view hides the other pool
+  const numa = pools.filter((x) => x.pair === 'NUMA/USDC').sort((x, y) => (y.w['30d']?.gem?.total ?? -1) - (x.w['30d']?.gem?.total ?? -1));
+  const f = await openUnlocked(browser, 'default', { width: 1440, stableDefault: true, storage: { 'lps.hint': '1', 'lps.fav': JSON.stringify([numa[0].id]) } }), p = f.page;
+  await p.click('[data-act="more"]').catch(() => {}); await sleep(150);
+  let a = await p.evaluate(SEEN_LISTS);
+  ok('stable: a starred stablecoin pair still shows (table, best-find tabs, favourites), its twin pool stays hidden', a.rows.filter((x) => x === 'NUMA/USDC').length === 1 && a.tabs.includes('NUMA/USDC') && a.fav.includes('NUMA/USDC') && a.n === `${N - 1} hidden`, JSON.stringify({ rows: a.rows.filter((x) => x === 'NUMA/USDC').length, tabs: a.tabs, fav: a.fav, n: a.n }));
+  await fillQ(p, numa[0].id.slice(0, 12));
+  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#all tbody tr.row td:nth-child(3)').click(); });
+  await p.waitForSelector('#sheet:not([hidden])'); await sleep(250);
+  await p.click('#sheet-pair'); await sleep(350);
+  const pv = await p.evaluate(() => ({ rows: document.querySelectorAll('#sheet-body table.pv tbody tr').length, meta: document.querySelector('#sheet-meta').textContent, btn: !!document.querySelector('#sheet-body [data-act="stable-on"]') }));
+  ok('stable: the pair view of a starred stablecoin pair lists the starred pool, says one is hidden and offers to show it', pv.rows === 1 && /1 hidden · stablecoin pairs off/.test(pv.meta) && pv.btn, JSON.stringify(pv));
+  await p.click('#sheet-body [data-act="stable-on"]'); await sleep(350);
+  const pv2 = await p.evaluate(() => ({ rows: document.querySelectorAll('#sheet-body table.pv tbody tr').length, sw: document.querySelector('#f-stab').getAttribute('aria-checked') }));
+  ok('stable: …"Show stablecoin pairs" turns the switch on and lists both', pv2.rows === 2 && pv2.sw === 'true', JSON.stringify(pv2));
+  ok('stable: favourites, no page errors', f.errors.length === 0, f.errors[0]);
+  await f.ctx.close();
+  // the 24-hour window with them off: its gems are all stablecoin pairs in the fixture, so the best find says none, cleanly
+  const d = await openUnlocked(browser, 'default', { phone: true, win: '24h', stableDefault: true, reducedMotion: 'reduce' }), pd = d.page;
+  ok('stable: a window whose every gem is hidden says "No gem", lists the rest, no NaN', /No gem in the 24-hour window/.test(await pd.textContent('#best')) && (await pd.$$('#best [role="tab"]')).length > 0 && noJunk(await bodyText(pd)));
+  await auditAt(pd, 'stable-off-phone-24h');
+  await d.ctx.close();
+  // storage blocked (a private window): the switch still works for the visit, nothing breaks
+  const b = await newPage(browser, { width: 1440, stableDefault: true });
+  await b.ctx.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } }); });
+  await b.page.goto(url('default')); await unlockWith(b.page, FIXTURE_PASSPHRASE); await waitApp(b.page);
+  const off = await b.page.getAttribute('#f-stab', 'aria-checked');
+  await b.page.click('#f-stab'); await sleep(250);
+  ok('stable: with storage blocked it starts off and still switches, without errors', off === 'false' && (await b.page.getAttribute('#f-stab', 'aria-checked')) === 'true' && b.errors.length === 0, b.errors[0]);
+  await b.ctx.close();
 }
 
 // ---------- 4g. sheets: swipe down to close on a phone ----------
@@ -889,7 +1137,7 @@ async function testSheets(browser) {
 // ---------- 4h. sticky table headers and back to top ----------
 const STICKY = (sel) => {
   const box = document.querySelector(sel), sh = box.parentElement.querySelector(':scope > .sh'), real = [...box.querySelectorAll('thead th')], copy = sh ? [...sh.querySelectorAll('th')] : [];
-  const sc = box.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : 0;
+  const bar = document.querySelector('#top'), sc = box.closest('.sheet-body'), top = sc ? sc.getBoundingClientRect().top : bar.classList.contains('hid') ? 0 : Math.max(0, bar.getBoundingClientRect().bottom); // the copy docks under the bar on top
   const on = !!sh && sh.classList.contains('on') && getComputedStyle(sh.firstElementChild).display !== 'none';
   const cr = on ? sh.firstElementChild.getBoundingClientRect() : null, br = box.getBoundingClientRect();
   const vw = sh ? sh.firstElementChild.getBoundingClientRect() : br;
@@ -906,7 +1154,7 @@ async function testSticky(browser) {
     let s = await p.evaluate(STICKY, '#all-box');
     ok(`sticky ${tag}: no header copy at the top of the page`, !s.on);
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
-    await sleep(200);
+    await sleep(380);
     s = await p.evaluate(STICKY, '#all-box');
     ok(`sticky ${tag}: inside All pools the header row sticks to the top, columns aligned (${s.cols})`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
     const hit = await p.evaluate(() => { const r = document.querySelector('#all .sh .sh-in').getBoundingClientRect(), e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e && !!e.closest('.sh'); });
@@ -922,20 +1170,20 @@ async function testSticky(browser) {
     ok(`sticky ${tag}: sorting from the stuck header sorts the table`, before === 'none' && (await p.getAttribute('#all-tbl thead th:nth-child(3)', 'aria-sort')) !== 'none' && (await p.evaluate(STICKY, '#all-box')).on);
     // at the end of the table it leaves with the table: never over what follows
     await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom - 30); });
-    await sleep(200);
+    await sleep(380);
     s = await p.evaluate(STICKY, '#all-box');
     ok(`sticky ${tag}: at the table's end the header goes with it, never past it`, !s.on || s.bottom <= s.boxBottom + 1, JSON.stringify(s));
     await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom + 40); });
-    await sleep(200);
+    await sleep(380);
     ok(`sticky ${tag}: past the table no header copy is left behind`, !(await p.evaluate(STICKY, '#all-box')).on);
-    await p.evaluate(() => scrollTo(0, 0)); await sleep(200);
+    await p.evaluate(() => scrollTo(0, 0)); await sleep(380);
     ok(`sticky ${tag}: back at the top it is gone (not stuck)`, !(await p.evaluate(STICKY, '#all-box')).on);
     // the detail panel's long "every window" table sticks inside the panel's own scroll
     await p.click('#best [data-act="detail"]');
     await p.waitForSelector('#sheet:not([hidden])'); await sleep(320);
     const wsel = '#sheet-body .tbl-box:not(.sh-in) > .wtbl';
     await p.evaluate((sel) => { const b = document.querySelector('#sheet-body'), tb = document.querySelector(sel).closest('.tbl-box'), r = tb.querySelector('tbody tr:nth-child(8)').getBoundingClientRect(); b.scrollTop += r.top - b.getBoundingClientRect().top - 40; }, wsel);
-    await sleep(200);
+    await sleep(380);
     const ws = await p.evaluate((sel) => { const tb = document.querySelector(sel).closest('.tbl-box'); tb.id ||= 'wtbl-box'; return '#' + tb.id; }, wsel);
     s = await p.evaluate(STICKY, ws);
     ok(`sticky ${tag}: in the detail panel the window table's header sticks to the panel's top`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
@@ -1504,12 +1752,398 @@ async function testLinks(browser) {
 async function testLockNote(browser) {
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
-    const n = await p.evaluate(() => { const b = document.querySelector('#lockbtn').getBoundingClientRect(), e = document.querySelector('#lock-note'), r = e.getBoundingClientRect(); return { t: e.innerText, on: !e.hidden && r.height > 0, near: Math.abs(r.top - b.top) < 80 && r.left < b.right + 200, desc: document.querySelector('#lockbtn').getAttribute('aria-describedby') }; });
-    ok(`lock note ${tag}: next to "Lock this device", one plain line on what it does`, n.on && n.near && n.desc === 'lock-note' && /Forgets the saved key on this device/.test(n.t) && /passphrase is needed next time/.test(n.t) && /stays sealed either way/.test(n.t), JSON.stringify(n).slice(0, 100));
+    const n = await p.evaluate(() => { const b = document.querySelector('#lockbtn').getBoundingClientRect(), e = document.querySelector('#lock-note'), r = e.getBoundingClientRect(); return { t: e.innerText, on: !e.hidden && r.height > 0, near: Math.abs(r.top - b.top) < 80 && r.left < b.right + 200, desc: document.querySelector('#lockbtn').getAttribute('aria-describedby'), btn: document.querySelector('#lockbtn').textContent }; });
+    ok(`lock note ${tag}: the button reads "Sign out on this device"`, n.btn === 'Sign out on this device', n.btn);
+    ok(`lock note ${tag}: next to "Sign out on this device", one plain line on what it does`, n.on && n.near && n.desc === 'lock-note' && n.t === 'Forgets the saved key here. You’ll need your passphrase next time. Your data stays encrypted either way.', JSON.stringify(n).slice(0, 100));
     await p.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await sleep(200);
     if (SHOTS) await snap(p, `p2-lock-note-${tag}`, 'footer');
     await p.click('#lockbtn'); await p.waitForSelector('#lockscreen:not([hidden])');
     ok(`lock note ${tag}: locked, the note, the strip and every star go`, !(await p.isVisible('#lock-note')) && !(await p.isVisible('#mstrip')) && (await p.$$('.star')).length === 0);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4j. text overlap: no text collides with other text or is cut off, at every width, before and after interactions ----------
+// tools/overlap.mjs reads every visible text's line boxes (Range.getClientRects) and an icon-only control's glyph, per
+// layer (the page, the panel, a note, the search list, a sticky header copy and the bar are layers of their own). The
+// "long" fixture carries worst-case names and numbers: real data runs longer than the made-up default.
+const OVL = (page, root) => page.evaluate(TEXT_OVERLAP, { root });
+async function overlapSteps(p, tag, found, views) {
+  const look = async (step, root) => { views.n++; for (const x of await OVL(p, root)) found.push(`${tag} ${step} · ${x.kind} ${x.sec}: ${x.a} × ${x.b}`); };
+  const click = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); if (!b || b.disabled) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
+  const esc = async () => { await p.keyboard.press('Escape'); await sleep(120); };
+  await look('top');
+  // favourites: a few starred pools fill the strip near the top (long names next to their stars)
+  for (const i of [1, 2, 3, 4, 7]) await p.evaluate((i) => { const b = document.querySelector(`#all tbody tr.row:nth-child(${i}) .star`); if (b) b.click(); }, i);
+  await sleep(150);
+  await look('favourites', '#fav');
+  for (let k = 0; k < 4 && (await click('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]')); k++) await sleep(80);
+  await look('chart zoomed out', '#best');
+  for (let k = 0; k < 6 && (await click('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]')); k++) await sleep(80);
+  for (let k = 0; k < 8 && (await click('[data-pz="liq-best"] > .pz-edge.r:not([hidden])')); k++) await sleep(40);
+  await look('chart zoomed in, right end', '#best');
+  await click('[data-act="zreset"][data-chart="liq-best"]'); await sleep(100);
+  for (let k = 0; k < 3 && (await click('[data-act="zoom"][data-chart="daily-best"][data-dir="1"]')); k++) await sleep(80);
+  await look('daily strip zoomed in', '#best');
+  await click('[data-act="zreset"][data-chart="daily-best"]'); await sleep(100);
+  if (await click('#best .tags [data-term="hook"], #best .best-meta [data-act="term"]')) { await sleep(150); await look('a term\'s note'); await esc(); }
+  if (await click('#gas')) { await sleep(150); await look('gas note'); await esc(); }
+  if (await click('#all tbody .whyb')) { await sleep(150); await look('why note'); await esc(); }
+  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
+  await p.click('#f-q'); await p.keyboard.type('ve', { delay: 20 }); await sleep(200);
+  await look('search list');
+  await esc(); await p.fill('#f-q', ''); await p.$eval('#f-q', (e) => e.blur()); await sleep(150);
+  if (await click('#why-tog')) { await sleep(120); await look('why legend', '#all'); await click('#why-tog'); }
+  // the stablecoin-pairs switch: its note, then the page with the switch the other way (counts appear or go)
+  if (await click('#all .ibtn')) { await sleep(150); await look('stablecoin note'); await esc(); }
+  if (await click('#f-stab')) { await sleep(350); await look('stablecoin pairs switched'); await click('#f-stab'); await sleep(350); }
+  // scrolled into the table, the bar back on top: the sticky header copy and the bar are layers over the rows
+  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 60); });
+  await sleep(250); await p.evaluate(() => scrollBy(0, -60)); await sleep(380);
+  await look('table scrolled, sticky header');
+  await p.evaluate(() => scrollTo(0, 0)); await sleep(200);
+  if (await click('#bt-lead tr.row')) { await sleep(800); await look('replay', '#bt'); }
+  if (await click('#best [data-act="detail"]')) {
+    await p.waitForSelector('#sheet:not([hidden])'); await sleep(400);
+    await look('detail panel', '#sheet');
+    if (await click('#sim [data-act="sim-all"]')) { await sleep(200); await look('similar list', '#sheet'); await click('#sim [data-act="sim-all"]'); }
+    if (await click('#sheet .tags [data-act="term"], #sheet-meta [data-act="term"]')) { await sleep(150); await look('a term\'s note in the panel'); await esc(); }
+    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-hr', 'd-day']) {
+      for (let k = 0; k < 5 && (await p.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
+    }
+    await look('panel charts zoomed out', '#sheet');
+    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-hr', 'd-day']) {
+      for (let k = 0; k < 6 && (await p.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
+    }
+    await look('panel charts zoomed in', '#sheet');
+    await p.evaluate(() => { const b = document.querySelector('#sheet-body'); b.scrollTop = 500; }); await sleep(380);
+    await look('panel scrolled (its top folded)', '#sheet');
+    await p.click('#sheet-close'); await sleep(150);
+  }
+  if (await click('#best h2 button[data-act="pair"]')) { await sleep(350); await look('pair view', '#sheet'); await p.click('#sheet-close'); await sleep(120); }
+}
+async function testOverlap(browser) {
+  const widths = DEVICE ? [0, 768, 1300, 1440, 1920] : [320, 360, 375, 390, 430, 768, 1300, 1440, 1920];
+  for (const c of ['default', 'long']) {
+    const found = [], views = { n: 0 }, errs = [];
+    for (const w of widths) {
+      const t = await openUnlocked(browser, c, { ...(w ? { width: w, height: 860 } : { phone: true }), storage: { 'lps.hint': '1' }, stableDefault: c === 'default' }), p = t.page; // default: stablecoin pairs off
+      try { await overlapSteps(p, w ? 'w' + w : 'phone', found, views); } catch (e) { errs.push(String(e.message).split('\n')[0].slice(0, 100)); }
+      if (SHOTS && (w === 390 || w === 1440 || !w)) await snap(p, `overlap-${c}-${w || 'phone'}`);
+      if (t.errors.length) errs.push(t.errors[0]);
+      await t.ctx.close();
+    }
+    const secs = [...new Set(found.map((f) => f.replace(/^.*· \w+ ([^:]+):.*$/, '$1')))];
+    ok(`overlap ${c}: no text collides or is cut off (${views.n} views, widths ${widths.map((x) => x || 'phone').join('/')})`, found.length === 0, `${found.length} in ${secs.join(', ')}: ${found.slice(0, 3).join(' | ')}`);
+    ok(`overlap ${c}: the walk-through ran without page errors`, errs.length === 0, errs[0]);
+  }
+  // the long case's liquidity chart, every best-find pool at every zoom level and both pan ends: the price pill, the
+  // "parked" and "beyond" labels and the ticks never sit on each other
+  const found = [];
+  let views = 0;
+  for (const o of DEVICE ? [{ phone: true }, { width: 1440 }] : [{ width: 360 }, { width: 390 }, { width: 1440 }]) {
+    const t = await openUnlocked(browser, 'long', { ...o, height: 860, reducedMotion: 'reduce', storage: { 'lps.hint': '1' } }), p = t.page, tag = o.width ? 'w' + o.width : 'phone';
+    for (const wk of ['24h', '30d']) {
+      await setWin(p, wk);
+      const n = await p.$$eval('#best [role="tab"]', (x) => x.length);
+      for (let i = 0; i < n; i++) {
+        await p.evaluate((i) => document.querySelectorAll('#best [role="tab"]')[i].click(), i); await sleep(40);
+        for (const dir of [-1, 1]) {
+          for (let z = 0; z < 5; z++) {
+            for (const side of ['', 'l', 'r']) {
+              if (side) for (let k = 0; k < 10 && (await p.evaluate((s) => { const e = document.querySelector(`[data-pz="liq-best"] > .pz-edge.${s}:not([hidden])`); if (!e) return false; e.click(); return true; }, side)); k++);
+              views++;
+              for (const x of await p.evaluate(TEXT_OVERLAP, { root: '[data-chartbox="liq-best"]' })) found.push(`${tag} ${wk} tab ${i} z${dir}${z}${side} · ${x.kind}: ${x.a} × ${x.b}`);
+            }
+            if (!(await p.evaluate((d) => { const b = document.querySelector(`[data-act="zoom"][data-chart="liq-best"][data-dir="${d}"]`); if (!b || b.disabled) return false; b.click(); return true; }, dir))) break;
+          }
+          await p.evaluate(() => { const b = document.querySelector('[data-act="zreset"][data-chart="liq-best"]'); if (b) b.click(); });
+        }
+      }
+    }
+    await t.ctx.close();
+  }
+  ok(`overlap: the liquidity chart's labels never collide, any pool, zoom or pan (${views} views of the long case)`, found.length === 0, `${found.length}: ${found.slice(0, 3).join(' | ')}`);
+}
+
+// ---------- 4k. touch: one finger drags, two fingers pinch and pan, as pointer events with pointerType 'touch' ----------
+// The page sees what a phone sends (tools/gestures.mjs: pointerdown / move / up per finger, each with its own
+// pointerId); WebKit in Actions runs these same events. What they can't show: that a real iPhone's Safari hands the
+// gesture to the page at all (that rests on touch-action: pan-y, checked below, and on preventDefault of its touchmove
+// and gesture events, also checked).
+// a pinch on a chart: two fingers `d0` px apart around (fx, fy) of the host, spread by `k`, the middle moved by (mx, my)
+async function pinch(page, id, k, { root = '', steps = 10, end = 'pointerup', ...o } = {}) {
+  const b = await page.evaluate(HOST_BOX, { id, root });
+  await sleep(60);
+  return page.evaluate(FINGERS, { steps, end, pts: pinchPts(b, k, o) });
+}
+async function finger(page, id, dx, { dy = 0, fy = 0.5, steps = 10, ms = 16, end = 'pointerup', root = '' } = {}) {
+  const b = await page.evaluate(HOST_BOX, { id, root });
+  await sleep(60);
+  const x0 = b.x + b.w / 2, y0 = b.y + b.h * fy;
+  return page.evaluate(FINGERS, { steps, ms, end, pts: [{ id: 31, x0, y0, x1: x0 + dx, y1: y0 + dy }] });
+}
+const liqSpan = (page, id) => page.evaluate((id) => (document.querySelector(`[data-chartbox="${id}"] .pz-cap1`) || {}).textContent || '', id);
+async function testTouch(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, storage: { 'lps.hint': '1' } }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const tas = await p.$$eval('.pz', (hs) => hs.map((h) => [h.classList.contains('pz-xy'), getComputedStyle(h).touchAction]));
+    ok(`touch ${tag}: every chart surface leaves vertical swipes to the page and takes sideways drags and pinches (touch-action pan-y) (${tas.length})`, tas.length >= 3 && tas.every(([xy, ta]) => ta === (xy ? 'none' : 'pan-y')), JSON.stringify(tas.slice(0, 3)));
+    // one finger
+    let v0 = await pzView(p, 'liq-best');
+    await finger(p, 'liq-best', -110, { steps: 12, ms: 30 }); await sleep(60);
+    let v1 = await pzSettled(p, 'liq-best');
+    ok(`touch ${tag}: a finger dragged left shows higher prices`, v1.c > v0.c + 0.05 && near(v1.w, v0.w), `${v0.c} → ${v1.c}`);
+    await finger(p, 'liq-best', 8, { dy: 90 }); await sleep(60);
+    ok(`touch ${tag}: a mostly vertical swipe leaves the chart alone (the page scrolls)`, near((await pzSettled(p, 'liq-best')).c, v1.c));
+    // the page doesn't scroll under a chart being dragged; iOS's own pinch events never reach the page from a chart
+    const blocked = await p.evaluate(async () => {
+      const h = document.querySelector('[data-pz="liq-best"]'), r = h.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, el = document.elementFromPoint(x, y);
+      const pe = (type, xx) => el.dispatchEvent(new PointerEvent(type, { pointerId: 41, pointerType: 'touch', isPrimary: true, clientX: xx, clientY: y, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1 }));
+      const tm = () => document.dispatchEvent(new Event('touchmove', { bubbles: true, cancelable: true }));
+      const before = tm(); // nothing dragged: a touchmove is left alone (the page scrolls)
+      pe('pointerdown', x); for (let i = 1; i <= 4; i++) { pe('pointermove', x - i * 8); await new Promise((r2) => setTimeout(r2, 16)); }
+      const during = tm(); pe('pointerup', x - 32);
+      const g1 = h.dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true })), g2 = h.dispatchEvent(new Event('gesturechange', { bubbles: true, cancelable: true }));
+      const g3 = document.querySelector('#all h2').dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true }));
+      return { before, during, g1, g2, g3 };
+    });
+    ok(`touch ${tag}: while a chart is dragged its touchmoves are held (no page scroll), otherwise not`, blocked.before === true && blocked.during === false, JSON.stringify(blocked));
+    ok(`touch ${tag}: Safari's pinch events (gesturestart / gesturechange) are stopped on charts only`, blocked.g1 === false && blocked.g2 === false && blocked.g3 === true, JSON.stringify(blocked));
+    await pzSettled(p, 'liq-best');
+    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
+    // two fingers: spread to zoom in around the point between them
+    v0 = await pzView(p, 'liq-best');
+    await pinch(p, 'liq-best', 2); await sleep(120);
+    v1 = await pzSettled(p, 'liq-best');
+    const cap1 = await liqSpan(p, 'liq-best');
+    ok(`touch ${tag}: spreading two fingers zooms in (the view halves, the price stays in the middle)`, near(v1.w, v0.w / 2, 0.01) && near(v1.c, v0.c, 0.01) && /^±2[23]%$/.test(cap1), `${JSON.stringify(v0)} → ${JSON.stringify(v1)} ${cap1}`);
+    ok(`touch ${tag}: …and the zoom buttons follow (reset shows, − and + both work)`, (await p.isVisible('[data-chartbox="liq-best"] [data-act="zreset"]')) && (await p.isEnabled('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]')) && (await p.isEnabled('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]')));
+    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
+    // off-centre: the price under the fingers' midpoint stays under it
+    v0 = await pzView(p, 'liq-best');
+    const want = v0.c - v0.w / 2 + 0.25 * v0.w, wantC = want + (0.5 - 0.25) * (v0.w / 2);
+    await pinch(p, 'liq-best', 2, { fx: 0.25 }); await sleep(120);
+    v1 = await pzSettled(p, 'liq-best');
+    ok(`touch ${tag}: a pinch zooms around the point between the fingers, not the middle of the chart`, near(v1.w, v0.w / 2, 0.01) && near(v1.c, wantC, 0.012), `${v1.c} vs ${wantC}`);
+    // both fingers moving together pan the zoomed chart
+    v0 = v1;
+    await pinch(p, 'liq-best', 1, { mx: 90 }); await sleep(120);
+    v1 = await pzSettled(p, 'liq-best');
+    ok(`touch ${tag}: two fingers moved together pan the chart (no zoom change)`, near(v1.w, v0.w, 0.005) && v1.c < v0.c - 0.03, `${JSON.stringify(v0)} → ${JSON.stringify(v1)}`);
+    // pinching closed stops at the whole field (a wide field can take two pinches): all the data, no hatch, − disabled
+    let rest = null;
+    for (let k = 0; k < 3 && !(rest && rest.out); k++) {
+      await pinch(p, 'liq-best', 0.2, { d0: 160 }); await sleep(120);
+      v1 = await pzSettled(p, 'liq-best');
+      rest = await p.evaluate(() => ({ hatch: document.querySelectorAll('[data-pz="liq-best"] .pz-end').length, out: document.querySelector('[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]').disabled }));
+    }
+    const SPt = poolOf(await bestId(p)).shape.depthSpan, capT = await liqSpan(p, 'liq-best');
+    ok(`touch ${tag}: pinched closed, the view stops at the whole field (${capT}): every bar, no hatch, − disabled`, near(v1.c, (SPt[0] + SPt[1]) / 2, 2e-3) && near(v1.w, SPt[1] - SPt[0], 2e-3) && rest.hatch === 0 && rest.out && /…/.test(capT), `${JSON.stringify(v1)} ${JSON.stringify(rest)} ${capT}`);
+    // a double tap (two finger taps) resets
+    const hb = await p.evaluate(() => { const r = document.querySelector('[data-pz="liq-best"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 70 }; });
+    for (let k = 0; k < 2; k++) { await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 51 + k, x0: hb.x, y0: hb.y, x1: hb.x, y1: hb.y }] }); await sleep(90); }
+    v1 = await pzSettled(p, 'liq-best');
+    ok(`touch ${tag}: a double tap resets the chart`, near(v1.c, 0) && near(v1.w, 0.9), JSON.stringify(v1));
+    // a cancelled touch (the browser took the gesture) ends the drag cleanly
+    await finger(p, 'liq-best', 260, { end: 'pointercancel' }); await sleep(80);
+    v1 = await pzSettled(p, 'liq-best');
+    ok(`touch ${tag}: a cancelled drag ends cleanly and springs back inside the data`, !(await p.$('[data-pz="liq-best"].dragging')) && v1.c >= SPt[0] + 0.45 - 2e-3, JSON.stringify(v1));
+    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]').catch(() => {}); await sleep(120);
+    // the daily strip: a pinch shows fewer, wider days; a finger drag shows older ones
+    let dv = await pzView(p, 'daily-best');
+    await pinch(p, 'daily-best', 2, { fx: 0.75 }); await sleep(120);
+    let dv2 = await pzSettled(p, 'daily-best');
+    ok(`touch ${tag}: a pinch on the daily strip shows fewer, wider days`, near(dv2.w, dv.w / 2, 0.6), `${dv.w} → ${dv2.w}`);
+    dv = dv2;
+    await finger(p, 'daily-best', 120, { steps: 12, ms: 30 }); await sleep(60);
+    dv2 = await pzSettled(p, 'daily-best');
+    ok(`touch ${tag}: a finger dragged right on the strip shows older days`, dv2.c < dv.c - 1, `${dv.c} → ${dv2.c}`);
+    // the detail panel: its charts pinch too, and the panel stays open
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(350);
+    v0 = await pzView(p, 'liq-detail');
+    await pinch(p, 'liq-detail', 2, { root: '#sheet' }); await sleep(120);
+    v1 = await pzSettled(p, 'liq-detail');
+    await finger(p, 'liq-detail', -80, { root: '#sheet', steps: 12, ms: 30 }); await sleep(60);
+    const v2 = await pzSettled(p, 'liq-detail');
+    ok(`touch ${tag}: in the detail panel a pinch zooms and a finger drags the chart; the panel stays open`, near(v1.w, v0.w / 2, 0.01) && v2.c > v1.c + 0.02 && (await p.isVisible('#sheet')), `${v0.w}→${v1.w} ${v1.c}→${v2.c}`);
+    await p.click('#sheet-close');
+    // the scatter: a pinch zooms both axes, then it takes drags both ways
+    await p.click('#bt-lead tr.row'); await sleep(900);
+    await pinch(p, 'scatter', 2); await sleep(200);
+    const sc = await p.evaluate(() => { const h = document.querySelector('[data-pz="scatter"]'); return { xy: h.classList.contains('pz-xy'), ta: getComputedStyle(h).touchAction, view: h.dataset.view }; });
+    ok(`touch ${tag}: a pinch on the scatter zooms it; zoomed, it takes drags both ways (touch-action none)`, sc.xy && sc.ta === 'none' && sc.view.split(',').length === 3, JSON.stringify(sc));
+    // a pop-out window: the same gestures
+    const pool = await p.getAttribute('#best [data-act="detail"]', 'data-id');
+    const w2 = await t.ctx.newPage();
+    await w2.goto(url('default', `&view=liq-best&pool=${pool}&w=30d`));
+    await w2.waitForSelector('.solo-box [data-pz="liq-best"]', { timeout: 20000 }); await sleep(300);
+    const s0 = await pzView(w2, 'liq-best');
+    await pinch(w2, 'liq-best', 2); await sleep(150);
+    const s1 = await pzSettled(w2, 'liq-best');
+    await finger(w2, 'liq-best', -100, { steps: 12, ms: 30 }); await sleep(60);
+    const s2 = await pzSettled(w2, 'liq-best');
+    ok(`touch ${tag}: in a chart's own window a pinch zooms and a finger drags`, near(s1.w, s0.w / 2, 0.01) && s2.c > s1.c + 0.02, `${JSON.stringify(s0)} ${JSON.stringify(s1)} ${JSON.stringify(s2)}`);
+    await w2.close();
+    ok(`touch ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // reduced motion: a pinch still zooms, nothing animates after it
+  const r = await openUnlocked(browser, 'default', { phone: true, reducedMotion: 'reduce', storage: { 'lps.hint': '1' } }), p = r.page;
+  const v0 = await pzView(p, 'liq-best');
+  await pinch(p, 'liq-best', 2); await sleep(60);
+  ok('touch: under reduced motion a pinch zooms at once and nothing animates', near((await pzView(p, 'liq-best')).w, v0.w / 2, 0.01) && (await p.evaluate(() => document.getAnimations().length)) === 0);
+  await r.ctx.close();
+}
+
+// ---------- 4l. the bar on top: one slim row; it slides away going down and comes back going up; the strip scrolls away ----------
+const BAR = () => {
+  const b = document.querySelector('#top'), r = b.getBoundingClientRect(), m = document.querySelector('#mstrip').getBoundingClientRect();
+  const kids = [...b.children].filter((e) => e.getBoundingClientRect().width > 0 && getComputedStyle(e).position !== 'absolute').map((e) => { const q = e.getBoundingClientRect(); return q.top + q.height / 2; });
+  return { h: Math.round(r.height), top: Math.round(r.top), bottom: Math.round(r.bottom), hid: b.classList.contains('hid'), pos: getComputedStyle(b).position, oneRow: kids.length >= 3 && Math.max(...kids) - Math.min(...kids) <= 4, strip: Math.round(m.bottom), y: scrollY, anim: document.getAnimations().length };
+};
+async function testHeader(browser) {
+  for (const [tag, o] of [['phone', { phone: true }], ['w360', { width: 360, height: 760 }], ['w768', { width: 768 }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
+    const t = await openUnlocked(browser, 'default', { ...o, storage: { 'lps.hint': '1' } }), p = t.page;
+    let b = await p.evaluate(BAR);
+    ok(`header ${tag}: the bar on top is one slim row (${b.h} px: mark, freshness, refresh, window), sticky`, b.oneRow && b.h >= 44 && b.h <= 52 && b.pos === 'sticky' && !b.hid && b.top >= 0 && b.top <= 30, JSON.stringify(b)); // under the MOCKUP ribbon
+    if (SHOTS && !/reduced/.test(tag)) await snap(p, `header-${tag.replace(' ', '-')}-top`, 'body');
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 900); }); await sleep(420);
+    b = await p.evaluate(BAR);
+    ok(`header ${tag}: scrolling down slides the bar away${tag.startsWith('phone') || tag === 'w360' ? ' and the market strip scrolls off with the page' : ''}`, b.hid && b.bottom <= 0 && b.strip < 0, JSON.stringify(b));
+    if (/reduced/.test(tag)) ok(`header ${tag}: under reduced motion it goes at once (nothing animates)`, b.anim === 0, String(b.anim));
+    await p.evaluate(() => scrollBy(0, -120)); await sleep(420);
+    b = await p.evaluate(BAR);
+    ok(`header ${tag}: a little scroll up brings it back`, !b.hid && b.top === 0 && b.bottom >= 44, JSON.stringify(b));
+    // the All pools header copy docks right under the bar, never under it
+    await p.evaluate(() => { const r = document.querySelector('#all-tbl tbody tr:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 40); }); await sleep(300);
+    await p.evaluate(() => scrollBy(0, -50)); await sleep(420);
+    const d = await p.evaluate(() => { const bar = document.querySelector('#top').getBoundingClientRect(), sh = document.querySelector('#all .sh'), r = sh && sh.firstElementChild.getBoundingClientRect(), on = !!sh && sh.classList.contains('on'); const e = on ? document.elementFromPoint(r.left + 40, r.top + r.height / 2) : null; return { on, gap: on ? Math.round(r.top - bar.bottom) : null, mine: !!e && !!e.closest('.sh') }; });
+    ok(`header ${tag}: with the bar back, the sticky table header docks right under it, not under it`, d.on && Math.abs(d.gap) <= 1 && d.mine, JSON.stringify(d));
+    if (SHOTS && !/reduced/.test(tag)) await p.screenshot({ path: path.join(SHOTS, `header-${tag.replace(' ', '-')}-docked.png`) });
+    // the keyboard brings the bar back
+    await p.evaluate(() => scrollBy(0, 400)); await sleep(420);
+    const hid = (await p.evaluate(BAR)).hid;
+    await p.evaluate(() => document.querySelector('#refresh').focus()); await sleep(300);
+    ok(`header ${tag}: focusing a control in the hidden bar brings it back`, hid && !(await p.evaluate(BAR)).hid);
+    await p.evaluate(() => scrollTo(0, 0)); await sleep(300);
+    b = await p.evaluate(BAR);
+    ok(`header ${tag}: at the top it shows, flat (no shadow)`, !b.hid && b.top >= 0 && !(await p.$eval('#top', (e) => e.classList.contains('stuck'))));
+    ok(`header ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4m. info notes: one glossary, a small note for each explainable word ----------
+const POP = () => { const e = document.querySelector('#pop'), r = e.getBoundingClientRect(), bar = document.querySelector('#top'), bb = bar.classList.contains('hid') ? 0 : bar.getBoundingClientRect().bottom, inSheet = !document.querySelector('#sheet').hidden;
+  return { on: !e.hidden, t: e.innerText, lbl: !!e.querySelector('.lbl'), gl: (e.querySelector('.gl') || {}).textContent || '', inside: r.left >= 0 && r.right <= document.documentElement.clientWidth && r.bottom <= innerHeight + 1 && r.top >= (inSheet ? 0 : bb) - 1, top: Math.round(r.top), bb: Math.round(bb) }; };
+async function testTerms(browser) {
+  const HOOK = 'A hook is extra code attached to a Uniswap v4 pool. It can change fees or move tokens; unverified hooks are a risk.';
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, storage: { 'lps.hint': '1' } }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const press = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
+    const keys = () => p.evaluate((root) => [...new Set([...document.querySelectorAll(`${root} [data-act="term"]`)].filter((b) => b.getClientRects().length).map((b) => b.dataset.term))], phone ? '#best' : '#best');
+    const best = await keys();
+    ok(`terms ${tag}: the best find explains its fee tier, chain, version, range, gem, net APR, LVR and chips`, ['fee', 'v3', 'range', 'gem', 'net', 'lvr', 'edge', 'sigma', 'room', 'stop'].every((k) => best.includes(k)) && (best.includes('base') || best.includes('ethereum')), best.join(','));
+    // the hook, in plain words
+    await p.evaluate(() => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.querySelector('.tn').textContent === 'TALI/WETH').click()); await sleep(150);
+    await press('#best .tags [data-term="hook"]'); await sleep(150);
+    let a = await p.evaluate(POP);
+    ok(`terms ${tag}: tapping "hook" opens a small note: "${HOOK.slice(0, 40)}…"`, a.on && a.gl === HOOK && a.inside, JSON.stringify(a).slice(0, 140));
+    ok(`terms ${tag}: …the word shows it is open (aria-expanded)`, (await p.getAttribute('#best .tags [data-term="hook"]', 'aria-expanded')) === 'true');
+    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `terms-hook-${tag}.png`) });
+    await press('#best .tags [data-term="hook"]'); await sleep(120);
+    ok(`terms ${tag}: a second tap closes it`, !(await p.evaluate(POP)).on && (await p.getAttribute('#best .tags [data-term="hook"]', 'aria-expanded')) === 'false');
+    await press('#best .tags [data-term="hook"]'); await sleep(120);
+    await p.evaluate(() => document.querySelector('#all h2').click()); await sleep(120);
+    ok(`terms ${tag}: a tap elsewhere closes it`, !(await p.evaluate(POP)).on);
+    await p.focus('#best .tags [data-term="hook"]'); await p.keyboard.press('Enter'); await sleep(120);
+    const kb = (await p.evaluate(POP)).on;
+    await p.keyboard.press('Escape'); await sleep(120);
+    ok(`terms ${tag}: the keyboard opens it (Enter) and Esc closes it, the focus back on the word`, kb && !(await p.evaluate(POP)).on && (await p.evaluate(() => document.activeElement && document.activeElement.dataset.term)) === 'hook');
+    // every explainable word on the card and in the panel: a label and a plain sentence, on screen, below the bar
+    const bad = [];
+    let n = 0;
+    const each = async (root) => {
+      for (const k of await p.evaluate((root) => [...new Set([...document.querySelectorAll(`${root} [data-act="term"]`)].filter((b) => b.getClientRects().length).map((b) => b.dataset.term))], root)) {
+        // (the panel's top folds while its content scrolls: a word up there is pressed with the content back at the top)
+        const shown = await p.evaluate(({ root, k }) => { window.dispatchEvent(new WheelEvent('wheel')); const b = [...document.querySelectorAll(`${root} [data-act="term"][data-term="${k}"]`)].find((x) => x.getClientRects().length); if (!b) { const sb = document.querySelector('#sheet-body'); if (sb) sb.scrollTop = 0; return false; } b.scrollIntoView({ block: 'center' }); return true; }, { root, k });
+        if (!shown) await sleep(420);
+        n++;
+        await p.evaluate(({ root, k }) => { const b = [...document.querySelectorAll(`${root} [data-act="term"][data-term="${k}"]`)].find((x) => x.getClientRects().length); b.scrollIntoView({ block: 'center' }); b.click(); }, { root, k }); await sleep(90);
+        const q = await p.evaluate(POP);
+        if (!q.on || !q.lbl || q.gl.length < 25 || !q.inside) bad.push(`${k} ${JSON.stringify(q).slice(0, 60)}`);
+        if (q.on) { await p.keyboard.press('Escape'); await sleep(60); }
+      }
+    };
+    await each('#best'); await each('#subhead'); await each('#health');
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(350);
+    await each('#sheet');
+    ok(`terms ${tag}: every explainable word opens its note: a name and a plain sentence, inside the screen, never under the bar (${n} kinds)`, bad.length === 0 && n >= 30, bad.slice(0, 3).join(' | '));
+    // the similar pools' reasons
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(420);
+    await p.evaluate(() => document.querySelector('#sim .mc-relb').click()); await sleep(120);
+    const k0 = await p.evaluate(() => document.querySelector('#sim .mc-v .k').textContent);
+    a = await p.evaluate(POP);
+    ok(`terms ${tag}: a similar pool's reason ("this pool", "same pair"…) explains itself, without switching the cards' figure`, a.on && /this pool|same pair|tier \+ token|same tier|shared token|unverified/i.test(a.t) && k0 === (await p.evaluate(() => document.querySelector('#sim .mc-v .k').textContent)), a.t.slice(0, 60));
+    if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `terms-sim-${tag}.png`) });
+    await p.keyboard.press('Escape'); await sleep(80);
+    // one glossary: the same word gives the same note everywhere
+    await p.evaluate(() => document.querySelector('#sheet [data-term="net"]').click()); await sleep(100);
+    const n1 = (await p.evaluate(POP)).gl;
+    await p.keyboard.press('Escape'); await p.click('#sheet-close'); await sleep(100);
+    await press('#best [data-term="net"]'); await sleep(100);
+    ok(`terms ${tag}: one glossary: "net APR" reads the same in the card and the panel`, n1.length > 20 && n1 === (await p.evaluate(POP)).gl);
+    await p.keyboard.press('Escape');
+    // a note near the top of the screen stays below the bar
+    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - 400); }); await sleep(300);
+    await p.evaluate(() => scrollBy(0, -40)); await sleep(350);
+    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - document.querySelector('#top').getBoundingClientRect().bottom - 4); }); await sleep(380);
+    await p.evaluate(() => document.querySelector('#best .best-meta [data-term="fee"]').click()); await sleep(120);
+    a = await p.evaluate(POP);
+    ok(`terms ${tag}: a note opened right under the bar sits below it, inside the screen`, a.on && a.inside, JSON.stringify(a).slice(0, 120));
+    await p.keyboard.press('Escape');
+    // the gas gauge and the watchdog
+    await press('#gas'); await sleep(120);
+    ok(`terms ${tag}: the gas gauge's note starts with what gas is`, /^Ethereum gas · next block\s*What Ethereum charges to run a transaction/i.test((await p.evaluate(POP)).t), (await p.evaluate(POP)).t.slice(0, 60));
+    await p.keyboard.press('Escape');
+    const wd = await p.evaluate(() => { const dt = [...document.querySelectorAll('#health dt')].find((x) => /Watchdog/.test(x.textContent)); return dt ? [dt.textContent, dt.nextElementSibling.textContent] : null; });
+    ok(`terms ${tag}: health says "Watchdog last restart" with a time, and explains it`, wd && wd[0] === 'Watchdog last restart' && /^\d\d:\d\d$|^\d+ \w+ \d\d:\d\d$/.test(wd[1]), JSON.stringify(wd));
+    ok(`terms ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  const m = await openUnlocked(browser, 'nomarket', { phone: true });
+  const wd = await m.page.evaluate(() => { const dt = [...document.querySelectorAll('#health dt')].find((x) => /Watchdog/.test(x.textContent)); return dt ? dt.nextElementSibling.textContent : null; });
+  ok('terms: a watchdog that never restarted the loop shows —, never a time or 0', wd === '—', wd);
+  await m.ctx.close();
+}
+
+// ---------- 4n. the detail panel's top folds while its content scrolls down, and opens again on the way up ----------
+const FOLD = () => { const c = document.querySelector('#sheet .sheet-card'), h = document.querySelector('#sheet .sheet-head'); return { cond: c.classList.contains('cond'), h: Math.round(h.getBoundingClientRect().height), sim: !document.querySelector('#sim').hidden && document.querySelector('#sim').getBoundingClientRect().height > 0, st: document.querySelector('#sheet-body').scrollTop, anim: document.getAnimations().length }; };
+async function testFold(browser) {
+  for (const [tag, o] of [['phone', { phone: true }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page;
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(400);
+    const f0 = await p.evaluate(FOLD);
+    for (const y of [80, 200, 400]) { await p.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(120); }
+    await sleep(300);
+    const f1 = await p.evaluate(FOLD);
+    ok(`fold ${tag}: scrolling the panel's content down folds its top (${f0.h} → ${f1.h} px; the similar pools tuck away)`, f0.sim && !f0.cond && f1.cond && !f1.sim && f1.h < f0.h - 60, JSON.stringify([f0, f1]));
+    if (/reduced/.test(tag)) ok(`fold ${tag}: under reduced motion it folds without sliding`, f1.anim === 0, String(f1.anim));
+    if (SHOTS && tag === 'phone') await p.screenshot({ path: path.join(SHOTS, 'fold-phone-folded.png') });
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop -= 30; }); await sleep(80);
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop -= 30; }); await sleep(380);
+    const f2 = await p.evaluate(FOLD);
+    ok(`fold ${tag}: a scroll back up opens it again`, !f2.cond && f2.sim, JSON.stringify(f2));
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 600; }); await sleep(420);
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(380);
+    ok(`fold ${tag}: back at the top it is open`, !(await p.evaluate(FOLD)).cond);
+    // a short panel (the pair view) never folds back and forth
+    await p.click('#sheet-close'); await sleep(120);
+    await p.evaluate(() => document.querySelector('#best h2 button[data-act="pair"]').click()); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    const flips = await p.evaluate(async () => { let n = 0; const mo = new MutationObserver(() => n++); mo.observe(document.querySelector('#sheet .sheet-card'), { attributes: true, attributeFilter: ['class'] }); const b = document.querySelector('#sheet-body'); for (let i = 0; i < 12; i++) { b.scrollTop = i % 2 ? b.scrollHeight : b.scrollHeight - 30; await new Promise((r) => setTimeout(r, 60)); } await new Promise((r) => setTimeout(r, 400)); mo.disconnect(); return n; });
+    ok(`fold ${tag}: a short panel never flips between folded and open`, flips <= 2, String(flips));
+    ok(`fold ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
 }
@@ -1575,7 +2209,7 @@ async function testClicks(browser) {
         good = new RegExp(`[?&]view=${want}(&|$)`).test(u) && /[?&]w=(24h|7d|30d)/.test(u) && /[?&]z=\d/.test(u) && (['scatter', 'health'].includes(want) || /[?&]pool=[0-9a-fx]+/.test(u));
       }
       if (act === 'ext') good = /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(await p.evaluate(() => (window.__opened || []).slice(-1)[0] || ''));
-      if (act === 'why' || act === 'gas') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
+      if (act === 'why' || act === 'gas' || act === 'term') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
       if (act === 'fav') good = good && (await p.$$('#fav .mc')).length > 0;
       if (act === 'detail' || act === 'pair') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
@@ -1629,7 +2263,7 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, sheets: testSheets, sticky: testSticky, top: testTop, zoomfit: testZoomFit, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, highlight: testHighlight, search: testSearch, links: testLinks, locknote: testLockNote, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;

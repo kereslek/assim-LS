@@ -14,6 +14,8 @@ import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { TEXT_OVERLAP } from './overlap.mjs';
+import { FINGERS, HOST_BOX, pinchPts } from './gestures.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -160,13 +162,14 @@ const ENUM = () => {
 const HSCROLL = () => document.documentElement.scrollWidth - document.documentElement.clientWidth;
 // a chart host's view ("<position>,<width>[,<y>]"): compared in memory, never printed
 const VIEW = (id) => { const h = document.querySelector(`[data-pz="${id}"]`); return h ? h.dataset.view : null; };
-const STUCK = () => { // the All pools header copy: shown at the top, columns over the real ones
-  const box = document.querySelector('#all-box'), sh = box && box.parentElement.querySelector(':scope > .sh');
+const STUCK = () => { // the All pools header copy: right under the bar on top (at the top while the bar is away), columns over the real ones
+  const box = document.querySelector('#all-box'), sh = box && box.parentElement.querySelector(':scope > .sh'), bar = document.querySelector('#top');
   if (!sh || !sh.classList.contains('on')) return { on: false };
   const real = [...box.querySelectorAll('thead th')], copy = [...sh.querySelectorAll('th')], vw = sh.firstElementChild.getBoundingClientRect();
+  const dock = !bar || bar.classList.contains('hid') ? 0 : Math.max(0, bar.getBoundingClientRect().bottom);
   let mis = 0;
   real.forEach((th, i) => { const a = th.getBoundingClientRect(), b = copy[i] && copy[i].getBoundingClientRect(); if (!b) { mis++; return; } if (Math.min(a.right, vw.right) - Math.max(a.left, vw.left) > 4 && Math.abs(a.left - b.left) > 1) mis++; });
-  return { on: true, top: Math.abs(vw.top) <= 1, mis };
+  return { on: true, top: Math.abs(vw.top - dock) <= 1, mis };
 };
 
 // ---------- 2b. gestures: zoom twice, drag, double-tap, swipe a sheet closed, sticky header, back to top ----------
@@ -225,13 +228,16 @@ async function gestures(page, R, tag, errTotal) {
   // the All pools header sticks while its rows scroll by, and leaves at the top
   if ((await page.$$('#all-tbl tbody tr.row')).length >= 12) {
     await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr.row:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
-    await sleep(350);
+    await sleep(450);
     const s = await page.evaluate(STUCK);
-    run('gestures: the All pools header sticks to the top, columns aligned', s.on && s.top && s.mis === 0);
+    run('gestures: the All pools header sticks right under the bar on top, columns aligned', s.on && s.top && s.mis === 0);
     await page.evaluate(() => scrollTo(0, 0)); await sleep(350);
     run('gestures: …and is gone back at the top', !(await page.evaluate(STUCK)).on);
   } else skip();
   await part2(page, run, skip, box, press);
+  await part3(page, run, skip);
+  await part4(page, run, skip, press);
+  await overlaps(page, run, tag);
   // back to top
   await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
   await sleep(450);
@@ -315,9 +321,10 @@ async function part2(page, run, skip, box, press) {
         run('part 2: "see all" lists every similar pool and folds again', n > 9 && !(await vis('#sim-list')));
       } else skip();
       if ((await page.$$('#sim .mc-name')).length >= 1) {
-        const t0 = await page.evaluate(() => document.querySelector('#sheet-title').textContent);
+        const id0 = await page.evaluate(() => (document.querySelector('#sheet-star [data-id]') || {}).dataset.id || ''); // the pool open now (same-pair cards share its name)
+        const want = await page.evaluate(() => document.querySelector('#sim button.mc-name').dataset.id);
         await page.evaluate(() => document.querySelector('#sim button.mc-name').click()); await sleep(500);
-        run('part 2: a card\'s name opens that pool, shape first', await page.evaluate((t0) => document.querySelector('#sheet-title').textContent !== t0 && document.querySelector('#sheet-body').firstElementChild.dataset.chartbox === 'liq-detail', t0));
+        run('part 2: a card\'s name opens that pool, shape first', await page.evaluate(({ id0, want }) => { const id = (document.querySelector('#sheet-star [data-id]') || {}).dataset.id; return id === want && id !== id0 && document.querySelector('#sheet-body').firstElementChild.dataset.chartbox === 'liq-detail'; }, { id0, want }));
       } else skip();
       run('part 2: the window pills look small (≤ 26 px) with 44 px taps', await page.evaluate(() => [...document.querySelectorAll('#sheet-win button')].every((b) => b.getBoundingClientRect().height >= 43.5 && b.firstElementChild.getBoundingClientRect().height <= 26)));
     } else skip();
@@ -339,7 +346,208 @@ async function part2(page, run, skip, box, press) {
       run('part 2: a grid tile highlights and explains itself, then lets go', c && (await pressed()) === 0);
     } else skip();
   } else skip();
-  run('part 2: "Lock this device" carries its one-line explanation', /passphrase is needed next time/.test(await page.innerText('#lock-note').catch(() => '')));
+  run('part 2: "Sign out on this device" carries its one-line explanation', (await page.textContent('#lockbtn').catch(() => '')) === 'Sign out on this device' && /Forgets the saved key here\. You’ll need your passphrase next time\./.test(await page.innerText('#lock-note').catch(() => '')));
+}
+// ---------- 2d. Run 2 part 3: fingers on the charts, the bar on top, info notes, the panel's folding top ----------
+// Synthetic fingers (tools/gestures.mjs: pointer events with pointerType 'touch') on the real page. Views are compared in
+// memory and never printed; every step is a check, or a skip when the live data lacks that part.
+async function part3(page, run, skip) {
+  const view = (id) => page.evaluate(VIEW, id);
+  const num = (v, i) => Number(String(v).split(',')[i]);
+  const fingers = (pts, o = {}) => page.evaluate(FINGERS, { pts, ...o });
+  const box = (id, root = '') => page.evaluate(HOST_BOX, { id, root });
+  const press = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel); if (!b || b.disabled) return false; window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
+  const settle = async (id) => { let a = await view(id); for (let k = 0; k < 20; k++) { await sleep(150); const b = await view(id); if (b === a) return b; a = b; } return a; };
+  const tas = await page.$$eval('.pz', (hs) => hs.map((h) => [h.classList.contains('pz-xy'), getComputedStyle(h).touchAction]));
+  if (tas.length) run('part 3: every chart surface takes sideways drags and pinches, vertical swipes stay the page\'s', tas.every(([xy, ta]) => ta === (xy ? 'none' : 'pan-y')));
+  else skip();
+  const liq = await page.evaluate(() => { const h = document.querySelector('#best [data-pz^="liq"]'); return h ? h.dataset.pz : null; });
+  if (liq) {
+    await press(`[data-act="zreset"][data-chart="${liq}"]`); await sleep(250);
+    const v0 = await view(liq);
+    let b = await box(liq);
+    await fingers([{ id: 31, x0: b.x + b.w / 2, y0: b.y + b.h / 2, x1: b.x + b.w / 2 - 110, y1: b.y + b.h / 2 }], { steps: 12, ms: 30 });
+    run('part 3: a finger drags the depth chart sideways', num(await settle(liq), 0) !== num(v0, 0));
+    await press(`[data-act="zreset"][data-chart="${liq}"]`); await sleep(250);
+    b = await box(liq);
+    await fingers(pinchPts(b, 2)); await sleep(200);
+    const v1 = await settle(liq);
+    run('part 3: spreading two fingers zooms the depth chart in (the view about halves)', Math.abs(num(v1, 1) / num(v0, 1) - 0.5) < 0.03);
+    b = await box(liq);
+    await fingers(pinchPts(b, 1, { mx: 80 })); await sleep(200);
+    const v2 = await settle(liq);
+    run('part 3: two fingers moved together pan it, at the same zoom', num(v2, 0) !== num(v1, 0) && Math.abs(num(v2, 1) - num(v1, 1)) < 1e-3);
+    // pinching closed (a wide field can take a few pinches) stops at the whole field: no hatch, − disabled
+    let v3 = v2, rest = null;
+    for (let k = 0; k < 5; k++) {
+      b = await box(liq);
+      await fingers(pinchPts(b, 0.15, { d0: 170 })); await sleep(250);
+      v3 = await settle(liq);
+      rest = await page.evaluate((id) => ({ hatch: document.querySelectorAll(`[data-pz="${id}"] .pz-end`).length, out: !!(document.querySelector(`[data-act="zoom"][data-chart="${id}"][data-dir="-1"]`) || {}).disabled }), liq);
+      if (rest.out) break;
+    }
+    run('part 3: pinched closed, it stops at the whole field: no hatch, − disabled', rest.hatch === 0 && rest.out && num(v3, 1) >= num(v0, 1));
+    b = await box(liq);
+    for (let k = 0; k < 2; k++) { await fingers([{ id: 51 + k, x0: b.x + b.w / 2, y0: b.y + 70, x1: b.x + b.w / 2, y1: b.y + 70 }], { steps: 1, ms: 10 }); await sleep(90); }
+    run('part 3: a double tap with a finger resets it', (await settle(liq)) === v0);
+    const g = await page.evaluate((id) => document.querySelector(`[data-pz="${id}"]`).dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true })), liq);
+    run('part 3: Safari\'s own pinch (gesturestart) never zooms the page from a chart', g === false);
+  } else { skip(); skip(); skip(); skip(); skip(); skip(); }
+  if (await page.evaluate(() => !!document.querySelector('#best [data-pz="daily-best"]'))) {
+    await press('[data-act="zreset"][data-chart="daily-best"]'); await sleep(200);
+    const d0 = await view('daily-best'), b = await box('daily-best');
+    await fingers(pinchPts(b, 2, { fx: 0.7 })); await sleep(200);
+    const d1 = await settle('daily-best');
+    run('part 3: a pinch on the daily strip shows fewer days', num(d1, 1) < num(d0, 1) * 0.75 || num(d0, 1) <= 2.01);
+    await press('[data-act="zreset"][data-chart="daily-best"]'); await sleep(200);
+  } else skip();
+  // the bar on top: slim; away going down, back going up
+  const bar = () => page.evaluate(() => { const b = document.querySelector('#top'), r = b.getBoundingClientRect(); return { h: r.height, hid: b.classList.contains('hid'), bottom: r.bottom, top: r.top, strip: document.querySelector('#mstrip').getBoundingClientRect().bottom }; });
+  await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(300);
+  const h0 = await bar();
+  await page.evaluate(() => scrollTo(0, 1100)); await sleep(450);
+  const h1 = await bar();
+  await page.evaluate(() => scrollBy(0, -140)); await sleep(450);
+  const h2 = await bar();
+  run('part 3: the bar on top is one slim row (≤ 52 px)', h0.h >= 44 && h0.h <= 52 && !h0.hid);
+  run('part 3: scrolling down slides it away and the market strip scrolls off; scrolling up brings the bar back', h1.hid && h1.bottom <= 0 && h1.strip < 0 && !h2.hid && Math.abs(h2.top) <= 1);
+  await page.evaluate(() => scrollTo(0, 0)); await sleep(300);
+  // an explainable word: a short note inside the screen, closed by Esc
+  if (await press('#best [data-act="term"]')) {
+    await sleep(200);
+    const pop = await page.evaluate(() => { const e = document.querySelector('#pop'), r = e.getBoundingClientRect(), bb = document.querySelector('#top').classList.contains('hid') ? 0 : document.querySelector('#top').getBoundingClientRect().bottom; return { on: !e.hidden, gl: ((e.querySelector('.gl') || {}).textContent || '').length, inside: r.left >= 0 && r.right <= document.documentElement.clientWidth && r.top >= bb - 1 && r.bottom <= innerHeight + 1 }; });
+    await page.keyboard.press('Escape'); await sleep(200);
+    run('part 3: a tap on an explainable word opens a short note inside the screen, below the bar; Esc closes it', pop.on && pop.gl >= 25 && pop.inside && !(await page.isVisible('#pop')));
+  } else skip();
+  // the detail panel's top folds while its content scrolls down
+  if (await press('#best [data-act="detail"]')) {
+    await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
+    const long = await page.evaluate(() => { const b = document.querySelector('#sheet-body'); return b.scrollHeight - b.clientHeight > 400; });
+    if (long) {
+      for (const y of [80, 220, 420]) { await page.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(130); }
+      await sleep(350);
+      const f1 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
+      await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(450);
+      const f2 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
+      run('part 3: the panel\'s top folds while its content scrolls down and opens at the top', f1 && !f2);
+    } else skip();
+    const lb = await box('liq-detail', '#sheet');
+    if (lb) {
+      const a = await view('liq-detail');
+      await page.evaluate(FINGERS, { pts: pinchPts(lb, 2) }); await sleep(250);
+      run('part 3: in the panel a pinch zooms its chart and the panel stays open', num(await settle('liq-detail'), 1) < num(a, 1) * 0.6 && (await page.isVisible('#sheet')));
+    } else skip();
+    await page.click('#sheet-close').catch(() => {}); await sleep(300);
+  } else { skip(); skip(); }
+}
+// ---------- 2d2. Run 2 part 3: the stablecoin-pairs switch, the whole-field depth chart, the fee history ----------
+// Booleans and counts only: how many rows a list has, never which pools.
+async function part4(page, run, skip, press) {
+  const read = () => page.evaluate(() => {
+    const c = document.querySelector('#all-count').textContent, m = /OF (\d+)/.exec(c);
+    return { on: document.querySelector('#f-stab').getAttribute('aria-checked'), total: m ? +m[1] : null, hid: parseInt(document.querySelector('#f-stab-n').textContent, 10), flag: /HIDDEN · STABLECOIN PAIRS OFF/.test(c), focus: document.activeElement && document.activeElement.id };
+  });
+  if (await page.$('#f-stab')) {
+    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-stab').scrollIntoView({ block: 'center' }); }); await sleep(200);
+    const s0 = await read();
+    await page.click('#f-stab'); await sleep(600);
+    const s1 = await read();
+    await page.click('#f-stab'); await sleep(600);
+    const s2 = await read();
+    const [off, on] = s0.on === 'false' ? [s0, s1] : [s1, s0];
+    run('part 4: the stablecoin-pairs switch turns on and off and keeps the focus', s1.on !== s0.on && s2.on === s0.on && s1.focus === 'f-stab' && s2.focus === 'f-stab');
+    run('part 4: off, the table counts the hidden pairs; on, it lists them all again (counts agree)', off.total != null && on.total === off.total + (off.hid || 0) && (off.hid > 0) === off.flag && !on.flag);
+    await press('#all .ibtn'); await sleep(250);
+    run('part 4: the switch\'s ⓘ opens a note, Esc closes it', (await page.isVisible('#pop')) && (await page.evaluate(() => document.querySelector('#pop').textContent.length > 80)));
+    await page.keyboard.press('Escape'); await sleep(200);
+  } else { skip(); skip(); skip(); }
+  // the depth chart zoomed all the way out: the whole field, never a "no data" hatch
+  const liq = await page.evaluate(() => { const h = document.querySelector('#best [data-pz^="liq"]'); return h ? h.dataset.pz : null; });
+  if (liq) {
+    await press(`[data-act="zreset"][data-chart="${liq}"]`); await sleep(250);
+    let k = 0;
+    for (; k < 10 && (await press(`[data-act="zoom"][data-chart="${liq}"][data-dir="-1"]`)); k++) await sleep(200);
+    const z = await page.evaluate((id) => { const h = document.querySelector(`[data-pz="${id}"]`); return { hatch: h.querySelectorAll('.pz-end').length, bars: (h.querySelector('svg path') || {}).getAttribute ? h.querySelectorAll('svg path').length : 0, txt: /NO DATA/.test(h.textContent) }; }, liq);
+    run('part 4: − steps the depth chart out to its whole field and stops: bars, no hatch, no "no data"', k >= 1 && z.hatch === 0 && z.bars > 0 && !z.txt);
+    await press(`[data-act="zreset"][data-chart="${liq}"]`); await sleep(250);
+  } else skip();
+  // the detail panel's fee history: hourly and daily bars, zoom out stops at their span, a drag pans
+  if (await press('#best [data-act="detail"]')) {
+    await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
+    const ids = await page.$$eval('#sheet [data-pz="d-hr"], #sheet [data-pz="d-day"]', (h) => h.map((x) => x.dataset.pz));
+    if (ids.length) {
+      let good = 0;
+      for (const id of ids) {
+        for (let k = 0; k < 6 && (await press(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`)); k++) await sleep(120);
+        const st = await page.evaluate((id) => { const h = document.querySelector(`[data-pz="${id}"]`), v = h.dataset.view.split(',').map(Number); return { full: Math.abs(v[0] - v[1]) < 1e-3, bars: h.querySelectorAll('svg > rect').length, out: document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`).disabled }; }, id);
+        if (st.full && st.out && st.bars > 0) good++;
+      }
+      run(`part 4: the panel's fee history (${ids.length} chart${ids.length === 1 ? '' : 's'}) zooms out to its whole span and stops there`, good === ids.length);
+    } else skip();
+    await page.click('#sheet-close').catch(() => {}); await sleep(300);
+  } else skip();
+}
+// ---------- 2e. text that collides or is cut off, in the views a phone and a laptop show ----------
+// The report names sections and element kinds (tag and first class) with counts: never a word of the page's text.
+async function overlaps(page, run, tag) {
+  const rep = {};
+  let views = 0;
+  const look = async (root) => { views++; for (const x of await page.evaluate(TEXT_OVERLAP, { root, safe: true })) { const k = `${x.kind} ${x.sec}: ${x.a} × ${x.b}`; rep[k] = (rep[k] || 0) + 1; } };
+  const press = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel); if (!b || b.disabled) return false; window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
+  const esc = async () => { await page.keyboard.press('Escape'); await sleep(150); };
+  await page.evaluate(() => scrollTo(0, 0)); await sleep(250);
+  await look();
+  // the best find's liquidity chart: every pool tab, every zoom level, both pan ends (the labels must never collide)
+  const tabs = await page.$$eval('#best [role="tab"]', (t) => t.length), t0 = Date.now();
+  for (let i = 0; i < tabs && Date.now() - t0 < 90e3; i++) {
+    await page.evaluate((i) => document.querySelectorAll('#best [role="tab"]')[i].click(), i); await sleep(80);
+    for (const dir of [-1, 1]) {
+      for (let z = 0; z < 5; z++) {
+        for (const side of ['', 'l', 'r']) {
+          if (side) for (let k = 0; k < 10 && (await page.evaluate((s) => { const e = document.querySelector(`#best [data-pz^="liq"] > .pz-edge.${s}:not([hidden])`); if (!e) return false; e.click(); return true; }, side)); k++) await sleep(30);
+          await sleep(60); await look('#best .best-r');
+        }
+        if (!(await page.evaluate((d) => { const b = document.querySelector(`#best [data-act="zoom"][data-dir="${d}"][data-chart^="liq"]`); if (!b || b.disabled) return false; b.click(); return true; }, dir))) break;
+        await sleep(60);
+      }
+      await page.evaluate(() => { const b = document.querySelector('#best [data-act="zreset"][data-chart^="liq"]'); if (b) b.click(); }); await sleep(80);
+    }
+  }
+  for (let k = 0; k < 3 && (await press('[data-act="zoom"][data-chart="daily-best"][data-dir="1"]')); k++) await sleep(100);
+  await look('#best');
+  await press('[data-act="zreset"][data-chart="daily-best"]'); await sleep(100);
+  if (await press('#gas')) { await sleep(200); await look(); await esc(); }
+  if (await press('#all tbody .whyb')) { await sleep(200); await look(); await esc(); }
+  if (await press('#best [data-act="term"]')) { await sleep(200); await look(); await esc(); }
+  if (await page.$('#f-q') && await page.$('#best h2')) {
+    const q = await page.evaluate(() => { const t = document.querySelector('#best h2').textContent.trim(); return t.slice(0, 2); }); // two letters, kept in memory only
+    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
+    await page.click('#f-q'); await page.keyboard.type(q, { delay: 40 }); await sleep(300);
+    await look();
+    await esc(); await page.fill('#f-q', ''); await page.$eval('#f-q', (e) => e.blur()); await sleep(300);
+  }
+  if ((await page.$$('#all-tbl tbody tr.row')).length >= 12) {
+    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr.row:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 60); });
+    await sleep(300); await page.evaluate(() => scrollBy(0, -60)); await sleep(450);
+    await look();
+    await page.evaluate(() => scrollTo(0, 0)); await sleep(250);
+  }
+  if (await press('#best [data-act="detail"]')) {
+    await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
+    await look('#sheet');
+    if (await press('#sim [data-act="sim-all"]')) { await sleep(250); await look('#sheet'); await press('#sim [data-act="sim-all"]'); await sleep(150); }
+    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-hr', 'd-day']) for (let k = 0; k < 5 && (await page.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
+    await look('#sheet');
+    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-fees', 'd-hr', 'd-day']) for (let k = 0; k < 6 && (await page.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="zoom"][data-chart="${id}"][data-dir="1"]`); if (!b || b.disabled) return false; b.click(); return true; }, id)); k++) await sleep(60);
+    await look('#sheet');
+    await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 600; }); await sleep(450);
+    await look('#sheet');
+    await page.click('#sheet-close').catch(() => {}); await sleep(250);
+  }
+  if (await press('#bt-lead tr.row')) { await sleep(1000); await look('#bt'); }
+  const n = Object.values(rep).reduce((a, b) => a + b, 0);
+  console.log(`[${tag}] overlap: ${views} views, ${n} findings${n ? ': ' + Object.entries(rep).map(([k, v]) => `${k} ×${v}`).join(', ') : ''}`);
+  run('overlap: no text collides with other text or is cut off, in every view walked', n === 0);
 }
 const JUNK = () => /\bNaN\b|\bundefined\b|\bInfinity\b|\[object /.test(document.body.innerText);
 
@@ -474,7 +682,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     } catch (e) { console.log(`[${tag}] gestures step stopped: ${errName(e)}`); R.ok('gestures: ran to the end', false); }
     T.gestures = secs(t);
 
-    // close anything open, then "lock this device"
+    // close anything open, then "Sign out on this device"
     t = Date.now();
     for (let k = 0; k < 3 && (await page.evaluate(ENUM)).overlay; k++) { await page.keyboard.press('Escape'); await sleep(300); }
     let locked = false;
@@ -484,7 +692,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       await page.waitForSelector('#lockscreen:not([hidden])', { timeout: 15000 });
       locked = true;
     } catch (e) { console.log(`[${tag}] lock step stopped: ${errName(e)}`); }
-    R.ok('lock: "lock this device" shows the lock screen', locked);
+    R.ok('lock: "Sign out on this device" shows the lock screen', locked);
     R.ok('lock: the data is hidden after locking', locked && !(await page.isVisible('#app')));
     R.ok('lock: the unlocked data is gone from the page', locked && (!probe || !(await page.evaluate((p) => document.body.textContent.includes(p), probe))));
     if (locked) {

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { makeData, writeFixtures, FIXTURE_PASSPHRASE, CASES, PLANTED } from '../tools/fixtures/make-fixture.mjs';
+import { makeData, writeFixtures, FIXTURE_PASSPHRASE, CASES, PLANTED, DEPTH_FAR, LOG_MAX, STABLE_PROBE_ADDR, oldDepth } from '../tools/fixtures/make-fixture.mjs';
 import { unlock, open } from '../lib/lock.mjs';
 
 const NOW = Date.UTC(2026, 10, 1, 13, 6);
@@ -48,20 +48,30 @@ test('every pool and window follows the contract and adds up', () => {
   for (const p of live.pools) {
     keys(p, ['id', 'chain', 'v', 'pair', 't0', 't1', 'feeTier', 'dynamicFee', 'lpKeeps', 'hooks', 'verified', 'firstSeen', 'createdAt', 'pairAgeDays', 'young',
       'tvlUsd', 'mapUsd', 'aggUsd', 'price', 'marketRatio', 'offMarket', 'shape', 'w', 'checks', 'gemFirstAt'], p.pair);
-    keys(p.shape, ['tag', 'parked', 'above', 'band9', 'lpsAtPrice', 'depth', 'depthSpan', 'depthStep', 'beyond', 'walls'], p.pair + ' shape');
-    // the scanner's bins (lib/shape.mjs depthFields): 48 fine across ±edge, 5 coarse a side out to depthSpan, ascending
+    keys(p.shape, ['tag', 'parked', 'above', 'band9', 'lpsAtPrice', 'depth', 'depthEdges', 'depthSpan', 'depthStep', 'beyond', 'fullRangeUsd', 'fullRangeSpan', 'walls'], p.pair + ' shape');
+    // the scanner's bins (lib/shape.mjs depthFields): 48 fine across ±edge, 5 coarse a side, then far bins doubling in width
+    // out to the side's last liquidity; depthEdges one more than the bars; the full-range layer taken out of the bars
     const sh = p.shape;
     if (sh.depth.length) {
-      assert.equal(sh.depth.length, 58, p.pair + ' bars');
+      assert.ok(sh.depth.length >= 58 && sh.depth.length <= 82, p.pair + ' bars');
       assert.deepEqual(sh.depthStep, { fine: 0.01875, coarse: 0.0375, edge: 0.45 });
-      assert.deepEqual(sh.depthSpan, [-0.6375, 0.6375]);
+      assert.equal(sh.depthEdges.length, sh.depth.length + 1, 'one edge more than the bars');
+      assert.deepEqual(sh.depthSpan, [sh.depthEdges[0], sh.depthEdges.at(-1)]);
+      assert.ok(sh.depthSpan[0] <= -0.6375 && sh.depthSpan[1] >= 0.6375 && sh.depthSpan[1] <= LOG_MAX + 1e-3, 'the span reaches the coarse bars at least, the tick limit at most');
+      for (let i = 0; i < sh.depth.length; i++) assert.ok(sh.depthEdges[i] < sh.depth[i][0] && sh.depth[i][0] < sh.depthEdges[i + 1], 'each bar inside its edges');
+      const far = sh.depthEdges.filter((x) => x > 0.6375 + 1e-6);
+      for (const x of far) assert.ok(DEPTH_FAR.some((e) => close(e, x, 1e-5)), 'far edges double in width');
       assert.equal(sh.depth.filter(([o]) => Math.abs(o) < sh.depthStep.edge).length, 48, 'fine bars inside the edge');
       for (let i = 1; i < sh.depth.length; i++) assert.ok(sh.depth[i][0] > sh.depth[i - 1][0], 'ascending');
-      const read = sh.depth.every(([, v]) => v !== null) && numOrNull(sh.beyond.below) && sh.beyond.below !== null && sh.beyond.above !== null;
-      if (read) assert.ok(close(sh.depth.reduce((a, d) => a + d[1], 0) + sh.beyond.below + sh.beyond.above, p.mapUsd, 2e-3), `${p.pair}: bars + beyond = mapUsd`);
+      assert.ok(sh.fullRangeUsd === null || sh.fullRangeUsd >= 0, 'the layer: a value, 0 for none, null when not measured');
+      if (sh.fullRangeUsd > 0) assert.ok(sh.fullRangeSpan[0] < 0 && sh.fullRangeSpan[1] > 0); else assert.equal(sh.fullRangeSpan, null);
+      const read = sh.depth.every(([, v]) => v !== null) && isNum(sh.beyond.below) && isNum(sh.beyond.above) && isNum(sh.fullRangeUsd);
+      if (read) assert.ok(close(sh.depth.reduce((a, d) => a + d[1], 0) + sh.beyond.below + sh.beyond.above + sh.fullRangeUsd, p.mapUsd, 2e-3), `${p.pair}: bars + beyond + layer = mapUsd`);
+      if (read) assert.ok(sh.beyond.below === 0 && sh.beyond.above === 0, 'uncapped bars reach the last tick: beyond is a real 0');
     } else {
-      assert.equal(sh.depthSpan, null); assert.equal(sh.depthStep, null);
+      assert.equal(sh.depthSpan, null); assert.equal(sh.depthStep, null); assert.equal(sh.depthEdges, null);
       assert.deepEqual(sh.beyond, { below: null, above: null });
+      assert.equal(sh.fullRangeUsd, null);
     }
     assert.ok(['served', 'mixed', 'stranded', 'one-sided'].includes(p.shape.tag));
     // the bars reach ±45%, or out to depthSpan where the data carries one (coarser bins past ±45%); an unread bin is null
@@ -113,7 +123,16 @@ test('the cases the page must handle are all present', () => {
   assert.ok(pools.some((p) => p.lpKeeps === null), 'an unread protocol cut');
   assert.ok(pools.some((p) => Object.values(p.w).some((w) => w && w.sigma === null)), 'an unread volatility');
   const quarx = pools.find((p) => p.t0.sym === 'QUARX');
-  assert.ok(quarx.shape.depth.slice(-2).every(([, v]) => v === null) && quarx.shape.beyond.above === null, 'an unread stretch of a map: null bars and beyond, never 0');
+  assert.ok(quarx.shape.depth.slice(-2).every(([, v]) => v === null) && quarx.shape.beyond.above === null && quarx.shape.fullRangeUsd === null, 'an unread stretch of a map: null bars, beyond and layer, never 0');
+  assert.ok(close(quarx.shape.depthSpan[1], LOG_MAX, 1e-5), 'an unread side runs its far bars out to the tick limit');
+  assert.ok(pools.filter((p) => p.shape.fullRangeUsd > 0).length >= 10 && pools.some((p) => p.shape.fullRangeSpan && p.shape.fullRangeSpan[1] < 10), 'full-range layers, some narrower than zero to infinity');
+  assert.ok(pools.some((p) => p.shape.depthSpan && p.shape.depthSpan[1] > 5), 'a field wider than ×100 (a stray far position)');
+  const numa = pools.filter((p) => p.pair === 'NUMA/USDC');
+  assert.ok(numa.length === 2 && numa[0].pairKey === numa[1].pairKey, 'a stablecoin pair with two pools (the pair view hides one)');
+  const tovi = pools.find((p) => p.pair === 'TOVI/MUNT');
+  assert.ok(tovi && tovi.t1.addr === STABLE_PROBE_ADDR && tovi.chain === 'base', 'a stablecoin known only by its address');
+  const od = oldDepth({ live }).live.pools.filter((p) => p.shape.depth.length);
+  assert.ok(od.some((p) => !('depthEdges' in p.shape) && p.shape.depthStep) && od.some((p) => !('depthStep' in p.shape) && !('beyond' in p.shape)) && od.some((p) => p.shape.depthEdges), 'olddepth: all three generations of the depth fields');
   const kova = pools.find((p) => p.t0.sym === 'KOVA');
   const far = kova.shape.depth.filter(([o]) => o > 0.45), fine = kova.shape.depth.filter(([o]) => Math.abs(o) < 0.45);
   assert.ok(Math.max(...far.map((d) => d[1])) > Math.max(...fine.map((d) => d[1])) / 4, 'a far wall in the coarse bins');
@@ -141,7 +160,8 @@ test('backtests add up: series signs, net = fees + lvr + costs, strategies and g
         'sigma', 'sigmaFrom', 'swaps', 'series', 'strategies', 'grid', 'revert', 'realCheck'], 'backtest');
       assert.ok(b.lvrUsd <= 0 && b.costsUsd <= 0 && b.entryUsd <= 0 && b.feesUsd >= 0);
       assert.ok(close(b.feesUsd + b.lvrUsd + b.costsUsd, b.netUsd, 1e-3), 'netUsd = fees + lvr + costs (entry included)');
-      assert.ok(close(((b.netUsd - b.entryUsd) / backtest.ticket) * (365 / b.days), b.net, 3e-3), 'net APR leaves out the entry cost');
+      const cent = (0.02 / backtest.ticket) * (365 / b.days); // both dollar figures are rounded to cents: on a 1-day window that is ±0.4% APR
+      assert.ok(Math.abs(((b.netUsd - b.entryUsd) / backtest.ticket) * (365 / b.days) - b.net) <= 3e-3 * Math.max(1, Math.abs(b.net)) + cent, 'net APR leaves out the entry cost');
       assert.ok(['pool', 'market'].includes(b.sigmaFrom));
       const s = b.series, n = s.t.length;
       for (const k of ['px', 'lo', 'hi', 'fees', 'lvr', 'costs', 'net']) assert.equal(s[k].length, n, k);
@@ -162,10 +182,21 @@ test('backtests add up: series signs, net = fees + lvr + costs, strategies and g
 
 test('history.json follows the contract', () => {
   assert.equal(history.v, 1);
+  let gaps = 0, unread = 0, off = 0;
   for (const e of Object.values(history.pools)) {
     for (const row of e.h) assert.equal(row.length, 5);
     for (const row of e.d) assert.equal(row.length, 5);
+    assert.ok(e.h.length <= 337 && e.d.length <= 91, 'hourly 14 days, daily 90 days');
+    for (const s of [e.h, e.d]) {
+      for (let i = 1; i < s.length; i++) assert.ok(s[i][0] > s[i - 1][0], 'ascending');
+      if (s.length) assert.equal(s === e.h ? s[0][3] : s[0][2], null, "the first row's fees are null: nothing before it");
+    }
+    if (e.h.some((r, i) => i && r[0] - e.h[i - 1][0] > 1.5 * 3600e3)) gaps++;
+    if (e.h.some((r, i) => i && r[3] === null)) unread++;
+    if (e.h.some((r) => r[0] % 3600e3)) off++;
   }
+  assert.ok(Object.values(history.pools).some((e) => e.h.length === 337 && e.d.length === 91), 'a pool with the full spans');
+  assert.ok(gaps && unread && off, 'a gap, an unread row and a row off its mark');
   for (const row of history.health) assert.equal(row.length, 4);
 });
 
