@@ -123,23 +123,35 @@ test('readGas: fee history first, then the pass\'s eth_gasPrice, then null', asy
   assert.ok(Date.now() - t < 1000);
 });
 
-test('prices: DefiLlama first, CoinGecko fills gaps, percentages become fractions', async () => {
-  const r = await readPrices(routeJson(), { nowS: T0 / 1000 });
+test('prices: DefiLlama first, then Coinbase, CoinGecko only for what both lack; percentages become fractions', async () => {
+  const asked = [];
+  const r = await readPrices(async (u, i) => { asked.push(u); return routeJson()(u, i); }, { nowS: T0 / 1000 });
   assert.deepEqual(r.px.ETH, { usd: 3000, ch24: -0.031, src: 'defillama' });
   assert.deepEqual(r.px.SOL, { usd: 150, ch24: 0, src: 'defillama' }, 'a real 0% move stays 0');
-  assert.deepEqual([r.read, r.both, r.agree], [3, 3, 3]);
-  // DefiLlama down: CoinGecko answers alone
+  assert.equal(r.read, 3);
+  assert.ok(!asked.some((u) => /coingecko\.com|coinbase/.test(u)), 'DefiLlama answered everything: no CoinGecko, no Coinbase call');
+  // DefiLlama down: Coinbase answers (spot + 24 h stats), CoinGecko is not asked
+  const cbRoutes = { 'coins.llama.fi': new Error('HTTP 502'), '/v2/prices/BTC-USD/spot': { data: { amount: '90050.5' } }, '/products/BTC-USD/stats': { open: '89000', last: '90050.5' } };
+  const seen = [];
+  const c = await readPrices(async (u, i) => { seen.push(u); return routeJson(cbRoutes)(u, i); }, { nowS: T0 / 1000 });
+  assert.deepEqual(c.px.BTC, { usd: 90050.5, ch24: 0.0118, src: 'coinbase' });
+  assert.deepEqual(c.px.ETH, { usd: 3010, ch24: -0.03, src: 'coingecko' }, 'Coinbase lacks ETH here: CoinGecko fills it');
+  assert.equal(seen.filter((u) => u.includes('coingecko.com')).length, 1, 'one CoinGecko call for the coins both lack');
+  // both down: CoinGecko answers alone
   const g = await readPrices(routeJson({ 'coins.llama.fi': new Error('HTTP 502') }), { nowS: T0 / 1000 });
   assert.deepEqual(g.px.BTC, { usd: 90100, ch24: 0.014, src: 'coingecko' });
-  // a stale DefiLlama price is dropped in favour of CoinGecko
+  // a stale DefiLlama price is dropped
   const stale = await readPrices(routeJson({ '/prices/current/': { coins: { 'coingecko:ethereum': { price: 2000, timestamp: T0 / 1000 - 6 * 3600 } } } }), { nowS: T0 / 1000 });
   assert.equal(stale.px.ETH.usd, 3010);
   assert.equal(stale.px.ETH.src, 'coingecko');
+  // the once-a-day agreement check asks CoinGecko even when DefiLlama answered
+  const x = await readPrices(routeJson(), { nowS: T0 / 1000, xcheck: true });
+  assert.deepEqual([x.both, x.agree, x.cgAsked, x.px.ETH.src], [3, 3, true, 'defillama']);
   // the key travels in a header only
-  const seen = [];
-  await readPrices(async (url, init) => { seen.push({ url, key: init?.headers?.['x-cg-demo-api-key'] }); return {}; }, { key: 'made-up-key' });
-  assert.ok(seen.find((s) => s.url.includes('coingecko.com')).key === 'made-up-key' && seen.every((s) => !s.url.includes('made-up-key')));
-  assert.ok(seen.filter((s) => s.url.includes('llama')).every((s) => s.key === undefined), 'the CoinGecko key never goes to DefiLlama');
+  const keys = [];
+  await readPrices(async (url, init) => { keys.push({ url, key: init?.headers?.['x-cg-demo-api-key'] }); return {}; }, { key: 'made-up-key' });
+  assert.ok(keys.find((s) => s.url.includes('coingecko.com')).key === 'made-up-key' && keys.every((s) => !s.url.includes('made-up-key')));
+  assert.ok(keys.filter((s) => !s.url.includes('coingecko.com')).every((s) => s.key === undefined), 'the CoinGecko key goes to CoinGecko only');
 });
 
 test('price junk is null, never a number', () => {
