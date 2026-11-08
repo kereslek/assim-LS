@@ -151,3 +151,19 @@ test('planted fault: every Base node refuses logs — the swaps cap stops the re
   }
   assert.ok(live.pools.filter((p) => p.chain === 'ethereum').every((p) => p.checks.find((c) => c.id === 'swaps-read').ok === true));
 });
+
+test('planted fault: the Base backstop spent during steps 1-5 does not cut the outputs\' own reads (fee counters now stay read)', () => {
+  const { run, store } = world();
+  // a backstop so short that Base's steps 1-5 read nothing past the first calls: maps unread, no Base pools
+  const r = run({ READ_CAPS: JSON.stringify({ base: { chain: { ms: 1 } } }) }, 90e3);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes('PASS sealed outputs'));
+  const live = store.get('live.json');
+  assert.ok(live.pools.filter((p) => p.chain === 'ethereum').length >= 4, 'Ethereum untouched');
+  assert.equal(live.pools.filter((p) => p.chain === 'base').length, 0, 'Base pools not read this pass: left out, never zeros');
+  // and with room for steps 1-5, the outputs read the counters as usual (rows carry fee growth)
+  const ok = run({ READ_CAPS: JSON.stringify({ base: { chain: { ms: 60000 } } }) }, 90e3);
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  const p = store.get('live.json').pools.find((x) => x.id === A('e'));
+  assert.ok(p && p.w['24h'] && p.w['24h'].lpFeesUsd > 0, 'the Base pool has its 24 h fees from the counters');
+});

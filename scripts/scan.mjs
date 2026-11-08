@@ -164,9 +164,10 @@ async function scanChain(CH, list) {
   const tok = new Map(list.tokens.map((t) => [t.address, t]));
   // a chain with a backstop cap (Base: caps.chain) reads steps 1-5 within it: past it every read is unread (null)
   const chainCap = CH.caps?.chain ? makeBudget({ ...CH.caps.chain, ...(CAP_OVERRIDE[CH.id]?.chain || {}) }) : UNLIMITED;
-  const rpc = capRpc(makeRpc(CH.rpcs, { timeout: 30000, maxRefusals: 4 }), chainCap);
+  const rawRpc = makeRpc(CH.rpcs, { timeout: 30000, maxRefusals: 4 }), rawArpc = makeRpc(CH.archive, { timeout: 30000, maxRefusals: 6 });
+  const rpc = capRpc(rawRpc, chainCap);
   const mc = makeMulticall(rpc, { chunk: 400, concurrency: 4 });
-  const arpc = capRpc(makeRpc(CH.archive, { timeout: 30000, maxRefusals: 6 }), chainCap);
+  const arpc = capRpc(rawArpc, chainCap);
   const amc = makeMulticall(arpc, { chunk: 300, concurrency: 3 }); // serve old state (probes)
   // this chain's read caps (Ethereum: only its new parts; lib/chains.mjs)
   const caps = new Map();
@@ -509,6 +510,12 @@ async function scanChain(CH, list) {
     } else say(null, 'benchmark', 'not mapped');
   }
   for (const p of mapped) p.X = X;
+  // the backstop covers steps 1-5 only: the outputs' reads (fee counters now, backfill, sell tests, transactions)
+  // run within their own caps, on the chain's nodes as such
+  if (chainCap !== UNLIMITED) {
+    Object.assign(X, { rpc: rawRpc, arpc: rawArpc, mc: makeMulticall(rawRpc, { chunk: 400, concurrency: 4 }), amc: makeMulticall(rawArpc, { chunk: 300, concurrency: 3 }) });
+    X.chainNote = chainCap.note();
+  }
   return X;
 }
 function sayRoot(ok, area, msg) { return say(ok, area, msg); }
