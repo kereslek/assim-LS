@@ -1,0 +1,69 @@
+diff --git a/site/app/index.html b/tools/candidate/index.html
+index 8454ac9..5c49539 100644
+--- a/site/app/index.html
++++ b/tools/candidate/index.html
+@@ -5,7 +5,7 @@
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+ <meta name="robots" content="noindex, nofollow">
+ <meta name="referrer" content="no-referrer">
+-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aze4TEvLl15UVUsYAJYYj+n3o/bgkVVpLCAHKEzE8RI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
++<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-umVydzw5Pdgoo4nmLSP9PIgE5ctzpO6VOgdiEJ7TOrk='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+ <meta name="color-scheme" content="dark">
+ <meta name="theme-color" content="#06080B">
+ <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
+@@ -921,7 +921,7 @@ td.fees{width:96px}
+ <script>
+ (() => {
+ 'use strict';
+-const BUILD = 'v0.4.3';
++const BUILD = 'v0.4.4';
+ const TZ = 'Europe/Budapest';
+ const CHECK = 'lps-lock-check-v1';
+ const WINS = ['24h', '7d', '30d'];
+@@ -2296,8 +2296,9 @@ document.addEventListener('pointerdown', (e) => {
+   if (PIN) return; // a third finger changes nothing
+   if (G && G.host === host && G.pid !== e.pointerId && e.pointerType !== 'mouse') { pinStart(e); return; }
+   if (G) return;
+-  pzStop(id); // a touch catches a coasting chart
+-  G = { id, host, pid: e.pointerId, x0: e.clientX, y0: e.clientY, v0: P.x(), w0: P.xy ? P.y() : 0, drag: false, s: [[e.clientX, e.clientY, e.timeStamp]], btn: !!e.target.closest('button') };
++  const caught = !!PZA[id]; // a touch catches a coasting chart: if it then lets go without a drag, the chart rests there
++  pzStop(id);
++  G = { id, host, pid: e.pointerId, x0: e.clientX, y0: e.clientY, v0: P.x(), w0: P.xy ? P.y() : 0, drag: false, caught, s: [[e.clientX, e.clientY, e.timeStamp]], btn: !!e.target.closest('button') };
+ }, { passive: true });
+ document.addEventListener('pointermove', (e) => {
+   const pt = PTS.get(e.pointerId);
+@@ -2310,7 +2311,7 @@ document.addEventListener('pointermove', (e) => {
+   if (!G.drag) {
+     const ax = Math.abs(dx), ay = Math.abs(dy);
+     if (P.xy ? Math.hypot(dx, dy) < 6 : ax < 6 && ay < 6) return;
+-    if (!P.xy && ay >= ax) { G = null; return; } // mostly vertical: the page scrolls, the chart stays
++    if (!P.xy && ay >= ax) { if (G.caught) pzSettle(G.id); G = null; return; } // mostly vertical: the page scrolls, the chart stays
+     // the view follows the finger from where it touched down: a busy phone hands over its moves in batches (one per
+     // frame), and a quick swipe whose first batch already crossed the threshold still pans by its whole length
+     G.drag = true;
+@@ -2329,6 +2330,7 @@ function pzEnd(e) {
+   const g = G; G = null;
+   if (S.hintKill) { S.hintKill = false; pzHintDone(); }
+   if (!g.drag) { // a tap: two quick taps on the chart (not on a button) reset it
++    if (g.caught) pzSettle(g.id); // a coast it stopped: at rest inside the data, the reset button shown or not
+     if (e.type !== 'pointerup' || g.btn) return;
+     if (lastTap && lastTap.id === g.id && e.timeStamp - lastTap.t < 380 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { lastTap = null; zreset(g.id); }
+     else lastTap = { id: g.id, t: e.timeStamp, x: e.clientX, y: e.clientY };
+@@ -2351,7 +2353,7 @@ function pinStart(e) {
+   if (pzRaf) { cancelAnimationFrame(pzRaf); pzRaf = 0; pzq.clear(); }
+   const [v0, v1] = P.vw();
+   PIN = { id: g.id, host: g.host, a: g.pid, b: e.pointerId, d0: Math.max(24, Math.hypot(a.x - b.x, a.y - b.y)), m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+-    v0, w0: v1 - v0, top0: P.y ? P.y() + (v1 - v0) / 2 : 0, lv0: zget(g.id), box: pzPlot(g.host, P), moved: false };
++    v0, w0: v1 - v0, top0: P.y ? P.y() + (v1 - v0) / 2 : 0, lv0: zget(g.id), box: pzPlot(g.host, P), moved: false, caught: g.caught };
+   g.host.classList.add('dragging');
+   try { g.host.setPointerCapture(e.pointerId); } catch (er) { /* a synthetic pointer */ }
+   if (S.hintEnd) S.hintKill = true;
+@@ -2383,7 +2385,7 @@ function pinEnd() {
+   lastTap = null;
+   swallowClick();
+   if (pzRaf) { cancelAnimationFrame(pzRaf); pzRaf = 0; pzq.clear(); }
+-  if (!g.moved) return;
++  if (!g.moved) { if (g.caught) pzSettle(g.id); return; }
+   if (!near1(zget(g.id), g.lv0)) zoomed(g.id); // a new zoom: its buttons, caption and limits redrawn
+   else pzCoast(g.id, 0, 0, g.host); // a two-finger pan: springs back inside the data if pulled past it
+ }
