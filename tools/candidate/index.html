@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-W7zSJ6B+u68F3QIhcatu7w/REctnCTmM44ek0hirjbI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-baAtJsYr9qn22wIDzc6gAw7NFaov4RUyDg2MfDBlOpE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -3059,7 +3059,7 @@ function showSheet() {
   sheetCard.classList.remove('cond'); foldY = 0; foldAcc = 0;
   $('#sheet').hidden = false;
   document.documentElement.classList.add('modal-open');
-  $('#sheet-body').scrollTop = 0;
+  $('#sheet-body').scrollTop = 0; sheetCard.scrollTop = 0; $('#sheet').scrollTop = 0; // a card that hides overflow never stays shifted
   stickyAll();
   onScroll();
   setTimeout(() => $('#sheet-close').focus({ preventScroll: true }), 0);
@@ -3160,8 +3160,9 @@ function feeMini(p, Wd = 90, Ht = 22, fit = false) { // fit: the svg may be draw
 function feeJump() { // the header's bar: the full daily fee chart, zoomed out to every day it has
   if (!PZ['d-day']) return;
   zreset('d-day');
-  const box = $('#sheet-body [data-chartbox="d-day"]');
-  if (box) box.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' });
+  const box = $('#sheet-body [data-chartbox="d-day"]'), sb = $('#sheet-body');
+  // the panel's own scroll only: scrollIntoView would also shift the card (it hides overflow) in Safari
+  if (box) sb.scrollTo({ top: Math.max(0, sb.scrollTop + box.getBoundingClientRect().top - sb.getBoundingClientRect().top - 8), behavior: reduced() ? 'auto' : 'smooth' });
 }
 // history.json's fee bars: a row's fees cover the time since the row before, so its bar spans that stretch at the rate (fees ÷
 // the hours or days it covers); a gap the backfill hasn't filled yet is one wide bar at its average, the first row (nothing
