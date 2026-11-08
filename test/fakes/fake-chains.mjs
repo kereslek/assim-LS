@@ -6,7 +6,8 @@
 // PancakeSwap's Swap event with its own protocol-fee words. Fake CoinGecko tickers: one coin trades on
 // exchanges, one answers 404 (unread), one trades on DEXes only (a real 0).
 // FAULT=pcs-nibbles plants a fault: the fake pools book PancakeSwap's cut as Uniswap's 1/N (the scan must
-// see its decode disagree with the events).
+// see its decode disagree with the events). FAULT=base-logs-refuse: every Base node refuses eth_getLogs (the one
+// node that serves them is down); FAULT=base-slow: every Base request takes 300 ms (the caps must stop the parts).
 import fs from 'node:fs';
 import { selector } from '../../lib/keccak.mjs';
 import { amountsInRange, sqrtAtTick, amount0Delta } from '../../lib/v3math.mjs';
@@ -153,6 +154,7 @@ const txOf = (chain, h) => {
 let calls = { ethereum: 0, base: 0 };
 function rpc(chain, q) {
   calls[chain]++;
+  if (chain === 'base' && process.env.FAULT === 'base-logs-refuse' && q.method === 'eth_getLogs') return { jsonrpc: '2.0', id: q.id, error: { code: -32005, message: 'logs not served' } };
   const r = (result) => ({ jsonrpc: '2.0', id: q.id, result });
   const N = NET[chain];
   if (q.method === 'eth_blockNumber') return r('0x' + N.block.toString(16));
@@ -188,6 +190,7 @@ globalThis.fetch = async (url, init = {}) => {
   }
   if ((init.method || 'GET') !== 'POST') return notFound;
   const chain = /base/.test(u) ? 'base' : 'ethereum';
+  if (chain === 'base' && process.env.FAULT === 'base-slow') await new Promise((r) => setTimeout(r, 300));
   const b = JSON.parse(init.body);
   return json(Array.isArray(b) ? b.map((q) => rpc(chain, q)) : rpc(chain, b));
 };

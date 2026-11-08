@@ -2,13 +2,13 @@
 // liquidity-map method reproduce a real pool? Public data only: pass/fail, counts, ratios, block
 // numbers and market data. No addresses are printed.
 import fs from 'node:fs';
-import { makeRpc, getJson } from '../lib/rpc.mjs';
+import { makeRpc, getJson, mapLimit } from '../lib/rpc.mjs';
 import { encodeCall, decodeWords, signed, toAddress } from '../lib/abi.mjs';
 import { topic } from '../lib/keccak.mjs';
 import { liquidityMap, ticksInWord, bitmapWordRange, sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { bandStats, hollowness, depthHistogram, nearestWalls, shapeTag } from '../lib/shape.mjs';
 import { readGas, readPrices, gasStats, COINS } from '../lib/market.mjs';
-import { CHAINS, ageOfBlocksBack, blocksBack as backFor } from '../lib/chains.mjs';
+import { CHAINS, ageOfBlocksBack, blocksBack as backFor, timeOfBlock } from '../lib/chains.mjs';
 import { ROUTERS, routerName } from '../lib/routers.mjs';
 import { PANCAKE_V3, BASE as BASE_C, ETHEREUM as ETH_C, TOPICS as POOL_TOPICS, v3LpKeeps, decodeInitialize } from '../lib/pools.mjs';
 import { SWAP_TOPICS, decodeSwap, swapFees } from '../lib/swaps.mjs';
@@ -296,6 +296,51 @@ async function probeDexScreenerBase() {
   say(rows.length ? true : null, 'dexscreener base', `cbBTC: ${rows.length} pairs; by venue ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ×${v}`).join(', ')}; oldest pair ${rows.filter((p) => p.createdAt).length ? Math.floor((Date.now() - Math.min(...rows.filter((p) => p.createdAt).map((p) => p.createdAt))) / 86400e3) + ' days' : '—'}`);
 }
 
+// Base's block clock (lib/chains.mjs eras: 2 s blocks until block 53,556,126 at 5 Nov 2026 18:00 UTC, 0.2 s since),
+// checked against independent sources: each Base node's own eth_getBlockByNumber timestamps at the same block
+// numbers (around the switch, a day either side, and the head), Blockscout's block API where it answers, and the
+// runner's own clock against the head. Block numbers and timestamps only (public chain data).
+async function probeBaseClock() {
+  const B = CHAINS.base, SW = B.eras.at(-1).block, nodes = [];
+  for (const url of B.rpcs) {
+    const r = makeRpc([url], { timeout: 12000, maxRefusals: 3 });
+    const bn = await r.call('eth_blockNumber', []);
+    if (bn != null) nodes.push({ host: new URL(url).host, r, head: parseInt(bn, 16), wall: Date.now() / 1000 });
+  }
+  if (nodes.length < 2) return say(null, 'base clock', `${nodes.length} Base node answered: two are needed to compare`);
+  const head = Math.min(...nodes.map((n) => n.head)) - 50; // a block every node already has
+  const blocks = [['2 s era, a day before the switch', SW - 43200], ['the block before the switch', SW - 1], ['the switch', SW], ['5 blocks after', SW + 5], ['10 blocks after', SW + 10],
+    ['a day after the switch', SW + 432000], ['a day before the head', head - 432000], ['the head − 50', head]];
+  const ts = new Map();
+  for (const n of nodes) {
+    const got = await n.r.batch(blocks.map(([, b]) => ({ method: 'eth_getBlockByNumber', params: ['0x' + b.toString(16), false] })));
+    n.ts = got.map((x) => (x && x.timestamp ? parseInt(x.timestamp, 16) : null));
+  }
+  // Blockscout's own index (not an RPC node), where it answers
+  const bs = await mapLimit(blocks, 2, async ([, b]) => {
+    try { const j = await getJson(`https://base.blockscout.com/api/v2/blocks/${b}`, { headers: { accept: 'application/json' } }, 15000); const t = Date.parse(j?.timestamp); return Number.isFinite(t) ? Math.round(t / 1000) : null; } catch { return null; }
+  });
+  let agreeAll = true, eraOff = 0, read = 0;
+  const rows = blocks.map(([label, b], i) => {
+    const vals = nodes.map((n) => n.ts[i]).filter((x) => x != null);
+    if (vals.length >= 2) read++;
+    const agree = vals.length >= 2 && vals.every((x) => x === vals[0]);
+    if (!agree) agreeAll = false;
+    const era = timeOfBlock(B, b), off = vals.length ? vals[0] - era : null;
+    if (off != null) eraOff = Math.max(eraOff, Math.abs(off));
+    ts.set(b, vals[0] ?? null);
+    return `${label} (block ${b}): ${vals.length} nodes ${agree ? 'agree' : vals.length >= 2 ? 'DISAGREE ' + [...new Set(vals)].join('/') : 'too few'} at ${vals[0] ?? '—'}, vs the era clock ${off == null ? '—' : (off >= 0 ? '+' : '') + off.toFixed(1) + ' s'}, Blockscout ${bs[i] == null ? 'unread' : bs[i] === vals[0] ? 'same' : `${bs[i] - (vals[0] ?? NaN)} s off`}`;
+  });
+  const spb = (a, b) => (ts.get(a) != null && ts.get(b) != null ? (ts.get(b) - ts.get(a)) / (b - a) : null);
+  const f = (x) => (x == null ? '—' : x.toFixed(4) + ' s');
+  const before = spb(SW - 43200, SW), after = spb(SW, SW + 432000), recent = spb(head - 432000, head);
+  const wallLag = nodes.map((n) => { const i = blocks.length - 1; return n.ts[i] != null ? Math.round(n.wall - n.ts[i] - (n.head - head) * B.secPerBlock) : null; });
+  say(read === blocks.length && agreeAll && eraOff <= 1 && Math.abs(before - 2) < 0.01 && Math.abs(after - 0.2) < 0.01 && Math.abs(recent - 0.2) < 0.01 ? true : null, 'base clock',
+    `${nodes.length} Base nodes (${nodes.map((n) => n.host).join(', ')}); seconds a block: ${f(before)} over the day before the switch, ${f(after)} over the day after, ${f(recent)} over the last day; ` +
+    `the head's age by the runner's clock ${wallLag.map((x) => (x == null ? '—' : x + ' s')).join(' / ')}; Blockscout read ${bs.filter((x) => x != null).length} of ${blocks.length}`);
+  say(agreeAll ? true : null, 'base clock blocks', rows.join(' | '));
+}
+
 async function probeBlockscoutBase() {
   const j = await getJson(`https://base.blockscout.com/api?module=contract&action=getsourcecode&address=${BASE.USDC}`, { headers: { accept: 'application/json' } }, 20000);
   const v = readVerified(j);
@@ -324,6 +369,7 @@ await guard('routers', () => probeRouters(eth, base));
 await guard('tickers', () => probeTickers());
 await guard('dexscreener base', () => probeDexScreenerBase());
 await guard('blockscout base', () => probeBlockscoutBase());
+await guard('base clock', () => probeBaseClock());
 
 const count = (k) => results.filter((r) => r.ok === k).length;
 const summary = `probes: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · eth rpcs ${ethOk.length}/${Object.keys(ETH_RPCS).length} · base rpcs ${baseOk.length}/${Object.keys(BASE_RPCS).length} · archive ${archive.length ? archive.join(', ') : 'none'} · map ${map ? (map.netSumZero && map.matchesPool ? 'complete' : 'INCOMPLETE') : 'unread'}`;

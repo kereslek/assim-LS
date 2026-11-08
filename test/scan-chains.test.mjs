@@ -21,7 +21,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 function world() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lps-chains-'));
   initLock({ dir: path.join(dir, 'lock'), passphrase: DUMMY, iterations: 1000 });
-  const run = (env = {}) => spawnSync(process.execPath, [path.join(ROOT, 'test', 'fakes', 'fake-chains.mjs')], { cwd: dir, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY, ...env } });
+  const run = (env = {}, timeout = 0) => spawnSync(process.execPath, [path.join(ROOT, 'test', 'fakes', 'fake-chains.mjs')], { cwd: dir, encoding: 'utf8', timeout, env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY, ...env } });
   const store = openStore({ lockDir: path.join(dir, 'lock'), outDir: path.join(dir, 'out', 'data'), env: { LOCK_PASSPHRASE: DUMMY } });
   return { dir, run, store };
 }
@@ -127,4 +127,27 @@ test('planted fault: pools that book PancakeSwap\'s cut as Uniswap\'s 1/N fail t
   const live = store.get('live.json');
   for (const id of [A('d'), A('f')]) assert.equal(live.pools.find((p) => p.id === id).checks.find((c) => c.id === 'fee-identity').ok, false, id);
   assert.equal(live.pools.find((p) => p.id === A('e')).checks.find((c) => c.id === 'fee-identity').ok, true, 'the Uniswap pool next to it still passes');
+});
+
+// The read caps (lib/chains.mjs caps, lib/budget.mjs). Planted faults: the scan before the caps retried and halved a
+// refused Base log read for many minutes, and read every slow Base answer without end; these runs would time out.
+test('planted fault: every Base node refuses logs — the swaps cap stops the read in time, its pools\' swap values are null (not read), never 0', () => {
+  const { run, store } = world();
+  const t0 = Date.now();
+  const r = run({ FAULT: 'base-logs-refuse', READ_CAPS: JSON.stringify({ base: { swaps: { ms: 3000, calls: 60 } } }) }, 90e3);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(Date.now() - t0 < 60e3, 'the pass did not run over');
+  const pub = r.stdout.split('\n');
+  assert.ok(pub.includes('N/A  base swaps'), 'the Base swaps are unread, not failed');
+  assert.ok(pub.some((l) => /^caps: .*base .*swaps \d+ s, \d+ calls \((time|calls) cap\)/.test(l) && /stopped by a cap: base swaps/.test(l)), pub.join('\n'));
+  assert.ok(pub.includes('PASS swaps') && pub.includes('PASS fee identity'), 'Ethereum is untouched');
+  const live = store.get('live.json');
+  for (const id of [A('e'), A('f')]) {
+    const p = live.pools.find((x) => x.id === id), ck = (k) => p.checks.find((c) => c.id === k)?.ok;
+    assert.equal(ck('swaps-read'), null, `${id}: a day of swaps not read`);
+    assert.equal(ck('markouts-read'), null);
+    assert.equal(ck('fee-identity'), null, 'no replay: the check did not run (null), never a pass or a fail');
+    assert.equal(p.w['24h']?.flow?.retailShare ?? null, null, 'retail share not read: null, never 0');
+  }
+  assert.ok(live.pools.filter((p) => p.chain === 'ethereum').every((p) => p.checks.find((c) => c.id === 'swaps-read').ok === true));
 });

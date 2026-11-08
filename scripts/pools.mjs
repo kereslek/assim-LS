@@ -6,6 +6,8 @@
 // for pools of at least $300k. Then PancakeSwap v3 on Ethereum (the same pairs through its factory) and
 // Base (Uniswap v3 and v4, PancakeSwap v3; lib/discover.mjs), whose ages come from the last 72 hours of
 // creation events and whose cross-check is DexScreener (GeckoTerminal's spacing would cost minutes).
+// Those parts run within read caps (lib/chains.mjs caps, lib/budget.mjs): a part that reaches its time or call
+// limit stops, what it did not read is null ("not read"), and the log says which cap stopped it.
 // Public market data only: the log shows counts, ratios, dates, venue names and quote symbols, never an address.
 import fs from 'node:fs';
 import { makeRpc, getJson } from '../lib/rpc.mjs';
@@ -20,8 +22,9 @@ import { geckoTokenPools, dexScreenerTokenPairs, eachSpaced } from '../lib/aggre
 import { pageLogs, rpcLogs } from '../lib/logs.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 import { BASE, PANCAKE_V3, V3_FEES } from '../lib/pools.mjs';
-import { CHAINS, timeOfBlock, blocksBack } from '../lib/chains.mjs';
+import { CHAINS, timeOfBlock, blocksBack, chainOn } from '../lib/chains.mjs';
 import { lookupV3, lookupV4, readState, priceTvl, recentCreations, stampCreations, firstTradedAt } from '../lib/discover.mjs';
+import { makeBudget, capRpc, capGetJson } from '../lib/budget.mjs';
 
 const FLOOR = 300_000;
 const GECKO_SAMPLE = 40;
@@ -267,17 +270,19 @@ if (dsr) {
 //      pool's age stays unknown), and the DexScreener lists already read. DexScreener labels PancakeSwap
 //      rows without v2/v3, so its listed pairs are counted against ours, not judged.
 const pcs = [];
+const pcsCap = makeBudget(CHAINS.ethereum.caps.pancakeswap);
 const pcsRows = (lists) => { const m = new Map(); for (const l of lists) for (const p of l || []) if (/^pancakeswap/.test(p.dex) && p.reserveUsd >= FLOOR && scoped(p) && /^0x[0-9a-f]{40}$/.test(p.id)) m.set(p.id, p); return m; };
 try {
   await timed('pancakeswap', async () => {
-    const lk = await lookupV3(mc, tag, { factory: PANCAKE_V3.factory, fees: PANCAKE_V3.fees, tokens: [...universe], quotes: C.quotes.filter((q) => q.v3).map((q) => q.address), dex: 'pancakeswap' });
+    const pmc = makeMulticall(capRpc(rpc, pcsCap), { chunk: 400, concurrency: 3 });
+    const lk = await lookupV3(pmc, tag, { factory: PANCAKE_V3.factory, fees: PANCAKE_V3.fees, tokens: [...universe], quotes: C.quotes.filter((q) => q.v3).map((q) => q.address), dex: 'pancakeswap' });
     pcs.push(...lk.pools);
-    const un = await readState(mc, tag, { v3: pcs, stateView: C.v4StateView });
+    const un = await readState(pmc, tag, { v3: pcs, stateView: C.v4StateView });
     const { offMarket: off } = priceTvl(pcs, { dec, usd: usdOf, quoteSet });
-    const ev = SKIP.has('events') ? null : await recentCreations(logRpc, { address: PANCAKE_V3.factory, kind: 'v3', from: block - WIN + 1, to: block, step: 9000, timeOf });
+    const ev = SKIP.has('events') ? null : await recentCreations(logRpc, { address: PANCAKE_V3.factory, kind: 'v3', from: block - WIN + 1, to: block, step: 9000, timeOf, budget: pcsCap });
     const aged = ev ? stampCreations(pcs, ev) : 0;
     const listed = [...pcsRows(ds).values()], ours = new Set(pcs.map((p) => p.id)), big = pcs.filter((p) => p.tvl >= FLOOR);
-    say(lk.unread || un ? null : true, 'pancakeswap', `${lk.candidates} pair × fee lookups through PancakeSwap v3's factory: ${pcs.length} pools exist (${lk.unread} unread, state unread ${un}); ${big.length} ≥ ${usd(FLOOR)} holding ${usd(big.reduce((a, p) => a + p.tvl, 0))}; ${off} trade more than 10% off market; creation events in the last ${WIN} blocks ${ev ? ev.length : 'unread'} (${aged} of our pools); DexScreener lists ${listed.length} PancakeSwap pairs ≥ ${usd(FLOOR)} in scope, ${listed.filter((p) => ours.has(p.id)).length} of them in our v3 list (the rest v2 or other pairs)`);
+    say(lk.unread || un ? null : true, 'pancakeswap', `${lk.candidates} pair × fee lookups through PancakeSwap v3's factory: ${pcs.length} pools exist (${lk.unread} unread, state unread ${un}); ${big.length} ≥ ${usd(FLOOR)} holding ${usd(big.reduce((a, p) => a + p.tvl, 0))}; ${off} trade more than 10% off market; creation events in the last ${WIN} blocks ${ev ? ev.length : 'unread'} (${aged} of our pools); DexScreener lists ${listed.length} PancakeSwap pairs ≥ ${usd(FLOOR)} in scope, ${listed.filter((p) => ours.has(p.id)).length} of them in our v3 list (the rest v2 or other pairs); reads ${pcsCap.note()}`);
   });
 } catch (e) { say(null, 'pancakeswap', `broke (${String(e?.message || e).replace(/[^A-Za-z ]/g, '').slice(0, 40)}); left out this run`); pcs.length = 0; }
 
@@ -313,13 +318,17 @@ fs.writeFileSync('out/pools-ethereum.json', JSON.stringify({
 
 // 14. Base: Uniswap v3 and v4 and PancakeSwap v3, the same method on Base's own nodes and contracts. A broken
 //     Base read never costs the Ethereum list: it is reported and the Base list is left as it was.
-try {
+if (!chainOn('base')) say(null, 'base', 'switched off for this run (CHAINS_OFF): the Base list is not rewritten');
+else try {
   await timed('base', () => discoverBase());
 } catch (e) { say(null, 'base', `broke (${String(e?.message || e).replace(/[^A-Za-z ]/g, '').slice(0, 40)}); the Base list is not rewritten this run`); }
 
 async function discoverBase() {
-  const B = CHAINS.base, BC = B.c;
-  const brpc = makeRpc(B.rpcs, { timeout: 25000, maxRefusals: 4 }), bmc = makeMulticall(brpc, { chunk: 400, concurrency: 3 });
+  const B = CHAINS.base, BC = B.c, CAP = B.caps;
+  // the caps (lib/chains.mjs): the whole discovery's time backstop, and each part's own time and calls within it
+  const all = makeBudget(CAP.list);
+  const part = (c) => makeBudget({ ms: Math.min(c.ms ?? Infinity, all.left()), calls: c.calls });
+  const brpc = capRpc(makeRpc(B.rpcs, { timeout: 25000, maxRefusals: 4 }), all), bmc = makeMulticall(brpc, { chunk: 400, concurrency: 3 });
   const btag = await brpc.call('eth_blockNumber', []);
   if (btag == null) { say(null, 'base block', 'no block number'); return; }
   const bblock = parseInt(btag, 16), bq = new Set(BC.quotes.map((q) => q.address));
@@ -328,7 +337,8 @@ async function discoverBase() {
   const d = await bmc([...bu.tokens, ...realQ].map((t) => ({ target: t.address, data: encodeCall('decimals()') })), btag);
   bu.tokens.forEach((t, i) => { const x = readUint(d[i]); t.decimals = x != null && x <= 36n ? Number(x) : null; });
   const qOk = realQ.every((q, i) => readUint(d[bu.tokens.length + i]) === BigInt(q.decimals));
-  const btoks = bu.tokens.filter((t) => t.decimals != null);
+  // best-ranked first: a capped read (DexScreener) covers the coins that matter most
+  const btoks = bu.tokens.filter((t) => t.decimals != null).sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
   say(qOk ? true : null, 'base universe', `${bu.counts.ranked} coins ranked 100–2000; ${bu.counts.onChain} have a Base token; ${btoks.length} answer decimals(); quote token decimals match the constants: ${qOk ? 'yes' : 'no'}`);
   const bdec = new Map([...BC.quotes.map((q) => [q.address, q.decimals]), ...btoks.map((t) => [t.address, t.decimals])]);
   const buniv = new Set(btoks.map((t) => t.address)), q3 = BC.quotes.filter((q) => q.v3).map((q) => q.address), q4 = BC.quotes.filter((q) => q.v4).map((q) => q.address);
@@ -351,26 +361,32 @@ async function discoverBase() {
   const { offMarket: off } = priceTvl(bv3, { dec: bdec, usd: busd, quoteSet: bq });
   const bigU = u3.pools.filter((p) => p.tvl >= FLOOR), bigP = p3.pools.filter((p) => p.tvl >= FLOOR);
   say(BC.quotes.every((q) => busd.has(q.address)) ? true : null, 'base tvl', `quote tokens priced ${BC.quotes.filter((q) => busd.has(q.address)).length} of ${BC.quotes.length} (ETH $${Math.round(busd.get(ZERO) ?? NaN)}); universe tokens priced ${btoks.filter((t) => busd.has(t.address)).length} of ${btoks.length}; pools ≥ ${usd(FLOOR)}: Uniswap v3 ${bigU.length} holding ${usd(bigU.reduce((a, p) => a + p.tvl, 0))}, PancakeSwap v3 ${bigP.length} holding ${usd(bigP.reduce((a, p) => a + p.tvl, 0))}; ${bv3.filter((p) => p.tvl == null).length} unpriced; ${off} trade more than 10% off market`);
-  // creation events of the last 72 hours: the young pools' ages (and the feed for new v4 pools with any key)
+  // creation events of the last 72 hours: the young pools' ages (and the feed for new v4 pools with any key);
+  // the three emitters side by side, each within a third of the events cap (an emitter cut short is unread)
   const from = bblock - blocksBack(B, { block: bblock, nowSec: timeOfBlock(B, bblock), secBack: 3 * 86400 }) + 1;
   const blogRpc = makeRpc(B.rpcs.filter((u) => !B.noLogs.some((x) => u.includes(x))), { timeout: 30000, maxRefusals: 1000 });
   const timeOfB = (b) => Math.round(timeOfBlock(B, b));
-  const evOpt = { from, to: bblock, step: B.logMax, timeOf: timeOfB, confirmEmpty: B.confirmEmpty };
-  const evU = await recentCreations(blogRpc, { address: BC.v3Factory, kind: 'v3', ...evOpt });
-  const evP = await recentCreations(blogRpc, { address: PANCAKE_V3.factory, kind: 'v3', ...evOpt });
-  const evV = await recentCreations(blogRpc, { address: BC.v4PoolManager, kind: 'v4', ...evOpt });
+  const evCaps = [0, 1, 2].map(() => part({ ms: CAP.events.ms, calls: Math.floor(CAP.events.calls / 3) }));
+  const evOpt = { from, to: bblock, step: B.logMax, minStep: 1000, timeOf: timeOfB, confirmEmpty: B.confirmEmpty };
+  const [evU, evP, evV] = await timed('base events', () => Promise.all([
+    recentCreations(blogRpc, { address: BC.v3Factory, kind: 'v3', ...evOpt, budget: evCaps[0] }),
+    recentCreations(blogRpc, { address: PANCAKE_V3.factory, kind: 'v3', ...evOpt, budget: evCaps[1] }),
+    recentCreations(blogRpc, { address: BC.v4PoolManager, kind: 'v4', ...evOpt, budget: evCaps[2] }),
+  ]));
   const agedU = evU ? stampCreations(u3.pools, evU) : 0, agedP = evP ? stampCreations(p3.pools, evP) : 0;
   if (evV) stampCreations(bv4, evV);
   // v4 pools of the window outside the standard keys: a universe token with a quote token, fee ≤ 1%, holding liquidity
   const inPairB = (a, b) => (buniv.has(a) || bq.has(a)) && (buniv.has(b) || bq.has(b)) && (bq.has(a) || bq.has(b));
   const std4 = new Set(bv4.map((p) => p.id));
   let keep4 = [], mlUnread = 0, mine4 = 0;
-  if (evV) {
+  const mlCap = part(CAP.liquidity);
+  if (evV) await timed('base liquidity events', async () => {
     const mine = evV.filter((e) => inPairB(e.t0, e.t1)), ev4 = mine.filter((e) => !std4.has(e.id) && !extremeFee(e.fee));
     mine4 = mine.length;
+    // a pool whose liquidity events stay unread (the cap) is kept only with liquidity at the price
     const net = new Map(), ids = ev4.map((e) => e.id);
     for (let i = 0; i < ids.length; i += 100) {
-      const ml = await logsAdaptive(blogRpc, { address: BC.v4PoolManager, topics: [TOPICS.modifyLiquidity, ids.slice(i, i + 100)] }, from, bblock, { step: B.logMax, maxStep: B.logMax, minStep: 250, retries: 2, confirmEmpty: B.confirmEmpty });
+      const ml = mlCap.over() ? null : await logsAdaptive(blogRpc, { address: BC.v4PoolManager, topics: [TOPICS.modifyLiquidity, ids.slice(i, i + 100)] }, from, bblock, { step: B.logMax, maxStep: B.logMax, minStep: 1000, segments: 4, retries: 2, confirmEmpty: B.confirmEmpty, budget: mlCap });
       if (!ml) { mlUnread += ids.slice(i, i + 100).length; continue; }
       for (const m of ml.map(decodeModifyLiquidity).filter(Boolean)) net.set(m.id, (net.get(m.id) || 0n) + m.liquidityDelta);
     }
@@ -378,10 +394,11 @@ async function discoverBase() {
     await readState(bmc, btag, { v4: fresh4, stateView: BC.v4StateView });
     keep4 = fresh4.filter((p) => p.slot0 && (p.liquidity > 0n || (net.get(p.id) || 0n) > 0n));
     bv4.push(...keep4);
-  }
+  });
   say(evU && evP && evV && !mlUnread ? true : null, 'base events', `last 72 hours (${bblock - from + 1} blocks): Uniswap v3 ${evU ? evU.length : 'unread'} pools created (${agedU} of ours), PancakeSwap v3 ${evP ? evP.length : 'unread'} (${agedP} of ours), Uniswap v4 ${evV ? evV.length : 'unread'} (${mine4} pair a universe token with a quote token; ${keep4.length} outside the standard keys hold liquidity${mlUnread ? `; liquidity events unread for ${mlUnread}` : ''})`);
-  // DexScreener for every Base token: the cross-check, and listed v4 pools our keys missed
-  const bds = SKIP.has('dexscreener') ? btoks.map(() => null) : await eachSpaced(btoks, 260, (t) => dexScreenerTokenPairs(getJson, 'base', t.address));
+  // DexScreener for every Base token, best-ranked first: the cross-check, and listed v4 pools our keys missed
+  const dsCap = part(CAP.dexscreener), dsGet = capGetJson(getJson, dsCap);
+  const bds = SKIP.has('dexscreener') ? btoks.map(() => null) : await timed('base dexscreener', () => eachSpaced(btoks, 260, (t) => dexScreenerTokenPairs(dsGet, 'base', t.address), { budget: dsCap }));
   const scopedB = (p) => p.base && p.quote && inPairB(p.base, p.quote);
   const listedB = new Map();
   for (const l of bds) for (const p of l || []) if (p.venue && p.reserveUsd >= FLOOR && scopedB(p) && !listedB.has(p.id)) listedB.set(p.id, p);
@@ -401,6 +418,9 @@ async function discoverBase() {
   const pcsListed = [...pcsRows(bds).values()].filter((p) => scopedB(p));
   const readB = bds.filter(Boolean).length;
   say(readB ? haveB.length >= 0.9 * inScope.length : null, 'base recall', `DexScreener: ${readB} of ${btoks.length} tokens read; ${inScope.length} Uniswap pools ≥ ${usd(FLOOR)} in scope (v3 ${inScope.filter((p) => p.venue === 3).length}, v4 ${inScope.filter((p) => p.venue === 4).length}): we have ${haveB.length} (${pct(haveB.length, inScope.length)}), ${keyFound} v4 keys read from the PositionManager; PancakeSwap pairs ≥ ${usd(FLOOR)} listed ${pcsListed.length}, in our v3 list ${pcsListed.filter((p) => allB.has(p.id)).length}`);
+  const caps = [['events: Uniswap v3', evCaps[0]], ['PancakeSwap v3', evCaps[1]], ['Uniswap v4', evCaps[2]], ['liquidity events', mlCap], ['DexScreener', dsCap], ['the whole list', all]];
+  const hit = caps.filter(([, b]) => b.why());
+  say(hit.length ? null : true, 'base caps', `${caps.map(([k, b]) => `${k} ${b.note()}`).join('; ')}${hit.length ? ` — what a cap stopped is unread (null) this run: ${hit.map(([k]) => k).join(', ')}` : ''}`);
   const bagg = aggOf(bds);
   for (const p of [...bv3, ...bv4]) { const a = bagg.get(p.id); p.aggReserveUsd = a?.reserveUsd ?? null; p.aggVolumeUsd24h = a?.volumeUsd24h ?? null; }
   // each token's first trading day: Ethereum's record for the same coin, or the oldest pair DexScreener lists on Base

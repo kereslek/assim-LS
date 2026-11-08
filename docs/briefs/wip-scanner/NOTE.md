@@ -15,3 +15,9 @@ Public file: no private data. Everything below is pushed and its unit tests pass
 3. Contract source on Base: Etherscan v2 (chainid 8453) may refuse a free key, and Blockscout's API answered HTTP errors in the probe. If both stay unread, Base pools stay capped at 40 ("unchecked"): find a source or note it.
 4. Only base-rpc.publicnode.com serves Base logs over 1,000+ blocks (probe), so Base log reads take an empty answer without a second node's confirmation (`confirmEmpty: false`).
 5. BNB Chain: left for later (sub-second blocks, few free archive nodes), noted in `lib/chains.mjs`.
+
+## Read caps (8 Nov 2026, after pools run 42472641065 timed out)
+- Every part added after Ethereum's Uniswap list now runs within a time and call cap (`lib/budget.mjs`, values in `lib/chains.mjs` `caps`): Base discovery (backstop 240 s; 72 h events, liquidity events, DexScreener), PancakeSwap on Ethereum, and in the scan Base's steps 1-5 (backstop 150 s; swaps, history, past maps), backfill, contract source (with a breaker after 3 unread in a row), sell tests, transactions (Ethereum too) and the exchange tickers (40 s). A capped part leaves the rest null ("not read").
+- Base scans its largest 150 pools by TVL (`caps.top`); the public `chains:` line says how many were left out. The public `caps:` line gives each capped part's seconds and calls and which cap stopped it.
+- The scan has a watchdog (18 min, `SCAN_LIMIT_MS`): a stuck pass prints its step timings and stops before the job's 55-min limit cancels it with no log. `READ_CAPS` (JSON) lowers caps for a test or diagnostic run; `CHAINS_OFF=base` switches Base off without a code change.
+- The block-clock probe (`base clock` in probes.yml) compares Base block timestamps across nodes and Blockscout.

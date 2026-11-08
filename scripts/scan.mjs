@@ -9,6 +9,9 @@
 // discovery lanes. Public market data only: the log prints counts and distributions, never a pool or an
 // address, except the UNI/WETH 0.3% benchmark, which is public and named as the worked example.
 // Ethereum's check areas keep their names; another chain's carry its prefix ("base maps").
+// The parts added after Ethereum's Uniswap scan run within read caps (lib/chains.mjs caps, lib/budget.mjs): a part
+// that reaches its time or call limit stops, and what it did not read is null ("not read"); the public log gets
+// each capped part's seconds and calls ("caps" lines) and which cap stopped it.
 import fs from 'node:fs';
 import { makeRpc, mapLimit, getJson } from '../lib/rpc.mjs';
 import { makeMulticall } from '../lib/multicall.mjs';
@@ -38,11 +41,12 @@ import { BACKFILL, blockClock, storePoints, planBackfill, runBudgeted, retryJobs
 import { allWindows, gemWarnings, isHooked } from '../lib/windows.mjs';
 import { buildPairs } from '../lib/pairs.mjs';
 import { historyRows } from '../lib/charts.mjs';
-import { CHAINS, CHAIN_IDS, timeOfBlock, blockAtTime, blocksBack, ageOfBlocksBack } from '../lib/chains.mjs';
+import { CHAINS, CHAIN_IDS, timeOfBlock, blockAtTime, blocksBack, ageOfBlocksBack, chainOn } from '../lib/chains.mjs';
 import { classifySwaps, retailShare, driftCorr, routingShare, sendersOf, txSample, dailyFlow, nextFlowDaily, FLOWQ } from '../lib/flowq.mjs';
 import { routerName } from '../lib/routers.mjs';
 import { cexVolumes, makeCexCache, cexScreen, CEX_BUDGET } from '../lib/cex.mjs';
 import { lensCexLed } from '../lib/lenses.mjs';
+import { makeBudget, capRpc, UNLIMITED } from '../lib/budget.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, GROUP = 40;
 // a pool under YOUNG_DAYS old is scanned from YOUNG_FLOOR (the newPools lane looks for them before liquidity arrives)
@@ -58,7 +62,7 @@ const NEW_POOL_MS = 72 * 3600e3, NEW_POOL_SENDERS = 20, TX_BUDGET = 3000, YOUNG_
 const nearOf = (p) => Math.max(NEAR_MIN, p.score?.r ?? 0);
 const spacingOf = (p) => (p.dex === 'pancakeswap' ? PANCAKE_V3.spacing : UNISWAP_V3_SPACING)[p.fee];
 
-const lines = [], timing = {};
+const lines = [], timing = {}, running = new Map();
 // With the lock (LOCK_PASSPHRASE set) every detail goes to the sealed log and the public log gets only
 // each check's area with pass/fail, counts and step timings. Without it (offline fakes) all prints.
 const SEALED = !!process.env.LOCK_PASSPHRASE;
@@ -78,7 +82,17 @@ const median = (a) => { const s = a.filter((x) => x != null && Number.isFinite(x
 const isNum = (x) => typeof x === 'number' && Number.isFinite(x);
 const within = (a, lo, hi) => a.filter((r) => r >= lo && r <= hi).length;
 const in2 = (x) => x != null && x >= 0.98 && x <= 1.02;
-async function timed(name, fn) { const t = Date.now(); try { return await fn(); } finally { timing[name] = (timing[name] || 0) + Math.round((Date.now() - t) / 1000); } }
+async function timed(name, fn) { const t = Date.now(); running.set(name, t); try { return await fn(); } finally { running.delete(name); timing[name] = (timing[name] || 0) + Math.round((Date.now() - t) / 1000); } }
+// Read caps can be lowered for a diagnostic run or a test: READ_CAPS='{"base":{"swaps":{"ms":2000}}}' (public settings, no data).
+const CAP_OVERRIDE = (() => { try { const j = JSON.parse(process.env.READ_CAPS || '{}'); return j && typeof j === 'object' ? j : {}; } catch { return {}; } })();
+// A watchdog under the job's own time limit: a pass still running at SCAN_LIMIT_MS (default 18 min) stops with its step
+// timings in the public log (names and seconds) instead of being cancelled with no log at all.
+const SCAN_LIMIT_MS = Number(process.env.SCAN_LIMIT_MS) > 0 ? Number(process.env.SCAN_LIMIT_MS) : 18 * 60e3;
+setTimeout(() => {
+  const now = Date.now();
+  pub(`scan: stopped by the watchdog after ${Math.round(SCAN_LIMIT_MS / 1000)} s · steps ${Object.entries(timing).map(([k, v]) => `${k} ${v}s`).join(', ')} · still running: ${[...running].map(([k, t]) => `${k} ${Math.round((now - t) / 1000)}s`).join(', ') || 'none'}`);
+  process.exit(1);
+}, SCAN_LIMIT_MS).unref();
 function finish(code) {
   const count = (k) => lines.filter((l) => l.ok === k).length;
   const summary = `scan: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · steps ${Object.entries(timing).map(([k, v]) => `${k} ${v}s`).join(', ')}`;
@@ -114,6 +128,7 @@ const ctxs = [];
 let passT = null;
 for (const id of CHAIN_IDS) {
   const CH = CHAINS[id], file = `out/pools-${id}.json`;
+  if (!chainOn(id)) { say(null, `${CH.prefix}scan`, 'switched off for this run (CHAINS_OFF)'); continue; }
   if (!fs.existsSync(file)) { if (id === 'ethereum') { say(null, 'pool list', 'out/pools-ethereum.json missing'); finish(1); } continue; }
   let list;
   try { list = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { say(null, `${CH.prefix}pool list`, 'unreadable'); if (id === 'ethereum') finish(1); continue; }
@@ -145,11 +160,23 @@ finish(badMaps ? 1 : 0);
 async function scanChain(CH, list) {
   const C = CH.c, eth = CH.id === 'ethereum';
   const say = (ok, area, msg) => sayRoot(ok, CH.prefix + area, msg);
+  const tm = (name, fn) => timed(CH.prefix + name, fn); // step timings per chain ("base swaps"); Ethereum's keep their names
   const tok = new Map(list.tokens.map((t) => [t.address, t]));
-  const rpc = makeRpc(CH.rpcs, { timeout: 30000, maxRefusals: 4 });
+  // a chain with a backstop cap (Base: caps.chain) reads steps 1-5 within it: past it every read is unread (null)
+  const chainCap = CH.caps?.chain ? makeBudget({ ...CH.caps.chain, ...(CAP_OVERRIDE[CH.id]?.chain || {}) }) : UNLIMITED;
+  const rpc = capRpc(makeRpc(CH.rpcs, { timeout: 30000, maxRefusals: 4 }), chainCap);
   const mc = makeMulticall(rpc, { chunk: 400, concurrency: 4 });
-  const amc = makeMulticall(makeRpc(CH.archive, { timeout: 30000, maxRefusals: 6 }), { chunk: 300, concurrency: 3 }); // serve old state (probes)
-  const X = { CH, list, tok, rpc, mc, amc };
+  const arpc = capRpc(makeRpc(CH.archive, { timeout: 30000, maxRefusals: 6 }), chainCap);
+  const amc = makeMulticall(arpc, { chunk: 300, concurrency: 3 }); // serve old state (probes)
+  // this chain's read caps (Ethereum: only its new parts; lib/chains.mjs)
+  const caps = new Map();
+  const cap = (k) => {
+    const c = { ...(CH.caps?.[k] || {}), ...(CAP_OVERRIDE[CH.id]?.[k] || {}) };
+    if (!c.ms && !c.calls) return UNLIMITED;
+    const b = makeBudget(c); caps.set(k, b); return b;
+  };
+  const X = { CH, list, tok, rpc, mc, amc, arpc, caps, cap };
+  if (chainCap !== UNLIMITED) caps.set('chain', chainCap);
 
   // 1. Which pools: every v3-style pool ≥ $300k by its own balances (and a young one from $50k); v4 pools an
   //    aggregator lists at ≥ $100k, and new v4 pools that hold liquidity (v4 has no per-pool balances: its
@@ -159,13 +186,16 @@ async function scanChain(CH, list) {
     ...list.v3.filter((p) => p.tvl >= FLOOR || (eth && p.id === BENCH) || young(p)).map((p) => ({ ...p, v: 3, dex: p.dex ?? 'uniswap' })).map((p) => ({ ...p, tickSpacing: spacingOf(p) })).filter((p) => p.tickSpacing),
     ...list.v4.filter((p) => !extremeFee(p.fee) && (p.aggReserveUsd >= V4_PREFILTER || p.source === 'event')).map((p) => ({ ...p, v: 4, dex: 'uniswap' })),
   ].sort((a, b) => (b.tvl ?? b.aggReserveUsd ?? 0) - (a.tvl ?? a.aggReserveUsd ?? 0));
-  let words = 0, skipped = 0;
+  let words = 0, skipped = 0, beyondTop = 0;
   const chosen = [];
   for (const p of pick) {
+    // a chain with a cap on its pool count (Base: caps.top) scans its largest pools by TVL; the rest wait
+    if (CH.caps?.top && chosen.length >= CH.caps.top) { beyondTop++; continue; }
     const w = wordsFor(p.tickSpacing).length;
     if (words + w > CH.maxWords && p.id !== BENCH) { skipped++; continue; }
     words += w; chosen.push({ ...p, chain: CH.id });
   }
+  X.beyondTop = beyondTop;
 
   // 2. Fresh block; state and maps all read there.
   const tag = await rpc.call('eth_blockNumber', []);
@@ -182,10 +212,10 @@ async function scanChain(CH, list) {
     : [v4Slot0Call(C.v4StateView, p.id), { target: C.v4StateView, data: encodeCall('getLiquidity(bytes32)', [{ t: 'bytes32', v: p.id }]) }]);
   const fgCalls = (p) => feeGrowthCalls(p, C.v4StateView);
   Object.assign(X, { stCalls, fgCalls });
-  const st = await timed('state', () => mc(chosen.flatMap(stCalls), tag));
+  const st = await tm('state', () => mc(chosen.flatMap(stCalls), tag));
   chosen.forEach((p, i) => { p.s = (p.v === 3 ? readV3Slot0(st[2 * i]) : readV4Slot0(st[2 * i])) || null; p.L = readUint(st[2 * i + 1]); });
   const ready = chosen.filter((p) => p.s && p.L != null);
-  const maps = await timed('maps', () => readMaps(mc, ready.map((p) => ({ v: p.v, id: p.id, tickSpacing: p.tickSpacing, tick: p.s.tick, liquidity: p.L })), { stateView: C.v4StateView, tag }));
+  const maps = await tm('maps', () => readMaps(mc, ready.map((p) => ({ v: p.v, id: p.id, tickSpacing: p.tickSpacing, tick: p.s.tick, liquidity: p.L })), { stateView: C.v4StateView, tag }));
 
   let complete = 0, unreadMaps = 0, badMaps = 0, ticksRead = 0;
   const tags = new Map(), v3Ratio = [], v4Ratio = [];
@@ -211,7 +241,7 @@ async function scanChain(CH, list) {
   });
   Object.assign(X, { chosen, ready, maps, unreadMaps, unreadState: chosen.length - ready.length, badMaps, skipped });
   const venues = top(tally(ready.map((p) => `${p.dex} v${p.v}`)), 4);
-  say(badMaps ? false : unreadMaps ? null : true, 'maps', `${complete} of ${ready.length} maps complete at block ${block} (liquidity sums to zero, never negative, walk = pool liquidity); ${badMaps} failed a check; ${unreadMaps} unread; ${skipped} skipped for the read budget; ${words} bitmap words, ${ticksRead} ticks; by venue ${venues}`);
+  say(badMaps ? false : unreadMaps ? null : true, 'maps', `${complete} of ${ready.length} maps complete at block ${block} (liquidity sums to zero, never negative, walk = pool liquidity); ${badMaps} failed a check; ${unreadMaps} unread; ${skipped} skipped for the read budget${CH.caps?.top ? `; the largest ${CH.caps.top} pools by TVL scanned, ${beyondTop} smaller ones left out this pass` : ''}; ${words} bitmap words, ${ticksRead} ticks; by venue ${venues}`);
   // The map can't hold more than the pool owns; the pool can own more than its map (fees owed to LPs
   // and to the protocol wait in its balance until collected), so this check is one-sided.
   const over = v3Ratio.filter((r) => r > 1.02).length;
@@ -241,9 +271,11 @@ async function scanChain(CH, list) {
   for (let i = 0; i < v4ids.length; i += GROUP) groups.push({ address: C.v4PoolManager, topics: [[SWAP_TOPICS.v4, EXTRA_TOPICS.donate], v4ids.slice(i, i + GROUP)] });
   // Log reads skip nodes known to answer short (lib/chains.mjs noLogs) and, where a second node serves logs,
   // confirm any empty answer with it.
-  const logRpc = makeRpc(CH.rpcs.filter((u) => !CH.noLogs.some((x) => u.includes(x))), { timeout: 30000, maxRefusals: 1000 });
+  const logRpc = capRpc(makeRpc(CH.rpcs.filter((u) => !CH.noLogs.some((x) => u.includes(x))), { timeout: 30000, maxRefusals: 1000 }), chainCap);
   X.logRpc = logRpc;
-  const got = await timed('swaps', () => mapLimit(groups, 2, (f) => logsAdaptive(logRpc, f, from, block, { step: CH.swapStep, maxStep: CH.swapStep, segments: eth ? 1 : 4, confirmEmpty: CH.confirmEmpty, retries: 2 })));
+  // Ethereum reads as before; another chain within its swaps cap (a group the cap stops is unread: its pools' fees null)
+  const swCap = eth ? null : cap('swaps');
+  const got = await tm('swaps', () => mapLimit(groups, 2, (f) => (swCap?.over() ? null : logsAdaptive(logRpc, f, from, block, { step: CH.swapStep, maxStep: CH.swapStep, segments: eth ? 1 : 4, confirmEmpty: CH.confirmEmpty, retries: 2, ...(swCap ? { minStep: 500, budget: swCap } : {}) }))));
   const unreadGroups = got.filter((g) => g == null).length;
   const unreadIds = new Set(groups.flatMap((g, i) => (got[i] == null ? (Array.isArray(g.address) ? g.address : g.topics[1]) : [])));
   const seenLog = new Set();
@@ -294,7 +326,7 @@ async function scanChain(CH, list) {
   for (const p of mapped) p.verified = p.v === 3 ? true : p.hooks == null ? null : !hookReturnsSwapDelta(p.hooks);
   const hookedOrDynamic = (p) => p.v === 4 && ((p.hooks && p.hooks !== ZERO) || p.fee === DYNAMIC_FEE);
   const fgPlan = mapped.filter((p) => !unreadIds.has(p.id) && sums.get(p.id)?.swaps >= 10);
-  const [fgNowR, fgThenR] = await timed('fee counters', () => Promise.all([amc(fgPlan.flatMap(fgCalls), tag), amc(fgPlan.flatMap((p) => [...fgCalls(p), ...stCalls(p)]), '0x' + (from - 1).toString(16))]));
+  const [fgNowR, fgThenR] = await tm('fee counters', () => Promise.all([amc(fgPlan.flatMap(fgCalls), tag), amc(fgPlan.flatMap((p) => [...fgCalls(p), ...stCalls(p)]), '0x' + (from - 1).toString(16))]));
   const segOf = new Map(ready.map((p, i) => [p.id, maps[i]?.segments ?? null]));
   X.segOf = segOf;
   let kn = 0, kt = 0, fgUnread = 0;
@@ -338,13 +370,17 @@ async function scanChain(CH, list) {
   // each token at most once a UTC day through a cache file the next pass reuses; DefiLlama's chart for
   // the tokens CoinGecko doesn't answer. Never a flat line for a token nobody answered.
   const histKeys = [...new Set(mapped.flatMap((p) => [keyOf(p.t0), keyOf(p.t1)]))];
-  const cgHist = await timed('history', () => coinGeckoHistory(getJson, histKeys, { key: process.env.COINGECKO_KEY || undefined, cache: hcache }));
-  const llHist = cgHist.unread.length ? await timed('history fallback', () => dailyHistory(getJson, cgHist.unread)) : { series: new Map(), unread: [], lastError: null };
-  const hist = { series: new Map([...cgHist.series, ...llHist.series]), unread: llHist.unread.length ? llHist.unread : cgHist.unread.filter((k) => !llHist.series.has(k)) };
+  // another chain within its history cap: the keys it leaves are asked on later passes (the cache keeps each day's)
+  const hiCap = eth ? null : cap('history');
+  const cgHist = await tm('history', () => coinGeckoHistory(getJson, histKeys, { key: process.env.COINGECKO_KEY || undefined, cache: hcache, ...(hiCap ? { budget: hiCap } : {}) }));
+  const notAsked = new Set(cgHist.skipped || []);
+  const fallbackKeys = cgHist.unread.filter((k) => !notAsked.has(k));
+  const llHist = fallbackKeys.length && !hiCap?.over() ? await tm('history fallback', () => dailyHistory(getJson, fallbackKeys, hiCap ? { budget: hiCap } : {})) : { series: new Map(), unread: fallbackKeys, lastError: null };
+  const hist = { series: new Map([...cgHist.series, ...llHist.series]), unread: [...new Set([...llHist.unread, ...cgHist.unread.filter((k) => !llHist.series.has(k))])] };
   // Each pool's own price at 31 daily blocks (archive state): that price is what range exits and LVR
   // follow. Each block's own timestamp comes along (Multicall3), so the market is sampled at the same moments.
   const pxCalls = [tsCall, ...mapped.map((p) => (p.v === 3 ? { target: p.id, data: encodeCall('slot0()') } : v4Slot0Call(C.v4StateView, p.id)))];
-  const pxDays = await timed('daily prices', () => mapLimit(Array.from({ length: 31 }, (_, k) => block - backBlocks(k * 86400)), 3, (b) => amc(pxCalls, '0x' + b.toString(16))));
+  const pxDays = await tm('daily prices', () => mapLimit(Array.from({ length: 31 }, (_, k) => block - backBlocks(k * 86400)), 3, (b) => amc(pxCalls, '0x' + b.toString(16))));
   const dayTs = pxDays.map((res, k) => { const ts = readUint(res[0]); return ts != null ? Number(ts) : nowSec - k * 86400; });
   mapped.forEach((p, i) => {
     p.dailyPx = [];
@@ -382,11 +418,12 @@ async function scanChain(CH, list) {
   const withSigma = mapped.filter((p) => p.sigma != null), both = mapped.filter((p) => p.sigmaChain > 0 && p.sigmaMarket > 0);
   say(withSigma.length ? true : null, 'volatility', `30-day volatility for ${withSigma.length} of ${mapped.length} pools (${mapped.filter((p) => p.sigmaChain != null).length} from the pool's own daily price, ${withSigma.length - mapped.filter((p) => p.sigmaChain != null).length} from market history); median ${fr(median(withSigma.map((p) => p.sigma)))} a day; re-range gas ${gasUsd == null ? '—' : '$' + gasUsd.toFixed(2)}`);
   {
-    const sc = mapped.filter((p) => p.score?.net != null), readM = sc.filter((p) => p.sigmaMarket != null), rr = both.map((p) => p.sigmaChain / p.sigmaMarket);
+    // a pool whose token the history cap left for a later pass is not counted against the check (not read is not a miss)
+    const sc = mapped.filter((p) => p.score?.net != null && !notAsked.has(keyOf(p.t0)) && !notAsked.has(keyOf(p.t1))), readM = sc.filter((p) => p.sigmaMarket != null), rr = both.map((p) => p.sigmaChain / p.sigmaMarket);
     const calm = both.filter((p) => p.sigmaChain < 0.002 && p.sigmaMarket < 0.002);
     say(sc.length && both.length ? readM.length / sc.length >= 0.9 && within(rr, 0.7, 1.3) / both.length >= 0.7 : null, 'volatility check',
       `market volatility read for ${readM.length} of ${sc.length} scored pools (${pct(readM.length, sc.length)}); pool vs market within 30% for ${within(rr, 0.7, 1.3)} of ${both.length} (${pct(within(rr, 0.7, 1.3), both.length)}), median ratio ${median(rr)?.toFixed(2) ?? '—'}; calm pairs (both under 0.2% a day) ${calm.length}, within 30% ${within(calm.map((p) => p.sigmaChain / p.sigmaMarket), 0.7, 1.3)}` +
-      `; history: CoinGecko ${cgHist.fetched} fetched + ${cgHist.cached} from today's cache (${cgHist.calls} calls${cgHist.lastError ? `, last error ${cgHist.lastError}` : ''}), DefiLlama fallback ${llHist.series.size} of ${cgHist.unread.length}${llHist.lastError ? ` (last error ${llHist.lastError})` : ''}, unread ${hist.unread.length} of ${histKeys.length} tokens`);
+      `; history: CoinGecko ${cgHist.fetched} fetched + ${cgHist.cached} from today's cache (${cgHist.calls} calls${cgHist.lastError ? `, last error ${cgHist.lastError}` : ''}), DefiLlama fallback ${llHist.series.size} of ${fallbackKeys.length}${llHist.lastError ? ` (last error ${llHist.lastError})` : ''}, unread ${hist.unread.length} of ${histKeys.length} tokens${notAsked.size ? ` (${notAsked.size} left by the cap for later passes)` : ''}`);
   }
   const scored = mapped.filter((p) => p.score?.net != null);
   const posN = scored.filter((p) => p.score.net > 0), edgy = scored.filter((p) => p.score.edge > 1);
@@ -405,12 +442,15 @@ async function scanChain(CH, list) {
   X.nowSeg = nowSeg;
   const pastBlocks = [10, 20, 30].map((d) => block - backBlocks(d * 86400));
   let pastRead = 0, pastTried = 0, pastStale = 0;
-  await timed('past maps', async () => {
+  // another chain's past maps within its cap (a date the cap stops is unread)
+  const paCap = eth ? UNLIMITED : cap('past');
+  const pamc = paCap === UNLIMITED ? amc : makeMulticall(capRpc(arpc, paCap), { chunk: 300, concurrency: 3 });
+  await tm('past maps', async () => {
     for (const pb of pastBlocks) {
       const ptag = '0x' + pb.toString(16);
       // the block's own timestamp rides along: a node that answers an old block with today's state is not
       // a past map; the fee counters ride along too, so each past map is also a full snapshot row
-      const st = await amc([tsCall, ...cands.flatMap((p) => [...stCalls(p), ...fgCalls(p)])], ptag);
+      const st = await pamc([tsCall, ...cands.flatMap((p) => [...stCalls(p), ...fgCalls(p)])], ptag);
       const ts = readUint(st[0]), real = ts != null && ageOk(ts, block - pb);
       if (!real) pastStale++;
       const alive = [];
@@ -426,7 +466,7 @@ async function scanChain(CH, list) {
         alive.push({ p, s0, L, a, t: Number(ts) * 1000 });
       });
       pastTried += alive.length;
-      const ms = alive.length ? await readMaps(amc, alive.map(({ p, s0, L }) => ({ v: p.v, id: p.id, tickSpacing: p.tickSpacing, tick: s0.tick, liquidity: L })), { stateView: C.v4StateView, tag: ptag }) : [];
+      const ms = alive.length ? await readMaps(pamc, alive.map(({ p, s0, L }) => ({ v: p.v, id: p.id, tickSpacing: p.tickSpacing, tick: s0.tick, liquidity: L })), { stateView: C.v4StateView, tag: ptag }) : [];
       alive.forEach(({ p, s0, a, t }, i) => {
         const m = ms[i];
         if (!m || m.unread || !(m.checks.netSumZero && m.checks.matchesPool)) { p.past.push({ hollow: null, segments: null }); return; }
@@ -522,10 +562,11 @@ async function writeOutputs() {
       // Ethereum's anchors are the store's Ethereum rows: a stored Base row's block number is always above
       // Ethereum's head (Base counts blocks 10-60 times faster), so the head filters them out exactly
       const anchors = [{ t: X.passT, block: X.block }, ...(eth ? storePoints(snaps).filter((q) => q.block <= X.block) : [])];
-      const budget = eth ? {} : { maxBatches: 60 };
-      const deadline = eth ? BACKFILL.deadlineMs : 40e3;
+      const bfc = X.CH.caps?.backfill;
+      const budget = eth ? {} : { maxBatches: bfc?.batches ?? 60 };
+      const deadline = eth ? BACKFILL.deadlineMs : bfc?.ms ?? 40e3;
       let plan = { jobs: [], wanted: 0, planned: 0 }, jobs = [], run = { results: [], started: 0, skipped: 0, retried: 0 };
-      await timed('backfill', async () => {
+      await timed(X.CH.prefix + 'backfill', async () => {
         let clock;
         if (X.CH.eras) clock = (T) => blockAtTime(X.CH, T / 1000);
         else {
@@ -579,14 +620,16 @@ async function writeOutputs() {
   const vOfChain = new Map(), vLines = [];
   for (const X of ctxs) {
     const vTok = [...new Set(X.mapped.flatMap((p) => [p.t0, p.t1]).filter((a) => a !== ZERO))];
-    const vs = await timed('etherscan', () => verifiedSources(getJson, vTok, { key: process.env.ETHERSCAN_KEY || undefined, cache: vCache, chainId: X.CH.etherscan, blockscout: X.CH.id === 'ethereum' ? null : X.CH.blockscout }));
+    // another chain within its cap, and a source that keeps refusing the chain is dropped after 3 tokens in a row
+    const scap = X.CH.id === 'ethereum' ? null : X.cap('source');
+    const vs = await timed(X.CH.prefix + 'etherscan', () => verifiedSources(getJson, vTok, { key: process.env.ETHERSCAN_KEY || undefined, cache: vCache, chainId: X.CH.etherscan, blockscout: X.CH.id === 'ethereum' ? null : X.CH.blockscout, ...(scap ? { budget: scap, breaker: 3 } : {}) }));
     vOfChain.set(X.CH.id, vs.verified);
     vLines.push({ X, vs, n: vTok.length });
   }
   try { vCache.save(); } catch { /* read again next pass */ }
   for (const { X, vs, n } of vLines) {
     const vals = [...vs.verified.values()];
-    say(vs.calls || vs.cached ? true : null, `${X.CH.prefix}contract source`, `tokens with verified source ${vals.filter((x) => x === true).length} of ${n}, unverified ${vals.filter((x) => x === false).length}, unread ${vals.filter((x) => x == null).length} (${vs.fetched} read, ${vs.cached} from the week's cache${vs.lastError ? `, last error ${vs.lastError}` : ''})`);
+    say(vs.calls || vs.cached ? true : null, `${X.CH.prefix}contract source`, `tokens with verified source ${vals.filter((x) => x === true).length} of ${n}, unverified ${vals.filter((x) => x === false).length}, unread ${vals.filter((x) => x == null).length} (${vs.fetched} read, ${vs.cached} from the week's cache${vs.lastError ? `, last error ${vs.lastError}` : ''}${vs.off?.length ? `; not asked again this pass after 3 unread in a row: ${vs.off.join(', ')}` : ''})`);
   }
   const vOf = (p, a) => (a === ZERO ? true : vOfChain.get(p.chain)?.get(a) ?? null);
   const bothVerified = (p) => { const v = [vOf(p, p.t0), vOf(p, p.t1)]; return v.includes(false) ? false : v.includes(null) ? null : true; };
@@ -626,8 +669,11 @@ async function writeOutputs() {
   try { slots = JSON.parse(fs.readFileSync(slotFile, 'utf8')) || {}; } catch { /* probe again */ }
   const sellOf = new Map();
   for (const X of ctxs) {
-    const sellRpc = makeRpc(X.CH.rpcs, { timeout: 20000, maxRefusals: 1000 }); // its own endpoints: override refusals mustn't drop nodes elsewhere
-    await timed('sell test', () => mapLimit(X.mapped.filter((p) => p.v === 3), 4, async (p) => {
+    // another chain within its sell-test cap: a pool the cap does not reach is unread (null), never a pass
+    const sellCap = X.CH.id === 'ethereum' ? UNLIMITED : X.cap('sell');
+    const sellRpc = capRpc(makeRpc(X.CH.rpcs, { timeout: 20000, maxRefusals: 1000 }), sellCap); // its own endpoints: override refusals mustn't drop nodes elsewhere
+    await timed(X.CH.prefix + 'sell test', () => mapLimit(X.mapped.filter((p) => p.v === 3), 4, async (p) => {
+      if (sellCap.over()) { sellOf.set(p.id, null); return; }
       const inIs = X.quoteAddrs.has(p.t0) && !X.quoteAddrs.has(p.t1) ? 1 : 0, tokenIn = inIs ? p.t1 : p.t0, tokenOut = inIs ? p.t0 : p.t1;
       const ti = X.tok.get(tokenIn), router = SELL_ROUTERS[X.CH.id]?.[p.dex];
       const sk = X.CH.id === 'ethereum' ? tokenIn : `${X.CH.id}:${tokenIn}`;
@@ -649,8 +695,8 @@ async function writeOutputs() {
   try { const j = JSON.parse(fs.readFileSync(txFile, 'utf8')); if (j?.v === 1 && j.tx) txc = j.tx; } catch { /* read again */ }
   const txMap = new Map(Object.entries(txc).map(([h, v]) => [h, { to: v[0], from: v[1], t: v[2] }]));
   let txRead = 0, txAsked = 0;
-  await timed('transactions', async () => {
-    for (const X of ctxs) {
+  for (const X of ctxs) await timed(X.CH.prefix + 'transactions', async () => {
+    {
       const want = new Set();
       for (const p of X.mapped) {
         if (X.unreadIds.has(p.id)) continue;
@@ -658,11 +704,15 @@ async function writeOutputs() {
         for (const h of txSample(sw)) want.add(h);
         if (isNum(p.createdAt) && X.passT - p.createdAt * 1000 < NEW_POOL_MS) for (const h of [...new Set(sw.map((s) => String(s.tx).toLowerCase()))].slice(0, YOUNG_TXS)) want.add(h);
       }
-      const ask = [...want].filter((h) => !txMap.has(h)).slice(0, Math.max(0, TX_BUDGET - txAsked));
+      // each chain within its transactions cap (lib/chains.mjs caps.txs: time, calls and how many); the rest wait
+      // for a later pass (read transactions are cached)
+      const tc = X.CH.caps?.txs, txCap = X.cap('txs');
+      const ask = [...want].filter((h) => !txMap.has(h)).slice(0, Math.max(0, Math.min(TX_BUDGET - txAsked, tc?.max ?? Infinity)));
       txAsked += ask.length;
       const parts = [];
       for (let i = 0; i < ask.length; i += 250) parts.push(ask.slice(i, i + 250));
-      const got = await mapLimit(parts, 3, (part) => X.rpc.batch(part.map((h) => ({ method: 'eth_getTransactionByHash', params: [h] }))));
+      const txRpc = capRpc(X.rpc, txCap);
+      const got = await mapLimit(parts, 3, (part) => (txCap.over() ? part.map(() => null) : txRpc.batch(part.map((h) => ({ method: 'eth_getTransactionByHash', params: [h] })))));
       parts.forEach((part, i) => part.forEach((h, j) => {
         const t = got[i]?.[j];
         if (t && typeof t.to === 'string' && typeof t.from === 'string') { txMap.set(h, { to: t.to.toLowerCase(), from: t.from.toLowerCase(), t: passT }); txRead++; }
@@ -845,10 +895,15 @@ async function writeOutputs() {
     retailUp: out.filter((x) => dw(x)?.lenses?.includes('retail')).sort((a, b) => (dw(b)?.flow?.retailShare ?? 0) - (dw(a)?.flow?.retailShare ?? 0)).map((x) => x.id),
   };
   const byVenue = (c) => top(tally(out.filter((x) => x.chain === c).map((x) => `${x.dex} v${x.v}`)), 4);
-  const chainCounts = ctxs.map((X) => `${X.CH.id} ${out.filter((x) => x.chain === X.CH.id).length} (${byVenue(X.CH.id)})`).join('; ');
+  const chainCounts = ctxs.map((X) => `${X.CH.id} ${out.filter((x) => x.chain === X.CH.id).length} (${byVenue(X.CH.id)})${X.CH.caps?.top ? `, scope the largest ${X.CH.caps.top} by TVL (${X.beyondTop} smaller left out)` : ''}`).join('; ');
   say(true, 'flow quality', `${defaultWindow}: retail share ${fq('retailShare')} of ${out.length} pools, drift correlation ${fq('driftCorr')}, routing ${fq('routing')}; transactions read ${txRead} of ${txAsked} asked (${txMap.size} known)`);
   say(cx.fetched > 0 || cx.fresh + cx.stale > 0 ? true : null, 'exchange screen', `exchange volume for ${out.filter((x) => x.cex.cexVol24 != null).length} of ${out.length} pools (${cx.fresh} coins fresh, ${cx.stale} up to 48 h old, ${cx.unread} unread; ${cx.calls} calls this pass, ${cexCache.calls()} today of ${CEX_BUDGET.perDay}${cx.lastError ? `, last error ${cx.lastError}` : ''}); ratio for ${out.filter((x) => x.cex.cexRatio != null).length}, tier vs σ for ${out.filter((x) => x.cex.tierVsSigma != null).length}`);
   pub(`chains: ${chainCounts}`);
+  // the read caps (lib/chains.mjs): each capped part's seconds and calls, and which cap stopped it (names and counts only)
+  const capLine = ctxs.map((X) => `${X.CH.id} ${[...X.caps].map(([k, b]) => `${k} ${b.note()}`).join(', ') || 'none'}`).join('; ');
+  const capsHit = ctxs.flatMap((X) => [...X.caps].filter(([, b]) => b.why()).map(([k]) => X.CH.prefix + k));
+  say(capsHit.length ? null : true, 'read caps', `${capLine}${capsHit.length ? `; stopped by a cap (the rest unread this pass): ${capsHit.join(', ')}` : ''}`);
+  pub(`caps: ${capLine}${capsHit.length ? ` · stopped by a cap: ${capsHit.join(', ')}` : ''}`);
   pub(`flow quality (${defaultWindow}): retail share ${fq('retailShare')}, drift ${fq('driftCorr')}, routing ${fq('routing')} of ${out.length} pools; exchange ratio ${out.filter((x) => x.cex.cexRatio != null).length}; lanes: new ${discovery.newPools.length}, exchange-led ${discovery.cexLed.length}, retail ${discovery.retailUp.length}`);
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
 
