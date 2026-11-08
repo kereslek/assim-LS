@@ -23,6 +23,10 @@ test('a budget says no once its time or its calls are spent, and says which', ()
   assert.equal(t.why(), 'time');
   assert.match(t.note(), /time cap/);
   assert.equal(UNLIMITED.take(), true); assert.equal(UNLIMITED.over(), false);
+  // a part that finished within its time reports no cap, however long after it the note is written
+  const done = makeBudget({ ms: 1000, clock });
+  done.take(); clock.add(5000);
+  assert.equal(done.why(), null); assert.equal(done.note(), '0 s, 1 calls');
 });
 
 // a fake RPC that counts what reaches it
