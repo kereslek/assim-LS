@@ -742,6 +742,7 @@ td.fees{width:96px}
 .feeh .lbl{color:var(--muted)}
 .feeh:hover .fm-t{color:var(--fg)}
 .sheet-card.cond #sheet-fee{display:none}
+.sheet-head:has(#sim-list:not([hidden])) #sheet-fee{display:none} /* the similar list open: the header keeps its old height, the panel stays in view */
 .feeh .fmini{flex:none}
 @media (max-width:400px){.feeh svg{width:100px}.feeh .lbl{display:none}}
 </style>
