@@ -57,6 +57,12 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Restore the market-data caches (public prices and counts; each token's history once a UTC day)
+        uses: actions/cache/restore@v4
+        with:
+          path: pinned/out/cache
+          key: loop-cache-${{ github.run_id }}
+          restore-keys: loop-cache-
       - name: Unit tests first (the pinned code; a broken check never reads real data)
         working-directory: pinned
         run: node --test test/*.test.mjs
@@ -81,6 +87,12 @@ jobs:
           if [ -z "$(ls out/data 2>/dev/null)" ]; then echo 'sealed files to publish: none'; exit 0; fi
           # a real push only in live mode with a live pass wired in; otherwise a dry run
           if [ "$MODE" = live ] && [ -n "$LIVE_PASS" ]; then node scripts/publish-data.mjs; else node scripts/publish-data.mjs --dry-run; fi
+      - name: Save the market-data caches for the next run
+        if: always() && hashFiles('pinned/out/cache/**') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: pinned/out/cache
+          key: loop-cache-${{ github.run_id }}
       - name: Hand over to the next run
         if: always()
         env:
