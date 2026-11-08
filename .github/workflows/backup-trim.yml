@@ -1,0 +1,59 @@
+name: backup-trim
+# Monthly (owner-approved): rewrite ONLY the `backup` branch's history so it keeps the last 30 days of dated
+# folders (what the daily backup job keeps, always today's) plus each month's first backup under monthly/.
+# Before anything is rewritten the old tip is pushed as tag backup-pre-trim-YYYYMMDD and read back; then only
+# refs/heads/backup is pushed, with --force-with-lease on the old tip (tools/backup-trim.mjs refuses any other
+# ref). A dispatch is a dry run unless dry_run is unticked: it plans, builds and checks the new commit and
+# pushes nothing. Public log: counts, dates and pass/fail only.
+on:
+  schedule:
+    - cron: '47 3 1 * *'   # the 1st of each month, 03:47 UTC (30 min after the daily backup)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: plan and check only, push nothing'
+        type: boolean
+        default: true
+permissions:
+  contents: write   # the pre-trim tag and the backup branch
+concurrency:
+  group: backup     # one queue with the daily backup: never both at once
+  cancel-in-progress: false
+jobs:
+  trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the scripts and the lock files
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Trim and backup tests first (planted faults, e.g. today's folder dropped, a push to another branch)
+        run: node --test tools/backup-trim.test.mjs test/backup.test.mjs
+      - name: Fetch the backup branch's whole history (commits and trees; file contents only on demand)
+        uses: actions/checkout@v5
+        with:
+          ref: backup
+          path: backup-repo
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: README.md
+          sparse-checkout-cone-mode: false
+      - name: Trim (dry run unless a dispatch unticked it; the schedule runs for real)
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          apply=''
+          if [ "$EVENT" = schedule ] || { [ "$EVENT" = workflow_dispatch ] && [ "$DRY" = false ]; }; then apply=--apply; fi
+          echo "mode: ${apply:-dry run}"
+          node tools/backup-trim.mjs --repo backup-repo --remote origin ${apply} --restore restore
+          echo "pre-trim tags on the remote: $(git -C backup-repo ls-remote --tags origin 'refs/tags/backup-pre-trim-*' | wc -l)"
+      - name: Restore rehearsal on the new commit's newest folder (never decrypts; pass/fail and counts only)
+        run: |
+          if [ -d restore ]; then node scripts/backup.mjs rehearse --backups restore --lock lock --max-age-h 48
+          else echo 'rehearsal: nothing was built (nothing to trim)'; fi

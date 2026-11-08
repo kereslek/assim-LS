@@ -3,7 +3,8 @@ name: backup
 # Copies the data branch's *.json and the repo's lock/*.json into <YYYY-MM-DDTHHMMZ>/ (data files) and
 # <stamp>/lock/ on the `backup` branch, refusing if any data file other than lock.json and inbox.json is
 # not a sealed envelope. Keeps 30 days: older dated folders are deleted in the same commit. Normal pushes
-# only (the branch keeps its history). Then a restore rehearsal on the newest folder as pushed: envelopes
+# only (the branch keeps its history; the monthly backup-trim.yml trims it to 30 days plus monthly/).
+# Then a restore rehearsal on the newest folder as pushed: envelopes
 # parse, t is sane, the lock files equal the repo's. Nothing is ever decrypted: no secret is used here.
 # Public log: dates, counts and pass/fail only.
 on:
@@ -27,8 +28,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Backup tests first (planted faults, e.g. an unsealed file must be refused)
-        run: node --test test/backup.test.mjs
+      - name: Backup tests first (planted faults, e.g. an unsealed file must be refused; the monthly trim's rules)
+        run: node --test test/backup.test.mjs tools/backup-trim.test.mjs
       - name: Check out the data branch (as published)
         uses: actions/checkout@v5
         with:
