@@ -32,17 +32,29 @@ This file describes shapes only: it holds no data. Every value below lives seale
   windows: ["24h", "7d", "30d"],
   defaultWindow: "24h",         // Gem now reads the last day
   gemAt: 60,                    // gem threshold
-  chains: [{ id: "ethereum"|"base", pools: <n>, unread: <n>, block: <n>, gasUsd: <re-range gas in $|null> }],
+  chains: [{ id: "ethereum"|"base", pools: <n>, unread: <n>, block: <n>, gasUsd: <re-range gas in $|null>,
+             dexes: { "uniswap"|"pancakeswap": <pools> } }],   // one entry per chain scanned this pass
   health: {
     loop: { passes24h: <n>, ok24h: <n>, lastGapMin: <n|null>, watchdogLast: <ms|null>,   // written by the loop, not the pass
             recent: [[<pass start ms>, <1 ok | 0 failed>]] } | null,                  // the last 24 h of passes plus the one before
     checks: [{ id: "<id>", label: "<short label>", ok: true|false|null, value: <0..1|null>, detail: "<one line>" }],
-    sealedLog: { lines: <n>, errors: <n>, categories: { "<word>": <n> } }
+    sealedLog: { lines: <n>, errors: <n>, categories: { "<word>": <n> } },
+    cex: { day: "YYYY-MM-DD", calls: <CoinGecko tickers calls this UTC day>, perDay: <budget> }   // carried pass to pass
+  },
+  stored: ["ethereum", "base"?],  // the chains whose rows the snapshot store keeps: Base's only once the live loop
+                                  // runs multi-chain code (a loop of older code reads every stored row's block number
+                                  // into one Ethereum clock); until then Base windows come from each pass's backfill
+  discovery: {                    // the discovery lanes (step 1), pool ids, best first
+    newPools: [<id>],             // under 72 hours old (creation event) with ≥ 20 distinct senders (tx.from) in the last day
+    cexLed: [<id>],               // the "cexled" lens: pool.cex.cexRatio ≥ 10 and tierVsSigma ≥ 2
+    crossChain: [],               // cross-chain gaps: not built yet, always []
+    retailUp: [<id>]              // the default window's "retail" lens
   },
   bench: "<pool id>",           // UNI/WETH 0.3% on Ethereum
   pools: [Pool],                // every scored pool, sorted by the default window's gem score
   pairs: { "<addr>-<addr>": Pair },  // every pool of a pair side by side (lib/pairs.mjs); key = the two token
-                                     // addresses, lower first, native ETH read as WETH
+                                     // addresses, lower first, native ETH read as WETH; another chain's pairs are
+                                     // their own, keyed "<chain>:<addr>-<addr>" (e.g. "base:0x…-0x…")
   market: Market | null             // the top strip (lib/market.mjs); null only if the block itself broke
 }
 Market = {
@@ -70,15 +82,18 @@ Pair = {
 
 `market` feeds the dashboard's top strip, so the page never calls a third party (no CSP holes, no viewer IP sent out). Hosts: gas from the scanner's Ethereum RPCs (`eth_feeHistory` over the last 1024 blocks, or 100 where a node caps the span, with the 50th-percentile reward; `eth_gasPrice` as the fallback); prices from `coins.llama.fi/prices/current` and `coins.llama.fi/percentage?period=24h` (ids `coingecko:ethereum`, `coingecko:bitcoin`, `coingecko:solana`), cross-checked with `api.coingecko.com/api/v3/simple/price` (the Demo key, in a header, when set). Gas and prices each have a 15-second limit and fail separately to `null`; a pass that reads nothing still carries `gas.hist` forward. The countdown uses `next` and "updated" uses `t`.
 
-Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggregator`, `maps-complete`, `lp-book`, `creation-events`, `volatility-xcheck`, `fees-vs-aggregator`.
+Check ids in `health.checks` (each across every chain scanned: false if any chain failed it, true if all passed, else null; `detail` names the chain): `fee-identity`, `price-vs-market`, `volume-vs-aggregator`, `maps-complete`, `lp-book`, `creation-events`, `volatility-xcheck`, `fees-vs-aggregator`.
 
 ### Pool
 
 ```
 {
-  id: "<v3 pool address or v4 pool id>", chain: "ethereum"|"base", v: 3|4, pair: "<SYM0>/<SYM1>", pairKey: "<key in pairs>",
+  id: "<v3 pool address or v4 pool id>", chain: "ethereum"|"base", dex: "uniswap"|"pancakeswap", v: 3|4,   // PancakeSwap: v 3
+  pair: "<SYM0>/<SYM1>", pairKey: "<key in pairs>",
   t0: { sym, addr, dec, usd: <n|null> }, t1: { sym, addr, dec, usd: <n|null> },
   feeTier: <fraction, e.g. 0.003>, dynamicFee: <bool>, lpKeeps: <fraction LPs keep after the protocol's cut|null>,
+                                // read per venue: Uniswap v3 1 − 1/N per nibble; PancakeSwap v3 1 − fp/10,000 per 16-bit
+                                // share (about 0.66); v4 from slot0's protocolFee and lpFee
   hooks: "<address>"|null,
   verified: true|false|null,    // true = swaps reproduce the fee counters; false = "unverified" (can't be checked, e.g. a hook
                                 //   that moves tokens outside the pool's books): never a gem; null = not checked yet
@@ -120,6 +135,13 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
     walls: { below: <log offset|null>, above: <log offset|null> }   // found on the ±0.45 fine bars only, as before
   },
   w: { "24h": Window|null, "7d": Window|null, "30d": Window|null },
+  cex: { cexVol24: <USD|null>, cexRatio: <n|null>, tierVsSigma: <n|null>, t: <ms the volume was read|null>, coin: "<CoinGecko id>"|null },
+                                // the exchange-led screen (lib/cex.mjs): the base token's 24 h volume on centralised
+                                // exchanges (CoinGecko tickers, DEX and flagged tickers left out; at most hourly per coin,
+                                // within a daily budget, so t can be up to 48 h old), ÷ the value within ±9%, and the fee
+                                // tier ÷ the per-block σ (daily σ ÷ √blocks a day: Base's 0.2 s blocks make this larger)
+  flowDaily: [[<UTC day ms>, <retailShare|null>, <lpFeesUsd|null>, <routing|null>]],   // up to 30 days, carried pass to
+                                // pass; the 7d and 30d windows' retailShare and routing read it
   checks: [{ id: "<id>", label: "<short>", ok: true|false|null }],   // the per-pool checklist, e.g. "12/12 checks pass"
   gemFirstAt: <ms|null>,        // first pass where the default window's gem reached gemAt ("new since you last looked")
   daily: [{ t, feesPer1k, net }],   // up to 30 days: USD a day for $1,000 at the price after dilution at the ticket, and
@@ -142,12 +164,23 @@ Check ids in `health.checks`: `fee-identity`, `price-vs-market`, `volume-vs-aggr
   feeApr, lvr, swapCost, gas, net, edge,               // annualised fractions at the ticket; edge = feeApr ÷ lvr
   aggApr: <fees ÷ total TVL: "what trackers show">,
   parkedAvg: <0..1|null>, strandedShare: <0..1|null>, markout: <markout ÷ fee|null>,
+  flow: { retailShare: <0..1|null>, driftCorr: <−1..1|null>, routing: <0..1|null>, senders: <n|null> },   // lib/flowq.mjs:
+       // retailShare = the share of LP fees from swaps that are not arb-like (arb-like = moves the pool toward the price
+       //   25 Ethereum / 1,500 Base blocks (5 min) later AND leaves the trader ahead at it; the markouts' reference);
+       //   24h from the day's swaps, 7d/30d the fee-weighted mean of flowDaily (≥ 3 days)
+       // driftCorr = Spearman's ρ of each hour's LP fees vs that hour's |log return| of the pool's own price (hourly
+       //   snapshot rows; ≥ 12 hours; 30d reads the 14 days the hourly tier keeps)
+       // routing = the share of swaps whose tx.to is a known router or aggregator (lib/routers.mjs), from the 40
+       //   smallest tx hashes of the day (a stable sample, cached); null under 10 sampled or half the sample unread
+       // senders = distinct tx.from over all the day's transactions (24h only; null unless every one was read)
   gem: { total: <0..100|null>, yield, thinness, flow, staying, warnings: ["..."], missing: ["..."],
          tags: ["unconfirmed"|"one-off"|"unchecked"] },
        // Gem now (lib/gem.mjs gemNow): yield now 45 (the median of the last 7 days' net per $1,000 a day) + thinness 25
        // (the day's LP fees ÷ the value at the price) + flow 20 (markout ÷ fee, traders) + staying power 10 (bonus).
        // A failed check → no gem; a safety check not run → capped at 40 ("unchecked"); a data check not run → −5.
-  lenses: ["stranded"|"one-sided"|"fresh"|"bigmove"|"calm"|"toxic"],
+  lenses: ["stranded"|"one-sided"|"fresh"|"bigmove"|"calm"|"toxic"|"cexled"|"retail"],
+       // cexled: pool.cex.cexRatio ≥ 10 and tierVsSigma ≥ 2; retail: flow.retailShare ≥ 0.6, or ≥ 0.1 above the next
+       // longer window's
   spark: { px: [<n>], fees: [<n>] }                    // about 24 points each, for sparklines
 }
 ```
