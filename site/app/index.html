@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ehbTwVCUG85uOYLXV18r4er0bkd/jmhIzec/c+KTo3c='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-baAtJsYr9qn22wIDzc6gAw7NFaov4RUyDg2MfDBlOpE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -713,6 +713,38 @@ a.ext svg{width:10px;height:10px;flex:none}
 .liq:not(.still) .pz-c>svg path,.daily .pz:not(.still) .pz-c>svg rect{transform-box:fill-box;transform-origin:50% 100%;animation:grow .25s ease-out}
 .xfade{animation:fadeIn .2s ease-out}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+/* v0.4.2: the pair's other pools stacked in the liquidity chart, and the 30-day fee-history mini bar */
+.mgchips{display:flex;flex-wrap:wrap;gap:2px 6px;margin:0 0 2px}
+.mgc{display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:0 10px;border:0;background:transparent;color:var(--muted);font:600 11px/1.2 var(--mono);cursor:pointer;position:relative}
+.mgc::before{content:"";position:absolute;inset:7px 0;border:1px solid var(--line2);border-radius:999px;pointer-events:none}
+.mgc .sq{width:9px;height:9px;border-radius:2px;background:var(--c);opacity:.35;flex:none}
+.mgc[aria-pressed="true"],.mgc.self{color:var(--fg)}
+.mgc[aria-pressed="true"]::before,.mgc.self::before{border-color:var(--c)}
+.mgc[aria-pressed="true"] .sq,.mgc.self .sq{opacity:1}
+.mgc.self{cursor:default}
+.mgc .cg{margin-right:0}
+.mgline{margin:2px 0 0;font:500 11px/1.5 var(--mono);color:var(--fg2)}
+.mgline .sq{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;background:var(--c)}
+.mgline>span{white-space:nowrap}
+.fmini{display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0;vertical-align:middle}
+.fmini svg{display:block;flex:none}
+.fm-t{font:500 10px/1.2 var(--mono);color:var(--fg2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fm-t .up{color:var(--accent)}.fm-t .dn{color:var(--bad)}
+td.fees{width:96px}
+#next{container-type:inline-size}
+.nb-row .fmini{display:none}
+@container (min-width:500px){.nb-row .fmini{display:inline-flex}}
+.mc .fmini{align-items:flex-start;position:relative;z-index:0;pointer-events:none;margin:0 0 4px}
+.fmrow{display:flex;align-items:center;gap:8px;margin-top:6px}
+.fmrow .fmini{flex-direction:row;align-items:center;gap:8px}
+.feeh{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:transparent;color:var(--fg2);cursor:pointer;font:inherit;max-width:100%}
+.feeh .fmini{flex-direction:row;align-items:center;gap:8px}
+.feeh .lbl{color:var(--muted)}
+.feeh:hover .fm-t{color:var(--fg)}
+.sheet-card.cond #sheet-fee{display:none}
+.sheet-head:has(#sim-list:not([hidden])) #sheet-fee{display:none} /* the similar list open: the header keeps its old height, the panel stays in view */
+.feeh .fmini{flex:none}
+@media (max-width:400px){.feeh svg{width:100px}.feeh .lbl{display:none}}
 </style>
 </head>
 <body>
@@ -858,7 +890,7 @@ a.ext svg{width:10px;height:10px;flex:none}
     <div class="grab" aria-hidden="true" title="Swipe down to close"><i></i></div>
     <div class="sheet-head">
       <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><div class="ttl"><h2 id="sheet-title">—</h2><span id="sheet-star"></span></div><div class="lbl" id="sheet-meta" style="margin-top:3px"></div>
-        <div class="sheet-ctl"><div class="seg pills winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button></div><button type="button" class="linkbtn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button></div>
+        <div class="sheet-ctl"><div class="seg pills winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button></div><button type="button" class="linkbtn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button><span id="sheet-fee"></span></div>
         <div class="sim" id="sim" hidden></div></div>
       <button type="button" class="btn" id="sheet-close" data-act="close-detail">Close</button>
     </div>
@@ -878,7 +910,7 @@ a.ext svg{width:10px;height:10px;flex:none}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.4.1';
+const BUILD = 'v0.4.2';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1595,17 +1627,92 @@ function frLayer(sh) {
   const c = v / eInt(sp[0], sp[1]);
   return { v, a: sp[0], b: sp[1], at: (x) => (x >= sp[0] && x <= sp[1] ? c * Math.exp(-Math.abs(x) / 2) : 0) };
 }
+// ---------- the pair's other pools, stacked in the detail's liquidity chart (owner's pick 1A, v0.4.2) ----------
+// Every pool of the same pair (another fee tier, version or chain; the stablecoin switch doesn't hide them here) gets a chip;
+// a tap stacks its bars on this pool's, in its own colour. Each pool's bars are offsets from its own price, turned to this
+// pool's token order, then shared out onto this pool's bar edges by the log width each source bar overlaps (the edges follow
+// one ladder for every pool, so inside the map that is exact). A source bar that wasn't read makes the bar it touches null.
+const MG_COL = ['#6EA9FF', '#C084FC', '#F472B6', '#FB923C', '#A3E635', '#E8B84A', '#94A3B8'], MG_B9 = 0.09;
+const mgDepth = (q) => ((q.shape && q.shape.depth) || []).filter((d) => Array.isArray(d) && isNum(d[0]) && (isNum(d[1]) || d[1] === null));
+function mgPeers(p) {
+  if (!S.live) return [];
+  const peers = S.live.pools.filter((q) => q.id !== p.id && samePair(p, q));
+  return peers.sort((a, b) => ((a.chain !== p.chain) - (b.chain !== p.chain)) || String(a.chain).localeCompare(String(b.chain)) || ((a.feeTier || 0) - (b.feeTier || 0)) || ((a.v || 0) - (b.v || 0)) || String(a.id).localeCompare(String(b.id)));
+}
+const mgFlip = (p, q) => { const a = pairSyms(p).map(symN), b = pairSyms(q).map(symN); return a[0] !== a[1] && b[0] === a[1] && b[1] === a[0]; };
+function mgSrc(q, flip) { // q's bars and full-range layer, in this pool's token order
+  const all = mgDepth(q);
+  if (!all.some((d) => isNum(d[1]))) return null;
+  const e = liqExtent(q.shape, all), by = (q.shape && q.shape.beyond) || {}, f0 = frLayer(q.shape);
+  let bars = e.bars.map((b) => ({ a: b.a, b: b.b, v: b.v })), below = by.below, above = by.above, fr = f0;
+  if (flip) {
+    bars = bars.map((b) => ({ a: -b.b, b: -b.a, v: b.v })).reverse(); [below, above] = [above, below];
+    if (f0) fr = { v: f0.v, a: -f0.b, b: -f0.a, at: (x) => f0.at(-x) };
+  }
+  return { bars, lo: bars[0].a, hi: bars[bars.length - 1].b, below, above, fr };
+}
+function mgOnto(src, tgt) { // src's value inside each target bar [a, b]; null where any of it wasn't read
+  return tgt.map((t) => {
+    let v = 0;
+    for (const x of src.bars) {
+      const ov = Math.min(t.b, x.b) - Math.max(t.a, x.a);
+      if (ov <= 1e-12) continue;
+      if (!isNum(x.v)) return null;
+      v += (x.v * ov) / (x.b - x.a);
+    }
+    if ((t.a < src.lo - 1e-12 && src.below === null) || (t.b > src.hi + 1e-12 && src.above === null)) return null; // past its bars, unread
+    return v;
+  });
+}
+function mgBand(bars, fr) { // a pool's own value within ±9% of its price: its bars by overlap, plus the full-range layer's share
+  let v = 0;
+  for (const x of bars) {
+    const ov = Math.min(MG_B9, x.b) - Math.max(-MG_B9, x.a);
+    if (ov <= 1e-12) continue;
+    if (!isNum(x.v)) return null;
+    v += (x.v * ov) / (x.b - x.a);
+  }
+  if (fr) v += (fr.v * eInt(Math.max(-MG_B9, fr.a), Math.min(MG_B9, fr.b))) / eInt(fr.a, fr.b);
+  return v;
+}
+const mgOn = (p) => (S.mg && S.mg.for === p.id ? S.mg.on : []);
+function mgToggle(qid) {
+  const p = poolById(S.detail);
+  if (!p) return;
+  if (!S.mg || S.mg.for !== p.id) S.mg = { for: p.id, on: [] };
+  const i = S.mg.on.indexOf(qid);
+  if (i >= 0) S.mg.on.splice(i, 1); else S.mg.on.push(qid);
+  renderDetail();
+  refocus(`#sheet-body [data-act="merge"][data-id="${qid}"]`);
+}
+const mgLabel = (q) => `${feeTxt(q.feeTier)} · v${esc(q.v)}`;
+function mgChips(p, peers) { // a row of chips over the chart: this pool, then the pair's other pools (fixed colours by place)
+  const on = mgOn(p);
+  return `<div class="mgchips" role="group" aria-label="Stack other pools of this pair">`
+    + `<span class="mgc self" style="--c:#16C784" title="This pool">${chainMark(p.chain)}<span class="sq"></span>${mgLabel(p)} · this</span>`
+    + peers.map((q, k) => `<button type="button" class="mgc" data-act="merge" data-id="${esc(q.id)}" style="--c:${MG_COL[k % MG_COL.length]}" aria-pressed="${on.includes(q.id)}" title="${esc(q.pair)} · ${esc(chainOf(q.chain).name)} · ${feeTxt(q.feeTier)} · v${esc(q.v)}${q.verified === false ? ' · unverified' : ''}: tap to ${on.includes(q.id) ? 'remove it from' : 'stack it on'} the chart">${chainMark(q.chain)}<span class="sq"></span>${mgLabel(q)}</button>`).join('')
+    + '</div>';
+}
 function liqChart(p, w, id) {
   // a null bar is a stretch of the map that wasn't read: hatched, never drawn as 0
   const all = ((p.shape && p.shape.depth) || []).filter((d) => Array.isArray(d) && isNum(d[0]) && (isNum(d[1]) || d[1] === null));
   if (!all.some((d) => isNum(d[1]))) { delete PZ[id]; return `<p class="empty" style="margin-top:8px">Liquidity map not read this pass (${DASH}).</p>`; }
   const ext = liqExtent(p.shape, all), depth = ext.bars.filter((b) => isNum(b.v)), unread = ext.bars.filter((b) => b.v === null);
   const key = p.id, sp = liqSpans(ext), L = () => liqHalf(sp, zget(id));
-  const fr = frLayer(p.shape);
+  const fr0 = frLayer(p.shape), peers = id === 'liq-detail' ? mgPeers(p) : [], on = mgOn(p);
+  const mg = [], parts = [{ p, col: '#16C784', v9: mgBand(ext.bars, fr0), self: true }];
+  peers.forEach((q, k) => {
+    if (!on.includes(q.id)) return;
+    const src = mgSrc(q, mgFlip(p, q)), col = MG_COL[k % MG_COL.length];
+    parts.push({ p: q, col, v9: src ? mgBand(src.bars, src.fr) : null });
+    if (src) mg.push({ id: q.id, col, v: mgOnto(src, ext.bars), fr: src.fr });
+  });
+  const frs = [fr0, ...mg.map((m) => m.fr)].filter(Boolean); // the layers add up: one flat band under the stack
+  const fr = !frs.length ? null : frs.length === 1 ? frs[0] : { v: sum(frs.map((f) => f.v)), a: Math.min(...frs.map((f) => f.a)), b: Math.max(...frs.map((f) => f.b)), at: (x) => sum(frs.map((f) => f.at(x))) };
   // the centre may move inside the data; the widest view is the whole map, centred on it
   const lim = () => { const l = L(); if (2 * l < ext.hi - ext.lo - 1e-9) return [ext.lo + l, ext.hi - l]; const c = clamp(0, ext.hi - l, ext.lo + l); return [c, c]; };
   const P = PZ[id] = {
-    key, p, w, depth, unread, fr, ex: ext, sp, kind: 'liq', aria: ['Show lower prices', 'Show higher prices'], hint: '◂ drag ▸ · pinch to zoom',
+    key, p, w, depth, unread, fr, mg, ex: ext, sp, kind: 'liq', aria: ['Show lower prices', 'Show higher prices'], hint: '◂ drag ▸ · pinch to zoom',
     x: () => panGet(id, key, clamp(0, ...lim())), setX: (v) => panPut(id, key, v), lim, half: L,
     span: () => 2 * L(), unit: (h) => (2 * L()) / Math.max(40, h.clientWidth),
     vw: () => [P.x() - L(), P.x() + L()], ext: () => [ext.lo, ext.hi],
@@ -1621,11 +1728,18 @@ function liqChart(p, w, id) {
   const tot = sum(depth.map((d) => d.v));
   P.label = `Liquidity by price: ${pct(r != null ? sum(depth.filter((d) => Math.abs(d.o) <= r + 1e-9).map((d) => d.v)) / (p.tvlUsd || tot) : null)} of the pool sits inside the suggested range`;
   const by = (p.shape && p.shape.beyond) || {}, byTxt = [['below', 'further down'], ['above', 'further up']].filter(([k]) => by[k] !== 0 && by[k] !== undefined).map(([k, t]) => `${usd(by[k])} ${t}`);
-  return pzShell(id, 'liq')
+  let mgl = '';
+  if (peers.length) { // each pool's share of the stack's value within ±9% of the price, and the total
+    const known = parts.every((x) => isNum(x.v9)), tot9 = known ? sum(parts.map((x) => x.v9)) : null;
+    mgl = `<p class="mgline" data-mgline="${parts.length}">Within ±9%: ${parts.map((x) => `<span><i class="sq" style="--c:${x.col}"></i>${chainMark(x.p.chain)}${feeTxt(x.p.feeTier)} v${esc(x.p.v)}${x.self ? ' this' : ''} ${parts.length > 1 ? (known && tot9 > 0 ? pct(x.v9 / tot9) : DASH) : usd(x.v9)}</span>`).join(' · ')}${parts.length > 1 ? ` · <span>total ${usd(tot9)}</span>` : ' · <span>tap a chip to stack another pool</span>'}</p>`;
+  }
+  const mgUnread = mg.some((m) => m.v.some((v) => v === null));
+  return (peers.length ? mgChips(p, peers) : '') + pzShell(id, 'liq') + mgl
     + `<div class="legend" style="margin-top:8px">${termB('range', `<span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span>`)}${termB('parked', '<span><i class="sw" style="background:#4B5563"></i>Parked, outside it</span>')}`
     + `${termB('price', '<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>')}${isNum(walls.below) || isNum(walls.above) ? termB('walls', '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>') : ''}`
     + (fr ? termB('fullrange', `<span><i class="sw fr"></i>Full range ${usd(fr.v)}</span>`) : '')
-    + (unread.length ? termB('unread', '<span><i class="sw hatch"></i>Not read</span>') : '')
+    + (mg.length ? mg.map((m) => `<span><i class="sw" style="background:${m.col}"></i>${mgLabel(poolById(m.id))}</span>`).join('') : '')
+    + (unread.length || mgUnread ? termB('unread', '<span><i class="sw hatch"></i>Not read</span>') : '')
     + (byTxt.length ? termB('beyond', `<span>Past the bars: ${byTxt.join(' · ')}</span>`) : '') + '</div>';
 }
 // the drawing inside the liquidity chart for its current view (redrawn on every frame of a drag)
@@ -1638,7 +1752,8 @@ function liqInner(id) {
   const seen = (b) => b.b > v0 && b.a < v1;
   // the bars fill the height for what is in view (zoomed in, the bars near the price stay readable); while a drag or a
   // coast is running the scale eases towards it, so bars glide instead of jumping as taller ones come into view
-  const want = Math.max(1, ...depth.filter(seen).map(dens));
+  const mg = P.mg || [], bars = ext.bars, stk = (i) => (isNum(bars[i].v) ? bars[i].v : 0) + sum(mg.map((m) => (isNum(m.v[i]) ? m.v[i] : 0)));
+  const want = Math.max(1, ...bars.map((b, i) => (seen(b) ? (stk(i) * ext.step) / (b.b - b.a) : 0)));
   const moving = !reduced() && ((G && G.id === id && G.drag) || !!PZA[id]);
   const max = P.ys = moving && isNum(P.ys) ? P.ys + (want - P.ys) * 0.3 : want;
   // the full-range band: flat, under the bars, as thick as the layer's dollars at the price on the bars' scale (thin: 2–12)
@@ -1647,19 +1762,39 @@ function liqInner(id) {
   const inR = (o) => r != null && Math.abs(o) <= r + 1e-9;
   let pin = '', pout = '', hin = 0;
   const edges = (b) => { const a = X(b.a), e = X(b.b), g = Math.min(2, (e - a) * 0.2); return [a + g / 2, Math.max(1, e - a - g)]; };
+  const top = new Map(); // where each bar's stack has reached so far
   for (const b of depth) { // each bar stands on the band at its own value (the scanner took the layer out of it)
     if (b.v <= 0 || !seen(b)) continue;
     const h = Math.max(1.5, (dens(b) / max) * (VH - 4 - hb)), [x, bw] = edges(b), d = `M${x.toFixed(1)} ${base.toFixed(1)}v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`; // a sliver at least: something is there
+    top.set(b, base - h);
     if (inR(b.o)) { pin += d; hin = Math.max(hin, h + hb); } else pout += d;
   }
+  let mgs = '', mgnr = '';
+  for (const m of mg) { // the stacked pools, in chip order: each segment starts where the bar under it ends
+    let d = '';
+    bars.forEach((b, i) => {
+      if (!seen(b)) return;
+      const v = m.v[i];
+      if (v === null) { const a = X(Math.max(b.a, v0)), e = X(Math.min(b.b, v1)); mgnr += `<rect class="unread mg-nr" x="${a.toFixed(1)}" y="0" width="${(e - a).toFixed(1)}" height="${VH}" fill="url(#nr-${id})"/>`; return; }
+      if (!(v > 0)) return;
+      const h = ((v * ext.step) / (b.b - b.a) / max) * (VH - 4 - hb);
+      if (h < 0.05) return;
+      const y0 = top.has(b) ? top.get(b) : base, [x, bw] = edges(b);
+      d += `M${x.toFixed(1)} ${y0.toFixed(1)}v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`;
+      top.set(b, y0 - h);
+      if (inR(b.o)) hin = Math.max(hin, VH - (y0 - h));
+    });
+    if (d) mgs += `<path class="mg" data-pid="${esc(m.id)}" fill="${m.col}" fill-opacity=".85" d="${d}"/>`;
+  }
   let s = `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none" aria-hidden="true">`;
-  if (unread.length) { // unread stretches: a hatch over their width, never a bar of 0
+  if (unread.length || mgnr) { // unread stretches: a hatch over their width, never a bar of 0
     s += `<defs><pattern id="nr-${id}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.32)"/></pattern></defs>`;
     for (const b of unread) { if (!seen(b)) continue; const a = X(Math.max(b.a, v0)), e = X(Math.min(b.b, v1)); s += `<rect class="unread" x="${a.toFixed(1)}" y="0" width="${(e - a).toFixed(1)}" height="${VH}" fill="url(#nr-${id})"/>`; }
+    s += mgnr;
   }
   if (r != null) { const a = Math.max(-r, v0), b = Math.min(r, v1); if (b > a) s += `<rect x="${X(a).toFixed(1)}" y="0" width="${(X(b) - X(a)).toFixed(1)}" height="${VH}" fill="rgba(22,199,132,0.16)"/>`; }
   if (band) s += `<rect class="fr" x="${X(fa).toFixed(1)}" y="${base.toFixed(1)}" width="${(X(fb) - X(fa)).toFixed(1)}" height="${hb.toFixed(1)}" fill="rgba(34,211,238,.32)"/><rect x="${X(fa).toFixed(1)}" y="${base.toFixed(1)}" width="${(X(fb) - X(fa)).toFixed(1)}" height="0.8" fill="#22D3EE"/>`;
-  s += `<path fill="#3A4452" d="${pout}"/><path fill="#16C784" stroke="rgba(22,199,132,.45)" stroke-width="3" vector-effect="non-scaling-stroke" d="${pin}"/>`;
+  s += `<path fill="#3A4452" d="${pout}"/><path fill="#16C784" stroke="rgba(22,199,132,.45)" stroke-width="3" vector-effect="non-scaling-stroke" d="${pin}"/>${mgs}`;
   const frTop = band ? base : null;
   const walls = (p.shape && p.shape.walls) || {};
   for (const k of ['below', 'above']) if (isNum(walls[k]) && walls[k] >= v0 && walls[k] <= v1) s += `<rect x="${(X(walls[k]) - 0.6).toFixed(1)}" y="0" width="1.2" height="${VH}" fill="#FAB219" opacity="0.7"/>`;
@@ -1815,7 +1950,7 @@ function renderBest() {
     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
     + `<div class="ttl">${chainMark(p.chain)}<h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
     + `<div class="lbl best-meta">${metaTerms(p)} · ${term('range', rangeTxt(w.range))}</div>`
-    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
+    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div><div class="fmrow"><span class="lbl">LP fees · 30 d</span>${feeMini(p)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + `<div class="best-body"><div class="best-l">`
     + `<div class="bigline"><span class="bignum${w.net < 0 ? ' neg' : ''}">${pct(w.net)}</span><span class="bigsub">${daysTxt} ${term('net', 'net APR')} at ${usdFull(L.ticket)}<br>after ${term('lvr', 'LVR')}, swaps and gas</span></div>`
     + breakdown(w)
@@ -2342,7 +2477,7 @@ function renderNext() {
   const rows = ranked.map((p) => {
     const w = W(p, wk);
     return `<div class="nb-row chs" style="${chainCol(p.chain)}" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<span class="nb-main"><span class="pn">${esc(p.pair)}</span>`
-      + `<span class="nb-meta"><span class="lbl">${chainMark(p.chain)}${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
+      + `<span class="nb-meta"><span class="lbl">${chainMark(p.chain)}${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${feeMini(p)}${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
   }).join('');
   $('#next').innerHTML = `<div class="sec-head"><h2 id="next-h">Next best</h2><span class="sub" style="margin:0">${int(gems)} gem${gems === 1 ? '' : 's'} ≥ ${gemAt()} · ${int(watch)} on watch · ${WIN_WORD[wk]} net at ${usdFull(L.ticket)}${hid ? `<span class="hidn"> · ${hidTxt(hid)}</span>` : ''}</span></div>`
     + (rows || `<p class="empty" style="margin:0 12px 12px">No other scored pool in the ${WIN_WORD[wk]} window.</p>`)
@@ -2356,6 +2491,7 @@ const COLS = [
   { k: 'gem', h: 'Gem', t: 'Gem now, 0–100: 60 or more is a gem', v: (p, w) => (p.verified === false ? null : w && w.gem ? w.gem.total : null) },
   { k: 'net', h: 'Net APR', t: 'Yearly return at the ticket after LVR, re-centre swaps and gas', v: (p, w) => w && w.net, f: (x) => pct(x) },
   { k: 'why', h: 'Why', t: 'Why it stands out: tap the icons', v: (p, w) => whyKeys(p, w).length || null },
+  { k: 'fees', h: 'Fees 30 d', t: 'LP fees a day over the last 30 days; the figure is the last 7 days’ average, the arrow vs the 7 days before', v: (p) => { const f = feeHist(p); return f ? f.day : null; } },
   { k: 'vol', h: 'Vol / day', t: 'Trading volume per day in this window', v: (p, w) => (w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : null), f: (x) => usd(x) },
   { k: 'tvl', h: 'TVL', t: 'Value in the pool', v: (p) => p.tvlUsd, f: (x) => usd(x) },
   { k: 'room', h: 'Room', t: 'Value already inside the suggested range: what a new position shares the fees with', v: (p, w) => w && w.inRangeUsd, f: (x) => usd(x) },
@@ -2409,7 +2545,7 @@ function renderTable() {
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
     + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · v${esc(p.v)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
-    + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
+    + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; if (c.k === 'fees') return `<td class="fees">${feeMini(p)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
   $('#ch-key').innerHTML = chainKey(L.pools);
   $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== L.pools.length ? ' (' + L.pools.length + ' IN ALL)' : ''}${fresh ? ` · ${fresh} NEW` : ''}${hid ? ' · ' + hidTxt(hid, true) : ''}`;
@@ -2914,6 +3050,7 @@ function openDetail(id, opener) {
   if (!poolById(id)) return;
   popClose(); qClose();
   if ($('#sheet').hidden || !S.opener) S.opener = opener || null; // moving between pools inside the sheet: focus later returns to where it started
+  if (S.detail !== id) S.mg = null; // another pool opens on itself only
   S.detail = id; S.pair = null;
   renderDetail();
   showSheet();
@@ -2923,7 +3060,7 @@ function showSheet() {
   sheetCard.classList.remove('cond'); foldY = 0; foldAcc = 0;
   $('#sheet').hidden = false;
   document.documentElement.classList.add('modal-open');
-  $('#sheet-body').scrollTop = 0;
+  $('#sheet-body').scrollTop = 0; sheetCard.scrollTop = 0; $('#sheet').scrollTop = 0; // a card that hides overflow never stays shifted
   stickyAll();
   onScroll();
   setTimeout(() => $('#sheet-close').focus({ preventScroll: true }), 0);
@@ -2984,6 +3121,50 @@ function miniBars(arr0, label, id, pool) {
   });
   return `<div class="dsec chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">${esc(label)}</span>${pzCapsHtml(id)}${ztools(id, pool)}</div>${pzShell(id, 'pz-bars')}</div>`;
 }
+// ---------- the fee-history mini bar (v0.4.2): 30 days of LP fees a day from history.json's daily rows ----------
+// A row's fees cover the time since the row before, so each bar is fees ÷ the days it covers, placed at its own dates (a gap
+// the backfill hasn't filled yet is one wide bar). "$X/d" is the last 7 days' average a day, the arrow that against the 7
+// days before (both need 3 days read). An unread row is a faint full-height mark, never a 0; no rows at all: a dash.
+const FH = { t: null, m: new Map() };
+function feeHist(p) {
+  if (FH.t !== S.t.hist || FH.h !== S.hist) { FH.t = S.t.hist; FH.h = S.hist; FH.m = new Map(); }
+  if (FH.m.has(p.id)) return FH.m.get(p.id);
+  const h = S.hist && S.hist.pools && S.hist.pools[p.id];
+  let out = null;
+  if (h && Array.isArray(h.d)) {
+    const { t1, bars } = rateRows(h.d, 2, D);
+    if (isNum(t1) && bars.some((b) => isNum(b.v))) {
+      const per = (a, b) => { let f = 0, d = 0; for (const x of bars) { if (!isNum(x.v)) continue; const ov = Math.min(b, x.b) - Math.max(a, x.a); if (ov > 0) { f += (x.v * ov) / D; d += ov / D; } } return d >= 3 - 1e-9 ? f / d : null; };
+      const day = per(t1 - 7 * D, t1), prev = per(t1 - 14 * D, t1 - 7 * D);
+      out = { t1, bars: bars.filter((x) => x.b > t1 - 30 * D), day, ch: isNum(day) && isNum(prev) && prev > 0 ? day / prev - 1 : null };
+    }
+  }
+  FH.m.set(p.id, out);
+  return out;
+}
+function feeSvg(fh, Wd, Ht) {
+  const t0 = fh.t1 - 30 * D, X = (t) => ((Math.max(t0, t) - t0) / (30 * D)) * Wd, mx = Math.max(...fh.bars.map((x) => x.v).filter(isNum)) || 1;
+  let g = '';
+  fh.bars.forEach((x, i) => {
+    const x0 = X(x.a), full = X(x.b) - x0, bw = Math.max(0.6, full - Math.min(1, full * 0.3)), last = i === fh.bars.length - 1;
+    if (!isNum(x.v)) g += `<rect class="nr" x="${x0.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${Ht}" fill="rgba(139,150,163,.22)"/>`;
+    else if (x.v > 0) { const h = Math.max(0.8, (x.v / mx) * Ht); g += `<rect x="${x0.toFixed(1)}" y="${(Ht - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="#16C784" opacity="${last ? 1 : 0.55}"/>`; }
+  });
+  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true">${g}<rect x="0" y="${Ht - 0.6}" width="${Wd}" height="0.6" fill="#2B3542"/></svg>`;
+}
+const feeTxt2 = (fh) => (!fh ? DASH : `${usd(fh.day)}/d${isNum(fh.ch) ? ` · <span class="${fh.ch >= 0 ? 'up' : 'dn'}">${fh.ch >= 0 ? '▲' : '▼'} ${Math.round(Math.abs(fh.ch) * 100)}%</span>` : ''}`);
+const feeAria = (fh) => (!fh ? 'LP fees a day: no history yet' : `LP fees a day over the last 30 days: ${usd(fh.day)} a day over the last 7${isNum(fh.ch) ? `, ${fh.ch >= 0 ? 'up' : 'down'} ${Math.round(Math.abs(fh.ch) * 100)}% on the 7 before` : ''}`);
+function feeMini(p, Wd = 90, Ht = 22, fit = false) { // fit: the svg may be drawn narrower by CSS (the header on a small phone)
+  const fh = feeHist(p), pa = fit ? ' preserveAspectRatio="none"' : '';
+  return `<span class="fmini" role="img" aria-label="${esc(feeAria(fh))}" data-fm="${fh ? fh.bars.length : 0}">${fh ? feeSvg(fh, Wd, Ht).replace('<svg ', `<svg${pa} `) : `<svg${pa} width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true"><rect x="0" y="${Ht - 0.6}" width="${Wd}" height="0.6" fill="#2B3542"/></svg>`}<span class="fm-t" aria-hidden="true">${feeTxt2(fh)}</span></span>`;
+}
+function feeJump() { // the header's bar: the full daily fee chart, zoomed out to every day it has
+  if (!PZ['d-day']) return;
+  zreset('d-day');
+  const box = $('#sheet-body [data-chartbox="d-day"]'), sb = $('#sheet-body');
+  // the panel's own scroll only: scrollIntoView would also shift the card (it hides overflow) in Safari
+  if (box) sb.scrollTo({ top: Math.max(0, sb.scrollTop + box.getBoundingClientRect().top - sb.getBoundingClientRect().top - 8), behavior: reduced() ? 'auto' : 'smooth' });
+}
 // history.json's fee bars: a row's fees cover the time since the row before, so its bar spans that stretch at the rate (fees ÷
 // the hours or days it covers); a gap the backfill hasn't filled yet is one wide bar at its average, the first row (nothing
 // before it) draws nothing and an unread row is hatched. The chart pans and zooms in time, out to the rows' own span.
@@ -3031,6 +3212,8 @@ function renderDetail() {
   $('#sheet-star').innerHTML = starBtn(p);
   $('#sheet-meta').innerHTML = metaTerms(p);
   $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p);
+  const hd = S.hist && S.hist.pools && S.hist.pools[p.id], fh = feeHist(p);
+  $('#sheet-fee').innerHTML = fh && hd && Array.isArray(hd.d) ? `<button type="button" class="feeh" data-act="feehist" title="Every day of LP fees: the full chart below">${feeMini(p, 150, 28, true)}<span class="lbl">30 D ▸</span></button>` : `<span class="feeh" style="cursor:default">${feeMini(p, 150, 28, true)}<span class="lbl">30 D</span></span>`;
   renderSim(p);
   const rowsDef = [
     ['Days covered', (x) => (isNum(x.days) ? +x.days.toFixed(1) + (x.partial ? ' (partial)' : '') : DASH)],
@@ -3481,7 +3664,7 @@ function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } =
   const cover = mode === 'sim' ? `<button type="button" class="mc-cover" data-act="sim-cycle" aria-label="Show the next figure on every card (now ${SIM_M[mi][0]})"></button>` : '';
   const foot = mode === 'sim' ? termB(self ? 'thispool' : uv ? 'unverified' : REL_TERM[rel], `<span class="mc-rel${self ? ' g0' : uv ? ' uv' : rel === 0 ? ' g0' : ''}">${self ? 'this pool' : uv ? 'unverified' : REL[rel] || ''}</span>`, 'mc-relb')
     : `<span class="mc-rel"><span class="why-icons">${whyKeys(p, W(p)).slice(0, 4).map(wiSvg).join('') || DASH}</span></span>`;
-  return `<div class="mc chs${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i};${chainCol(p.chain)}">${cover}${name}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}</div>`;
+  return `<div class="mc chs${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i};${chainCol(p.chain)}">${cover}${name}${feeMini(p)}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}</div>`;
 }
 const NAV = (d) => `<button type="button" class="mc-nav ${d < 0 ? 'l' : 'r'}" data-act="mc-scroll" data-dir="${d}" tabindex="-1" aria-label="Scroll the cards ${d < 0 ? 'back' : 'on'}">${CHEV(d)}</button>`;
 const mcStrip = (id, cards, enter) => `<div class="mc-wrap">${NAV(-1)}<div class="mc-track${enter ? ' enter' : ''}" id="${id}">${cards}</div>${NAV(1)}</div>`;
@@ -3744,6 +3927,8 @@ document.addEventListener('click', (e) => {
     case 'pair': openPair(el.dataset.key, el); break;
     case 'zoom': zoom(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'zreset': zreset(el.dataset.chart); break;
+    case 'merge': mgToggle(el.dataset.id); break;
+    case 'feehist': feeJump(); break;
     case 'pan': pzStep(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'totop': toTop(); break;
     case 'openchart': openChart(el.dataset.chart, el.dataset.pool); break;
