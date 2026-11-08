@@ -8,6 +8,14 @@ import { topic } from '../lib/keccak.mjs';
 import { liquidityMap, ticksInWord, bitmapWordRange, sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { bandStats, hollowness, depthHistogram, nearestWalls, shapeTag } from '../lib/shape.mjs';
 import { readGas, readPrices, gasStats, COINS } from '../lib/market.mjs';
+import { CHAINS } from '../lib/chains.mjs';
+import { ROUTERS, routerName } from '../lib/routers.mjs';
+import { PANCAKE_V3, BASE as BASE_C, ETHEREUM as ETH_C, TOPICS as POOL_TOPICS, v3LpKeeps, decodeInitialize } from '../lib/pools.mjs';
+import { SWAP_TOPICS, decodeSwap, swapFees } from '../lib/swaps.mjs';
+import { parseTickers } from '../lib/cex.mjs';
+import { parseDexScreenerPairs } from '../lib/aggregators.mjs';
+import { pastBlockAnswer } from '../lib/snapshots.mjs';
+import { readVerified } from '../lib/etherscan.mjs';
 
 const ETH_RPCS = {
   publicnode: 'https://ethereum-rpc.publicnode.com', drpc: 'https://eth.drpc.org', '1rpc': 'https://1rpc.io/eth',
@@ -175,6 +183,122 @@ async function probeMap(rpc) {
   return m.checks;
 }
 
+// ---------- Base and PancakeSwap onboarding (8 Nov 2026): what the scanner needs from each chain and venue.
+// Public data only: pass/fail, counts, ratios, block ages, router and venue names; no pool or tx addresses.
+const MC3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const tsCall = encodeCall('getCurrentBlockTimestamp()');
+const word0 = (h) => decodeWords(h)?.[0] ?? null;
+
+// Which Base nodes serve old state: Multicall3's block timestamp at 1, 30 and 90 days back must be that old.
+async function probeArchiveBase() {
+  for (const url of CHAINS.base.rpcs) {
+    const r = makeRpc([url], { timeout: 12000, maxRefusals: 3 });
+    const bn = await r.call('eth_blockNumber', []);
+    if (bn == null) { say(null, `archive base ${new URL(url).host}`, 'no block number'); continue; }
+    const head = parseInt(bn, 16), nowSec = Math.floor(Date.now() / 1000), out = [];
+    for (const d of [1, 30, 90]) {
+      const back = d * 43200, ts = word0(await r.call('eth_call', [{ to: MC3, data: tsCall }, '0x' + (head - back).toString(16)]));
+      out.push(`${d} d ${ts == null ? 'unread' : pastBlockAnswer(ts, { nowSec, blocksBack: back, secPerBlock: 2 }) ? 'yes' : 'wrong state'}`);
+    }
+    say(out.every((x) => x.endsWith('yes')) ? true : null, `archive base ${new URL(url).host}`, out.join(', '));
+  }
+}
+
+// How many blocks one eth_getLogs may span on each Base node (a busy pool's swaps).
+async function probeLogsBase(base) {
+  const pool = toAddress(decodeWords(await base.ethCall(BASE.v3Factory, encodeCall('getPool(address,address,uint24)', [{ t: 'address', v: BASE.WETH }, { t: 'address', v: BASE.USDC }, { t: 'uint', v: 500 }])))[0]);
+  for (const url of CHAINS.base.rpcs) {
+    const r = makeRpc([url], { timeout: 20000, maxRefusals: 9 });
+    const head = parseInt(await r.call('eth_blockNumber', []) ?? '0x0', 16), out = [];
+    for (const span of [2000, 5000, 10000]) {
+      const logs = head ? await r.call('eth_getLogs', [{ address: pool, topics: [SWAP_TOPICS.v3], fromBlock: '0x' + (head - span + 1).toString(16), toBlock: '0x' + head.toString(16) }]) : null;
+      out.push(`${span} blocks ${Array.isArray(logs) ? logs.length + ' swaps' : 'refused'}`);
+    }
+    say(out.some((x) => x.endsWith('swaps')) ? true : null, `logs base ${new URL(url).host}`, `WETH/USDC 0.05% (Uniswap v3): ${out.join(', ')}`);
+  }
+}
+
+// A sample of swaps' transactions: which routers they were sent to (names only).
+async function routerTally(rpc, chain, logs) {
+  const txs = [...new Set(logs.map((l) => l.transactionHash))].slice(0, 30);
+  const got = txs.length ? await rpc.batch(txs.map((h) => ({ method: 'eth_getTransactionByHash', params: [h] }))) : [];
+  const read = got.filter((t) => t && t.to), names = new Map();
+  for (const t of read) { const n = routerName(chain, t.to) ?? 'other'; names.set(n, (names.get(n) || 0) + 1); }
+  return `tx.to read ${read.length} of ${txs.length}: ${[...names].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ×${v}`).join(', ') || 'none'}`;
+}
+
+// PancakeSwap v3: the factory finds a pool; fee, spacing and feeProtocol read; the Swap event's layout (our
+// topic among the pool's logs) and its own protocol fee against our decode of feeProtocol.
+async function probePancake(chain, rpc) {
+  const ch = CHAINS[chain], q = ch.c.quotes, sym = (a) => q.find((x) => x.address === a)?.symbol;
+  const pairs = chain === 'base' ? [[q[0].address, q[2].address], [q[3].address, q[0].address]] : [[q[0].address, q[2].address], [q[0].address, q[3].address], [q[5].address, q[0].address]];
+  let pool = null, label = null;
+  for (const [a, b] of pairs) for (const fee of [500, 100, 2500]) {
+    if (pool) break;
+    const w = decodeWords(await rpc.ethCall(PANCAKE_V3.factory, encodeCall('getPool(address,address,uint24)', [{ t: 'address', v: a }, { t: 'address', v: b }, { t: 'uint', v: fee }])));
+    if (w && w[0] !== 0n) { pool = toAddress(w[0]); label = `${sym(a)}/${sym(b)} ${fee / 1e4}%`; }
+  }
+  if (!pool) return say(null, `pancakeswap ${chain}`, 'no pool found through the factory (or unread)');
+  const [fee, ts, s0] = await rpc.batch([encodeCall('fee()'), encodeCall('tickSpacing()'), encodeCall('slot0()')].map((d) => ({ method: 'eth_call', params: [{ to: pool, data: d }, 'latest'] })));
+  const f = Number(word0(fee) ?? NaN), sp = Number(signed(word0(ts) ?? 0n)), w0 = decodeWords(s0), fp = w0?.length >= 7 ? Number(w0[5]) : null;
+  const keeps = fp == null ? null : v3LpKeeps(fp, 'pancakeswap');
+  say(keeps && Number.isFinite(f) ? keeps.every((k) => k > 0.5 && k <= 1) && PANCAKE_V3.spacing[f] === sp : null, `pancakeswap ${chain}`, `${label}: fee ${f / 1e4}%, tick spacing ${sp} (expected ${PANCAKE_V3.spacing[f] ?? '—'}); LPs keep ${keeps ? keeps.map((k) => (k * 100).toFixed(1) + '%').join(' / ') : '—'} (as Uniswap nibbles it would read ${fp == null ? '—' : (v3LpKeeps(fp & 0xff) || []).map((k) => (k * 100).toFixed(1) + '%').join(' / ') || 'invalid'})`);
+  const head = parseInt(await rpc.call('eth_blockNumber', []) ?? '0x0', 16), span = chain === 'base' ? 5000 : 3000;
+  const logs = head ? await rpc.call('eth_getLogs', [{ address: pool, fromBlock: '0x' + (head - span + 1).toString(16), toBlock: '0x' + head.toString(16) }]) : null;
+  if (!Array.isArray(logs)) return say(null, `pancakeswap ${chain} events`, 'logs unread');
+  const t0 = logs.map((l) => String(l.topics?.[0] || '').toLowerCase());
+  const ours = logs.filter((l, i) => t0[i] === SWAP_TOPICS.pcs3), uni = t0.filter((t) => t === SWAP_TOPICS.v3).length;
+  const sw = ours.map(decodeSwap).filter((x) => x && x.in != null), meta = { fee: f, feeProtocol: fp, dex: 'pancakeswap' };
+  let mine = 0n, theirs = 0n;
+  for (const x of sw) { const fs2 = swapFees(x, meta); if (fs2) { mine += fs2.protocol; theirs += x.protocolFees[x.in]; } }
+  const ratio = theirs > 0n ? Number(mine) / Number(theirs) : null;
+  say(ours.length ? ratio != null && Math.abs(ratio - 1) <= 0.02 : null, `pancakeswap ${chain} events`, `last ${span} blocks: ${logs.length} logs, ${ours.length} with the PancakeSwap Swap topic, ${uni} with Uniswap's; protocol fee from our feeProtocol decode ÷ the event's own ${ratio == null ? '—' : ratio.toFixed(4)}; ${await routerTally(rpc, chain, ours)}`);
+}
+
+// Base Uniswap: v4 Initialize events reach the PoolManager; v3 swaps' routers.
+async function probeUniBase(base) {
+  const head = parseInt(await base.call('eth_blockNumber', []) ?? '0x0', 16);
+  const inits = head ? await base.call('eth_getLogs', [{ address: BASE_C.v4PoolManager, topics: [POOL_TOPICS.initialize], fromBlock: '0x' + (head - 1999).toString(16), toBlock: '0x' + head.toString(16) }]) : null;
+  const dec = Array.isArray(inits) ? inits.map(decodeInitialize).filter(Boolean) : [];
+  say(Array.isArray(inits) ? dec.length > 0 : null, 'uniswap base v4 events', Array.isArray(inits) ? `${inits.length} Initialize events in the last 2000 blocks, ${dec.length} decode; hooked ${dec.filter((e) => e.hooks !== '0x0000000000000000000000000000000000000000').length}` : 'unread');
+  const pool = toAddress(decodeWords(await base.ethCall(BASE.v3Factory, encodeCall('getPool(address,address,uint24)', [{ t: 'address', v: BASE.WETH }, { t: 'address', v: BASE.USDC }, { t: 'uint', v: 500 }])))[0]);
+  const logs = head ? await base.call('eth_getLogs', [{ address: pool, topics: [SWAP_TOPICS.v3], fromBlock: '0x' + (head - 499).toString(16), toBlock: '0x' + head.toString(16) }]) : null;
+  say(Array.isArray(logs) ? true : null, 'uniswap base routers', Array.isArray(logs) ? `WETH/USDC 0.05%, last 500 blocks: ${logs.length} swaps; ${await routerTally(base, 'base', logs)}` : 'unread');
+}
+
+// Every router in lib/routers.mjs has code on its chain.
+async function probeRouters(eth, base) {
+  for (const [chain, rpc] of [['ethereum', eth], ['base', base]]) {
+    const list = Object.entries(ROUTERS[chain]);
+    const codes = await rpc.batch(list.map(([a]) => ({ method: 'eth_getCode', params: [a, 'latest'] })));
+    const none = list.filter((_, i) => codes[i] != null && codes[i].length <= 2).map(([, n]) => n), unread = codes.filter((c) => c == null).length;
+    say(unread ? null : none.length === 0, `routers ${chain}`, `${list.length - none.length - unread} of ${list.length} have code${none.length ? `; no code: ${none.join(', ')}` : ''}${unread ? `; unread ${unread}` : ''}`);
+  }
+  // the Ethereum benchmark's recent swaps
+  const head = parseInt(await eth.call('eth_blockNumber', []) ?? '0x0', 16);
+  const logs = head ? await eth.call('eth_getLogs', [{ address: ETH.bench, topics: [SWAP_TOPICS.v3], fromBlock: '0x' + (head - 1999).toString(16), toBlock: '0x' + head.toString(16) }]) : null;
+  if (Array.isArray(logs)) say(true, 'routers ethereum benchmark', `UNI/WETH 0.3%, last 2000 blocks: ${logs.length} swaps; ${await routerTally(eth, 'ethereum', logs)}`);
+}
+
+// CoinGecko tickers (no key here): the centralised share of a coin's markets, as lib/cex.mjs reads it.
+async function probeTickers() {
+  const r = parseTickers(await getJson('https://api.coingecko.com/api/v3/coins/uniswap/tickers?order=volume_desc&depth=false&page=1', { headers: { accept: 'application/json' } }, 20000));
+  say(r ? r.cex > 0 && r.dex > 0 : null, 'tickers coingecko', r ? `UNI: ${r.cex} centralised markets ($${Math.round(r.vol / 1e3)}k in 24 h), ${r.dex} DEX markets left out, ${r.skipped} anomalous or stale` : 'unread');
+}
+
+async function probeDexScreenerBase() {
+  const rows = parseDexScreenerPairs(await getJson(`https://api.dexscreener.com/token-pairs/v1/base/${BASE_C.quotes[3].address}`, { headers: { accept: 'application/json' } }, 20000), 'base');
+  const by = new Map();
+  for (const p of rows) by.set(p.dex, (by.get(p.dex) || 0) + 1);
+  say(rows.length ? true : null, 'dexscreener base', `cbBTC: ${rows.length} pairs; by venue ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ×${v}`).join(', ')}; oldest pair ${rows.filter((p) => p.createdAt).length ? Math.floor((Date.now() - Math.min(...rows.filter((p) => p.createdAt).map((p) => p.createdAt))) / 86400e3) + ' days' : '—'}`);
+}
+
+async function probeBlockscoutBase() {
+  const j = await getJson(`https://base.blockscout.com/api?module=contract&action=getsourcecode&address=${BASE.USDC}`, { headers: { accept: 'application/json' } }, 20000);
+  const v = readVerified(j);
+  say(v == null ? null : v === true, 'blockscout base', `USDC source verified: ${v == null ? 'unreadable answer' : v ? 'yes' : 'no'}`);
+}
+
 const eth = makeRpc([ETH_RPCS.publicnode, ETH_RPCS.drpc, ETH_RPCS.blockscout, ETH_RPCS['1rpc'], ETH_RPCS.llamarpc], { batchSize: 40 });
 const base = makeRpc([BASE_RPCS.base, BASE_RPCS.publicnode, BASE_RPCS.drpc, BASE_RPCS['1rpc']], { batchSize: 40 });
 
@@ -187,6 +311,16 @@ const archive = await probeArchive(ETH_RPCS);
 await probeLogs(eth, 'eth', 30);
 await probeLogs(base, 'base', 180);
 const map = await probeMap(makeRpc(ethOk.length ? ethOk : Object.values(ETH_RPCS), { batchSize: 40 }));
+const guard = async (area, fn) => { try { await fn(); } catch (e) { say(null, area, `probe broke (${String(e?.message || e).replace(/[^A-Za-z ]/g, '').slice(0, 40)})`); } };
+await guard('archive base', () => probeArchiveBase());
+await guard('logs base', () => probeLogsBase(base));
+await guard('pancakeswap eth', () => probePancake('ethereum', eth));
+await guard('pancakeswap base', () => probePancake('base', base));
+await guard('uniswap base', () => probeUniBase(base));
+await guard('routers', () => probeRouters(eth, base));
+await guard('tickers', () => probeTickers());
+await guard('dexscreener base', () => probeDexScreenerBase());
+await guard('blockscout base', () => probeBlockscoutBase());
 
 const count = (k) => results.filter((r) => r.ok === k).length;
 const summary = `probes: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · eth rpcs ${ethOk.length}/${Object.keys(ETH_RPCS).length} · base rpcs ${baseOk.length}/${Object.keys(BASE_RPCS).length} · archive ${archive.length ? archive.join(', ') : 'none'} · map ${map ? (map.netSumZero && map.matchesPool ? 'complete' : 'INCOMPLETE') : 'unread'}`;
