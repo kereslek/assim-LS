@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-baAtJsYr9qn22wIDzc6gAw7NFaov4RUyDg2MfDBlOpE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aze4TEvLl15UVUsYAJYYj+n3o/bgkVVpLCAHKEzE8RI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -634,6 +634,17 @@ div.mc-name{cursor:inherit;pointer-events:none}
 .mc-track.enter>.mc{animation:mcIn .34s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0) * 40ms)}
 .sim{margin-top:10px;--mcf:var(--head)}
 .sim .mc{background:var(--surface)}
+.sim .mc{width:172px;flex-direction:row;align-items:stretch;padding:0 10px;min-height:52px}
+.sim .mc-name{margin:0;padding:4px 70px 4px 0;min-height:52px;flex:1 1 auto;min-width:0}
+.sim .mc-name .n,.sim .mc-name .m{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sim .mc .fmini,.sim .mc-v .k{display:none}
+.sim .mc-v{position:absolute;top:5px;line-height:1.1;right:10px;max-width:66px;justify-content:flex-end}
+.sim .mc-v .v{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:66px}
+.sim .mc-relb{position:absolute;right:8px;bottom:5px;line-height:1;margin:0;z-index:1;max-width:70px}
+.sim .mc-relb>.mc-rel{display:block;line-height:1.1;font-size:8.5px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68px}
+.sim .mc.end{width:auto;min-width:72px;flex-direction:column;align-items:center}
+.sim .mc.end .big{font-size:15px}
+
 .sim-list{margin-top:8px;max-height:min(38vh,320px);overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .sim-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:44px;padding:5px 10px;border:0;border-top:1px solid var(--grid);background:transparent;color:var(--fg);text-align:left;cursor:pointer;font:inherit}
 .sim-row:first-child{border-top:0}
@@ -910,7 +921,7 @@ td.fees{width:96px}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.4.2';
+const BUILD = 'v0.4.3';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -2999,7 +3010,9 @@ function renderHealth() {
 // ---------- detail sheet ----------
 const PV_COL = ['#16C784', '#E8B84A', '#6EA9FF', '#B6A2FF', '#F290C4', '#98A6BA'];
 function openPair(key, opener) {
-  if (!pairPools(key).length) return; // a pair whose pools are all hidden still opens: it says so, with a way to show them
+  if (!pairPools(key).length) return;
+  const from = S.detail && !$('#sheet').hidden ? S.detail : null; S.backTo = from;
+  if (from) { try { history.pushState({ lps: 'pair' }, ''); } catch (e) {} } // a pair whose pools are all hidden still opens: it says so, with a way to show them
   S.pair = key; S.detail = null; S.opener = opener || null;
   renderPair();
   showSheet();
@@ -3020,7 +3033,9 @@ function renderPair() {
   const best = sent || verifiedBest;
   const name = pairName(S.pair);
   $('#sheet-kicker').textContent = `PAIR VIEW · ${WIN_LABEL[wk]}`;
-  $('#sheet-pair').hidden = true; $('#sheet-star').innerHTML = ''; renderSim(null);
+  { const b = $('#sheet-pair'), bp = S.backTo && poolById(S.backTo);
+    if (bp) { b.hidden = false; b.dataset.act = 'pair-back'; b.textContent = `‹ Back to ${bp.pair} ${feeTxt(bp.feeTier)}`; } else b.hidden = true; }
+  $('#sheet-star').innerHTML = ''; renderSim(null);
   $('#sheet-title').textContent = name;
   sheetChain(null);
   $('#sheet-meta').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${[...new Set(pools.map((p) => chainLong(p.chain)))].join(' + ')} · ${usd(totVol)} ${WIN_WORD[wk]} volume${hid ? ' · ' + hidTxt(hid) : ''}`;
@@ -3046,6 +3061,10 @@ function pairRowToCard(id) {
   setBestSel(id, false);
   jumpTo('#best');
 }
+window.addEventListener('popstate', () => {
+  if (S.skipPop) { S.skipPop = false; return; }
+  if (S.pair && S.backTo && !$('#sheet').hidden) { const id = S.backTo; S.backTo = null; openDetail(id); }
+});
 function openDetail(id, opener) {
   if (!poolById(id)) return;
   popClose(); qClose();
@@ -3211,7 +3230,7 @@ function renderDetail() {
   sheetChain(p.chain);
   $('#sheet-star').innerHTML = starBtn(p);
   $('#sheet-meta').innerHTML = metaTerms(p);
-  $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p);
+  $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p); $('#sheet-pair').dataset.act = 'pair'; $('#sheet-pair').textContent = 'Pair view ▸';
   const hd = S.hist && S.hist.pools && S.hist.pools[p.id], fh = feeHist(p);
   $('#sheet-fee').innerHTML = fh && hd && Array.isArray(hd.d) ? `<button type="button" class="feeh" data-act="feehist" title="Every day of LP fees: the full chart below">${feeMini(p, 150, 28, true)}<span class="lbl">30 D ▸</span></button>` : `<span class="feeh" style="cursor:default">${feeMini(p, 150, 28, true)}<span class="lbl">30 D</span></span>`;
   renderSim(p);
@@ -3659,7 +3678,7 @@ const mcMeta = (p) => `${chainMark(p.chain)}${feeTxt(p.feeTier)} · v${esc(p.v)}
 function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } = {}) {
   const uv = p.verified === false, meta = mcMeta(p);
   const name = self ? `<div class="mc-name"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></div>`
-    : `<button type="button" class="mc-name" data-act="detail" data-id="${esc(p.id)}" title="Open ${esc(p.pair)}, shape first"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></button>`;
+    : `<button type="button" class="mc-name" data-act="detail" data-id="${esc(p.id)}" title="Open ${esc(p.pair)}, shape first${mode === 'sim' && !self ? ' · ' + (uv ? 'unverified' : REL[rel] || '') : ''}"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></button>`;
   // similar: the card's body cycles the figure; a favourite: the name's link reaches over the whole card (one control)
   const cover = mode === 'sim' ? `<button type="button" class="mc-cover" data-act="sim-cycle" aria-label="Show the next figure on every card (now ${SIM_M[mi][0]})"></button>` : '';
   const foot = mode === 'sim' ? termB(self ? 'thispool' : uv ? 'unverified' : REL_TERM[rel], `<span class="mc-rel${self ? ' g0' : uv ? ' uv' : rel === 0 ? ' g0' : ''}">${self ? 'this pool' : uv ? 'unverified' : REL[rel] || ''}</span>`, 'mc-relb')
@@ -3925,6 +3944,7 @@ document.addEventListener('click', (e) => {
     case 'win': setWin(el.dataset.w); break;
     case 'tab': setBestSel(el.dataset.id, false); break;
     case 'pair': openPair(el.dataset.key, el); break;
+    case 'pair-back': if (S.backTo) { const id = S.backTo; S.backTo = null; try { if (history.state && history.state.lps === 'pair') { S.skipPop = true; history.back(); } } catch (e) {} openDetail(id, el); } break;
     case 'zoom': zoom(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'zreset': zreset(el.dataset.chart); break;
     case 'merge': mgToggle(el.dataset.id); break;
