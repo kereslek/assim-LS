@@ -11,6 +11,7 @@
 //                                                    merge feebar
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
+//   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
 //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
 //
 // Playwright comes from the environment (NODE_PATH); never npm install in the repo.
@@ -123,7 +124,14 @@ const bodyText = (page) => page.evaluate(() => document.body.innerText);
 const domText = (page) => page.evaluate(() => document.body.textContent); // hidden elements included: locked means gone, not hidden
 const noJunk = (txt) => !/\bNaN\b|\bundefined\b|\bInfinity\b|\[object |— of the —|\$1\.0K/.test(txt); // a dash sentence or a rounded ticket is junk too
 // type into the table's search, then leave the box (its suggestion list closes and stays out of the way of the rows)
-async function fillQ(page, v) { await page.fill('#f-q', v); await page.$eval('#f-q', (e) => e.blur()); await sleep(150); }
+// The table filters 120 ms after the last keystroke (a timer): on a slow WebKit that timer can fire well after 150 ms, and
+// the rows read before it are the unfiltered table's. A page timer set after the page's own two (filter, and closing the
+// suggestion list 120 ms after the blur) with a longer delay runs after them, however late they fire (HTML timer order).
+async function fillQ(page, v) {
+  await page.fill('#f-q', v); await page.$eval('#f-q', (e) => e.blur());
+  await page.evaluate(() => new Promise((r) => setTimeout(r, 140)));
+  await frames(page, 2);
+}
 async function setWin(page, wk) { await page.click(`#winseg button[data-w="${wk}"]`); await sleep(150); }
 
 // ---------- 1. unlock: wrong, right, kept, locked ----------
@@ -597,9 +605,12 @@ async function pzDrag(page, id, dx, { dy = 0, steps = 10, ms = 16, y = 0.5, up =
   if (hold) await sleep(hold); // the finger stops before it lifts: no flick
   if (up) { await page.mouse.up(); if (settle) { await sleep(Math.min(settle, 250)); await pzSettled(page, id); } }
 }
-// wait until a chart's view has come to rest: the same over 3 drawn frames and at least 200 ms (a coast or a spring-back
-// moves it every frame; an edge button's first frame is its start)
-async function pzSettled(page, id, ms = 4000) {
+// wait until a chart's view has come to rest: the page's own coast or step for it is over, which (its state is private to
+// its script) shows as the view being the same over 3 drawn frames and at least 200 ms (an edge button's first frame is
+// its start).
+// A coast counts time per frame at most 40 ms, so where WebKit draws a frame every 260 ms a 0.9 s flick runs ~6 s of
+// wall time: hence the long limit. Waiting less read a view mid-coast, and the next touch then caught the coast.
+async function pzSettled(page, id, ms = 15000) {
   return page.evaluate(async ({ id, ms }) => {
     const rd = () => { const h = document.querySelector(`[data-pz="${id}"]`); return h ? h.dataset.view : null; };
     const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -672,7 +683,7 @@ async function testPan(browser) {
     await pzDrag(p, 'liq-best', 160, { steps: 5, ms: 8, settle: 0 });
     const f0 = await pzView(p, 'liq-best'); await sleep(250);
     const f1 = await pzView(p, 'liq-best');
-    const f2 = await pzSettled(p, 'liq-best', 5000), lo = SP[0] + 0.12; // the left limit at ±12% for the map's span
+    const f2 = await pzSettled(p, 'liq-best'), lo = SP[0] + 0.12; // the left limit at ±12% for the map's span
     ok(`pan ${tag}: a flick coasts after the release, then stops inside the data`, f1.c < f0.c - 1e-3 && f2.c >= lo - 1e-3, `${f0.c} ${f1.c} ${f2.c}`);
     // a mostly vertical drag doesn't pan
     const s0 = await pzView(p, 'liq-best');
@@ -1186,11 +1197,11 @@ async function testSticky(browser) {
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); });
-    await sleep(150);
+    await calm(p, BAR_MOVES);
     let s = await p.evaluate(STICKY, '#all-box');
     ok(`sticky ${tag}: no header copy at the top of the page`, !s.on);
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#all-tbl tbody tr:nth-child(10)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 120); });
-    await sleep(380);
+    await calm(p, BAR_MOVES);
     s = await p.evaluate(STICKY, '#all-box');
     ok(`sticky ${tag}: inside All pools the header row sticks to the top, columns aligned (${s.cols})`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
     const hit = await p.evaluate(() => { const r = document.querySelector('#all .sh .sh-in').getBoundingClientRect(), e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e && !!e.closest('.sh'); });
@@ -1202,24 +1213,24 @@ async function testSticky(browser) {
     // a sort from the stuck header works and the header stays
     const before = await p.getAttribute('#all-tbl thead th:nth-child(3)', 'aria-sort');
     await p.evaluate(() => document.querySelector('#all .sh button[data-k="net"]').click());
-    await sleep(250);
+    await calm(p, BAR_MOVES);
     ok(`sticky ${tag}: sorting from the stuck header sorts the table`, before === 'none' && (await p.getAttribute('#all-tbl thead th:nth-child(3)', 'aria-sort')) !== 'none' && (await p.evaluate(STICKY, '#all-box')).on);
     // at the end of the table it leaves with the table: never over what follows
     await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom - 30); });
-    await sleep(380);
+    await calm(p, BAR_MOVES);
     s = await p.evaluate(STICKY, '#all-box');
     ok(`sticky ${tag}: at the table's end the header goes with it, never past it`, !s.on || s.bottom <= s.boxBottom + 1, JSON.stringify(s));
     await p.evaluate(() => { const b = document.querySelector('#all-box').getBoundingClientRect(); scrollTo(0, scrollY + b.bottom + 40); });
-    await sleep(380);
+    await calm(p, BAR_MOVES);
     ok(`sticky ${tag}: past the table no header copy is left behind`, !(await p.evaluate(STICKY, '#all-box')).on);
-    await p.evaluate(() => scrollTo(0, 0)); await sleep(380);
+    await p.evaluate(() => scrollTo(0, 0)); await calm(p, BAR_MOVES);
     ok(`sticky ${tag}: back at the top it is gone (not stuck)`, !(await p.evaluate(STICKY, '#all-box')).on);
     // the detail panel's long "every window" table sticks inside the panel's own scroll
     await p.click('#best [data-act="detail"]');
-    await p.waitForSelector('#sheet:not([hidden])'); await sleep(320);
+    await p.waitForSelector('#sheet:not([hidden])'); await calm(p, ['#sheet .sheet-card', '#sheet .sheet-head']);
     const wsel = '#sheet-body .tbl-box:not(.sh-in) > .wtbl';
     await p.evaluate((sel) => { const b = document.querySelector('#sheet-body'), tb = document.querySelector(sel).closest('.tbl-box'), r = tb.querySelector('tbody tr:nth-child(8)').getBoundingClientRect(); b.scrollTop += r.top - b.getBoundingClientRect().top - 40; }, wsel);
-    await sleep(380);
+    await calm(p, ['#sheet .sheet-card', '#sheet .sheet-head', '.sh']);
     const ws = await p.evaluate((sel) => { const tb = document.querySelector(sel).closest('.tbl-box'); tb.id ||= 'wtbl-box'; return '#' + tb.id; }, wsel);
     s = await p.evaluate(STICKY, ws);
     ok(`sticky ${tag}: in the detail panel the window table's header sticks to the panel's top`, s.on && Math.abs(s.top) <= 1 && s.mis === 0, JSON.stringify(s));
@@ -1233,6 +1244,22 @@ const TOTOP = () => { const b = document.querySelector('#totop'), r = b.getBound
 // the button follows the scroll in the next drawn frame and fades in .18 s: wait for that many frames (a slow WebKit draws
 // one every 100–260 ms), then for the state, up to 3 s
 const frames = (page, n = 3) => page.evaluate(async (n) => { for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); }, n);
+// after a scroll: the page reacts in its next drawn frames (the scroll event, then its own frame: the bar slides, the
+// table header copy moves to dock under it, the panel's top folds), and those slides take .22 s each. On a slow WebKit
+// that is 1–3 frames of 50–260 ms, after a scroll event that itself waits for a frame. So: a few frames, then until
+// no finite animation on these elements (all, when none are named) is still going, then one more frame; up to `ms`.
+// Returns how many were still going at the end (0 when calm).
+const calm = (page, sels = [], ms = 5000) => page.evaluate(async ({ sels, ms }) => {
+  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  const t0 = performance.now();
+  for (let i = 0; i < 3; i++) await frame();
+  const going = () => (sels.length ? sels.flatMap((s) => [...document.querySelectorAll(s)]).flatMap((e) => e.getAnimations()) : document.getAnimations())
+    .filter((a) => a.playState !== 'finished' && a.playState !== 'idle' && a.effect && Number.isFinite(a.effect.getComputedTiming().endTime));
+  while (going().length && performance.now() - t0 < ms) await frame();
+  await frame();
+  return going().length;
+}, { sels, ms });
+const BAR_MOVES = ['#top', '.sh'];
 async function totopIs(page, on) {
   await frames(page);
   await page.waitForFunction((on) => { const b = document.querySelector('#totop'), cs = getComputedStyle(b); return (cs.visibility === 'visible' && +cs.opacity > 0.98) === on || (!on && cs.visibility === 'hidden'); }, on, { timeout: 3000 }).catch(() => {});
@@ -1996,6 +2023,21 @@ async function testTouch(browser) {
     ok(`touch ${tag}: Safari's pinch events (gesturestart / gesturechange) are stopped on charts only`, blocked.g1 === false && blocked.g2 === false && blocked.g3 === true, JSON.stringify(blocked));
     await pzSettled(p, 'liq-best');
     await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
+    // a tap that catches a coasting chart (the way a phone stops a flick) leaves it at rest where it stopped: inside the
+    // data, and the reset button shown since it is no longer on its default view (v0.4.3 stopped the coast and then left
+    // the chart in the middle of it: no reset button, and past an end it stayed past it)
+    const hc = await p.evaluate(HOST_BOX, { id: 'liq-best' }), cx = hc.x + hc.w / 2, cy = hc.y + hc.h / 2;
+    let coasting = false;
+    for (let k = 0; k < 3 && !coasting; k++) { // a busy machine can stretch the flick past the page's 100 ms speed window: then it doesn't coast, and the flick goes again
+      if (k) { await pzSettled(p, 'liq-best'); await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]').catch(() => {}); await sleep(150); }
+      await p.evaluate(FINGERS, { steps: 4, ms: 12, pts: [{ id: 61, x0: cx, y0: cy, x1: cx - 50, y1: cy }] });
+      coasting = await p.evaluate(async () => { const v = () => document.querySelector('[data-pz="liq-best"]').dataset.view, a = v(); await new Promise((r) => requestAnimationFrame(() => r())); return v() !== a; }); // still moving: the tap below lands mid-coast
+    }
+    await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 62, x0: cx + 40, y0: cy, x1: cx + 40, y1: cy }] });
+    const cv = await pzSettled(p, 'liq-best');
+    const caught = await p.evaluate(() => { const P = document.querySelector('[data-chartbox="liq-best"]'); return { reset: !!P.querySelector('.ctools [data-act="zreset"]'), drag: !!P.querySelector('.dragging') }; });
+    ok(`touch ${tag}: a tap that catches a coasting chart leaves it at rest, off its default view, with its reset button`, coasting && caught.reset && !caught.drag && cv.c > 0.02, JSON.stringify({ coasting, ...caught, c: cv.c }));
+    await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]').catch(() => {}); await sleep(150);
     // two fingers: spread to zoom in around the point between them
     v0 = await pzView(p, 'liq-best');
     await pinch(p, 'liq-best', 2); await sleep(120);
@@ -2092,25 +2134,29 @@ async function testHeader(browser) {
     let b = await p.evaluate(BAR);
     ok(`header ${tag}: the bar on top is one slim row (${b.h} px: mark, freshness, refresh, window), sticky`, b.oneRow && b.h >= 44 && b.h <= 52 && b.pos === 'sticky' && !b.hid && b.top >= 0 && b.top <= 30, JSON.stringify(b)); // under the MOCKUP ribbon
     if (SHOTS && !/reduced/.test(tag)) await snap(p, `header-${tag.replace(' ', '-')}-top`, 'body');
-    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 900); }); await sleep(420);
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 900); });
+    // the moment the page has acted on the scroll (the bar marked away), count what animates: under reduced motion, nothing
+    await p.waitForFunction(() => document.querySelector('#top').classList.contains('hid'), null, { timeout: 5000 }).catch(() => {});
+    const anim0 = await p.evaluate(() => document.getAnimations().filter((a) => a.playState !== 'finished' && a.playState !== 'idle').length);
+    await calm(p, BAR_MOVES);
     b = await p.evaluate(BAR);
     ok(`header ${tag}: scrolling down slides the bar away${tag.startsWith('phone') || tag === 'w360' ? ' and the market strip scrolls off with the page' : ''}`, b.hid && b.bottom <= 0 && b.strip < 0, JSON.stringify(b));
-    if (/reduced/.test(tag)) ok(`header ${tag}: under reduced motion it goes at once (nothing animates)`, b.anim === 0, String(b.anim));
-    await p.evaluate(() => scrollBy(0, -120)); await sleep(420);
+    if (/reduced/.test(tag)) ok(`header ${tag}: under reduced motion it goes at once (nothing animates)`, anim0 === 0 && b.anim === 0, `${anim0} ${b.anim}`);
+    await p.evaluate(() => scrollBy(0, -120)); await calm(p, BAR_MOVES);
     b = await p.evaluate(BAR);
     ok(`header ${tag}: a little scroll up brings it back`, !b.hid && b.top === 0 && b.bottom >= 44, JSON.stringify(b));
     // the All pools header copy docks right under the bar, never under it
-    await p.evaluate(() => { const r = document.querySelector('#all-tbl tbody tr:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 40); }); await sleep(300);
-    await p.evaluate(() => scrollBy(0, -50)); await sleep(420);
+    await p.evaluate(() => { const r = document.querySelector('#all-tbl tbody tr:nth-child(12)'); scrollTo(0, scrollY + r.getBoundingClientRect().top - 40); }); await calm(p, BAR_MOVES);
+    await p.evaluate(() => scrollBy(0, -50)); await calm(p, BAR_MOVES);
     const d = await p.evaluate(() => { const bar = document.querySelector('#top').getBoundingClientRect(), sh = document.querySelector('#all .sh'), r = sh && sh.firstElementChild.getBoundingClientRect(), on = !!sh && sh.classList.contains('on'); const e = on ? document.elementFromPoint(r.left + 40, r.top + r.height / 2) : null; return { on, gap: on ? Math.round(r.top - bar.bottom) : null, mine: !!e && !!e.closest('.sh') }; });
     ok(`header ${tag}: with the bar back, the sticky table header docks right under it, not under it`, d.on && Math.abs(d.gap) <= 1 && d.mine, JSON.stringify(d));
     if (SHOTS && !/reduced/.test(tag)) await p.screenshot({ path: path.join(SHOTS, `header-${tag.replace(' ', '-')}-docked.png`) });
     // the keyboard brings the bar back
-    await p.evaluate(() => scrollBy(0, 400)); await sleep(420);
+    await p.evaluate(() => scrollBy(0, 400)); await calm(p, BAR_MOVES);
     const hid = (await p.evaluate(BAR)).hid;
-    await p.evaluate(() => document.querySelector('#refresh').focus()); await sleep(300);
+    await p.evaluate(() => document.querySelector('#refresh').focus()); await calm(p, BAR_MOVES);
     ok(`header ${tag}: focusing a control in the hidden bar brings it back`, hid && !(await p.evaluate(BAR)).hid);
-    await p.evaluate(() => scrollTo(0, 0)); await sleep(300);
+    await p.evaluate(() => scrollTo(0, 0)); await calm(p, BAR_MOVES);
     b = await p.evaluate(BAR);
     ok(`header ${tag}: at the top it shows, flat (no shadow)`, !b.hid && b.top >= 0 && !(await p.$eval('#top', (e) => e.classList.contains('stuck'))));
     ok(`header ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
@@ -2118,6 +2164,28 @@ async function testHeader(browser) {
   }
 }
 
+// press a control once it has stopped moving: scrolled to the middle (the first one on screen), then the same over two
+// drawn frames with nothing sliding around it. A scroll folds the panel's top or slides the bar a frame or two later,
+// and a note whose word has left the screen closes itself: a word pressed mid-scroll had its note shut by the scroll's
+// late frame, and the next Esc closed the panel instead. Returns whether there was one to press.
+const TAP_STILL = async ({ sel, ms = 3000 }) => {
+  const el = [...document.querySelectorAll(sel)].find((x) => x.getClientRects().length);
+  if (!el) return false;
+  window.dispatchEvent(new WheelEvent('wheel'));
+  el.scrollIntoView({ block: 'center' });
+  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  const box = () => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
+  const sliding = () => document.getAnimations().some((x) => x.playState !== 'finished' && x.playState !== 'idle' && x.effect && Number.isFinite(x.effect.getComputedTiming().endTime) && x.effect.target && x.effect.target.contains && (x.effect.target.contains(el) || x.effect.target.id === 'top'));
+  let a = box(), same = 0;
+  for (const t0 = performance.now(); performance.now() - t0 < ms && (same < 2 || sliding());) {
+    await frame();
+    const b = box();
+    if (b.every((v, i) => Math.abs(v - a[i]) < 0.5)) same++; else { same = 0; a = b; }
+  }
+  el.click();
+  return true;
+};
+const SHEET_MOVES = ['#sheet', '#sheet .sheet-card', '#sheet .sheet-head', '#sheet .sheet-scrim', '.sh'];
 // ---------- 4m. info notes: one glossary, a small note for each explainable word ----------
 const POP = () => { const e = document.querySelector('#pop'), r = e.getBoundingClientRect(), bar = document.querySelector('#top'), bb = bar.classList.contains('hid') ? 0 : bar.getBoundingClientRect().bottom, inSheet = !document.querySelector('#sheet').hidden;
   return { on: !e.hidden, t: e.innerText, lbl: !!e.querySelector('.lbl'), gl: (e.querySelector('.gl') || {}).textContent || '', inside: r.left >= 0 && r.right <= document.documentElement.clientWidth && r.bottom <= innerHeight + 1 && r.top >= (inSheet ? 0 : bb) - 1, top: Math.round(r.top), bb: Math.round(bb) }; };
@@ -2125,20 +2193,20 @@ async function testTerms(browser) {
   const HOOK = 'A hook is extra code attached to a Uniswap v4 pool. It can change fees or move tokens; unverified hooks are a risk.';
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440, storage: { 'lps.hint': '1' } }), p = t.page, tag = phone ? 'phone' : 'laptop';
-    const press = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
+    const press = (sel) => p.evaluate(TAP_STILL, { sel });
     const keys = () => p.evaluate((root) => [...new Set([...document.querySelectorAll(`${root} [data-act="term"]`)].filter((b) => b.getClientRects().length).map((b) => b.dataset.term))], phone ? '#best' : '#best');
     const best = await keys();
     ok(`terms ${tag}: the best find explains its fee tier, chain, version, range, gem, net APR, LVR and chips`, ['fee', 'v3', 'range', 'gem', 'net', 'lvr', 'edge', 'sigma', 'room', 'stop'].every((k) => best.includes(k)) && (best.includes('base') || best.includes('ethereum')), best.join(','));
     // the hook, in plain words
     await p.evaluate(() => [...document.querySelectorAll('#best [role="tab"]')].find((e) => e.querySelector('.tn').textContent === 'TALI/WETH').click()); await sleep(150);
-    await press('#best .tags [data-term="hook"]'); await sleep(150);
+    await press('#best .tags [data-term="hook"]');
     let a = await p.evaluate(POP);
     ok(`terms ${tag}: tapping "hook" opens a small note: "${HOOK.slice(0, 40)}…"`, a.on && a.gl === HOOK && a.inside, JSON.stringify(a).slice(0, 140));
     ok(`terms ${tag}: …the word shows it is open (aria-expanded)`, (await p.getAttribute('#best .tags [data-term="hook"]', 'aria-expanded')) === 'true');
     if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `terms-hook-${tag}.png`) });
-    await press('#best .tags [data-term="hook"]'); await sleep(120);
+    await press('#best .tags [data-term="hook"]');
     ok(`terms ${tag}: a second tap closes it`, !(await p.evaluate(POP)).on && (await p.getAttribute('#best .tags [data-term="hook"]', 'aria-expanded')) === 'false');
-    await press('#best .tags [data-term="hook"]'); await sleep(120);
+    await press('#best .tags [data-term="hook"]');
     await p.evaluate(() => document.querySelector('#all h2').click()); await sleep(120);
     ok(`terms ${tag}: a tap elsewhere closes it`, !(await p.evaluate(POP)).on);
     await p.focus('#best .tags [data-term="hook"]'); await p.keyboard.press('Enter'); await sleep(120);
@@ -2151,44 +2219,49 @@ async function testTerms(browser) {
     const each = async (root) => {
       for (const k of await p.evaluate((root) => [...new Set([...document.querySelectorAll(`${root} [data-act="term"]`)].filter((b) => b.getClientRects().length).map((b) => b.dataset.term))], root)) {
         // (the panel's top folds while its content scrolls: a word up there is pressed with the content back at the top)
-        const shown = await p.evaluate(({ root, k }) => { window.dispatchEvent(new WheelEvent('wheel')); const b = [...document.querySelectorAll(`${root} [data-act="term"][data-term="${k}"]`)].find((x) => x.getClientRects().length); if (!b) { const sb = document.querySelector('#sheet-body'); if (sb) sb.scrollTop = 0; return false; } b.scrollIntoView({ block: 'center' }); return true; }, { root, k });
-        if (!shown) await sleep(420);
+        const sel = `${root} [data-act="term"][data-term="${k}"]`;
         n++;
-        await p.evaluate(({ root, k }) => { const b = [...document.querySelectorAll(`${root} [data-act="term"][data-term="${k}"]`)].find((x) => x.getClientRects().length); b.scrollIntoView({ block: 'center' }); b.click(); }, { root, k }); await sleep(90);
+        if (!(await p.evaluate(TAP_STILL, { sel }))) {
+          await p.evaluate(() => { const sb = document.querySelector('#sheet-body'); if (sb) sb.scrollTop = 0; });
+          await calm(p, SHEET_MOVES);
+          await p.evaluate(TAP_STILL, { sel });
+        }
         const q = await p.evaluate(POP);
         if (!q.on || !q.lbl || q.gl.length < 25 || !q.inside) bad.push(`${k} ${JSON.stringify(q).slice(0, 60)}`);
         if (q.on) { await p.keyboard.press('Escape'); await sleep(60); }
       }
     };
     await each('#best'); await each('#subhead'); await each('#health');
-    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(350);
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
     await each('#sheet');
     ok(`terms ${tag}: every explainable word opens its note: a name and a plain sentence, inside the screen, never under the bar (${n} kinds)`, bad.length === 0 && n >= 30, bad.slice(0, 3).join(' | '));
     // the similar pools' reasons
-    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(420);
-    await p.evaluate(() => document.querySelector('#sim .mc-relb').click()); await sleep(120);
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await calm(p, SHEET_MOVES);
+    await p.evaluate(TAP_STILL, { sel: '#sim .mc-relb' });
     const k0 = await p.evaluate(() => document.querySelector('#sim .mc-v .k').textContent);
     a = await p.evaluate(POP);
     ok(`terms ${tag}: a similar pool's reason ("this pool", "same pair"…) explains itself, without switching the cards' figure`, a.on && /this pool|same pair|tier \+ token|same tier|shared token|unverified/i.test(a.t) && k0 === (await p.evaluate(() => document.querySelector('#sim .mc-v .k').textContent)), a.t.slice(0, 60));
     if (SHOTS) await p.screenshot({ path: path.join(SHOTS, `terms-sim-${tag}.png`) });
     await p.keyboard.press('Escape'); await sleep(80);
-    // one glossary: the same word gives the same note everywhere
-    await p.evaluate(() => document.querySelector('#sheet [data-term="net"]').click()); await sleep(100);
-    const n1 = (await p.evaluate(POP)).gl;
-    await p.keyboard.press('Escape'); await p.click('#sheet-close'); await sleep(100);
-    await press('#best [data-term="net"]'); await sleep(100);
+    // one glossary: the same word gives the same note everywhere (Esc only puts an open note away: with none open it
+    // closes the panel)
+    await press('#sheet [data-term="net"]');
+    const g1 = await p.evaluate(POP), n1 = g1.gl;
+    if (g1.on) await p.keyboard.press('Escape');
+    await p.click('#sheet-close'); await calm(p, SHEET_MOVES);
+    await press('#best [data-term="net"]');
     ok(`terms ${tag}: one glossary: "net APR" reads the same in the card and the panel`, n1.length > 20 && n1 === (await p.evaluate(POP)).gl);
     await p.keyboard.press('Escape');
     // a note near the top of the screen stays below the bar
-    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - 400); }); await sleep(300);
-    await p.evaluate(() => scrollBy(0, -40)); await sleep(350);
-    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - document.querySelector('#top').getBoundingClientRect().bottom - 4); }); await sleep(380);
-    await p.evaluate(() => document.querySelector('#best .best-meta [data-term="fee"]').click()); await sleep(120);
+    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - 400); }); await calm(p, BAR_MOVES);
+    await p.evaluate(() => scrollBy(0, -40)); await calm(p, BAR_MOVES);
+    await p.evaluate(() => { const b = document.querySelector('#best .best-meta [data-term="fee"]'); scrollTo(0, scrollY + b.getBoundingClientRect().top - document.querySelector('#top').getBoundingClientRect().bottom - 4); }); await calm(p, BAR_MOVES);
+    await p.evaluate(() => document.querySelector('#best .best-meta [data-term="fee"]').click()); await frames(p, 1);
     a = await p.evaluate(POP);
     ok(`terms ${tag}: a note opened right under the bar sits below it, inside the screen`, a.on && a.inside, JSON.stringify(a).slice(0, 120));
     await p.keyboard.press('Escape');
     // the gas gauge and the watchdog
-    await press('#gas'); await sleep(120);
+    await press('#gas');
     ok(`terms ${tag}: the gas gauge's note starts with what gas is`, /^Ethereum gas · next block\s*What Ethereum charges to run a transaction/i.test((await p.evaluate(POP)).t), (await p.evaluate(POP)).t.slice(0, 60));
     await p.keyboard.press('Escape');
     const wd = await p.evaluate(() => { const dt = [...document.querySelectorAll('#health dt')].find((x) => /Watchdog/.test(x.textContent)); return dt ? [dt.textContent, dt.nextElementSibling.textContent] : null; });
@@ -2538,8 +2611,9 @@ const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar };
+const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
-  for (const g of ONLY) {
+  for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
     if (!groups[g]) continue;
     const s = Date.now();
     try { await groups[g](browser); } catch (e) { if (process.env.ST_DEBUG) console.error(e.stack); ok(`${g}: ran to the end`, false, String(e.message).split('\n')[0].slice(0, 160)); }

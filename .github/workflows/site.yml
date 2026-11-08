@@ -16,6 +16,10 @@ on:
         description: 'Run only these test groups (comma list, e.g. pan,touch,top); empty = all'
         required: false
         default: ''
+      repeat:
+        description: 'Run the chosen groups this many times over (1-9), to shake out timing faults'
+        required: false
+        default: ''
       probe:
         description: 'Also run this probe script under tools/candidate/ first (timings and event counts only)'
         required: false
@@ -51,8 +55,10 @@ jobs:
           PAGE: ${{ inputs.page }}
           ONLY: ${{ inputs.only }}
           PROBE: ${{ inputs.probe }}
+          REPEAT: ${{ inputs.repeat }}
         run: |
           set -eu
+          if [ -n "$REPEAT" ] && ! printf '%s' "$REPEAT" | grep -Eq '^[1-9]$'; then echo "repeat must be 1-9"; exit 1; fi
           if [ -n "$PAGE" ] && ! printf '%s' "$PAGE" | grep -Eq '^tools/candidate/[A-Za-z0-9._-]+\.html$'; then echo "page must be a .html file under tools/candidate/"; exit 1; fi
           if [ -n "$PAGE" ] && [ ! -f "$PAGE" ]; then echo "no such page"; exit 1; fi
           if [ -n "$ONLY" ] && ! printf '%s' "$ONLY" | grep -Eq '^[a-z0-9,]+$'; then echo "only must be a comma list of group names"; exit 1; fi
@@ -92,4 +98,6 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/pw/node_modules
           PAGE: ${{ inputs.page }}
           ONLY: ${{ inputs.only }}
-        run: node tools/site-test.mjs --browser ${{ matrix.browser }} --device "${{ matrix.device }}" ${PAGE:+--page "$PAGE"} ${ONLY:+--only "$ONLY"}
+          REPEAT: ${{ inputs.repeat }}
+          ST_DEBUG: '1' # a group that throws prints its stack (file and line numbers of the test; made-up data only)
+        run: node tools/site-test.mjs --browser ${{ matrix.browser }} --device "${{ matrix.device }}" ${PAGE:+--page "$PAGE"} ${ONLY:+--only "$ONLY"} ${REPEAT:+--repeat "$REPEAT"}
