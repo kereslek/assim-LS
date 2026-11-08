@@ -300,12 +300,22 @@ test('GeckoTerminal: candles parsed, today dropped, base side found (native ETH 
   assert.equal(baseSide('0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', ZERO, T1, WETH), 0);
   assert.equal(baseSide(WETH, T0, T1, WETH), null);
   const pools = Array.from({ length: 5 }, (_, i) => ({ id: 'q' + i, network: 'eth', t0: T0, t1: T1 }));
-  for (const [err, why] of [['HTTP 429', 'rate limit'], ['fetch failed', 'unreachable']]) {
+  for (const [err, why, calls] of [['HTTP 429', 'rate limit', 2], ['fetch failed', 'unreachable', 1]]) {
     let n = 0;
-    const st = await fetchVolumes(async () => { n++; throw new Error(err); }, pools, { cache: new Map(), now: NOW, spacingMs: 0, pause: async () => {} });
-    assert.equal(n, 1, why);
+    const waits = [];
+    const st = await fetchVolumes(async () => { n++; throw new Error(err); }, pools, { cache: new Map(), now: NOW, spacingMs: 0, pause: async (ms) => { waits.push(ms); } });
+    assert.equal(n, calls, why);
     assert.equal(st.stopped, why);
+    if (calls === 2) assert.deepEqual(waits, [FEEHIST.gt.backoffMs], 'one wait on the first 429, then the same pool again');
   }
+  // a 429 then answers: the wait pays off and the pass goes on
+  let k = 0;
+  const once = await fetchVolumes(async () => { if (k++ === 1) throw new Error('HTTP 429'); return candles(366); }, pools, { cache: new Map(), now: NOW, spacingMs: 0, pause: async () => {} });
+  assert.deepEqual([once.full, once.stopped, once.calls], [5, null, 6]);
+  // no room left in the time budget for the wait: stop at once
+  let m = 0;
+  const tight = await fetchVolumes(async () => { m++; throw new Error('HTTP 429'); }, pools, { cache: new Map(), now: NOW, budget: makeBudget({ ms: 5000 }), spacingMs: 0, pause: async () => {} });
+  assert.deepEqual([m, tight.stopped], [1, 'rate limit']);
   let n = 0;
   const st = await fetchVolumes(async () => { n++; throw new Error('HTTP 502'); }, pools, { cache: new Map(), now: NOW, spacingMs: 0, pause: async () => {} });
   assert.equal(n, FEEHIST.gt.stopAfter);
