@@ -8,7 +8,7 @@ This file describes shapes only: it holds no data. Every value below lives seale
 |---|---|---|---|
 | `lock.json` | no (salt, rounds, a sealed check string) | lock init, once | never; a new passphrase means a new lock |
 | `live.json` | yes | every scanner pass | each pass |
-| `history.json` | yes | scanner | when a pool gains an hourly row (about hourly; every pass while the backfill catches up) |
+| `history.json` | yes | scanner | when a pool gains an hourly row, a fee-history day or day volumes (about hourly; every pass while the backfills catch up) |
 | `backtest.json` | yes | backtest job | daily and on demand |
 | `snapshots.json` | yes | scanner | when a pool gains an hourly row (about hourly; every pass while the backfill catches up) |
 | `inbox.json` | no (the X25519 public key only) | lock init | with `lock.json` |
@@ -191,12 +191,31 @@ Check ids in `health.checks` (each across every chain scanned: false if any chai
 {
   v: 1, t: <ms>,
   pools: { "<id>": { h: [[t, price, liquidity, lpFeesUsd, parked]],    // hourly, last 14 days (≤ 337 rows)
-                     d: [[t, price, lpFeesUsd, volUsd, parked]] } },   // daily, last 90 days (≤ 91 rows)
+                     d: [[t, price, lpFeesUsd, volUsd, parked]],       // daily, last 90 days (≤ 91 rows)
+                     y: [[t, feesUsd, src]],                           // the fee history: one row a UTC day, up to 365
+                     yp: { exact, est, age, dyn } } },                 //   days (yesterday last), and its progress
   health: [[t, okPasses, passes, unread]]                              // hourly, last 7 days
 }
 ```
 
 Built by `lib/charts.mjs` from `snapshots.json`, one row per stored snapshot row, ascending by `t` (the row's own time: a pass time, or a backfilled block's timestamp). `price` = token1 per token0 (8 significant digits); `liquidity` = the pool's active liquidity (8 significant digits); `parked` 0..1 (4 decimals). `lpFeesUsd` = the pool's LP fees **from the row before to this one** (fee growth × the interval's liquidity, at the pass's token prices), `volUsd` = those fees ÷ the LP fee rate. Rows are not always exactly an hour or a day apart (a gap the backfill has not filled yet, or a row a few minutes off its mark), so a chart of fees per hour or per day divides by the gap to the row before. `null` = unread: the first row, a row whose counters were not read and the row after it. A pool's rows start where its data starts: hours and days before the pool existed have **no row at all** (absent, never a 0 row), and a pool younger than the span simply has fewer rows. Size, sealed, for about 100 pools: about 0.55 MB with 7 and 30 days, about 1.1 MB with 14 and 90 (made-up data of the same shape; 60 days instead of 90 would save under 10%, the 14 days of hours are most of it).
+
+### The fee history: `y` and `yp` (the owner's option C, 8 Nov 2026)
+
+Every pool shows up to a year of daily LP fees at once: exact days drawn solid, estimated days pale (`lib/feehist.mjs`).
+
+- **`y` rows** `[t, feesUsd, src]`: `t` = the UTC day's start (ms), one row a day, ascending, from the pool's first day within the year to **yesterday** (today is not complete; at most 365 rows). `feesUsd` = that day's LP fees in USD (4 significant digits). `src`:
+  - `'x'` **exact**: the pool's own fee counters, Δ feeGrowthGlobal × the interval's liquidity from the day's row to the next day's (rows 20 to 28 hours apart, scaled to 24 h; anything else is not a day), the same counters the windows read.
+  - `'e'` **estimated**: the day's volume × fee tier × the share LPs keep (the pool's own `lpKeeps`, the same rate as `d`'s `volUsd`). Volume = GeckoTerminal's public day candle (USD). A v4 dynamic-fee pool's estimate uses its current lpFee: `yp.dyn` is true.
+  - `null` with `feesUsd` `null`: neither was read for that day (**never 0**). A day with no swaps on an exact day is a real `0`.
+  - **Exact always overrides estimated** for the same day. **A day before the pool existed has no row at all**: the rows start at the pool's creation day (its creation event, else the day of the last moment a read found it not there yet), which is partial and usually estimated.
+- **Valued at the day's prices** (unlike `h` and `d`, which use the pass's prices): an exact day's token amounts at the candle's close for GeckoTerminal's base token and the pool's own on-chain price at the day's end for the other token; with no candle within 3 days, at the pass's prices. So a token's later price move never redraws its past, and the pale and solid bars meet without a jump.
+- **`yp`** `{ exact, est, age, dyn }`: `exact` = days with an `'x'` row, `est` = days with an `'e'` row, `age` = the pool's age in days within the year (= `y.length`; 365 for an older pool) when its start is known (a creation event, a read that found it not there yet, or data reaching the year's start), else `null`; the progress bar is `exact` of `age`. `dyn` = the estimates use the current dynamic fee.
+- **How it fills.** Exact days come from the snapshot tiers (14 days of hours, 90 days of days) and a **deep backfill** that reads one archive block per past day (00:05 UTC), newest first, back to the pool's creation and at most 365 days, after every moment the windows and the 90-day chart need (`lib/backfill.mjs` ranks; a day whose only row is far from its start, e.g. a pass at 13:00, is read again at 00:05). Per pass: at most 10 days a pool, 40 batches on Ethereum, 12 on Base (`lib/chains.mjs` `caps.backfill.deep`), within the backfill's own time budget; 3 unread batches in a row leave the rest for the next pass. Each batch carries its own block timestamp (Multicall3) and a batch answered with today's state is dropped, as for the backfill; Ethereum's deep moments get their block from a timestamp read at each one first, Base's from its two-era clock. Only for the chains whose rows the store keeps (`live.json` `stored`). With about 224 Ethereum pools, about 4 batches a past day: the year takes about 28 passes.
+- **Volumes**: `https://api.geckoterminal.com/api/v2/networks/{eth|base}/pools/{pool address or v4 pool id}/ohlcv/day?aggregate=1&limit=366&currency=usd` (public, no key), fetched **once per pool**, the largest pools first, and cached in `snapshots.json` `gt`; after that, once a UTC day from 00:30, only the newest days (`limit` = the days since the last held + 1). 2.4 s apart (about 25 a minute, under the public 30), at most 24 calls and 60 s a pass, alongside the backfill's reads (no wall time added); stopped for the pass by a 429 or an unreachable host, and after 3 other errors in a row; a pool GeckoTerminal does not know (404) is asked again after a week. About 16 passes fetch 374 pools.
+- **Never in a score.** The estimates (and the deep record) feed only `y`, `yp` and one public sanity number: never the windows, the gem, the lenses, the backtest or any score. The windows are given the raw tiers only (`windowSeries`); `test/feehist.test.mjs` proves it statically (no scoring module can see the fee history) and by taint (estimates × 1,000 change no window or gem), each with a planted leak it catches, and `test/feehist-scan.test.mjs` runs the scan with absurd volumes and finds every window and gem unchanged.
+- **Sanity check** (public log, one line `fee history: …`, counts and one ratio only): the median of estimated ÷ exact over every pool-day with both (exact valued at that day's own close, exact ≥ $10, dynamic-fee pools left out); it should be near 1 (sealed check `fee history`: within 25% once 20 days have both).
+- **Size**, sealed, made-up data of the same shape, 300 pools with a full year: `y` + `yp` add about 0.8 MB to `history.json` (about 2.7 KB a pool); in `snapshots.json` the deep record adds about 1.05 MB and the candle cache about 0.9 MB. `y` rides in `history.json` rather than a separate `feehist.json`: the page already fetches it, it is rewritten as often (about hourly), and a new file name would stop a loop of older code from publishing (its data branch check refuses unknown files).
 
 ## snapshots.json
 
@@ -206,11 +225,18 @@ The raw state each pass reads, from which every time window is recomputed (`lib/
 {
   v: 1, t: <ms>, fix: 2,
   pools: { "<id>": { h: Tier, d: Tier,      // h: first row of each UTC hour, 14 days; d: first row of each UTC day, 90 days
-                     nb: <ms> } }           // optional: the latest moment a backfill found the pool not there yet
+                     nb: <ms>,              // optional: the latest moment a backfill found the pool not there yet
+                     y: Deep } },           // optional: the fee history's deep record (lib/feehist.mjs)
+  gt: { "<id>": { t: <ms fetched>, b: 0|1|null, d0: <UTC day ms>|null, v: [<volume USD|null>], c: [<close USD|null>] }
+              | { t: <ms>, miss: <ms> } }   // GeckoTerminal's day candles, the last 366 days; miss = not on GeckoTerminal
 }
 Tier = { t: [<ms, then deltas>], block: [<n, then deltas>], sqrtP: ["<decimal>"], tick: [<n>], L: ["<decimal>"],
          fg0: ["<decimal>"], fg1: ["<decimal>"], parked: [<basis points>] }   // parallel arrays; null = unread
+Deep = { d0: <UTC day ms>|null, q: [<n|null>], px: [<n|null>], r: Tier, nb: <ms>? }
 ```
+
+- **`y` (Deep)**: every exact day of the year, as columns from `d0`: `q` = the day's LP fees in token1 raw units (token0's side converted at `px`), scaled to 24 h; `px` = token1 raw per token0 raw at the day's end (6 significant digits; `null` = no exact fee that day). Kept once the tiers let a day's rows go. `r` = the few raw rows (near 00:05) the deep backfill still pairs (the frontier, usually 0 to 2). `nb` = the latest moment a deep read found the pool not there yet: nothing at or before it is asked for again. `merge` carries it unchanged; the windows never read it. Base's goes with Base's rows (`live.json` `stored`).
+- **`gt`**: the candle cache, one entry a pool: `b` = which of the pool's tokens GeckoTerminal's base is (its close values that side), `v`/`c` columns from `d0` (`null` = no candle that day: never 0). Kept for 30 days after a pool was last asked for. A loop of older code rewrites `snapshots.json` without `y` and `gt` (they come back as the new code runs).
 
 - **What reads what.** `history.json` charts every row. The time windows read exactly what they always read: 7 days of the hourly tier (windows up to 7 days) and 30 days of the daily one, each plus one step (`lib/windows.mjs` `READS`), so `24h`, `7d` and `30d` are unchanged by the longer store (`test/windows.test.mjs`); a configured window longer than 30 days would read its own span of daily rows.
 - **Never a pre-creation row.** A row with no price read and both fee counters at exactly 0 is what a pool that did not exist yet answers (a v4 pool before its initialisation reads 0 everywhere); it is never stored, and an older store holding one loses it on load. Stored, it would book the pool's whole lifetime of fees into its first real interval.

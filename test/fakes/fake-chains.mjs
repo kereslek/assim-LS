@@ -8,6 +8,10 @@
 // FAULT=pcs-nibbles plants a fault: the fake pools book PancakeSwap's cut as Uniswap's 1/N (the scan must
 // see its decode disagree with the events). FAULT=base-logs-refuse: every Base node refuses eth_getLogs (the one
 // node that serves them is down); FAULT=base-slow: every Base request takes 300 ms (the caps must stop the parts).
+// GeckoTerminal day candles: unreachable unless FAKE_GT=<scale> (made-up volumes × scale, 400 days, closes at the
+// fake USD prices); the young Base pool gets two planted candles from before it existed. Requests are counted.
+// FAULT=deep-today: every node answers a block over 90 days old with today's timestamp (the fee history's deep
+// backfill must drop those batches).
 import fs from 'node:fs';
 import { selector } from '../../lib/keccak.mjs';
 import { amountsInRange, sqrtAtTick, amount0Delta } from '../../lib/v3math.mjs';
@@ -101,7 +105,8 @@ const ageDays = (chain, tag) => Math.round((NOW - NET[chain].ts(parseInt(tag, 16
 const sqrtX96 = (p, tag) => { const k = tag ? ageDays(p.chain, tag) : 0; return k === 0 ? p.sim.end : wobble(p, k); };
 function answer(chain, target, data, tag) {
   const t = target.toLowerCase(), sel = data.slice(0, 10), v4 = [S.s4, S.l4, S.bm4, S.t4, S.fg4].includes(sel), b = parseInt(tag, 16);
-  if (t === '0xca11bde05977b3631167028862be2a173976ca11' && sel === S.ts) return W(NET[chain].ts(b));
+  // FAULT=deep-today: the nodes answer blocks over 90 days old with today's state (and timestamp)
+  if (t === '0xca11bde05977b3631167028862be2a173976ca11' && sel === S.ts) return W(process.env.FAULT === 'deep-today' && ageDays(chain, tag) > 90 ? NOW : NET[chain].ts(b));
   const p = v4 ? pools.find((x) => x.chain === chain && x.id === '0x' + data.slice(10, 74)) : pools.find((x) => x.chain === chain && x.id === t);
   if (!p) return null;
   if (isFinite(created(p)) && NET[chain].ts(b) < created(p)) return sel === S.s0 ? '' : null; // not deployed yet: no code
@@ -166,8 +171,26 @@ function rpc(chain, q) {
 }
 const json = (j) => ({ ok: true, status: 200, json: async () => j });
 const notFound = { ok: false, status: 404, json: async () => ({ error: 'not found' }) };
+let gtCalls = 0;
+const gtCandles = (p, limit, scale) => {
+  const day = Math.floor(NOW / 86400) * 86400, out = [];
+  for (let k = 0; k < Math.min(limit, 400); k++) {
+    const t = day - k * 86400;
+    if (p.young && t < created(p) - 2 * 86400) break; // two planted candles from before the pool existed
+    out.push([t, 1, 1, 1, USD[p.t0], scale * (1000 + 10 * (k % 7))]);
+  }
+  return out;
+};
 globalThis.fetch = async (url, init = {}) => {
   const u = String(url);
+  if (u.includes('api.geckoterminal.com') && u.includes('/ohlcv/')) {
+    gtCalls++;
+    if (!process.env.FAKE_GT) throw new TypeError('fetch failed'); // the host unreachable: the scan stops asking at once
+    const [, net, id] = /networks\/([^/]+)\/pools\/([^/]+)\//.exec(u), p = pools.find((x) => x.id === id && (x.chain === 'base') === (net === 'base'));
+    if (!p) return notFound;
+    const limit = Number(/limit=(\d+)/.exec(u)?.[1] ?? 100);
+    return json({ data: { attributes: { ohlcv_list: gtCandles(p, limit, Number(process.env.FAKE_GT)) } }, meta: { base: { address: p.t0 }, quote: { address: p.t1 } } });
+  }
   if (u.includes('api.coingecko.com') && u.includes('/market_chart')) { // hourly for 30 days; UNI is left to the DefiLlama fallback
     const addr = u.split('/contract/')[1].split('/')[0], j = Object.keys(USD).indexOf(addr);
     if (addr === UNI || j < 0) return notFound;
@@ -194,5 +217,5 @@ globalThis.fetch = async (url, init = {}) => {
   const b = JSON.parse(init.body);
   return json(Array.isArray(b) ? b.map((q) => rpc(chain, q)) : rpc(chain, b));
 };
-process.on('exit', () => console.error(`[fake-chains] RPC requests: ethereum ${calls.ethereum}, base ${calls.base}`));
+process.on('exit', () => process.stderr.write(`[fake-chains] RPC requests: ethereum ${calls.ethereum}, base ${calls.base}; GeckoTerminal requests: ${gtCalls}\n`)); // past the sealed log's console
 await import('../../scripts/scan.mjs');

@@ -38,6 +38,7 @@ import { openStore } from '../lib/store.mjs';
 import { marketBlock, carryMarket } from '../lib/market.mjs';
 import { parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
 import { BACKFILL, blockClock, storePoints, planBackfill, runBudgeted, retryJobs, readBackfill, probeMoments, oldestMissing } from '../lib/backfill.mjs';
+import { FEEHIST, DEEP_RANK, deepMoments, foldDeep, feeYear, fetchVolumes, packGt, unpackGt, windowSeries, median as midOf } from '../lib/feehist.mjs';
 import { allWindows, gemWarnings, isHooked } from '../lib/windows.mjs';
 import { buildPairs } from '../lib/pairs.mjs';
 import { historyRows } from '../lib/charts.mjs';
@@ -527,7 +528,8 @@ async function writeOutputs() {
   // the stored snapshots (restored from the data branch); one that won't open or parse is never overwritten
   let snaps = new Map(), snapsOk = true;
   let rebuilt = false;
-  if (store) { try { const o = store.get('snapshots.json'); if (o && (o.fix ?? 0) >= SNAP_FIX) snaps = parseStore(o); else if (o) rebuilt = true; } catch { snapsOk = false; } }
+  let gtCache = new Map();
+  if (store) { try { const o = store.get('snapshots.json'); if (o && (o.fix ?? 0) >= SNAP_FIX) snaps = parseStore(o); else if (o) rebuilt = true; gtCache = unpackGt(o?.gt); } catch { snapsOk = false; } }
   // Which chains' new rows are kept. A loop pinned to code from before Base reads every stored row's block
   // number into ONE block clock for its Ethereum backfill, so Base rows must not reach the shared store while
   // such a loop may still run: Ethereum's rows always are; another chain's only when this pass runs as the
@@ -536,8 +538,17 @@ async function writeOutputs() {
   // still feed this pass's windows.
   const keepChains = new Set(['ethereum', ...(process.env.MODE === 'live' ? ctxs.map((X) => X.CH.id) : (prev?.stored || []).filter((c) => CHAIN_IDS.includes(c)))]);
   const chainOf = new Map(mapped.map((p) => [p.id, p.chain]));
-  const sig = (m) => [...m].map(([id, x]) => `${id}:${x.h.length}:${x.h.at(-1)?.t}:${x.d.length}:${x.d.at(-1)?.t}`).sort().join('|');
+  const sig = (m) => [...m].map(([id, x]) => `${id}:${x.h.length}:${x.h.at(-1)?.t}:${x.d.length}:${x.d.at(-1)?.t}:${x.y ? `${x.y.f.size}:${x.y.r.length}:${x.y.nb ?? ''}` : ''}`).sort().join('|');
   const before = sig(snaps);
+  // The fee history's day volumes (lib/feehist.mjs): GeckoTerminal's public day candles, each pool fetched once and
+  // cached in snapshots.json (gt), then only the newest days once a UTC day; about 25 calls a minute and a capped
+  // number per pass (FEEHIST.gt; READ_CAPS {"gt": {...}} lowers it for a test), alongside the reads below.
+  const gtCap = { ...FEEHIST.gt, ...(CAP_OVERRIDE.gt || {}) };
+  const gtPools = mapped.map((p) => ({ id: p.id, network: p.X.CH.gecko, t0: p.t0, t1: p.t1, weth: p.X.WETH, tvl: p.tvl ?? p.mapUsd ?? 0 }));
+  const gtRun = store && snapsOk
+    ? timed('fee history volumes', () => fetchVolumes(getJson, gtPools, { cache: gtCache, now: passT, budget: makeBudget({ ms: gtCap.ms, calls: gtCap.calls }), spacingMs: gtCap.spacingMs }))
+      .catch((e) => ({ pools: gtPools.length, wanted: 0, full: 0, fresh: 0, missed: 0, failed: 0, calls: 0, stopped: 'broke', lastError: errWord(e) }))
+    : Promise.resolve(null);
   // fee growth now for every mapped pool (the 24 h check read it only for busy pools)
   const rows = new Map();
   for (const X of ctxs) {
@@ -558,8 +569,14 @@ async function writeOutputs() {
   // that was not there yet gives no row (absent, never 0), and that moment is remembered so it is not asked
   // for again. Ethereum's clock interpolates the store's own (time, block) pairs, Ethereum's only; a chain
   // with a fixed block clock (Base, lib/chains.mjs eras) needs no probes.
-  const unborn = new Map();
-  const bf = { wanted: 0, planned: 0, jobs: 0, retried: 0, skipped: 0, rows: 0, unbornMoments: 0, stale: 0, unread: 0, batches: 0, probesRead: 0, probesTried: 0 };
+  // The fee history's deep backfill (lib/feehist.mjs) rides on the same reads, after every moment above: one block
+  // per past UTC day (00:05) back to the pool's creation, at most 365 days, a few days a pool and a capped number of
+  // batches per pass (Ethereum FEEHIST.deep.batches, another chain its caps.backfill.deep), only for the chains whose
+  // rows the store keeps. Ethereum's deep moments get their block from a timestamp read at each one first (the
+  // anchors can be months apart there); a run of unread deep batches leaves the rest for the next pass.
+  const unborn = new Map(), deepUnborn = new Map();
+  const bf = { wanted: 0, planned: 0, jobs: 0, retried: 0, skipped: 0, rows: 0, unbornMoments: 0, stale: 0, unread: 0, batches: 0, probesRead: 0, probesTried: 0,
+    deepWanted: 0, deepJobs: 0, deepRows: 0, deepUnborn: 0, deepUnread: 0, deepBroke: 0 };
   if (snapsOk) {
     for (const X of ctxs) {
       const eth = X.CH.id === 'ethereum';
@@ -572,44 +589,69 @@ async function writeOutputs() {
       const bfc = X.CH.caps?.backfill;
       const budget = eth ? {} : { maxBatches: bfc?.batches ?? 60 };
       const deadline = eth ? BACKFILL.deadlineMs : bfc?.ms ?? 40e3;
-      let plan = { jobs: [], wanted: 0, planned: 0 }, jobs = [], run = { results: [], started: 0, skipped: 0, retried: 0 };
+      const deepMax = keepChains.has(X.CH.id) ? (eth ? FEEHIST.deep.batches : bfc?.deep ?? 0) : 0;
+      const deepOf = (s, o) => deepMoments(s, { ...o, perPool: FEEHIST.deep.perPool });
+      let plan = { jobs: [], wanted: 0, planned: 0 }, deep = { jobs: [], wanted: 0, planned: 0 }, jobs = [], run = { results: [], started: 0, skipped: 0, retried: 0 };
       await timed(X.CH.prefix + 'backfill', async () => {
-        let clock;
+        let clock, known = anchors;
+        const probe = async (blocks) => {
+          const pr = await mapLimit(blocks, 3, (b) => X.amc([tsCall], '0x' + b.toString(16)));
+          const pairs = [];
+          blocks.forEach((b, i) => { const ts = readUint(pr[i]?.[0]); if (ts != null && X.ageOk(ts, X.block - b)) pairs.push({ t: Number(ts) * 1000, block: b }); });
+          bf.probesTried += blocks.length; bf.probesRead += pairs.length;
+          return pairs;
+        };
         if (X.CH.eras) clock = (T) => blockAtTime(X.CH, T / 1000);
         else {
           // block timestamps first where the moments wanted reach past the pairs the store knows (lib/backfill.mjs)
           const clock0 = blockClock(anchors, { secPerBlock: X.CH.secPerBlock });
           const probes = probeMoments(anchors, oldestMissing(entries, { now: X.passT })).map((T) => clock0(T)).filter((b) => Number.isSafeInteger(b) && b > 0 && b < X.block);
-          const pr = await mapLimit(probes, 3, (b) => X.amc([tsCall], '0x' + b.toString(16)));
-          const pairs = [];
-          probes.forEach((b, i) => { const ts = readUint(pr[i]?.[0]); if (ts != null && X.ageOk(ts, X.block - b)) pairs.push({ t: Number(ts) * 1000, block: b }); });
-          bf.probesTried += probes.length; bf.probesRead += pairs.length;
-          clock = blockClock([...anchors, ...pairs], { secPerBlock: X.CH.secPerBlock });
+          known = [...anchors, ...(await probe(probes))];
+          clock = blockClock(known, { secPerBlock: X.CH.secPerBlock });
         }
         plan = planBackfill(entries, { now: X.passT, clock, block: X.block, ...budget });
-        const read = (job) => X.amc([tsCall, ...job.ids.flatMap((id) => bfCalls(byId.get(id)))], '0x' + job.block.toString(16));
-        const t0 = Date.now(), first = await runBudgeted(plan.jobs, read, { deadlineMs: deadline });
+        if (deepMax > 0) {
+          deep = planBackfill(entries, { now: X.passT, clock, block: X.block, maxBatches: deepMax, momentsOf: deepOf });
+          if (!X.CH.eras && deep.jobs.length) {
+            const blocks = [...new Set(deep.jobs.map((j) => j.block))];
+            clock = blockClock([...known, ...(await probe(blocks))], { secPerBlock: X.CH.secPerBlock });
+            deep = planBackfill(entries, { now: X.passT, clock, block: X.block, maxBatches: deepMax, momentsOf: deepOf });
+          }
+        }
+        let deepFails = 0;
+        const read = async (job) => {
+          if (job.rank === DEEP_RANK && deepFails >= FEEHIST.deep.stopAfter) { bf.deepBroke++; return null; }
+          const ans = await X.amc([tsCall, ...job.ids.flatMap((id) => bfCalls(byId.get(id)))], '0x' + job.block.toString(16));
+          if (job.rank === DEEP_RANK) deepFails = readUint(ans?.[0]) == null ? deepFails + 1 : 0;
+          return ans;
+        };
+        const all = [...plan.jobs, ...deep.jobs];
+        const t0 = Date.now(), first = await runBudgeted(all, read, { deadlineMs: deadline });
         // a batch that landed outside its moment's hour is read once more at the block its timestamp points to
         const tsOf = (ans, job) => { const ts = readUint(ans?.[0]); return ts != null && X.ageOk(ts, X.block - job.block) ? Number(ts) * 1000 : null; };
-        const again = X.CH.eras ? [] : retryJobs(plan.jobs, plan.jobs.map((job, j) => tsOf(first.results[j], job)), { block: X.block, secPerBlock: X.CH.secPerBlock, max: Math.ceil(BACKFILL.maxBatches / 4) });
+        const again = X.CH.eras ? [] : retryJobs(all, all.map((job, j) => tsOf(first.results[j], job)), { block: X.block, secPerBlock: X.CH.secPerBlock, max: Math.ceil(BACKFILL.maxBatches / 4) });
         const left = deadline - (Date.now() - t0);
         const second = again.length && left > 0 ? await runBudgeted(again, read, { deadlineMs: left }) : { results: again.map(() => null), started: 0, skipped: again.length };
-        jobs = [...plan.jobs, ...again];
+        jobs = [...all, ...again];
         run = { results: [...first.results, ...second.results], started: first.started + second.started, skipped: first.skipped + second.skipped, retried: again.length };
       });
       bf.wanted += plan.wanted; bf.planned += plan.planned; bf.jobs += plan.jobs.length; bf.retried += run.retried; bf.skipped += run.skipped; bf.batches += run.started;
+      bf.deepWanted += deep.wanted; bf.deepJobs += deep.jobs.length;
       jobs.forEach((job, j) => {
-        const ans = run.results[j];
+        const ans = run.results[j], isDeep = job.rank === DEEP_RANK;
         if (!ans) return; // not started within the time budget: next pass
         const ts = readUint(ans[0]);
-        if (ts == null) { bf.unread++; return; }
+        if (ts == null) { bf.unread++; if (isDeep) bf.deepUnread++; return; }
         if (!X.ageOk(ts, X.block - job.block)) { bf.stale++; return; } // not that block's state
         let o = 1;
         for (const id of job.ids) {
           const p = byId.get(id), n = bfCalls(p).length, r = readBackfill(p.v, ans.slice(o, o + n));
           o += n;
-          if (r.kind === 'row') { rows.get(id).push({ t: Number(ts) * 1000, block: job.block, ...r.row, parked: null }); bf.rows++; }
-          else if (r.kind === 'unborn') { unborn.set(id, Math.max(unborn.get(id) ?? 0, Number(ts) * 1000)); bf.unbornMoments++; }
+          if (r.kind === 'row') { rows.get(id).push({ t: Number(ts) * 1000, block: job.block, ...r.row, parked: null }); bf.rows++; if (isDeep) bf.deepRows++; }
+          else if (r.kind === 'unborn') {
+            const m = isDeep ? deepUnborn : unborn;
+            m.set(id, Math.max(m.get(id) ?? 0, Number(ts) * 1000)); bf.unbornMoments++; if (isDeep) bf.deepUnborn++;
+          }
         }
       });
     }
@@ -619,7 +661,19 @@ async function writeOutputs() {
   const keepUnborn = new Map([...unborn].filter(([id]) => keepChains.has(chainOf.get(id))));
   const snapsKeep = mergeStore(snapsOk ? snaps : new Map(), keepRows, { now: passT, unborn: keepUnborn });
   const snaps2 = mergeStore(snapsKeep, new Map([...rows].filter(([id]) => !keepRows.has(id))), { now: passT, unborn: new Map([...unborn].filter(([id]) => !keepUnborn.has(id))) });
-  const changed = snapsOk && (rebuilt || sig(snapsKeep) !== before);
+  // the fee history's deep record per pool (lib/feehist.mjs foldDeep): every exact day of the year, folded from
+  // the previous tiers' rows, this pass's and the deep backfill's; kept with the store for the chains it keeps
+  for (const p of mapped) {
+    const prevS = snaps.get(p.id), passRows = [...(prevS?.h || []), ...(prevS?.d || []), ...(rows.get(p.id) || [])];
+    for (const st of keepChains.has(p.chain) ? [snapsKeep, snaps2] : [snaps2]) {
+      const s = st.get(p.id);
+      if (!s) continue;
+      const y = foldDeep(s, passRows, { now: passT, unborn: deepUnborn.get(p.id) ?? null, notBefore: isNum(p.createdAt) ? p.createdAt * 1000 : null });
+      if (y) s.y = y; else delete s.y;
+    }
+  }
+  const gt = await gtRun;
+  const changed = snapsOk && (rebuilt || sig(snapsKeep) !== before || (gt && gt.full + gt.fresh + gt.missed > 0));
 
   // contract-verified: both tokens' source (Etherscan v2 for the chain, Blockscout where Etherscan doesn't
   // answer; cached a week; no answer: unread)
@@ -793,7 +847,9 @@ async function writeOutputs() {
     ];
     // flow quality per window (lib/flowq.mjs): the day's swaps for 24 h; the hourly snapshot rows for drift;
     // the daily record carried in live.json for the longer windows
-    const series = snaps2.get(p.id);
+    // the raw tiers only (lib/feehist.mjs windowSeries): the fee history's deep record and estimates never reach the
+    // windows, the gem or a score
+    const series = windowSeries(snaps2.get(p.id));
     const rate = feeTier && keeps ? feeTier * (keeps[0] + keeps[1]) / 2 : null;
     const hrows = series ? historyRows(series, { d0: t0.decimals, d1: t1.decimals, usd0: t0.usd, usd1: t1.usd, rate }).h : [];
     const curRow = [p.row.t, rnd(pxNow, 8), null, null, null];
@@ -960,14 +1016,21 @@ async function writeOutputs() {
   };
   store.put('live.json', live);
   let histWritten = false;
+  const fh = { pools: 0, exact: 0, est: 0, rows: 0, xc: [], xcPools: 0, aged: 0, full: 0, left: 0 };
   if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/history.json`))) {
     // history.json's charts (lib/charts.mjs): 14 days hourly, 90 days daily, nothing before a pool existed
+    // plus y, up to a year of daily LP fees (lib/feehist.mjs): exact from the fee counters, estimated from the day
+    // volumes before that, exact overriding; and yp, the pool's progress (exact days of its age within the year)
     const hp = {};
     for (const p of mapped) {
       const s2 = snaps2.get(p.id), t0 = p.X.tok.get(p.t0) || {}, t1 = p.X.tok.get(p.t1) || {};
       if (!s2) continue;
       const x = out.find((o) => o.id === p.id), rate = x.feeTier && x.lpKeeps ? x.feeTier * x.lpKeeps : null;
-      hp[p.id] = historyRows(s2, { d0: t0.decimals, d1: t1.decimals, usd0: t0.usd, usd1: t1.usd, rate });
+      const fy = feeYear({ series: s2, gt: gtCache.get(p.id) ?? null, now: passT,
+        pool: { d0: t0.decimals, d1: t1.decimals, rate, dyn: !!x.dynamicFee, usd0: t0.usd ?? null, usd1: t1.usd ?? null, pxNow: x.price ?? null, createdAt: x.createdAt } });
+      hp[p.id] = { ...historyRows(windowSeries(s2), { d0: t0.decimals, d1: t1.decimals, usd0: t0.usd, usd1: t1.usd, rate }), y: fy.y, yp: fy.yp };
+      fh.pools++; fh.exact += fy.yp.exact; fh.est += fy.yp.est; fh.rows += fy.y.length; fh.xc.push(...fy.xc); if (fy.xc.length) fh.xcPools++;
+      if (fy.yp.age != null) { fh.aged++; fh.left += fy.yp.age - fy.yp.exact; if (fy.yp.exact === fy.yp.age) fh.full++; }
     }
     let ph = null;
     try { ph = store.get('history.json'); } catch { ph = null; }
@@ -977,6 +1040,16 @@ async function writeOutputs() {
     store.put('history.json', { v: 1, t: passT, pools: hp, health });
     histWritten = true;
   }
-  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snapsKeep), t: passT, fix: SNAP_FIX });
+  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snapsKeep), t: passT, fix: SNAP_FIX, gt: packGt(gtCache, { now: passT }) });
+  // the fee history in the public log: counts, one ratio and seconds only (never a pool, an amount or an address)
+  if (histWritten) {
+    const xm = midOf(fh.xc), g = gt || {};
+    const line = `${fh.pools} pools, days exact ${fh.exact}, estimated ${fh.est}, unread ${fh.rows - fh.exact - fh.est} of ${fh.rows}; ${fh.full} of ${fh.aged} pools of known age exact on every day (${fh.left} pool-days still estimated or unread); `
+      + `estimated ÷ exact median ${xm == null ? '—' : xm.toFixed(3)} over ${fh.xc.length} days (${fh.xcPools} pools); `
+      + `GeckoTerminal ${g.full ?? 0} pools fetched + ${g.fresh ?? 0} topped up, ${g.missed ?? 0} unknown, ${g.failed ?? 0} unread, ${g.calls ?? 0} calls${g.stopped ? ` (stopped: ${g.stopped})` : ''}, ${gtCache.size} cached (base token matched for ${[...gtCache.values()].filter((e) => e.b === 0 || e.b === 1).length}); `
+      + `deep backfill ${bf.deepRows} rows from ${bf.deepJobs} batches planned of ${bf.deepWanted} pool-days wanted (${bf.deepUnborn} before a pool existed, ${bf.deepUnread} unread, ${bf.deepBroke} left after unread ones)`;
+    say(xm == null || fh.xc.length < 20 ? null : Math.abs(xm - 1) <= 0.25, 'fee history', line + (g.lastError ? `; last GeckoTerminal error ${g.lastError}` : ''));
+    pub(`fee history: ${line}; ${timing['fee history volumes'] ?? 0} s for the volumes`);
+  }
   say(snapsOk ? true : false, 'sealed outputs', `live.json written with ${out.length} pools; history.json ${histWritten ? 'written' : 'kept (no new hourly row)'}; snapshots ${snapsOk ? (changed ? 'updated' : 'unchanged') : 'stored copy did not open: left as it was'}`);
 }
