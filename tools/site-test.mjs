@@ -8,6 +8,7 @@
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
+//                                                    merge feebar
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
@@ -46,7 +47,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -1534,7 +1535,7 @@ async function testTable2(browser) {
   }
   const l = await openUnlocked(browser, 'default', { width: 1440 });
   ok('table laptop: every column fits a laptop, no sideways scroll', await l.page.evaluate(() => { const b = document.querySelector('#all-box'); return b.scrollWidth <= b.clientWidth + 1; }));
-  ok('table laptop: fewer, better columns (11)', (await l.page.$$eval('#all-tbl thead th', (x) => x.map((e) => e.querySelector('button').dataset.k).join())) === 'pair,gem,net,why,vol,tvl,room,feeApr,edge,sigma,age');
+  ok('table laptop: fewer, better columns (12: the 30-day fee bar after Why, since v0.4.2)', (await l.page.$$eval('#all-tbl thead th', (x) => x.map((e) => e.querySelector('button').dataset.k).join())) === 'pair,gem,net,why,fees,vol,tvl,room,feeApr,edge,sigma,age');
   await l.ctx.close();
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
@@ -2340,13 +2341,203 @@ async function testMotion(browser) {
   await m.ctx.close();
 }
 
+
+// ---------- the pair's other pools stacked in the detail's liquidity chart (v0.4.2, owner's pick 1A) ----------
+// An independent model of what the page should stack: every pool's bars on its own edges (offsets from its own price), turned
+// to the open pool's token order, shared onto the open pool's edges by overlap, then drawn on one scale for the stack's totals.
+const symNx = (s) => (String(s).toUpperCase() === 'ETH' ? 'WETH' : String(s).toUpperCase());
+const pairOfFx = (p) => [p.t0.sym, p.t1.sym].map(symNx);
+const samePairFx = (a, b) => a.pairKey === b.pairKey || pairOfFx(a).slice().sort().join('/') === pairOfFx(b).slice().sort().join('/');
+function mgModel(base, layers, view, shift = 0) { // layers: pools in stack order; shift: a planted misalignment (log units)
+  const sh = base.shape, E = sh.depthEdges, step = sh.depthStep.fine, [v0, v1] = view, X = (o) => ((o - v0) / (v1 - v0)) * 480;
+  const tg = sh.depth.map(([, v], i) => ({ a: E[i], b: E[i + 1], v }));
+  const onto = (q) => {
+    const flip = pairOfFx(q)[0] === pairOfFx(base)[1] && pairOfFx(q)[1] === pairOfFx(base)[0];
+    let src = q.shape.depth.map(([, v], i) => ({ a: q.shape.depthEdges[i] + shift, b: q.shape.depthEdges[i + 1] + shift, v }));
+    if (flip) src = src.map((x) => ({ a: -x.b, b: -x.a, v: x.v })).reverse();
+    return tg.map((t) => { let v = 0; for (const x of src) { const ov = Math.min(t.b, x.b) - Math.max(t.a, x.a); if (ov > 1e-12) { if (x.v == null) return null; v += (x.v * ov) / (x.b - x.a); } } return v; });
+  };
+  const L = layers.map(onto), inV = (t) => t.b > v0 && t.a < v1;
+  const max = Math.max(1, ...tg.map((t, i) => (inV(t) ? (((t.v ?? 0) + L.reduce((s, l) => s + (l[i] ?? 0), 0)) * step) / (t.b - t.a) : 0)));
+  const at0 = [base, ...layers].reduce((s, q) => s + (q.shape.fullRangeUsd > 0 ? q.shape.fullRangeUsd / eInt(...(q.shape.fullRangeSpan || [-Infinity, Infinity])) : 0), 0);
+  const hb = at0 > 0 ? Math.min(12, Math.max(2, ((at0 * step) / max) * 116)) : 0, H = 116 - hb;
+  const top = tg.map(() => 120 - hb), segs = { base: [], layers: L.map(() => []) };
+  tg.forEach((t, i) => { if (!inV(t) || !(t.v > 0)) return; const h = Math.max(1.5, ((t.v * step) / (t.b - t.a) / max) * H), full = X(t.b) - X(t.a), g = Math.min(2, full * 0.2); segs.base.push({ x: X(t.a) + g / 2, y: top[i], w: Math.max(1, full - g), h }); top[i] -= h; });
+  L.forEach((l, k) => tg.forEach((t, i) => { if (!inV(t) || !(l[i] > 0)) return; const h = ((l[i] * step) / (t.b - t.a) / max) * H; if (h < 0.05) return; const full = X(t.b) - X(t.a), g = Math.min(2, full * 0.2); segs.layers[k].push({ x: X(t.a) + g / 2, y: top[i], w: Math.max(1, full - g), h }); top[i] -= h; }));
+  return segs;
+}
+const MG_LOOK = (id) => {
+  const h = document.querySelector(`[data-pz="${id}"]`), box = h.closest('[data-chartbox]'), seg = (d) => [...String(d).matchAll(/M(-?[\d.]+) (-?[\d.]+)v(-?[\d.]+)h([\d.]+)v/g)].map((m) => ({ x: +m[1], y: +m[2], h: -m[3], w: +m[4] }));
+  return { view: h.dataset.view, chips: [...box.querySelectorAll('[data-act="merge"]')].map((b) => ({ id: b.dataset.id, on: b.getAttribute('aria-pressed') === 'true', txt: b.textContent, chain: !!b.querySelector('.cg') })),
+    base: seg([...h.querySelectorAll('.pz-c svg path:not(.mg)')].map((x) => x.getAttribute('d')).join('')),
+    layers: [...h.querySelectorAll('.pz-c svg path.mg')].map((x) => ({ id: x.dataset.pid, segs: seg(x.getAttribute('d')) })),
+    line: (box.querySelector('.mgline') || {}).textContent || '', unread: h.querySelectorAll('rect.mg-nr').length };
+};
+function segsMatch(got, want) {
+  const bad = [];
+  if (got.length !== want.length) bad.push(`${got.length}/${want.length} segments`);
+  for (const e of want) { const g = got.find((b) => Math.abs(b.x - e.x) < 0.16); if (!g || Math.abs(g.h - e.h) > 0.16 || Math.abs(g.y - e.y) > 0.16 || Math.abs(g.w - e.w) > 0.16) bad.push(`x ${e.x.toFixed(1)} h ${e.h.toFixed(2)} y ${e.y.toFixed(1)} got ${g ? `h ${g.h} y ${g.y}` : 'none'}`); }
+  return { ok: !bad.length, why: bad.slice(0, 2).join(' | ') };
+}
+function stackOk(a) { // every segment starts where the one under it ends: the stack's height is the sum of its parts
+  const all = [...a.base, ...a.layers.flatMap((l) => l.segs)], byX = new Map();
+  for (const s of all) { const k = s.x.toFixed(1); (byX.get(k) || byX.set(k, []).get(k)).push(s); }
+  let bad = 0, n = 0;
+  for (const col of byX.values()) { col.sort((p, q) => q.y - p.y); for (let i = 1; i < col.length; i++) { n++; if (Math.abs(col[i].y - (col[i - 1].y - col[i - 1].h)) > 0.16) bad++; } }
+  return { ok: bad === 0 && n > 0, why: `${bad} of ${n} joins off` };
+}
+async function testMerge(browser) {
+  const pools = FXD.live.pools;
+  // the pair with the most pools: VELNA/WETH (two tiers on Base, a v4 pool in native ETH, and Ethereum)
+  const base = pools.find((q) => q.pair === 'VELNA/WETH' && q.chain === 'ethereum'), peers = pools.filter((q) => q.id !== base.id && samePairFx(base, q));
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop', ID = 'liq-detail';
+    await openPool(p, base.id.slice(0, 10));
+    const look = () => p.evaluate(MG_LOOK, ID), tap = async (qid) => { await p.evaluate((qid) => document.querySelector(`#sheet-body [data-act="merge"][data-id="${qid}"]`).click(), qid); await sleep(200); };
+    let a = await look();
+    ok(`merge ${tag}: a chip for each other pool of the pair (${a.chips.length}: other tiers, v4 and another chain), each with its chain mark, all off by default`, a.chips.length === peers.length && peers.length >= 3 && a.chips.every((c) => !c.on && c.chain) && new Set(a.chips.map((c) => c.id)).size === peers.length && a.chips.some((c) => pools.find((q) => q.id === c.id).chain !== base.chain), JSON.stringify(a.chips.map((c) => c.txt)));
+    ok(`merge ${tag}: by default the chart is this pool only, and the ±9% line names this pool alone`, a.layers.length === 0 && /Within ±9%/.test(a.line) && /this/.test(a.line) && !/total/.test(a.line), a.line);
+    const order = a.chips.map((c) => pools.find((q) => q.id === c.id)), q1 = order[0], q2 = order[order.length - 1];
+    await tap(q1.id);
+    a = await look();
+    let want = mgModel(base, [q1], viewOf(a)), m = segsMatch(a.layers[0] ? a.layers[0].segs : [], want.layers[0]);
+    ok(`merge ${tag}: a tap stacks that pool (${q1.chain} ${q1.feeTier * 100}% v${q1.v}) in its own colour, each bar on its own log offset (${want.layers[0].length} segments)`, a.chips[0].on && a.layers.length === 1 && a.layers[0].id === q1.id && m.ok, m.why);
+    m = segsMatch(a.base, want.base);
+    ok(`merge ${tag}: …this pool's bars rescale under the stack (one scale for the totals)`, m.ok, m.why);
+    let st = stackOk(a);
+    ok(`merge ${tag}: …every stacked segment sits on top of the bar under it: the stack is the sum of its parts`, st.ok, st.why);
+    // planted fault: the same pool one fine bar off its edges must not pass the comparison
+    const bad = segsMatch(a.layers[0].segs, mgModel(base, [q1], viewOf(a), 0.01875).layers[0]);
+    ok(`merge ${tag}: planted: a stack misaligned by one bar is caught`, !bad.ok, 'the shifted model matched');
+    await tap(q2.id);
+    a = await look();
+    want = mgModel(base, [q1, q2], viewOf(a));
+    const m1 = segsMatch(a.layers.find((l) => l.id === q1.id).segs, want.layers[0]), m2 = segsMatch((a.layers.find((l) => l.id === q2.id) || { segs: [] }).segs, want.layers[1]);
+    st = stackOk(a);
+    ok(`merge ${tag}: a second chip stacks a third pool on top (any number at once), still the sum of its parts`, a.layers.length === 2 && m1.ok && m2.ok && st.ok, m1.why || m2.why || st.why);
+    // the ±9% line: one share per pool, adding up to 100%, and a total
+    const parts = a.line.replace(/^Within ±9%: /, '').split(' · ').filter((x) => /%$/.test(x.trim())).map((x) => +x.trim().match(/([\d.]+)%$/)[1]);
+    ok(`merge ${tag}: …the line under the chart gives each pool's share of the value within ±9% (${parts.join(' + ')}) and the total`, parts.length === 3 && Math.abs(parts.reduce((s, x) => s + x, 0) - 100) <= 1.5 && /total \$[\d.]+[KMB]?/.test(a.line), a.line);
+    // pan and zoom with the stack on: zoom out to the whole field, then drag; the stack follows
+    await zoomAllOut(p, ID, '#sheet-body');
+    a = await look(); want = mgModel(base, [q1, q2], viewOf(a));
+    const z1 = segsMatch(a.layers.find((l) => l.id === q1.id).segs, want.layers[0]), z0 = segsMatch(a.base, want.base);
+    ok(`merge ${tag}: zoomed out to the whole field the stack is still aligned bar for bar`, z1.ok && z0.ok && stackOk(a).ok, z1.why || z0.why);
+    await pzClick(p, `#sheet-body [data-act="zoom"][data-chart="${ID}"][data-dir="1"]`); await sleep(150);
+    await pzClick(p, `#sheet-body [data-act="zoom"][data-chart="${ID}"][data-dir="1"]`); await sleep(150);
+    await pzDrag(p, ID, 120); await pzSettled(p, ID);
+    a = await look(); want = mgModel(base, [q1, q2], viewOf(a));
+    const d1 = segsMatch(a.layers.find((l) => l.id === q1.id).segs, want.layers[0]);
+    ok(`merge ${tag}: zoomed in and dragged, the stack moves with the bars (${a.view})`, d1.ok && stackOk(a).ok && !/^0\.0000,/.test(a.view), d1.why);
+    await pzClick(p, `#sheet-body [data-act="zreset"][data-chart="${ID}"]`).catch(() => {}); await sleep(150);
+    // off again, one at a time
+    await tap(q1.id);
+    a = await look(); want = mgModel(base, [q2], viewOf(a));
+    const o2 = segsMatch((a.layers[0] || { segs: [] }).segs, want.layers[0]);
+    ok(`merge ${tag}: a second tap takes that pool off (the other stays)`, a.layers.length === 1 && a.layers[0].id === q2.id && !a.chips[0].on && o2.ok, o2.why);
+    await tap(q2.id);
+    a = await look();
+    const back = barsMatch((await p.evaluate(LIQ_LOOK, ID)).bars, liqExpect(base, viewOf(a)), (await p.evaluate(LIQ_LOOK, ID)).band);
+    ok(`merge ${tag}: with every chip off the chart is this pool alone again, exactly as before`, a.layers.length === 0 && a.chips.every((c) => !c.on) && back.ok, back.why);
+    // another pool opens on itself only
+    await tap(q1.id); await closePool(p);
+    await openPool(p, q2.id.slice(0, 10));
+    a = await look();
+    ok(`merge ${tag}: another pool's detail opens on itself only`, a.layers.length === 0 && a.chips.length === peers.length, String(a.layers.length));
+    await closePool(p);
+    // a stablecoin pair: its other pool is a chip even while the stablecoin switch hides both from the lists
+    const nm = pools.filter((q) => q.pair === 'NUMA/USDC');
+    await openPool(p, nm[0].id.slice(0, 10));
+    await p.evaluate(() => document.querySelector('#f-stab').click()); await sleep(300);
+    a = await look();
+    const hidden = await p.evaluate(() => document.querySelector('#f-stab').getAttribute('aria-checked'));
+    ok(`merge ${tag}: pools the stablecoin switch hides still appear as chips here (same pair)`, hidden === 'false' && a.chips.length === nm.length - 1, `${hidden} ${a.chips.length}`);
+    ok(`merge ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    if (SHOTS && !phone) { await p.evaluate(() => document.querySelector('#f-stab').click()); await closePool(p); await openPool(p, base.id.slice(0, 10)); await tap(q1.id); await tap(q2.id); await snap(p, 'merge-laptop', '#sheet .sheet-card'); }
+    if (SHOTS && phone) { await p.evaluate(() => document.querySelector('#f-stab').click()); await closePool(p); await openPool(p, base.id.slice(0, 10)); await tap(q1.id); await snap(p, 'merge-phone'); }
+    await t.ctx.close();
+  }
+}
+
+// ---------- the fee-history mini bar (v0.4.2): lists, cards and the pool header ----------
+function feeModel(rows) { // the last 7 days' fees a day and the change on the 7 before, straight from history.json's rows
+  const r = rows.filter((x) => typeof x[0] === 'number').sort((a, b) => a[0] - b[0]), t1 = r[r.length - 1][0], bars = [];
+  for (let i = 1; i < r.length; i++) if (r[i][0] > r[i - 1][0]) bars.push({ a: r[i - 1][0], b: r[i][0], v: typeof r[i][2] === 'number' ? r[i][2] / ((r[i][0] - r[i - 1][0]) / 864e5) : null });
+  const per = (a, b) => { let f = 0, d = 0; for (const x of bars) { if (x.v == null) continue; const ov = Math.min(b, x.b) - Math.max(a, x.a); if (ov > 0) { f += (x.v * ov) / 864e5; d += ov / 864e5; } } return d >= 3 - 1e-9 ? f / d : null; };
+  const day = per(t1 - 7 * 864e5, t1), prev = per(t1 - 14 * 864e5, t1 - 7 * 864e5);
+  return { day, ch: day != null && prev > 0 ? day / prev - 1 : null, n: bars.filter((x) => x.b > t1 - 30 * 864e5).length };
+}
+const usdFx = (x) => { const a = Math.abs(x); return '$' + (a >= 999.5e6 ? (a / 1e9).toFixed(a >= 9.95e9 ? 0 : 1) + 'B' : a >= 999.5e3 ? (a / 1e6).toFixed(a >= 9.95e6 ? 0 : 1) + 'M' : a >= 9995 ? Math.round(a / 1e3) + 'K' : a >= 999.5 ? (a / 1e3).toFixed(1) + 'K' : a >= 9.995 ? String(Math.round(a)) : a.toFixed(2)); }; // the page's own rounding (not under test here)
+const moneyOf = (s) => { const m = /\$([\d.]+)([KMB]?)/.exec(s); return m ? +m[1] * ({ K: 1e3, M: 1e6, B: 1e9 }[m[2]] || 1) : null; };
+async function testFeeBar(browser) {
+  const H = FXD.history.pools, pools = FXD.live.pools;
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    await p.click('[data-act="more"]').catch(() => {}); await sleep(150);
+    const rows = await p.evaluate(() => [...document.querySelectorAll('#all tbody tr.row')].map((r) => { const f = r.querySelector('td.fees .fmini'); return { id: r.dataset.id, txt: f ? f.querySelector('.fm-t').textContent : null, n: f ? +f.dataset.fm : -1, svg: f ? [f.querySelector('svg').getAttribute('width'), f.querySelector('svg').getAttribute('height')].join('×') : '' }; }));
+    const head = await p.evaluate(() => [...document.querySelectorAll('#all-tbl thead th')].map((e) => e.textContent));
+    let bad = [], dash = 0, withCh = 0;
+    for (const r of rows) {
+      const h = H[r.id], e = h && Array.isArray(h.d) && h.d.some((x) => typeof x[2] === 'number') ? feeModel(h.d) : null;
+      if (!e) { if (r.txt !== '—') bad.push('no history but ' + r.txt); else dash++; continue; }
+      const got = moneyOf(r.txt), chm = /([▲▼]) (\d+)%/.exec(r.txt);
+      if (e.day == null ? got != null : !r.txt.startsWith(usdFx(e.day) + '/d')) bad.push(`day ${r.txt} vs ${e.day}`);
+      if (e.ch == null ? !!chm : !(chm && (chm[1] === '▲') === (e.ch >= 0) && Math.abs(+chm[2] - Math.round(Math.abs(e.ch) * 100)) <= 0)) bad.push(`change ${r.txt} vs ${e.ch}`);
+      if (chm) withCh++;
+      if (r.n !== e.n || r.svg !== '90×22') bad.push(`bars ${r.n}/${e.n} ${r.svg}`);
+    }
+    ok(`feebar ${tag}: All pools has a "Fees 30 d" column after Why: a 90×22 bar of 30 days and "$X/d · ▲/▼ N%", matching history.json's daily rows ÷ their gaps (${rows.length} rows, ${withCh} with a change)`, head.some((x) => /Fees 30 d/.test(x)) && head.findIndex((x) => /Fees 30 d/.test(x)) === head.findIndex((x) => /^Why/.test(x)) + 1 && rows.length > 50 && !bad.length && withCh > 20, bad.slice(0, 2).join(' | '));
+    // a pool with no daily rows: a dash, never $0
+    const noHist = pools.filter((q) => !H[q.id] || !(H[q.id].d || []).some((x) => typeof x[2] === 'number'));
+    ok(`feebar ${tag}: a pool without history shows a dash (${dash} in the table, ${noHist.length} in the data)`, dash === rows.filter((r) => noHist.some((q) => q.id === r.id)).length, String(dash));
+    // sorting by the column: highest first, dashes last
+    await p.click('#all-tbl thead [data-k="fees"]'); await sleep(200);
+    const sorted = await p.evaluate(() => [...document.querySelectorAll('#all tbody tr.row td.fees .fm-t')].map((e) => e.textContent));
+    const vals = sorted.map(moneyOf), firstNull = vals.findIndex((x) => x == null);
+    ok(`feebar ${tag}: the column sorts by fees a day, a dash sinks`, vals.slice(0, firstNull < 0 ? vals.length : firstNull).every((x, i, a) => !i || x <= a[i - 1] * 1.051) && (firstNull < 0 || vals.slice(firstNull).every((x) => x == null)), sorted.slice(0, 4).join(' '));
+    // best find and favourites/similar cards carry it; Next best only where the row has room
+    const cards = await p.evaluate(() => ({ best: !!document.querySelector('#best .fmrow .fmini svg'), next: [...document.querySelectorAll('#next .nb-row .fmini')].map((e) => getComputedStyle(e).display !== 'none'), nextW: document.querySelector('#next').clientWidth }));
+    ok(`feebar ${tag}: the best find carries the mini bar`, cards.best);
+    ok(`feebar ${tag}: Next best shows it only where the row has room (${cards.nextW} px wide: ${cards.next.filter(Boolean).length}/${cards.next.length})`, cards.next.length > 0 && cards.next.every((x) => x === cards.nextW >= 500), JSON.stringify(cards));
+    const pick = pools.find((q) => H[q.id] && H[q.id].d && H[q.id].d.length > 80 && !isStableFx(q) && q.pair === 'VELNA/WETH') || pools.find((q) => H[q.id] && H[q.id].d && H[q.id].d.length > 80);
+    await openPool(p, pick.id.slice(0, 10));
+    const sim = await p.evaluate(() => [...document.querySelectorAll('#sim .mc:not(.end)')].map((c) => !!c.querySelector('.fmini svg')));
+    ok(`feebar ${tag}: the similar-pool cards carry it (${sim.length} cards)`, sim.length > 0 && sim.every(Boolean), JSON.stringify(sim));
+    // the header's bigger bar: a tap lands on the full daily fee chart, zoomed out to every day it has
+    const hb = await p.evaluate(() => { const b = document.querySelector('#sheet-fee [data-act="feehist"]'); return b ? { w: +b.querySelector('svg').getAttribute('width'), t: b.textContent, h: b.getBoundingClientRect().height } : null; });
+    ok(`feebar ${tag}: the pool header has a bigger bar (${hb && hb.w} px) that is a 44 px button`, hb && hb.w >= 140 && hb.h >= 43.5 && /\/d/.test(hb.t), JSON.stringify(hb));
+    await pzClick(p, '#sheet-body [data-act="zoom"][data-chart="d-day"][data-dir="1"]'); await sleep(150);
+    await pzClick(p, '#sheet-body [data-act="zoom"][data-chart="d-day"][data-dir="1"]'); await sleep(150);
+    const zin = +(await p.getAttribute('[data-pz="d-day"]', 'data-view')).split(',')[1];
+    await p.evaluate(() => document.querySelector('#sheet-body').scrollTo(0, 0)); await sleep(150);
+    await p.click('#sheet-fee [data-act="feehist"]'); await sleep(900);
+    const land = await p.evaluate(() => { const b = document.querySelector('#sheet-body [data-chartbox="d-day"]').getBoundingClientRect(), sb = document.querySelector('#sheet-body').getBoundingClientRect(); return { top: b.top - sb.top, h: sb.height, view: document.querySelector('[data-pz="d-day"]').dataset.view }; });
+    const rr = pick && H[pick.id].d.filter((x) => typeof x[0] === 'number'), span = (rr[rr.length - 1][0] - rr[0][0]) / 864e5;
+    ok(`feebar ${tag}: a tap scrolls to the daily fee chart and zooms it out to all ${Math.round(span)} days (was ${zin.toFixed(1)})`, land.top >= -4 && land.top < land.h * 0.5 && Math.abs(+land.view.split(',')[1] - span) < 0.05 && span > 85 && zin < span - 1, JSON.stringify(land));
+    await pzClick(p, '#sheet-body [data-act="zoom"][data-chart="d-day"][data-dir="1"]'); await sleep(150);
+    const v0 = await p.getAttribute('[data-pz="d-day"]', 'data-view');
+    await pzDrag(p, 'd-day', 120); await pzSettled(p, 'd-day');
+    const v1 = await p.getAttribute('[data-pz="d-day"]', 'data-view');
+    ok(`feebar ${tag}: …and it zooms in and pans back in time`, v0 !== v1 && +v1.split(',')[0] < +v0.split(',')[0], v0 + ' → ' + v1);
+    if (SHOTS) await snap(p, `feebar-${tag}`);
+    await closePool(p);
+    ok(`feebar ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // history not published yet: every bar is a dash, nothing breaks
+  const n = await openUnlocked(browser, 'nofiles', { width: 1300 });
+  const txt = await n.page.evaluate(() => [...document.querySelectorAll('#all tbody td.fees .fm-t')].map((e) => e.textContent));
+  ok('feebar: with no history.json every mini bar is a dash, never $0', txt.length > 0 && txt.every((x) => x === '—'), txt.slice(0, 3).join(' '));
+  await n.ctx.close();
+}
+
 // ---------- run ----------
 const t0 = Date.now();
 writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion };
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar };
 try {
   for (const g of ONLY) {
     if (!groups[g]) continue;
