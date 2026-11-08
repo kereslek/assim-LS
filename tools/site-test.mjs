@@ -8,7 +8,7 @@
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
-//                                                    merge feebar
+//                                                    merge feebar stablewalk flash
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -48,7 +48,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -85,12 +85,15 @@ const url = (c, q = '') => `${ORIGIN}/app/index.html?base=/fx/${c}/${q}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Most groups read every pool, so their pages start with the stablecoin-pairs switch on; `stableDefault: true` leaves the
 // page's own default (off), and the stable group and the overlap walk use it.
-async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false } = {}) {
+// The competition flash (v0.4.5) plays when a pool's detail opens; groups that read the detail's chart at once turn its
+// auto-play off (`flash: true` leaves it on: the flash group and the walk-through). A tap on its badge still plays it.
+async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false, flash = false } = {}) {
   if (!stableDefault) storage = { 'lps.stable': '1', ...(storage || {}) };
   const base = phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: phone ? { width: 390, height: 844 } : { width, height } }; // phone = 390 px here, the device in Actions
   if (BROWSER !== 'chromium') delete base.defaultBrowserType;
   const ctx = await browser.newContext({ ...base, reducedMotion });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
+  if (!flash) await ctx.addInitScript(() => { window.__lpsNoFlash = true; });
   await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
   await ctx.addInitScript(() => document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a && !window.__allowExt) { e.preventDefault(); (window.__opened ||= []).push(a.href); } }, true)); // explorer links: recorded, never followed
   const page = await ctx.newPage();
@@ -792,12 +795,12 @@ async function testPan(browser) {
 // bars, across its span, as thick as its dollars at the price (constant liquidity: ∝ e^(−|x|/2)) on the bars' scale, 2 to 12
 // units; a real 0 past the bars draws nothing and an unread stretch is hatched.
 const eInt = (a, b) => (b <= a ? 0 : a >= 0 ? 2 * (Math.exp(-a / 2) - Math.exp(-b / 2)) : b <= 0 ? 2 * (Math.exp(b / 2) - Math.exp(a / 2)) : eInt(a, 0) + eInt(0, b));
-function liqExpect(pool, view) { // what the page should draw for this view: [{ x, y, w, h }] in the chart's 480 × 120 box
+function liqExpect(pool, view, detail = false) { // what the page should draw for this view: [{ x, y, w, h }] in the chart's 480 × 120 box
   const sh = pool.shape, E = sh.depthEdges, step = sh.depthStep.fine, [v0, v1] = view, X = (o) => ((o - v0) / (v1 - v0)) * 480;
   const fr = sh.fullRangeUsd > 0 ? sh.fullRangeUsd : 0, [la, lb] = sh.fullRangeSpan || [0, 0], c = fr ? fr / eInt(la, lb) : 0;
   const bars = sh.depth.map(([o, v], i) => ({ a: E[i], b: E[i + 1], v })).filter((b) => b.b > v0 && b.a < v1);
   const dens = (b) => (b.v * step) / (b.b - b.a);
-  const max = Math.max(1, ...bars.filter((b) => b.v != null).map(dens));
+  const max = Math.max(1, ...bars.filter((b) => b.v != null).map(dens), detail ? ghostCap(pool, view) : 0);
   const hb = fr && Math.min(v1, lb) > Math.max(v0, la) ? Math.min(12, Math.max(2, ((c * step) / max) * 116)) : 0;
   const out = bars.filter((b) => b.v > 0).map((b) => { const full = X(b.b) - X(b.a), g = Math.min(2, full * 0.2); return { x: X(b.a) + g / 2, y: 120 - hb, w: Math.max(1, full - g), h: Math.max(1.5, (dens(b) / max) * (116 - hb)) }; });
   out.band = hb ? { x: X(Math.max(v0, la)), w: X(Math.min(v1, lb)) - X(Math.max(v0, la)), h: hb } : null;
@@ -888,7 +891,7 @@ async function testDepth(browser) {
     a = await look('liq-detail');
     const nulls = qp.shape.depth.filter((d) => d[1] === null).length;
     ok(`depth ${tag}: unread bars are hatched (${a.unread} of ${nulls}) and the unread "beyond" says so, never $0; no layer where it couldn't be measured`, a.unread === nulls && a.by.some((x) => /not read beyond/.test(x.t)) && /Not read/.test(a.legend) && !/\$0 /.test(a.by.map((x) => x.t).join(' ')) && a.fr === 0 && /×10/.test(a.cap), JSON.stringify({ u: a.unread, by: a.by, cap: a.cap }));
-    m = barsMatch(a.bars, liqExpect(qp, viewOf(a)), a.band);
+    m = barsMatch(a.bars, liqExpect(qp, viewOf(a), true), a.band);
     ok(`depth ${tag}: …its read bars still sit on their edges at ×${a.cap.split('×').pop()}`, m.ok, m.why);
     await pzDrag(p, 'liq-detail', -160, { up: false }); await sleep(60);
     const endQ = await p.$$eval('[data-pz="liq-detail"] .pz-end.r', (e) => e.map((x) => x.className + '|' + x.textContent).join());
@@ -900,7 +903,7 @@ async function testDepth(browser) {
     await openPool(p, 'ORVO');
     await zoomAllOut(p, 'liq-detail', '#sheet');
     a = await look('liq-detail');
-    m = barsMatch(a.bars, liqExpect(op, viewOf(a)), a.band);
+    m = barsMatch(a.bars, liqExpect(op, viewOf(a), true), a.band);
     ok(`depth ${tag}: a stray far position stretches the field (${a.cap}) and its bar is drawn out to the end`, /×2\d\d$/.test(a.cap) && m.ok && a.bars.some((b) => b.x + b.w > 470), a.cap + ' ' + m.why);
     await closePool(p);
     ok(`depth ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
@@ -2368,7 +2371,7 @@ async function testClicks(browser) {
       if (act === 'ext') good = /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(await p.evaluate(() => (window.__opened || []).slice(-1)[0] || ''));
       if (act === 'why' || act === 'gas' || act === 'term') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
       if (act === 'fav') good = good && (await p.$$('#fav .mc')).length > 0;
-      if (act === 'detail' || act === 'pair') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
+      if (act === 'detail' || act === 'pair' || act === 'flash-open') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
       if (act === 'win') good = good && (await p.getAttribute(`#winseg [data-w="${real.split(':')[1]}"]`, 'aria-pressed')) === 'true';
@@ -2421,6 +2424,29 @@ async function testMotion(browser) {
 const symNx = (s) => (String(s).toUpperCase() === 'ETH' ? 'WETH' : String(s).toUpperCase());
 const pairOfFx = (p) => [p.t0.sym, p.t1.sym].map(symNx);
 const samePairFx = (a, b) => a.pairKey === b.pairKey || pairOfFx(a).slice().sort().join('/') === pairOfFx(b).slice().sort().join('/');
+// the detail chart's ghost (v0.4.5): every pool of the pair onto the open pool's edges, summed bar by bar (unknown where any
+// bar wasn't read); the scale takes the ghost's tallest bar in view, but never more than 4× this pool's own tallest
+function ontoFx(base, q, shift = 0) {
+  const E = base.shape.depthEdges, tg = base.shape.depth.map(([, v], i) => ({ a: E[i], b: E[i + 1], v }));
+  const flip = pairOfFx(q)[0] === pairOfFx(base)[1] && pairOfFx(q)[1] === pairOfFx(base)[0];
+  let src = q.shape.depth.map(([, v], i) => ({ a: q.shape.depthEdges[i] + shift, b: q.shape.depthEdges[i + 1] + shift, v }));
+  if (flip) src = src.map((x) => ({ a: -x.b, b: -x.a, v: x.v })).reverse();
+  return tg.map((t) => { let v = 0; for (const x of src) { const ov = Math.min(t.b, x.b) - Math.max(t.a, x.a); if (ov > 1e-12) { if (x.v == null) return null; v += (x.v * ov) / (x.b - x.a); } } return v; });
+}
+function ghostOf(base) {
+  const peers = FXD.live.pools.filter((q) => q.id !== base.id && samePairFx(base, q) && q.shape.depth.some((d) => d[1] != null));
+  if (!peers.length) return null;
+  const L = peers.map((q) => ontoFx(base, q));
+  return base.shape.depth.map(([, v], i) => (v != null && L.every((l) => l[i] != null) ? v + L.reduce((s, l) => s + l[i], 0) : null));
+}
+function ghostCap(base, view) {
+  const g = ghostOf(base);
+  if (!g) return 0;
+  const sh = base.shape, E = sh.depthEdges, step = sh.depthStep.fine, [v0, v1] = view, inV = (i) => E[i + 1] > v0 && E[i] < v1, dn = (v, i) => (v * step) / (E[i + 1] - E[i]);
+  const own = Math.max(1, ...sh.depth.map(([, v], i) => (inV(i) && v != null ? dn(v, i) : 0)));
+  const gw = Math.max(0, ...g.map((v, i) => (inV(i) && v != null ? dn(v, i) : 0)));
+  return Math.min(gw, 4 * own);
+}
 function mgModel(base, layers, view, shift = 0) { // layers: pools in stack order; shift: a planted misalignment (log units)
   const sh = base.shape, E = sh.depthEdges, step = sh.depthStep.fine, [v0, v1] = view, X = (o) => ((o - v0) / (v1 - v0)) * 480;
   const tg = sh.depth.map(([, v], i) => ({ a: E[i], b: E[i + 1], v }));
@@ -2431,7 +2457,7 @@ function mgModel(base, layers, view, shift = 0) { // layers: pools in stack orde
     return tg.map((t) => { let v = 0; for (const x of src) { const ov = Math.min(t.b, x.b) - Math.max(t.a, x.a); if (ov > 1e-12) { if (x.v == null) return null; v += (x.v * ov) / (x.b - x.a); } } return v; });
   };
   const L = layers.map(onto), inV = (t) => t.b > v0 && t.a < v1;
-  const max = Math.max(1, ...tg.map((t, i) => (inV(t) ? (((t.v ?? 0) + L.reduce((s, l) => s + (l[i] ?? 0), 0)) * step) / (t.b - t.a) : 0)));
+  const max = Math.max(1, ...tg.map((t, i) => (inV(t) ? (((t.v ?? 0) + L.reduce((s, l) => s + (l[i] ?? 0), 0)) * step) / (t.b - t.a) : 0)), ghostCap(base, view));
   const at0 = [base, ...layers].reduce((s, q) => s + (q.shape.fullRangeUsd > 0 ? q.shape.fullRangeUsd / eInt(...(q.shape.fullRangeSpan || [-Infinity, Infinity])) : 0), 0);
   const hb = at0 > 0 ? Math.min(12, Math.max(2, ((at0 * step) / max) * 116)) : 0, H = 116 - hb;
   const top = tg.map(() => 120 - hb), segs = { base: [], layers: L.map(() => []) };
@@ -2510,7 +2536,7 @@ async function testMerge(browser) {
     ok(`merge ${tag}: a second tap takes that pool off (the other stays)`, a.layers.length === 1 && a.layers[0].id === q2.id && !a.chips[0].on && o2.ok, o2.why);
     await tap(q2.id);
     a = await look();
-    const back = barsMatch((await p.evaluate(LIQ_LOOK, ID)).bars, liqExpect(base, viewOf(a)), (await p.evaluate(LIQ_LOOK, ID)).band);
+    const back = barsMatch((await p.evaluate(LIQ_LOOK, ID)).bars, liqExpect(base, viewOf(a), true), (await p.evaluate(LIQ_LOOK, ID)).band);
     ok(`merge ${tag}: with every chip off the chart is this pool alone again, exactly as before`, a.layers.length === 0 && a.chips.every((c) => !c.on) && back.ok, back.why);
     // another pool opens on itself only
     await tap(q1.id); await closePool(p);
@@ -2610,7 +2636,236 @@ writeFixtures(FX);
 const srv = await serve();
 ORIGIN = `http://127.0.0.1:${srv.address().port}`;
 const browser = await pw[BROWSER].launch();
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar };
+// ---------- 4f5. v0.4.5: every place that names a pool, walked with the stablecoin switch off ----------
+// The owner still saw stablecoin pairs with the switch off (the backtest leaderboard, a pools section). This walk goes through
+// every window, every best-find tab, the whole table, New since, Next best, the backtests (leaderboard, scatter, each replay,
+// the strategy lab), search, a pool's detail (similar pools, its list) and a pair view, with one stablecoin pair starred, and
+// reads what is on screen: no other stablecoin pair may show, by its name or (the scatter's labels) by its token. With the
+// switch on, the same reading must find them (the walk sees what it claims to see).
+const WALK_TXT = () => document.body.innerText + '\n' + [...document.querySelectorAll('svg text')].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.textContent).join('\n');
+async function testStableWalk(browser) {
+  const pools = FXD.live.pools, fav = pools.filter((q) => q.pair === 'NUMA/USDC')[0];
+  const okSyms = new Set(pools.filter((q) => !isStableFx(q) || q.pair === fav.pair).flatMap((q) => [q.t0.sym, q.t1.sym]));
+  const hidden = pools.filter((q) => isStableFx(q) && q.pair !== fav.pair);
+  const names = [...new Set(hidden.map((q) => q.pair))], syms = [...new Set(hidden.map((q) => q.t0.sym))].filter((s) => !okSyms.has(s));
+  const leaksIn = (txt) => [...names.filter((n) => txt.includes(n)), ...syms.filter((s) => new RegExp(`(^|[^A-Z0-9])${s}([^A-Z0-9]|$)`).test(txt))];
+  for (const phone of [false, true]) {
+    const tag = phone ? 'phone' : 'laptop';
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, stableDefault: true, storage: { 'lps.hint': '1', 'lps.fav': JSON.stringify([fav.id]) } }), p = t.page;
+    const where = new Map(), seen = { n: 0 };
+    const read = async (place) => { seen.n++; for (const x of leaksIn(await p.evaluate(WALK_TXT))) if (!where.has(x)) where.set(x, place); };
+    const tap = async (sel) => { const hit = await p.evaluate((s) => { window.dispatchEvent(new WheelEvent('wheel')); const e = document.querySelector(s); if (!e) return false; e.click(); return true; }, sel); await sleep(250); return hit; };
+    for (const wk of phone ? ['30d'] : ['24h', '7d', '30d']) {
+      await setWin(p, wk);
+      await tap('#all-more .btn');
+      await read(`${wk} page`);
+      const tabs = await p.$$eval('#best [role="tab"]', (x) => x.length);
+      for (let i = 0; i < tabs; i++) { await p.evaluate((i) => document.querySelectorAll('#best [role="tab"]')[i].click(), i); await sleep(60); await read(`${wk} best tab ${i}`); }
+      const bt = await p.$$eval('#bt-lead tr.row', (x) => x.length);
+      for (let i = 0; i < bt; i++) { await p.evaluate((i) => document.querySelectorAll('#bt-lead tr.row')[i].click(), i); await sleep(250); await read(`${wk} replay ${i}`); }
+      await tap('#bt-replay [data-act="bt-close"]');
+    }
+    // search: a stablecoin's ticker suggests nothing hidden (the starred pair may show)
+    await p.fill('#f-q', 'USDC'); await sleep(300);
+    const sugg = await p.evaluate(() => document.querySelector('#q-list').innerText);
+    for (const x of leaksIn(sugg)) where.set(x, 'search');
+    await fillQ(p, '');
+    // a pool's detail (similar pools, also as a list) and its pair view
+    await tap('#next .nb-row[data-act="detail"]');
+    await read('detail');
+    if (await tap('#sim [data-act="sim-all"]')) await read('similar list');
+    await tap('#sheet-pair'); await read('pair view');
+    await p.click('#sheet-close'); await sleep(200);
+    const a = await p.evaluate(() => ({ tile: document.querySelector('#scanner').innerText, favRow: [...document.querySelectorAll('#all tbody tr.row')].filter((r) => /NUMA\/USDC/.test(r.textContent)).map((r) => /★ STABLE/.test(r.textContent)),
+      favCard: [...document.querySelectorAll('#fav .mc')].map((c) => /★ STABLE/.test(c.textContent)), nb: document.querySelector('#next .foot .btn').textContent, count: document.querySelector('#all-count').textContent }));
+    ok(`stablewalk ${tag}: with the switch off no stablecoin pair shows anywhere but the starred one (${seen.n} views: every window, tab, replay, the table, search, a detail and a pair view)`, where.size === 0 && seen.n >= (phone ? 4 : 12), JSON.stringify([...where].slice(0, 4)));
+    ok(`stablewalk ${tag}: the starred stablecoin pair stays, marked ★ STABLE (table row, favourites card)`, a.favRow.length === 1 && a.favRow[0] && a.favCard.length === 1 && a.favCard[0], JSON.stringify(a));
+    const nVis = pools.length - pools.filter((q) => isStableFx(q) && q.id !== fav.id).length;
+    ok(`stablewalk ${tag}: the scanner tile counts the hidden ones; Next best's button and the table's count leave them out (${nVis} shown)`, /\d+ hidden · stablecoin pairs off/.test(a.tile) && a.nb.includes(`All ${nVis} scored pools`) && new RegExp(`OF ${nVis}( |$)`).test(a.count), `${a.nb} | ${a.count}`);
+    // switched on (from the strip): the same reading finds them, so the walk can see them
+    await p.evaluate(() => scrollTo(0, 0));
+    await p.click('#t-stab'); await sleep(350);
+    const found = new Set();
+    for (const wk of ['24h', '30d']) {
+      await setWin(p, wk); await tap('#all-more .btn');
+      for (const x of leaksIn(await p.evaluate(WALK_TXT))) found.add(x);
+      const lead = await p.$$eval('#bt-lead tr.row .pn2', (x) => x.map((e) => e.textContent));
+      if (lead.some((n) => names.includes(n))) found.add('leaderboard');
+    }
+    ok(`stablewalk ${tag}: switched on, the same walk finds them (the table, the leaderboard: ${found.size} names)`, found.size >= 5 && found.has('leaderboard'), [...found].slice(0, 5).join(' '));
+    ok(`stablewalk ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    if (!phone) await snap(p, 'stablewalk-on-laptop');
+    await t.ctx.close();
+  }
+  // the strip's switch and the table's: one state, both ways, the focus stays where it was pressed, kept on this device
+  for (const phone of [true, false]) {
+    const tag = phone ? 'phone' : 'laptop';
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, stableDefault: true }), p = t.page;
+    const st = () => p.evaluate(() => ({ top: document.querySelector('#t-stab').getAttribute('aria-checked'), topTxt: document.querySelector('#t-stab').textContent.replace(/\s+/g, ' ').trim(),
+      row: document.querySelector('#f-stab').getAttribute('aria-checked'), focus: document.activeElement && document.activeElement.id, ls: localStorage.getItem('lps.stable'),
+      lead: [...document.querySelectorAll('#bt-lead tr.row .pn2')].map((e) => e.textContent) }));
+    const box = await p.evaluate(() => { const r = document.querySelector('#t-stab').getBoundingClientRect(), g = document.querySelector('#gas').getBoundingClientRect(), s = document.querySelector('#mstrip').getBoundingClientRect(); return { vis: r.width > 40 && r.height >= 44 && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth, inStrip: r.top >= s.top - 14 && r.bottom <= s.bottom + 14, dy: Math.abs((r.top + r.bottom) / 2 - (g.top + g.bottom) / 2) }; });
+    let a = await st();
+    ok(`stablewalk ${tag}: the strip has the switch next to the gas gauge, in view on load ("${a.topTxt}"), a switch for assistive tech`, box.vis && box.inStrip && a.top === 'false' && /^Stables: off$/.test(a.topTxt) && (await p.getAttribute('#t-stab', 'role')) === 'switch', JSON.stringify(box));
+    await p.click('#t-stab'); await sleep(350);
+    a = await st();
+    ok(`stablewalk ${tag}: the strip's switch turns both on, keeps its focus and the choice`, a.top === 'true' && a.row === 'true' && /Stables: on/.test(a.topTxt) && a.focus === 't-stab' && a.ls === '1' && a.lead.some((n) => /\/(USDC|MUNT)$/.test(n)), JSON.stringify(a).slice(0, 200));
+    await p.evaluate(() => document.querySelector('#f-stab').scrollIntoView({ block: 'center' })); await p.click('#f-stab'); await sleep(350);
+    a = await st();
+    ok(`stablewalk ${tag}: the table's switch turns both off again (one state)`, a.top === 'false' && a.row === 'false' && /Stables: off/.test(a.topTxt) && a.focus === 'f-stab' && a.ls === '0' && !a.lead.some((n) => /\/(USDC|MUNT)$/.test(n)), JSON.stringify(a).slice(0, 200));
+    await p.evaluate(() => scrollTo(0, 0)); await sleep(150);
+    await p.click('#mstrip [data-term="stabtop"]'); await sleep(200);
+    const note = await p.evaluate(() => { const e = document.querySelector('#pop'); return e && !e.hidden ? e.textContent : ''; });
+    ok(`stablewalk ${tag}: its ⓘ says it in plain words`, note.includes('Pairs with a stablecoin (USDC, USDT, DAI…) are hidden by default. Turn on to include them.'), note.slice(0, 80));
+    await p.keyboard.press('Escape'); await sleep(100);
+    if (!phone) await auditAt(p, 'stable-strip-w1440'); else await auditAt(p, 'stable-strip-phone');
+    ok(`stablewalk ${tag}: switches, no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4m. v0.4.5: the competition flash (owner's pick A, 3.5 s) ----------
+// An independent reading of the badge: each pool's value within ±9% of its own price (its bars by overlap, the full-range
+// layer's share), the others' sum over this pool's. The flash itself is read through the chart: the stacked layers (path.mg),
+// the chips' light (.fl-on), the banner, the ghost (path.ghost) and the slot's phase (data-ph: grow, hold, fade, end).
+const v9Fx = (q, B = 0.09, withFr = true) => {
+  const sh = q.shape, E = sh.depthEdges;
+  if (!sh.depth.some((d) => d[1] != null)) return null;
+  let v = 0;
+  for (let i = 0; i < sh.depth.length; i++) { const ov = Math.min(B, E[i + 1]) - Math.max(-B, E[i]); if (ov <= 1e-12) continue; if (sh.depth[i][1] == null) return null; v += (sh.depth[i][1] * ov) / (E[i + 1] - E[i]); }
+  if (withFr && sh.fullRangeUsd > 0) { const s = sh.fullRangeSpan && sh.fullRangeSpan[0] < 0 && sh.fullRangeSpan[1] > 0 ? sh.fullRangeSpan : [-Infinity, Infinity]; v += (sh.fullRangeUsd * eInt(Math.max(-B, s[0]), Math.min(B, s[1]))) / eInt(s[0], s[1]); }
+  return v;
+};
+function cmpModel(base, o = {}) {
+  const peers = FXD.live.pools.filter((q) => q.id !== base.id && samePairFx(base, q)), vs = peers.map((q) => v9Fx(q, o.B, o.fr));
+  const own = v9Fx(base, o.B, o.fr), known = vs.filter((v) => v != null);
+  const x = own > 0 && known.length ? known.reduce((s, v) => s + v, 0) / own : null;
+  return { n: peers.length, x, ge: known.length < peers.length, txt: x == null ? null : (known.length < peers.length ? '≥' : '') + (x >= 9.95 ? String(Math.round(x)) : x >= 0.095 ? x.toFixed(1) : '<0.1') + '×' };
+}
+const FL_LOOK = (root) => {
+  const box = document.querySelector(`${root} [data-chartbox="liq-detail"]`) || document.querySelector('[data-chartbox="liq-detail"]');
+  if (!box) return null;
+  const c = box.querySelector('.cmp'), ban = c && c.querySelector('.cmp-ban'), b = c && c.querySelector('.cmp-b'), gh = box.querySelector('path.ghost');
+  return { ph: c ? c.dataset.ph : null, layers: box.querySelectorAll('path.mg').length, lit: box.querySelectorAll('.mgc.fl-on').length,
+    pressed: [...box.querySelectorAll('[data-act="merge"]')].filter((x) => x.getAttribute('aria-pressed') === 'true').length, chips: box.querySelectorAll('[data-act="merge"]').length,
+    ban: !!ban && getComputedStyle(ban).visibility === 'visible', banTxt: ban ? ban.textContent : '', badge: !!b && getComputedStyle(b).visibility === 'visible', badgeTxt: b ? b.textContent : '', replay: !!(b && b.matches('button[data-act="flash"]')),
+    ghost: gh ? +gh.getAttribute('opacity') : 0, legend: /Whole pair · \d+ pools/.test(box.querySelector('.legend').textContent) };
+};
+const flLook = (p, root = '#sheet') => p.evaluate(FL_LOOK, root);
+// waits for the slot's phase (polled every frame inside the page, so a slow browser can't skip past it unseen)
+const flWait = (p, ph, ms = 8000) => p.waitForFunction((ph) => { const c = document.querySelector('[data-chartbox="liq-detail"] .cmp'); return !!c && c.dataset.ph === ph; }, ph, { polling: 'raf', timeout: ms }).then(() => true, () => false);
+const badgeNum = (txt) => { const m = /\+(\d+) pools? · (≥?(?:[\d.]+|<0\.1)×) liquidity/.exec(txt || ''); return m ? { n: +m[1], x: m[2] } : null; };
+async function testFlash(browser) {
+  const pools = FXD.live.pools;
+  const base = pools.find((q) => q.pair === 'VELNA/WETH' && q.chain === 'ethereum'), peers = pools.filter((q) => q.id !== base.id && samePairFx(base, q));
+  for (const phone of [true, false]) {
+    const tag = phone ? 'phone' : 'laptop';
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, flash: true }), p = t.page;
+    // 1. the timeline: grow → hold (every other pool stacked, chips lit, gold banner) → fade → end, once
+    await fillQ(p, base.id.slice(0, 10)); await sleep(250);
+    const t0 = Date.now();
+    await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
+    const samples = [];
+    const watcher = p.evaluate(() => new Promise((res) => { const out = [], t0 = performance.now(); const f = () => { const box = document.querySelector('[data-chartbox="liq-detail"]'), c = box && box.querySelector('.cmp'); if (c) out.push([Math.round(performance.now() - t0), c.dataset.ph, box.querySelectorAll('path.mg').length, [...box.querySelectorAll('[data-act="merge"]')].filter((x) => x.getAttribute('aria-pressed') === 'true').length]); if (performance.now() - t0 < 5500) requestAnimationFrame(f); else res(out); }; requestAnimationFrame(f); }));
+    const sawHold = await p.waitForFunction(() => document.querySelector('[data-chartbox="liq-detail"] .cmp.ban'), null, { polling: 'raf', timeout: 8000 }).then(() => true, () => false); // the banner joins at 0.8 s
+    const hold = await flLook(p);
+    const sawEnd = await flWait(p, 'end'), tEnd = Date.now() - t0;
+    const end = await flLook(p);
+    samples.push(...(await watcher));
+    const seq = samples.map((s) => s[1]).filter((x, i, a) => !i || x !== a[i - 1]), phases = seq.join('>'), ORD = ['grow', 'hold', 'fade', 'end'];
+    const inOrder = seq.every((x, i) => !i || ORD.indexOf(x) > ORD.indexOf(seq[i - 1])) && ['hold', 'fade', 'end'].every((x) => seq.includes(x)) && (BROWSER === 'webkit' || seq[0] === 'grow');
+    ok(`flash ${tag}: a pool with ${peers.length} other pools of its pair plays grow → hold → fade → end once (${phases}), about 3.5 s (${(tEnd / 1000).toFixed(1)} s)`, sawHold && sawEnd && inOrder && tEnd >= 3300 && tEnd < (BROWSER === 'webkit' ? 9000 : 6000), phases + ' ' + tEnd);
+    ok(`flash ${tag}: in the hold every other pool is stacked, its chip lit, under a gold banner ("${hold.banTxt.slice(0, 60)}")`, hold.layers === peers.length && hold.lit === peers.length && hold.ban && !hold.badge && hold.pressed === 0 && /^This pair: \d+ other pools hold/.test(hold.banTxt), JSON.stringify(hold).slice(0, 220));
+    ok(`flash ${tag}: the end state is this pool alone, chips off and unlit, the ghost and the badge (with replay) shown, the banner gone`, end.ph === 'end' && end.layers === 0 && end.lit === 0 && end.pressed === 0 && !end.ban && end.badge && end.replay && end.ghost > 0.8 && end.legend, JSON.stringify(end).slice(0, 220));
+    ok(`flash ${tag}: never a stack the chips don't own once it has ended (${samples.length} frames read)`, samples.every((s) => s[3] === 0) && samples.filter((s) => s[1] === 'end').every((s) => s[2] === 0) && samples.some((s) => s[2] === peers.length), JSON.stringify(samples.filter((s) => s[1] === 'end' && s[2]).slice(0, 3)));
+    for (const x of await p.evaluate(TEXT_OVERLAP, { root: '#sheet' })) ok(`flash ${tag}: end state, no text collides`, false, `${x.kind}: ${x.a} × ${x.b}`);
+    if (phone) await snap(p, 'flash-end-phone', '#sheet [data-chartbox="liq-detail"]'); else await snap(p, 'flash-end-laptop', '#sheet [data-chartbox="liq-detail"]');
+    // 2. the badge's maths against the independent model
+    const m = cmpModel(base), bn = badgeNum(end.badgeTxt);
+    ok(`flash ${tag}: the badge says +${m.n} pools · ${m.txt} liquidity, as the independent model reads the fixture`, bn && bn.n === m.n && bn.x === m.txt, `${end.badgeTxt} vs ${m.n} ${m.txt}`);
+    // 3. once per pool per page: closed and opened again, it doesn't play; the replay plays it
+    await closePool(p); await openPool(p, base.id.slice(0, 10));
+    await sleep(500);
+    let a = await flLook(p);
+    ok(`flash ${tag}: opened again in the same page it doesn't replay by itself`, a.ph === 'end' && a.layers === 0 && a.ghost > 0.8, JSON.stringify(a).slice(0, 120));
+    // 4. any interaction ends it at once on the end state: a chip, a zoom, a drag, a wheel, a key, close
+    const replay = async () => { await p.evaluate(() => document.querySelector('#sheet [data-act="flash"]').click()); return flWait(p, 'hold'); };
+    const ends = {};
+    if (await replay()) { await p.evaluate(() => document.querySelector('#sheet [data-act="merge"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))); await p.evaluate(() => document.querySelector('#sheet [data-act="merge"]').click()); await frames(p, 2); a = await flLook(p); ends.chip = a.ph === 'end' && a.layers === 1 && a.pressed === 1 && a.lit === 0 && !a.ban; }
+    if (await replay()) { await frames(p, 1); a = await flLook(p); const mid = a.layers; await sleep(BROWSER === 'webkit' ? 4500 : 3800); a = await flLook(p); ends.keepChip = mid >= 1 && a.ph === 'end' && a.layers === 1 && a.pressed === 1; } // a chip on before the replay is still on after
+    await p.evaluate(() => document.querySelector('#sheet [data-act="merge"][aria-pressed="true"]').click()); await sleep(200);
+    if (await replay()) { await p.evaluate(() => document.querySelector('#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="1"]').click()); await frames(p, 2); a = await flLook(p); ends.zoom = a.ph === 'end' && a.layers === 0 && !a.ban; }
+    await pzClick(p, '#sheet [data-act="zreset"][data-chart="liq-detail"]').catch(() => {}); await sleep(150);
+    if (await replay()) { await finger(p, 'liq-detail', -60, { root: '#sheet', steps: 4 }); await frames(p, 2); a = await flLook(p); ends.drag = a.ph === 'end' && a.layers === 0; }
+    await pzClick(p, '#sheet [data-act="zreset"][data-chart="liq-detail"]').catch(() => {}); await sleep(150);
+    if (await replay()) { await p.evaluate(() => document.querySelector('#sheet-body').dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }))); await frames(p, 2); a = await flLook(p); ends.wheel = a.ph === 'end' && a.layers === 0; }
+    if (await replay()) { await p.keyboard.press('Shift'); await frames(p, 2); a = await flLook(p); ends.key = a.ph === 'end' && a.layers === 0; }
+    if (await replay()) { await p.click('#sheet-close'); await sleep(150); const s = await p.evaluate(() => ({ hidden: document.querySelector('#sheet').hidden })); await openPool(p, base.id.slice(0, 10)); a = await flLook(p); ends.close = s.hidden && a.ph === 'end' && a.layers === 0 && a.lit === 0; }
+    ok(`flash ${tag}: a chip, a zoom, a drag, a wheel, a key or close ends it at once on the end state (${Object.keys(ends).join(', ')})`, Object.keys(ends).length === 7 && Object.values(ends).every(Boolean), JSON.stringify(ends));
+    // 5. a pool with no other pool of its pair: nothing (no badge, no ghost, no chips)
+    await closePool(p);
+    const solo = pools.find((q) => q.t0.sym === 'QUARX');
+    await openPool(p, 'QUARX'); await sleep(300);
+    const s0 = await p.evaluate(() => { const b = document.querySelector('#sheet [data-chartbox="liq-detail"]'); return { cmp: !!b.querySelector('.cmp'), ghost: !!b.querySelector('path.ghost'), chips: b.querySelectorAll('.mgchips').length, legend: /Whole pair/.test(b.textContent) }; });
+    ok(`flash ${tag}: a pool with no other pool of its pair (${solo.pair}) shows nothing of it`, !s0.cmp && !s0.ghost && !s0.chips && !s0.legend, JSON.stringify(s0));
+    await closePool(p);
+    ok(`flash ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    await t.ctx.close();
+  }
+  // 6. the badge's maths on the other pools of the pair (one under 1×, one over 10×); planted faults must be caught
+  {
+    const t = await openUnlocked(browser, 'default', { width: 1440 }), p = t.page, res = [];
+    for (const q of [base, ...peers]) {
+      await openPool(p, q.id.slice(0, 10));
+      const b = badgeNum((await flLook(p)).badgeTxt), m = cmpModel(q);
+      res.push({ pair: q.pair, tier: q.feeTier, v: q.v, chain: q.chain, got: b && b.x, n: b && b.n, want: m.txt, ok: !!b && b.n === m.n && b.x === m.txt, noFr: cmpModel(q, { fr: false }).txt, b10: cmpModel(q, { B: 0.1 }).txt });
+      await closePool(p);
+    }
+    ok(`flash: the badge matches the independent model on every pool of the pair (${res.map((r) => r.got).join(', ')})`, res.every((r) => r.ok) && res.some((r) => parseFloat(r.want) < 1) && res.some((r) => parseFloat(r.want) >= 10), JSON.stringify(res.filter((r) => !r.ok)));
+    ok('flash: planted: a model without the full-range layer, or reading ±10%, is caught somewhere on the pair', res.some((r) => r.noFr !== r.got) && res.some((r) => r.b10 !== r.got), JSON.stringify(res.map((r) => [r.got, r.noFr, r.b10])));
+    // the best-find card: the badge only (no flash there); its tap opens the pool and plays it
+    await setWin(p, '30d');
+    const tabOk = await p.evaluate(() => { const t = [...document.querySelectorAll('#best [role="tab"]')].find((e) => /VELNA/.test(e.textContent)); if (!t) return false; t.click(); return true; });
+    await sleep(250);
+    const card = await p.evaluate(() => { const b = document.querySelector('#best .cmp-b'); return { txt: b ? b.textContent : '', act: b && b.dataset.act, mg: document.querySelectorAll('#best path.mg, #best path.ghost').length, chips: document.querySelectorAll('#best .mgchips').length, id: b && b.dataset.id }; });
+    const cm = card.id && cmpModel(pools.find((q) => q.id === card.id)), cb = badgeNum(card.txt);
+    ok(`flash: the best-find card carries the badge only (${card.txt.slice(0, 50)}), as the model reads it`, tabOk && card.act === 'flash-open' && card.mg === 0 && card.chips === 0 && cb && cm && cb.n === cm.n && cb.x === cm.txt, JSON.stringify(card));
+    await p.evaluate(() => document.querySelector('#best .cmp-b').click());
+    const played = await flWait(p, 'hold', 6000) || (await flWait(p, 'grow', 100));
+    ok('flash: the card\'s badge opens that pool and plays it there (even with the auto-play off)', (await p.isVisible('#sheet')) && played);
+    await p.click('#sheet-close'); await sleep(200);
+    ok('flash: card and model, no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 7. reduced motion: never animated, the ghost and the badge (no replay) at once
+  {
+    const t = await openUnlocked(browser, 'default', { phone: true, flash: true, reducedMotion: 'reduce' }), p = t.page;
+    await fillQ(p, base.id.slice(0, 10)); await sleep(250);
+    const watcher = p.evaluate(() => new Promise((res) => { let worst = 0; const t0 = performance.now(); const f = () => { const b = document.querySelector('[data-chartbox="liq-detail"]'); if (b) worst = Math.max(worst, b.querySelectorAll('path.mg, .mgc.fl-on').length + (b.querySelector('.cmp.ban') ? 1 : 0)); if (performance.now() - t0 < 2500) requestAnimationFrame(f); else res(worst); }; requestAnimationFrame(f); }));
+    await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
+    const worst = await watcher, a = await flLook(p);
+    ok('flash: under reduced motion nothing animates (no stack, no light, no banner), the ghost and the badge show at once, without a replay', worst === 0 && a.ph === 'end' && a.ghost > 0.8 && a.badge && !a.replay, JSON.stringify({ worst, a }).slice(0, 200));
+    ok('flash: reduced motion, no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 8. the pop-out window: the same flash on its own (a page of its own: it plays there once too)
+  {
+    const t = await openUnlocked(browser, 'default', { width: 1440, flash: true }), p = t.page;
+    await openPool(p, base.id.slice(0, 10)); await flWait(p, 'end');
+    await p.evaluate(() => document.querySelector('#sheet [data-act="openchart"][data-chart="liq-detail"]').click()); await sleep(200);
+    const u = await p.evaluate(() => (window.__opened || []).slice(-1)[0] || '');
+    const w2 = await t.ctx.newPage(), e2 = [];
+    w2.on('pageerror', (e) => e2.push(String(e.message).slice(0, 100)));
+    await w2.goto(u);
+    await w2.waitForSelector('.solo-box[data-chartbox="liq-detail"], .solo-box [data-pz="liq-detail"]', { timeout: 20000 }).catch(() => {});
+    const hold = await flWait(w2, 'hold', 15000), end = (await flWait(w2, 'end')) && (await flLook(w2, 'body'));
+    ok('flash: the pop-out window plays it as well and ends on the ghost and the badge', hold && end && end.layers === 0 && end.ghost > 0.8 && end.badge && e2.length === 0, JSON.stringify(end).slice(0, 160) + ' ' + (e2[0] || ''));
+    await w2.close();
+    await t.ctx.close();
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash };
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

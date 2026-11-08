@@ -510,7 +510,8 @@ function makeMarket(r, now) {
     hist.push([hour - i * H, sig((0.32 + 0.18 * day) * spike * between(r, 0.7, 1.35), 4), 1 + Math.floor(r() * 4)]);
   }
   const sorted = hist.map((x) => x[1]).sort((a, b) => a - b), q = (p) => sig(sorted[Math.round((sorted.length - 1) * p)], 4);
-  const gwei = sig(q(0.5) * 1.08, 2), band = gwei < q(0.25) ? 'cheap' : gwei <= q(0.6) ? 'normal' : gwei <= q(0.9) ? 'busy' : 'expensive';
+  // the middle of the normal band, so the band never hangs on the hour the fixture is made at (it once read busy)
+  const gwei = sig((q(0.25) + q(0.6)) / 2, 2), band = gwei < q(0.25) ? 'cheap' : gwei <= q(0.6) ? 'normal' : gwei <= q(0.9) ? 'busy' : 'expensive';
   return {
     t: now,
     gas: { gwei, p10: q(0.1), p50: q(0.5), p90: q(0.9), band, basis: 'history', histDays: 6.5, source: 'feeHistory', hist },
