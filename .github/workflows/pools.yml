@@ -19,17 +19,16 @@ jobs:
           node-version: 22
       - name: Unit tests first (a broken check never reads real data)
         run: node --test test/*.test.mjs
-      - name: Pool list (public market data only)
-        env:
-          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
-        run: node scripts/pools.mjs
-      - name: Price-history cache (public market prices; each token fetched at most once a day)
-        if: always()
+      - name: Market-data caches (public prices, the universe and the day's API counts; each token's history once a day)
         uses: actions/cache/restore@v4
         with:
           path: out/cache
           key: history-${{ github.run_id }}
           restore-keys: history-
+      - name: Pool list (public market data only)
+        env:
+          COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
+        run: node scripts/pools.mjs
       - name: Restore the sealed data (snapshots and the last live.json)
         if: always() && hashFiles('out/pools-ethereum.json') != ''
         env:

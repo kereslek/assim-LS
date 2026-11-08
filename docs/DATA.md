@@ -39,7 +39,10 @@ This file describes shapes only: it holds no data. Every value below lives seale
             recent: [[<pass start ms>, <1 ok | 0 failed>]] } | null,                  // the last 24 h of passes plus the one before
     checks: [{ id: "<id>", label: "<short label>", ok: true|false|null, value: <0..1|null>, detail: "<one line>" }],
     sealedLog: { lines: <n>, errors: <n>, categories: { "<word>": <n> } },
-    cex: { day: "YYYY-MM-DD", calls: <CoinGecko tickers calls this UTC day>, perDay: <budget> }   // carried pass to pass
+    cex: { day: "YYYY-MM-DD", calls: <CoinGecko tickers calls this UTC day>, perDay: <budget> },  // carried pass to pass
+    apis: { day: "YYYY-MM-DD",                                  // market-data calls this UTC day, by source (lib/apicount.mjs)
+            coingecko: { used: <n>, cap: 150 },                 // the hard daily CoinGecko budget: past it, no CoinGecko call
+            defillama: <n>, coinbase: <n>, geckoterminal: <n> }  // is made (the fallbacks serve, else null); carried pass to pass
   },
   stored: ["ethereum", "base"?],  // the chains whose rows the snapshot store keeps: Base's only once the live loop
                                   // runs multi-chain code (a loop of older code reads every stored row's block number
@@ -69,8 +72,11 @@ Market = {
     hist: [[<hour ms>, <mean gwei>, <passes>]]   // the rolling history the scanner carries between passes: one mean
                                      // per UTC hour, last 7 days (≤ 168 rows); percentiles weight each hour once
   },
-  px: { ETH|BTC|SOL: { usd: <n|null>, ch24: <fraction|null>, src: "defillama"|"coingecko"|null } }
-                                    // ch24 = 24 h change as a fraction (−0.031 = −3.1%); DefiLlama first, CoinGecko fills a gap
+  px: { ETH|BTC|SOL: { usd: <n|null>, ch24: <fraction|null>, src: "defillama"|"coinbase"|"coingecko"|null } },
+                                    // ch24 = 24 h change as a fraction (−0.031 = −3.1%); DefiLlama first, then Coinbase,
+                                    // CoinGecko only for a coin both lack (within the daily budget), else null
+  xcheck: { day: "YYYY-MM-DD", both: <n>, agree: <n> } | null   // the once-a-UTC-day DefiLlama vs CoinGecko check: coins
+                                    // both answered, and those within 2%; carried, asked once on each new day
 }
 Pair = {
   label: "<SYM>/<SYM>", pools: ["<pool id>"], best: "<pool id>"|null,   // best = highest net APR in the default
@@ -80,7 +86,7 @@ Pair = {
 }
 ```
 
-`market` feeds the dashboard's top strip, so the page never calls a third party (no CSP holes, no viewer IP sent out). Hosts: gas from the scanner's Ethereum RPCs (`eth_feeHistory` over the last 1024 blocks, or 100 where a node caps the span, with the 50th-percentile reward; `eth_gasPrice` as the fallback); prices from `coins.llama.fi/prices/current` and `coins.llama.fi/percentage?period=24h` (ids `coingecko:ethereum`, `coingecko:bitcoin`, `coingecko:solana`), cross-checked with `api.coingecko.com/api/v3/simple/price` (the Demo key, in a header, when set). Gas and prices each have a 15-second limit and fail separately to `null`; a pass that reads nothing still carries `gas.hist` forward. The countdown uses `next` and "updated" uses `t`.
+`market` feeds the dashboard's top strip, so the page never calls a third party (no CSP holes, no viewer IP sent out). Hosts: gas from the scanner's Ethereum RPCs (`eth_feeHistory` over the last 1024 blocks, or 100 where a node caps the span, with the 50th-percentile reward; `eth_gasPrice` as the fallback); prices from `coins.llama.fi/prices/current` and `coins.llama.fi/percentage?period=24h` (ids `coingecko:ethereum`, `coingecko:bitcoin`, `coingecko:solana`), then for a coin DefiLlama lacks `api.coinbase.com/v2/prices/{ETH|BTC|SOL}-USD/spot` with the 24 h change from `api.exchange.coinbase.com/products/{…}-USD/stats` (open vs last; no key), and `api.coingecko.com/api/v3/simple/price` (the Demo key, in a header) only for a coin both lack and once a UTC day for the agreement check (`xcheck`). Gas and prices each have a 15-second limit and fail separately to `null`; a pass that reads nothing still carries `gas.hist` forward. The countdown uses `next` and "updated" uses `t`.
 
 Check ids in `health.checks` (each across every chain scanned: false if any chain failed it, true if all passed, else null; `detail` names the chain): `fee-identity`, `price-vs-market`, `volume-vs-aggregator`, `maps-complete`, `lp-book`, `creation-events`, `volatility-xcheck`, `fees-vs-aggregator`.
 
@@ -137,8 +143,9 @@ Check ids in `health.checks` (each across every chain scanned: false if any chai
   w: { "24h": Window|null, "7d": Window|null, "30d": Window|null },
   cex: { cexVol24: <USD|null>, cexRatio: <n|null>, tierVsSigma: <n|null>, t: <ms the volume was read|null>, coin: "<CoinGecko id>"|null },
                                 // the exchange-led screen (lib/cex.mjs): the base token's 24 h volume on centralised
-                                // exchanges (CoinGecko tickers, DEX and flagged tickers left out; at most hourly per coin,
-                                // within a daily budget, so t can be up to 48 h old), ÷ the value within ±9%, and the fee
+                                // exchanges (CoinGecko tickers, DEX and flagged tickers left out; only the 15 coins of the
+                                // biggest pools, each at most once in 24 h, within the daily budget, so t can be up to
+                                // 48 h old; a coin past the 15 is null), ÷ the value within ±9%, and the fee
                                 // tier ÷ the per-block σ (daily σ ÷ √blocks a day: Base's 0.2 s blocks make this larger)
   flowDaily: [[<UTC day ms>, <retailShare|null>, <lpFeesUsd|null>, <routing|null>]],   // up to 30 days, carried pass to
                                 // pass; the 7d and 30d windows' retailShare and routing read it

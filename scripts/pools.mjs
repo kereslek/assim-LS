@@ -10,14 +10,15 @@
 // limit stops, what it did not read is null ("not read"), and the log says which cap stopped it.
 // Public market data only: the log shows counts, ratios, dates, venue names and quote symbols, never an address.
 import fs from 'node:fs';
-import { makeRpc, getJson } from '../lib/rpc.mjs';
+import { makeRpc, getJson as rawGetJson } from '../lib/rpc.mjs';
 import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
 import {
   ETHEREUM as C, ZERO, TOPICS, DYNAMIC_FEE, v3Candidates, v4Candidates, getPoolCall, v4Slot0Call, readGetPool, readV4Slot0,
   readV3Slot0, readUint, decodePoolCreated, decodeInitialize, decodeModifyLiquidity, extremeFee, poolPrice, tvlUsd, baseUsdAtPool, poolKeysCall, readPoolKey,
 } from '../lib/pools.mjs';
-import { buildUniverse, fetchCoinGecko } from '../lib/universe.mjs';
+import { buildUniverse, cachedUniverse, priceTokens } from '../lib/universe.mjs';
+import { makeApiCounter } from '../lib/apicount.mjs';
 import { geckoTokenPools, dexScreenerTokenPairs, eachSpaced } from '../lib/aggregators.mjs';
 import { pageLogs, rpcLogs } from '../lib/logs.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
@@ -26,6 +27,10 @@ import { CHAINS, timeOfBlock, blocksBack, chainOn } from '../lib/chains.mjs';
 import { lookupV3, lookupV4, readState, priceTvl, recentCreations, stampCreations, firstTradedAt } from '../lib/discover.mjs';
 import { makeBudget, capRpc, capGetJson } from '../lib/budget.mjs';
 
+// every market-data call is counted by source (lib/apicount.mjs), and CoinGecko's within its daily budget; the
+// counts go on to the scan through the cache file
+const apis = makeApiCounter({ file: 'out/cache/apis.json' });
+const getJson = apis.wrap(rawGetJson);
 const FLOOR = 300_000;
 const GECKO_SAMPLE = 40;
 // Diagnostic runs can skip the slow parts: POOLS_SKIP=events,gecko,dexscreener (a full run skips nothing).
@@ -43,7 +48,9 @@ async function timed(name, fn) { const t = Date.now(); try { return await fn(); 
 function finish(code) {
   const count = (k) => lines.filter((l) => l.ok === k).length;
   const summary = `pools: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · steps ${Object.entries(timing).map(([k, v]) => `${k} ${v}s`).join(', ')}`;
+  apis.save();
   console.log('\n' + summary);
+  console.log(`apis: ${apis.line()}`);
   console.log(`::notice title=pool list::${lines.map((l) => `${l.ok === true ? '✓' : l.ok === false ? '✗' : '·'} ${l.area}: ${l.msg}`).join(' | ')}`);
   if (process.env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${summary}\n\n| | Area | Result |\n|---|---|---|\n` +
@@ -61,12 +68,12 @@ if (tag == null) { say(null, 'block', 'no block number'); finish(1); }
 const block = parseInt(tag, 16);
 
 // 1. Universe.
-const cg = await timed('universe', () => fetchCoinGecko(getJson, { key: process.env.COINGECKO_KEY || undefined }));
+const cg = await timed('universe', () => cachedUniverse(getJson, { file: 'out/cache/universe.json', key: process.env.COINGECKO_KEY || undefined, apis }));
 if (!cg.list || cg.markets.length === 0) { say(null, 'universe', `unread (markets ${cg.markets.length} rows, list ${cg.list ? 'ok' : 'unread'})`); finish(1); }
 const quoteSet = new Set(C.quotes.map((q) => q.address));
 const uni = buildUniverse(cg.markets, cg.list, { include: ['uniswap'], exclude: [...quoteSet] });
 say(cg.unreadPages.length ? null : true, 'universe', `${uni.counts.ranked} coins (ranks 100–2000 and the UNI benchmark); ${uni.counts.onChain} have an Ethereum token; ${uni.counts.kept} kept` +
-  (cg.unreadPages.length ? `; market pages unread: ${cg.unreadPages.join(', ')}` : ''));
+  (cg.unreadPages.length ? `; market pages unread: ${cg.unreadPages.join(', ')}` : '') + `; ranks ${cg.from === 'cache' ? `from the cache, ${Math.round(cg.ageMs / 3600e3)} h old` : 'fresh from CoinGecko'}`);
 
 // 2. Decimals (quotes too, as a sanity check on the constants).
 const realQuotes = C.quotes.filter((q) => q.address !== ZERO);
@@ -116,7 +123,11 @@ for (const q of C.quotes) {
   const c = llama.get(`ethereum:${q.priceAs || q.address}`);
   if (c && c.price > 0 && Date.now() / 1000 - c.timestamp < 3600 && (c.confidence ?? 1) >= 0.9) usdOf.set(q.address, c.price);
 }
-for (const t of tokens) if (t.usd > 0 && !usdOf.has(t.address)) usdOf.set(t.address, t.usd);
+// universe tokens: DefiLlama, then GeckoTerminal, then CoinGecko's market rows while under a day old
+const cgFresh = cg.ageMs < 24 * 3600e3, tp = await timed('token prices', () => priceTokens(getJson, 'ethereum', tokens.map((t) => t.address)));
+for (const t of tokens) if (tp.usd.has(t.address) && !usdOf.has(t.address)) usdOf.set(t.address, tp.usd.get(t.address));
+for (const t of tokens) if (cgFresh && t.usd > 0 && !usdOf.has(t.address)) usdOf.set(t.address, t.usd);
+say(true, 'token prices', `${tokens.length} universe tokens: DefiLlama ${tp.defillama}, GeckoTerminal ${tp.geckoterminal}, CoinGecko rows ${tokens.filter((t) => usdOf.has(t.address)).length - tp.defillama - tp.geckoterminal}, unpriced ${tokens.filter((t) => !usdOf.has(t.address)).length}`);
 say(usdOf.size >= C.quotes.length ? true : null, 'prices', `quote tokens priced ${C.quotes.filter((q) => usdOf.has(q.address)).length} of ${C.quotes.length} (ETH $${Math.round(usdOf.get(ZERO) ?? NaN)}); universe tokens priced ${tokens.filter((t) => usdOf.has(t.address)).length} of ${tokens.length}`);
 
 // 7. v3 TVL two ways: both sides at market prices, and the base side at the pool's own rate.
@@ -361,7 +372,9 @@ async function discoverBase() {
     const c = llama.get(`base:${q.priceAs || q.address}`);
     if (c && c.price > 0 && Date.now() / 1000 - c.timestamp < 3600 && (c.confidence ?? 1) >= 0.9) busd.set(q.address, c.price);
   }
-  for (const t of btoks) if (t.usd > 0 && !busd.has(t.address)) busd.set(t.address, t.usd);
+  const btp = await priceTokens(getJson, 'base', btoks.map((t) => t.address));
+  for (const t of btoks) if (btp.usd.has(t.address) && !busd.has(t.address)) busd.set(t.address, btp.usd.get(t.address));
+  for (const t of btoks) if (cgFresh && t.usd > 0 && !busd.has(t.address)) busd.set(t.address, t.usd);
   const { offMarket: off } = priceTvl(bv3, { dec: bdec, usd: busd, quoteSet: bq });
   const bigU = u3.pools.filter((p) => p.tvl >= FLOOR), bigP = p3.pools.filter((p) => p.tvl >= FLOOR);
   say(BC.quotes.every((q) => busd.has(q.address)) ? true : null, 'base tvl', `quote tokens priced ${BC.quotes.filter((q) => busd.has(q.address)).length} of ${BC.quotes.length} (ETH $${Math.round(busd.get(ZERO) ?? NaN)}); universe tokens priced ${btoks.filter((t) => busd.has(t.address)).length} of ${btoks.length}; pools ≥ ${usd(FLOOR)}: Uniswap v3 ${bigU.length} holding ${usd(bigU.reduce((a, p) => a + p.tvl, 0))}, PancakeSwap v3 ${bigP.length} holding ${usd(bigP.reduce((a, p) => a + p.tvl, 0))}; ${bv3.filter((p) => p.tvl == null).length} unpriced; ${off} trade more than 10% off market`);

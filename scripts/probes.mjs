@@ -13,6 +13,7 @@ import { ROUTERS, routerName } from '../lib/routers.mjs';
 import { PANCAKE_V3, BASE as BASE_C, ETHEREUM as ETH_C, TOPICS as POOL_TOPICS, v3LpKeeps, decodeInitialize } from '../lib/pools.mjs';
 import { SWAP_TOPICS, decodeSwap, swapFees } from '../lib/swaps.mjs';
 import { parseTickers } from '../lib/cex.mjs';
+import { dailyHistory, geckoTerminalHistory } from '../lib/history.mjs';
 import { parseDexScreenerPairs } from '../lib/aggregators.mjs';
 import { pastBlockAnswer } from '../lib/snapshots.mjs';
 import { readVerified } from '../lib/etherscan.mjs';
@@ -30,6 +31,8 @@ const APIS = {
   dexscreener: 'https://api.dexscreener.com/latest/dex/search?q=UNI%20WETH',
   defillama: 'https://coins.llama.fi/prices/current/coingecko:ethereum',
   coingecko: 'https://api.coingecko.com/api/v3/ping',
+  coinbase: 'https://api.coinbase.com/v2/prices/ETH-USD/spot',
+  'coinbase exchange': 'https://api.exchange.coinbase.com/products/ETH-USD/stats',
   goplus: 'https://api.gopluslabs.io/api/v1/token_security/1?contract_addresses=0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
 };
 const ETH = {
@@ -96,10 +99,19 @@ async function probeMarket(rpc) {
   const s = g ? gasStats(g.gwei, [], g.blocks) : null;
   say(g ? g.source === 'feeHistory' : null, 'market gas', g ? `${g.gwei.toFixed(2)} gwei from ${g.source}${g.blocks ? ` over ${g.blocks.length} blocks` : ''}; vs those blocks: ${s.band ?? '—'} (p10 ${s.p10 ?? '—'}, p50 ${s.p50 ?? '—'}, p90 ${s.p90 ?? '—'})` : 'unread');
   const ll = await readPrices(async (url, init, t) => (url.includes('coingecko.com') ? null : getJson(url, init, t)), { timeoutMs: 15000 });
-  const cg = await readPrices(async (url, init, t) => (url.includes('llama') ? null : getJson(url, init, t)), { timeoutMs: 15000 });
+  // the fallback (lib/market.mjs): with DefiLlama and CoinGecko blocked, Coinbase must answer all three
+  const cb = await readPrices(async (url, init, t) => (/llama|coingecko\.com/.test(url) ? null : getJson(url, init, t)), { timeoutMs: 15000 });
   const fmt = (r) => Object.keys(COINS).map((k) => `${k} ${r.px[k].usd == null ? '—' : '$' + r.px[k].usd} (${r.px[k].ch24 == null ? '—' : (r.px[k].ch24 * 100).toFixed(1) + '%'})`).join(', ');
   say(ll.read === 3 ? true : ll.read ? null : false, 'market defillama', fmt(ll));
-  say(cg.read === 3 ? true : cg.read ? null : false, 'market coingecko', fmt(cg));
+  say(cb.read === 3 && Object.values(cb.px).every((x) => x.src === 'coinbase') ? true : cb.read ? null : false, 'market coinbase', fmt(cb));
+  // token history fallbacks (lib/history.mjs) for UNI, the public benchmark token: DefiLlama's chart, then GeckoTerminal's
+  const k = `ethereum:${ETH.UNI.toLowerCase()}`;
+  const lh = await dailyHistory(getJson, [k], { spacingMs: 0 });
+  const lp = lh.series.get(k);
+  say(lp?.length >= 25 ? true : lp ? null : false, 'history defillama', lp ? `UNI ${lp.length} daily points` : `unread${lh.lastError ? ` (${lh.lastError})` : ''}`);
+  const gt = await geckoTerminalHistory(getJson, [k], { spacingMs: 2500 });
+  const gp = gt.series.get(k);
+  say(gp?.length >= 500 ? true : gp ? null : false, 'history geckoterminal', gp ? `UNI ${gp.length} hourly points in ${gt.calls} calls, newest ${Math.round((Date.now() / 1000 - gp.at(-1).t) / 60)} min old` : `unread${gt.lastError ? ` (${gt.lastError})` : ''}`);
 }
 
 async function probeContracts(eth, base) {

@@ -78,7 +78,8 @@ test('a Base pool and PancakeSwap pools go through the scan: venues tagged, the 
   assert.ok(one.cex.cexRatio > 0 && Number.isFinite(one.cex.tierVsSigma) && one.cex.coin === 'one-coin' && one.cex.t > 0);
   assert.deepEqual([uni.cex.cexVol24, uni.cex.cexRatio, uni.cex.coin], [null, null, null], 'missing tickers: null, never 0');
   assert.equal(baseUni.cex.cexVol24, 0); assert.equal(baseUni.cex.cexRatio, 0);
-  assert.equal(basePcs.cex.tierVsSigma, null, 'the young pool has no 30-day σ yet: null');
+  assert.ok(basePcs.sigmaChain == null || !('sigmaChain' in basePcs), 'the young pool has no 30-day σ of its own');
+  assert.ok(Number.isFinite(basePcs.cex.tierVsSigma), 'its tokens\' market history (DefiLlama first) gives the σ');
   assert.ok(live.health.cex.calls >= 1 && live.health.cex.calls <= live.health.cex.perDay);
   // the lanes
   assert.deepEqual(Object.keys(live.discovery).sort(), ['cexLed', 'crossChain', 'newPools', 'retailUp']);

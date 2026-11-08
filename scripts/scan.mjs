@@ -13,7 +13,7 @@
 // that reaches its time or call limit stops, and what it did not read is null ("not read"); the public log gets
 // each capped part's seconds and calls ("caps" lines) and which cap stopped it.
 import fs from 'node:fs';
-import { makeRpc, mapLimit, getJson } from '../lib/rpc.mjs';
+import { makeRpc, mapLimit, getJson as rawGetJson } from '../lib/rpc.mjs';
 import { makeMulticall } from '../lib/multicall.mjs';
 import { encodeCall } from '../lib/abi.mjs';
 import { ZERO, DYNAMIC_FEE, TOPICS, decodeModifyLiquidity, readV3Slot0, readV4Slot0, readUint, v4Slot0Call, poolPrice, extremeFee, PANCAKE_V3, UNISWAP_V3_SPACING, v3LpKeeps } from '../lib/pools.mjs';
@@ -23,7 +23,8 @@ import { hollowness, shapeTag, bandStats, depthHistogram, nearestWalls, depthPro
 import { SWAP_TOPICS, EXTRA_TOPICS, decodeSwap, decodeExtra, hookReturnsSwapDelta, summarize, usdOfPair, swapFees } from '../lib/swaps.mjs';
 import { dailySigma, ratioByDay, markouts } from '../lib/flow.mjs';
 import { scorePool, recentMoves } from '../lib/score.mjs';
-import { coinGeckoHistory, dailyHistory, makeHistoryCache, ratioAt } from '../lib/history.mjs';
+import { tokenHistory, makeHistoryCache, ratioAt } from '../lib/history.mjs';
+import { makeApiCounter } from '../lib/apicount.mjs';
 import { MULTICALL3 } from '../lib/multicall.mjs';
 import { verifiedSources, makeVerifiedCache } from '../lib/etherscan.mjs';
 import { findBalanceKey, sellTest, SELL_ROUTERS } from '../lib/selltest.mjs';
@@ -123,6 +124,11 @@ const nowSec = Math.floor(Date.now() / 1000);
 const tsCall = { target: MULTICALL3, data: encodeCall('getCurrentBlockTimestamp()') };
 // Market history for the volatility cross-check: one cache for every chain (keys carry the chain)
 const hcache = makeHistoryCache('out/cache/history.json');
+// Every market-data call is counted by source (lib/apicount.mjs) and CoinGecko's stay within the daily budget: the
+// pool list's calls come through the cache file, earlier loop jobs' through the last live.json (health.apis).
+const apis = makeApiCounter({ file: 'out/cache/apis.json' });
+try { apis.seed(store?.get('live.json')?.health?.apis); } catch { /* the counts start from the file */ }
+const getJson = apis.wrap(rawGetJson);
 
 // Every chain whose pool list is here. Ethereum's is required; another chain's list over 2 days old is left out.
 const ctxs = [];
@@ -374,11 +380,9 @@ async function scanChain(CH, list) {
   const histKeys = [...new Set(mapped.flatMap((p) => [keyOf(p.t0), keyOf(p.t1)]))];
   // another chain within its history cap: the keys it leaves are asked on later passes (the cache keeps each day's)
   const hiCap = eth ? null : cap('history');
-  const cgHist = await tm('history', () => coinGeckoHistory(getJson, histKeys, { key: process.env.COINGECKO_KEY || undefined, cache: hcache, ...(hiCap ? { budget: hiCap } : {}) }));
-  const notAsked = new Set(cgHist.skipped || []);
-  const fallbackKeys = cgHist.unread.filter((k) => !notAsked.has(k));
-  const llHist = fallbackKeys.length && !hiCap?.over() ? await tm('history fallback', () => dailyHistory(getJson, fallbackKeys, hiCap ? { budget: hiCap } : {})) : { series: new Map(), unread: fallbackKeys, lastError: null };
-  const hist = { series: new Map([...cgHist.series, ...llHist.series]), unread: [...new Set([...llHist.unread, ...cgHist.unread.filter((k) => !llHist.series.has(k))])] };
+  const th = await tm('history', () => tokenHistory(getJson, histKeys, { key: process.env.COINGECKO_KEY || undefined, cache: hcache, apis, ...(hiCap ? { budget: hiCap } : {}) }));
+  const notAsked = new Set(th.skipped);
+  const hist = { series: th.series, unread: th.unread };
   // Each pool's own price at 31 daily blocks (archive state): that price is what range exits and LVR
   // follow. Each block's own timestamp comes along (Multicall3), so the market is sampled at the same moments.
   const pxCalls = [tsCall, ...mapped.map((p) => (p.v === 3 ? { target: p.id, data: encodeCall('slot0()') } : v4Slot0Call(C.v4StateView, p.id)))];
@@ -425,7 +429,7 @@ async function scanChain(CH, list) {
     const calm = both.filter((p) => p.sigmaChain < 0.002 && p.sigmaMarket < 0.002);
     say(sc.length && both.length ? readM.length / sc.length >= 0.9 && within(rr, 0.7, 1.3) / both.length >= 0.7 : null, 'volatility check',
       `market volatility read for ${readM.length} of ${sc.length} scored pools (${pct(readM.length, sc.length)}); pool vs market within 30% for ${within(rr, 0.7, 1.3)} of ${both.length} (${pct(within(rr, 0.7, 1.3), both.length)}), median ratio ${median(rr)?.toFixed(2) ?? '—'}; calm pairs (both under 0.2% a day) ${calm.length}, within 30% ${within(calm.map((p) => p.sigmaChain / p.sigmaMarket), 0.7, 1.3)}` +
-      `; history: CoinGecko ${cgHist.fetched} fetched + ${cgHist.cached} from today's cache (${cgHist.calls} calls${cgHist.lastError ? `, last error ${cgHist.lastError}` : ''}), DefiLlama fallback ${llHist.series.size} of ${fallbackKeys.length}${llHist.lastError ? ` (last error ${llHist.lastError})` : ''}, unread ${hist.unread.length} of ${histKeys.length} tokens${notAsked.size ? ` (${notAsked.size} left by the cap for later passes)` : ''}`);
+      `; history: ${th.by.cache} from today's cache, DefiLlama ${th.by.defillama} (${th.calls.defillama} calls), GeckoTerminal ${th.by.geckoterminal} (${th.calls.geckoterminal} calls), CoinGecko ${th.by.coingecko} (${th.calls.coingecko} calls)${th.lastError ? `, last error ${th.lastError}` : ''}; unread ${hist.unread.length} of ${histKeys.length} tokens${notAsked.size ? ` (${notAsked.size} left by a cap for later passes)` : ''}`);
   }
   const scored = mapped.filter((p) => p.score?.net != null);
   const posN = scored.filter((p) => p.score.net > 0), edgy = scored.filter((p) => p.score.edge > 1);
@@ -795,7 +799,9 @@ async function writeOutputs() {
   };
   const seed = (prev?.pools || []).filter((x) => x.cex && isNum(x.cex.cexVol24) && isNum(x.cex.t) && x.cex.coin).map((x) => ({ coin: x.cex.coin, t: x.cex.t, vol: x.cex.cexVol24 }));
   const cexCache = makeCexCache('out/cache/cex.json', { now: passT, seed, budget: prev?.health?.cex ?? null });
-  const cx = await timed('exchanges', () => cexVolumes(getJson, [...new Set(mapped.map(coinOfPool).filter(Boolean))], { key: process.env.COINGECKO_KEY || null, cache: cexCache, now: passT }));
+  // the candidates, biggest pools first: only the top CEX_BUDGET.topN coins are screened
+  const cexCoins = [...new Set([...mapped].sort((a, b) => (b.tvl ?? b.mapUsd ?? 0) - (a.tvl ?? a.mapUsd ?? 0)).map(coinOfPool).filter(Boolean))];
+  const cx = await timed('exchanges', () => cexVolumes(getJson, cexCoins, { key: process.env.COINGECKO_KEY || null, cache: cexCache, now: passT, apis }));
   try { cexCache.save(); } catch { /* the live.json copy carries it */ }
 
   // every window per pool
@@ -975,10 +981,10 @@ async function writeOutputs() {
   let market = null;
   try {
     const mr = await timed('market', () => marketBlock({ rpc: makeRpc(CHAINS.ethereum.rpcs, { timeout: 8000, maxRefusals: 2 }), getJson, prev: prev?.market ?? null,
-      now: passT, key: process.env.COINGECKO_KEY || null, gasPriceWei: ETHX.gp, timeoutMs: 15000 }));
+      now: passT, key: process.env.COINGECKO_KEY || null, gasPriceWei: ETHX.gp, timeoutMs: 15000, apis }));
     market = mr.market;
     const g = market.gas;
-    say(g.gwei != null && mr.log.read === 3 ? true : null, 'market', `gas ${g.gwei ?? '—'} gwei (${mr.log.gas ?? 'unread'}), band ${g.band ?? '—'} vs ${g.basis ?? 'no'} range (p10 ${g.p10 ?? '—'}, p50 ${g.p50 ?? '—'}, p90 ${g.p90 ?? '—'}; ${g.hist.length} hourly samples over ${g.histDays} days); prices ${mr.log.read} of 3 read, ${mr.log.agree} of ${mr.log.both} agree within 2% across DefiLlama and CoinGecko`);
+    say(g.gwei != null && mr.log.read === 3 ? true : null, 'market', `gas ${g.gwei ?? '—'} gwei (${mr.log.gas ?? 'unread'}), band ${g.band ?? '—'} vs ${g.basis ?? 'no'} range (p10 ${g.p10 ?? '—'}, p50 ${g.p50 ?? '—'}, p90 ${g.p90 ?? '—'}; ${g.hist.length} hourly samples over ${g.histDays} days); prices ${mr.log.read} of 3 read (${Object.values(market.px).map((x) => x.src ?? 'unread').join(', ')}); daily DefiLlama vs CoinGecko check${mr.log.xcheck ? ' (asked this pass)' : ''}: ${market.xcheck ? `${market.xcheck.agree} of ${market.xcheck.both} agree within 2% on ${market.xcheck.day}` : 'not yet'}`);
   } catch {
     try { market = carryMarket(prev?.market ?? null, passT); } catch { market = null; }
     say(null, 'market', 'the market block broke: every reading null this pass, the gas history carried');
@@ -998,6 +1004,8 @@ async function writeOutputs() {
     for (const [id, k] of keyOf) keyOfAll.set(id, pre + k);
   }
   for (const x of out) x.pairKey = keyOfAll.get(x.id);
+  apis.save();
+  pub(`apis: ${apis.line()}`);
   const live = {
     v: 1, t: passT, phase: 0, build: `scan-${(process.env.GITHUB_SHA || 'local').slice(0, 7)}`, next: null,
     ticket: config.ticket, stopLoss: config.stopLoss, windows, defaultWindow, gemAt: config.gemAt,
@@ -1010,6 +1018,7 @@ async function writeOutputs() {
         chk('volatility-xcheck', 'volatility cross-check', 'volatility check'), chk('fees-vs-aggregator', 'fees vs aggregator', 'fees vs aggregator')],
       sealedLog: logStats ? (({ lines: l, errors, categories }) => ({ lines: l, errors, categories }))(logStats()) : null,
       cex: { day: cexCache.today, calls: cexCache.calls(), perDay: CEX_BUDGET.perDay },
+      apis: apis.health(),
     },
     stored: [...keepChains], // the chains whose rows the snapshot store keeps (Base only once the live loop runs this code)
     bench: BENCH, pools: out, pairs: pairsAll, market, discovery,
