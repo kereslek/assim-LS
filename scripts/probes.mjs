@@ -8,7 +8,7 @@ import { topic } from '../lib/keccak.mjs';
 import { liquidityMap, ticksInWord, bitmapWordRange, sqrtX96ToSqrt, ticksForLog } from '../lib/v3math.mjs';
 import { bandStats, hollowness, depthHistogram, nearestWalls, shapeTag } from '../lib/shape.mjs';
 import { readGas, readPrices, gasStats, COINS } from '../lib/market.mjs';
-import { CHAINS } from '../lib/chains.mjs';
+import { CHAINS, ageOfBlocksBack, blocksBack as backFor } from '../lib/chains.mjs';
 import { ROUTERS, routerName } from '../lib/routers.mjs';
 import { PANCAKE_V3, BASE as BASE_C, ETHEREUM as ETH_C, TOPICS as POOL_TOPICS, v3LpKeeps, decodeInitialize } from '../lib/pools.mjs';
 import { SWAP_TOPICS, decodeSwap, swapFees } from '../lib/swaps.mjs';
@@ -196,11 +196,14 @@ async function probeArchiveBase() {
     const bn = await r.call('eth_blockNumber', []);
     if (bn == null) { say(null, `archive base ${new URL(url).host}`, 'no block number'); continue; }
     const head = parseInt(bn, 16), nowSec = Math.floor(Date.now() / 1000), out = [];
-    for (const d of [1, 30, 90]) {
-      const back = d * 43200, ts = word0(await r.call('eth_call', [{ to: MC3, data: tsCall }, '0x' + (head - back).toString(16)]));
-      out.push(`${d} d ${ts == null ? 'unread' : pastBlockAnswer(ts, { nowSec, blocksBack: back, secPerBlock: 2 }) ? 'yes' : 'wrong state'}`);
+    for (const d of [1, 7, 30, 90]) {
+      const back = backFor(CHAINS.base, { block: head, nowSec, secBack: d * 86400 }), ts = word0(await r.call('eth_call', [{ to: MC3, data: tsCall }, '0x' + (head - back).toString(16)]));
+      const ageSec = ageOfBlocksBack(CHAINS.base, { block: head, back, nowSec });
+      out.push(`${d} d ${ts == null ? 'unread' : pastBlockAnswer(ts, { nowSec, blocksBack: back, ageSec }) ? `yes (${((nowSec - Number(ts)) / 86400).toFixed(2)} d old)` : `wrong state (${((nowSec - Number(ts)) / 86400).toFixed(2)} d old)`}`);
     }
-    say(out.every((x) => x.endsWith('yes')) ? true : null, `archive base ${new URL(url).host}`, out.join(', '));
+    const clock = Math.round(Number((await r.call('eth_getBlockByNumber', [bn, false]))?.timestamp ?? NaN) - (CHAINS.base.eras.at(-1).t + (head - CHAINS.base.eras.at(-1).block) * CHAINS.base.eras.at(-1).sec));
+    out.push(`head time vs the era clock ${Number.isFinite(clock) ? clock + ' s' : 'unread'}`);
+    say(out.slice(0, 4).every((x) => / yes/.test(x)) ? true : null, `archive base ${new URL(url).host}`, out.join(', '));
   }
 }
 
@@ -210,7 +213,7 @@ async function probeLogsBase(base) {
   for (const url of CHAINS.base.rpcs) {
     const r = makeRpc([url], { timeout: 20000, maxRefusals: 9 });
     const head = parseInt(await r.call('eth_blockNumber', []) ?? '0x0', 16), out = [];
-    for (const span of [2000, 5000, 10000]) {
+    for (const span of [1000, 2000, 10000]) {
       const logs = head ? await r.call('eth_getLogs', [{ address: pool, topics: [SWAP_TOPICS.v3], fromBlock: '0x' + (head - span + 1).toString(16), toBlock: '0x' + head.toString(16) }]) : null;
       out.push(`${span} blocks ${Array.isArray(logs) ? logs.length + ' swaps' : 'refused'}`);
     }
