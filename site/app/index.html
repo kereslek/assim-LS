@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-z5QwF+bXhTJ3vP0zgjsA7x4PDU3kii9n/vVpVB75pZ0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WKtNlFxtLvsxC3yWSv4/gOXszmkV9TOjfrFZPdyMF0w='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -132,6 +132,18 @@ body.solo main{max-width:none}
 .solo-box .liq .tick{top:auto;bottom:4px}
 .solo-box svg[preserveAspectRatio="none"]{height:min(48vh,420px)!important}
 .solo-cap{margin-bottom:8px}
+/* date axes and chart notes (v0.4.6): ticks under every chart over time, one note for the data under the pointer or finger */
+.tax{position:relative;height:14px;margin-top:5px;pointer-events:none}
+.tax>span{position:absolute;top:0;transform:translateX(-50%);font:500 10px/1.3 var(--mono);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.tax>span.d{color:var(--fg2)}
+.pz-cur{position:absolute;top:0;bottom:0;width:1px;margin-left:-.5px;background:rgba(230,237,243,.6);pointer-events:none;z-index:1}
+.ctip{position:fixed;left:0;top:0;z-index:72;width:max-content;max-width:min(300px,calc(100vw - 16px));padding:7px 10px;border-radius:9px;border:1px solid var(--line3);background:rgba(17,23,30,.97);box-shadow:0 10px 26px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2);pointer-events:none}
+.ctip .tt{display:block;margin-bottom:2px;font:600 11px/1.35 var(--mono);letter-spacing:.03em;color:var(--fg)}
+.ctip b{color:var(--fg);font-weight:600}
+.ctip .q{color:var(--muted)}
+.ctip .sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.spk{display:inline-block;vertical-align:middle}
+.fmini,.spk{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 
 /* pan: drag a chart sideways (a vertical swipe still scrolls the page), edge buttons where more lies off-screen,
    a thin bar for where the view sits, a soft hatch where the data ends */
@@ -948,12 +960,13 @@ td.fees{width:96px}
   <span class="lock-note" id="lock-note" hidden>Forgets the saved key here. You’ll need your passphrase next time. Your data stays encrypted either way.</span></div>
 </footer>
 <div class="pop" id="pop" role="tooltip" hidden></div>
+<div class="ctip" id="ctip" role="tooltip" hidden></div>
 <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.4.5';
+const BUILD = 'v0.4.6';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1853,7 +1866,7 @@ function liqChart(p, w, id) {
     vw: () => [P.x() - L(), P.x() + L()], ext: () => [ext.lo, ext.hi],
     sub: () => Math.max(1, Math.ceil(Math.log(sp[0] / sp[1]) / Math.log(4) - 1e-9)), // − steps out at most ×4 a press
     zr: () => [sp[0] > sp[1] + 1e-9 ? 0 : 1, ZMAX.liq], wAt: (lv) => 2 * liqHalf(sp, lv), lvOf: (wd) => liqLevel(sp, wd / 2), place: (a) => P.setX(a + L()),
-    caps: () => [liqCapTxt(P.x() - L(), P.x() + L())],
+    caps: () => [liqCapTxt(P.x() - L(), P.x() + L())], tip: (o) => liqTip(id, o),
     isDef: () => Math.abs(P.x() - clamp(0, ...lim())) < 1e-6,
     rezoom: () => { if (panned(id, key)) P.setX(clamp(P.x(), ...lim())); },
     inner: () => liqInner(id),
@@ -2158,8 +2171,10 @@ function dailyStrip(p, w, id = 'daily-best') {
     const sv = v.slice(i0, i1).filter(isNum).sort((x, y) => x - y), hi = sv.length ? sv[sv.length - 1] : 0;
     return { i0, i1, med: sv.length ? sv[Math.floor(sv.length / 2)] : null, hi, iMax: hi > 0 ? i0 + v.slice(i0, i1).indexOf(hi) : -1 };
   };
+  const ts = d.map((x) => x.t);
   const P = pzTime(id, p.id, N, {
     words: ['older', 'newer'], aria: ['Show older days', 'Show newer days'], hint: '◂ drag for older days',
+    mid: true, tAt: (u) => kAt(ts, u, D), uAt: (t) => kU(ts, t, D), axis: () => taxOf(id), tip: (u) => dailyTip(p, d, v, Math.floor(u), seen().med),
     inner: () => {
       const [a, b] = P.vw(), len = b - a, Wd = 300, Ht = 44, bw = Wd / len, z = seen(), x0 = a * bw;
       let s = `<svg viewBox="${x0.toFixed(2)} 0 ${Wd} ${Ht}" preserveAspectRatio="none" role="img" aria-label="Fees per 1,000 dollars, one bar per day; the median is marked">`;
@@ -2316,7 +2331,8 @@ function pzShell(id, cls = '', inset = null) { // the chart's host: drawing, edg
     + `<div class="pz-c"${P.label ? ` role="img" aria-label="${esc(P.label)}"` : ''}>${P.inner()}</div>`
     + (P.xy ? '' : `<button type="button" class="pz-edge l" data-act="pan" data-chart="${id}" data-dir="-1" aria-label="${P.aria[0]}"${st.l ? '' : ' hidden'}>${CHEV(-1)}${wd[0] ? `<span>${wd[0]}</span>` : ''}</button>`
     + `<button type="button" class="pz-edge r" data-act="pan" data-chart="${id}" data-dir="1" aria-label="${P.aria[1]}"${st.r ? '' : ' hidden'}>${wd[1] ? `<span>${wd[1]}</span>` : ''}${CHEV(1)}</button>`)
-    + `<div class="pz-bar"${st.bar ? '' : ' hidden'}><i style="${st.bar}"></i></div>${pzHintHtml(id, st)}</div>`;
+    + `<div class="pz-bar"${st.bar ? '' : ' hidden'}><i style="${st.bar}"></i></div>${pzHintHtml(id, st)}</div>`
+    + (P.axis ? `<div class="tax" data-tax="${id}" aria-hidden="true">${P.axis()}</div>` : '');
 }
 // a chart's captions that follow its view (the days shown, the visible max); P.caps() gives their texts
 const pzCapsHtml = (id) => PZ[id].caps().map((t, i) => (t == null ? '' : `<span class="lbl pz-cap${i + 1}">${esc(t)}</span>`)).join('');
@@ -2342,6 +2358,7 @@ function pzRedraw(id) {
   h.dataset.view = st.view;
   if (!h.classList.contains('still')) h.classList.add('still');
   pzCaps(id);
+  if (P.axis) { const ax = h.nextElementSibling; if (ax && ax.dataset.tax === id) { ax.innerHTML = P.axis(); axFit(ax); } }
   if (P.kind === 'liq') liqDeclutter(id);
 }
 const pzq = new Set();
@@ -2448,6 +2465,10 @@ document.addEventListener('pointerdown', (e) => {
   const caught = !!PZA[id]; // a touch catches a coasting chart: if it then lets go without a drag, the chart rests there
   pzStop(id);
   G = { id, host, pid: e.pointerId, x0: e.clientX, y0: e.clientY, v0: P.x(), w0: P.xy ? P.y() : 0, drag: false, caught, s: [[e.clientX, e.clientY, e.timeStamp]], btn: !!e.target.closest('button') };
+  if (e.pointerType !== 'mouse' && !G.btn && (P.tip || P.tipXY)) { // a finger held still: the note follows it (a scrub) instead of panning
+    const g = G;
+    g.lp = setTimeout(() => { if (G === g && !g.drag && !PIN && g.host.isConnected) { g.scrub = true; tipAt(g.host, g.x0, g.y0, true); } }, 420);
+  }
 }, { passive: true });
 document.addEventListener('pointermove', (e) => {
   const pt = PTS.get(e.pointerId);
@@ -2456,10 +2477,12 @@ document.addEventListener('pointermove', (e) => {
   if (!G || e.pointerId !== G.pid) return;
   const P = PZ[G.id];
   if (!P || !G.host.isConnected) { G = null; return; }
+  if (G.scrub) { tipAt(G.host, e.clientX, e.clientY, true); return; }
   const dx = e.clientX - G.x0, dy = e.clientY - G.y0;
   if (!G.drag) {
     const ax = Math.abs(dx), ay = Math.abs(dy);
     if (P.xy ? Math.hypot(dx, dy) < 6 : ax < 6 && ay < 6) return;
+    clearTimeout(G.lp);
     if (!P.xy && ay >= ax) { if (G.caught) pzSettle(G.id); G = null; return; } // mostly vertical: the page scrolls, the chart stays
     // the view follows the finger from where it touched down: a busy phone hands over its moves in batches (one per
     // frame), and a quick swipe whose first batch already crossed the threshold still pans by its whole length
@@ -2477,12 +2500,17 @@ document.addEventListener('pointermove', (e) => {
 function pzEnd(e) {
   if (!G || e.pointerId !== G.pid) return;
   const g = G; G = null;
+  clearTimeout(g.lp);
   if (S.hintKill) { S.hintKill = false; pzHintDone(); }
-  if (!g.drag) { // a tap: two quick taps on the chart (not on a button) reset it
+  if (g.scrub) { TIP.pin = true; swallowClick(); return; } // the note stays where the finger let go
+  if (!g.drag) { // a tap: two quick taps on the chart (not on a button) reset it; one shows the note for the data there
     if (g.caught) pzSettle(g.id); // a coast it stopped: at rest inside the data, the reset button shown or not
     if (e.type !== 'pointerup' || g.btn) return;
-    if (lastTap && lastTap.id === g.id && e.timeStamp - lastTap.t < 380 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { lastTap = null; zreset(g.id); }
-    else lastTap = { id: g.id, t: e.timeStamp, x: e.clientX, y: e.clientY };
+    if (lastTap && lastTap.id === g.id && e.timeStamp - lastTap.t < 380 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) { lastTap = null; tipHide(); zreset(g.id); }
+    else {
+      lastTap = { id: g.id, t: e.timeStamp, x: e.clientX, y: e.clientY };
+      if (e.pointerType && e.pointerType !== 'mouse' && g.host.isConnected && tipAt(g.host, e.clientX, e.clientY, true)) TIP.pin = true;
+    }
     return;
   }
   g.host.classList.remove('dragging');
@@ -2496,7 +2524,8 @@ function pzEnd(e) {
 // pinch: the data point under the middle of the two fingers stays under it, the view's width follows their spread
 function pinStart(e) {
   const g = G, P = PZ[g.id], a = PTS.get(g.pid) || { x: g.x0, y: g.y0 }, b = { x: e.clientX, y: e.clientY };
-  G = null; lastTap = null;
+  G = null; lastTap = null; clearTimeout(g.lp);
+  if (g.scrub) tipHide();
   if (!P || !P.wAt) return;
   pzStop(g.id);
   if (pzRaf) { cancelAnimationFrame(pzRaf); pzRaf = 0; pzq.clear(); }
@@ -2557,7 +2586,7 @@ document.addEventListener('touchend', pzEndLate);
 document.addEventListener('touchcancel', pzEndLate);
 // iOS Safari: while a chart is dragged or pinched the page neither scrolls nor zooms under the fingers, and its own
 // pinch events (gesturestart / gesturechange) never zoom the page from a chart
-document.addEventListener('touchmove', (e) => { if ((PIN || (G && G.drag)) && e.cancelable) e.preventDefault(); }, { passive: false });
+document.addEventListener('touchmove', (e) => { if ((PIN || (G && (G.drag || G.scrub))) && e.cancelable) e.preventDefault(); }, { passive: false });
 for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => { const el = e.target; if (el && el.nodeType === 1 && el.closest('.pz')) e.preventDefault(); }, { passive: false });
 // a trackpad's sideways scroll (or shift + wheel) pans the chart under the pointer, a trackpad pinch (ctrl + wheel) zooms
 // it around the pointer; up and down still scroll the page
@@ -2589,6 +2618,263 @@ document.addEventListener('wheel', (e) => {
 }, { passive: false });
 let wheelZ = 0;
 
+// ---------- date axes and chart notes (v0.4.6) ----------
+// Every chart over time has a date axis in the page's time zone that follows its zoom and pan: hours while the view spans
+// up to a few days (a midnight shows its date), then days, then the 1st of each month. P.axis() gives the ticks under the
+// drawing (P.tAt / P.uAt map the chart's x units to times and back); axFit holds them inside the box and leaves out any
+// that would touch. P.tip(u) gives the note for the data at u (P.tipXY for the scatter): a mouse hovers, a finger taps,
+// or holds still and then slides along (a scrub). A sideways drag still pans and two fingers still pinch. Missing data
+// reads as a dash, never as 0. The small fee bars in rows and cards have no room for an axis: they say their dates in
+// their label, and show the same note on hover or a long press.
+const fParts = dtf({ year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' });
+const TZO = new Map();
+function tzOff(t) { // the zone's offset from UTC at t, per hour
+  const k = Math.floor(t / H);
+  let o = TZO.get(k);
+  if (o === undefined) { const q = {}; for (const x of fParts.formatToParts(k * H)) q[x.type] = +x.value; o = Date.UTC(q.year, q.month - 1, q.day, q.hour % 24, q.minute) - k * H; TZO.set(k, o); }
+  return o;
+}
+const wallT = (t) => t + tzOff(t), fromWall = (w) => w - tzOff(w - tzOff(w));
+const dayName = (t) => (isNum(t) ? fDay.format(t).replace(',', '') : DASH); // "Fri 30 Oct"
+const dayHM = (t) => (isNum(t) ? dayName(t) + ' ' + hm(t) : DASH);
+const spanTxt = (a, b) => (b - a <= D + 60e3 && dm(a) === dm(b - 1) ? `${dayName(a)} ${hm(a)}–${hm(b)}` : `${dm(a)} ${hm(a)} → ${dm(b)} ${hm(b)}`);
+const xMed = (r) => (r >= 10 ? Math.round(r) : r.toFixed(1)) + '×';
+// times at knots: ts[i] at u = i, a step `st` a unit past either end
+const kAt = (ts, u, st) => { const n = ts.length - 1; if (n < 1 || u <= 0) return ts[0] + u * st; if (u >= n) return ts[n] + (u - n) * st; const i = Math.floor(u); return ts[i] + (u - i) * (ts[i + 1] - ts[i]); };
+const kU = (ts, t, st) => { const n = ts.length - 1; if (n < 1 || t <= ts[0]) return (t - ts[0]) / st; if (t >= ts[n]) return n + (t - ts[n]) / st; let lo = 0, hi = n; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ts[m] <= t) lo = m; else hi = m; } return lo + (t - ts[lo]) / ((ts[lo + 1] - ts[lo]) || st); };
+// ticks between ta and tb for W px of axis; mid: day ticks at midday (under daily bars)
+function timeTicks(ta, tb, W, mid = false, minPx = 66) {
+  const out = [], n = Math.max(1, Math.floor(W / minPx)), T = Math.max(1, tb - ta);
+  const hs = [1, 2, 3, 6, 12].find((h) => T / (h * H) <= n);
+  if (hs) {
+    for (let w = Math.ceil(wallT(ta) / (hs * H)) * hs * H, k = 0; k < 500; w += hs * H, k++) { const t = fromWall(w); if (t > tb) break; if (t >= ta) out.push({ t, d: w % D === 0 }); }
+    if (out.length && !out.some((x) => x.d)) out[0].dh = true; // no midnight in view: the first tick carries the date
+    return out;
+  }
+  const ds = [1, 2, 5, 10, 15].find((x) => T / (x * D) <= n) || 31, off = mid ? D / 2 : 0;
+  for (let w = Math.ceil((wallT(ta) - off) / D) * D, k = 0; k < 800; w += D, k++) {
+    const t = fromWall(w + off);
+    if (t > tb) break;
+    if (t < ta) continue;
+    const dt = new Date(w), dom = dt.getUTCDate(), dim = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+    if (ds > 15 ? dom === 1 : (dom - 1) % ds === 0 && (dom === 1 || dim - dom + 1 >= ds * 0.6)) out.push({ t, d: true });
+  }
+  return out;
+}
+// the HTML axis under a pan chart, for its view
+function taxOf(id) {
+  const P = PZ[id], [a, b] = P.vw(), [e0, e1] = P.ext(), lo = Math.max(a, e0), hi = Math.min(b, e1);
+  const el = document.querySelector(`[data-tax="${id}"]`), W = P.aw = Math.round((el && el.clientWidth) || Math.min(innerWidth - 48, 560));
+  if (!(hi > lo) || !(b > a)) return '';
+  return timeTicks(P.tAt(lo), P.tAt(hi), (W * (hi - lo)) / (b - a), P.mid).map((k) => {
+    const f = (((P.uAt(k.t) - a) / (b - a)) * 100).toFixed(2);
+    return `<span${k.d || k.dh ? ' class="d"' : ''} data-f="${f}" style="left:${f}%">${k.d ? dm(k.t) : k.dh ? dm(k.t) + ' ' + hm(k.t) : hm(k.t)}</span>`;
+  }).join('');
+}
+// the same ticks as SVG text, for the charts that draw their own axis (replay, money, lab)
+function svgTaxis(ts, a, b, X, y, pw, x0, x1) {
+  const n = ts.length - 1, lo = Math.max(a, 0), hi = Math.min(b, n), st = n > 0 ? (ts[n] - ts[0]) / n : H;
+  if (!(hi > lo)) return '';
+  return timeTicks(kAt(ts, lo, st), kAt(ts, hi, st), (pw * (hi - lo)) / (b - a), false, 78).map((k) => `<text class="dt" x="${clamp(X(kU(ts, k.t, st)), x0, x1).toFixed(1)}" y="${y}" text-anchor="middle">${k.d ? dm(k.t) : hm(k.t)}</text>`).join('');
+}
+function axFit(el) { // inside the box, none touching (left to right, the first wins)
+  const W = el.clientWidth, sp = [...el.children];
+  if (!W) return;
+  el.dataset.fit = '1';
+  const ws = sp.map((x) => x.offsetWidth);
+  let last = -Infinity;
+  sp.forEach((x, i) => {
+    const w = ws[i], c = clamp((+x.dataset.f / 100) * W, w / 2, W - w / 2), off = c - w / 2 < last + 8;
+    x.style.left = c.toFixed(1) + 'px'; x.style.visibility = off ? 'hidden' : '';
+    if (!off) last = c + w / 2;
+  });
+}
+// an axis drawn by a render is fitted once it is laid out (and again when its width changes: a tab shown, a window
+// resized); drawn for a width it doesn't have, its chart is redrawn. No layout is forced while charts redraw.
+const taxRO = new ResizeObserver((es) => {
+  for (const en of es) {
+    const el = en.target;
+    if (!el.isConnected) { taxRO.unobserve(el); continue; }
+    if (!el.clientWidth) continue;
+    axFit(el);
+    const P = PZ[el.dataset.tax];
+    if (P && Math.abs(el.clientWidth - (P.aw || 0)) > 24) pzDraw(el.dataset.tax);
+  }
+});
+const taxEach = (n, f) => { if (n.nodeType !== 1) return; if (n.classList.contains('tax')) f(n); else if (n.firstElementChild) for (const x of n.getElementsByClassName('tax')) f(x); };
+new MutationObserver((rs) => { for (const r of rs) { for (const n of r.addedNodes) taxEach(n, (x) => taxRO.observe(x)); for (const n of r.removedNodes) taxEach(n, (x) => taxRO.unobserve(x)); } }).observe(document.body, { childList: true, subtree: true });
+let taxR = 0, taxW = innerWidth;
+addEventListener('resize', () => { // only a new width: a phone's toolbars sliding away on a scroll resize the height alone
+  if (innerWidth === taxW) return;
+  taxW = innerWidth; tipHide(); clearTimeout(taxR); taxR = setTimeout(() => { for (const el of $$('.tax')) if (PZ[el.dataset.tax]) pzDraw(el.dataset.tax); }, 180); });
+
+// the one note: inside the window, never under the bar on top (or the panel's head), above the finger
+const TIP = { host: null, mini: null, pin: false, ev: null, raf: 0 };
+function tipHide() {
+  const el = $('#ctip');
+  if (el && !el.hidden) el.hidden = true;
+  for (const c of $$('.pz-cur')) c.remove();
+  TIP.host = TIP.mini = null; TIP.pin = false;
+}
+function tipPut(html, ax, ay, touch) {
+  const el = $('#ctip');
+  if (!el) return;
+  if (el.__h !== html) { el.innerHTML = html; el.__h = html; }
+  el.hidden = false;
+  const w = el.offsetWidth, h = el.offsetHeight, hd = $('#sheet').hidden ? $('header.top') : $('#sheet .sheet-head');
+  const top0 = Math.max(8, (hd ? hd.getBoundingClientRect().bottom : 0) + 6);
+  let y = ay - h - (touch ? 34 : 14);
+  if (y < top0) y = ay + (touch ? 30 : 20);
+  y = clamp(y, top0, Math.max(top0, innerHeight - h - 8));
+  const x = clamp(ax - w / 2, 8, Math.max(8, innerWidth - w - 8));
+  el.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
+  TIP.px = x; TIP.py = y; TIP.at = performance.now();
+}
+function tipAt(host, cx, cy, touch) {
+  const P = PZ[host.dataset.pz];
+  if (!P || !(P.tip || P.tipXY)) { tipHide(); return false; }
+  const r = host.getBoundingClientRect();
+  let res = null, ax = cx, ay = cy;
+  if (P.tipXY) { res = P.tipXY(cx, cy, host); if (res) { ax = res.x; ay = res.y; } }
+  else {
+    const b = pzPlot(host, P), f = (cx - b.l) / b.w, [a, z] = P.vw();
+    if (touch || (f >= -0.02 && f <= 1.02)) res = P.tip(a + clamp(f, 0, 0.9999) * (z - a)); // a finger sliding past the end keeps the last point
+    if (res && isNum(res.u)) ax = clamp(b.l + ((res.u - a) / (z - a)) * b.w, r.left, r.right);
+  }
+  if (!res) { tipHide(); return false; }
+  let cur = host.querySelector(':scope > .pz-cur');
+  if (!P.tipXY) { if (!cur) { cur = document.createElement('i'); cur.className = 'pz-cur'; cur.setAttribute('aria-hidden', 'true'); host.appendChild(cur); } cur.style.left = (ax - r.left).toFixed(1) + 'px'; }
+  for (const c of $$('.pz-cur')) if (c !== cur) c.remove();
+  TIP.host = host; TIP.mini = null; TIP.top = r.top;
+  tipPut(res.h, ax, ay, touch);
+  return true;
+}
+// the small fee bars (rows, cards, the panel's header) and the backtest's net sparklines
+function miniUnder(t, cx, cy) {
+  const c = t && t.closest && t.closest('.mc'), fm = t && t.closest && (t.closest('.fmini, .spk') || (c && c.querySelector('.fmini')));
+  if (!fm) return null;
+  const r = (fm.querySelector('svg') || fm).getBoundingClientRect();
+  return r.width > 0 && cx >= r.left - 2 && cx <= r.right + 2 && cy >= r.top - 4 && cy <= r.bottom + 4 ? fm : null;
+}
+function miniTip(fm, cx, cy, touch) {
+  const r = (fm.querySelector('svg') || fm).getBoundingClientRect(), f = clamp((cx - r.left) / Math.max(1, r.width), 0, 0.9999);
+  const res = fm.classList.contains('spk') ? spkTip(fm, f) : fmTip(fm, f);
+  if (!res) { tipHide(); return false; }
+  for (const c of $$('.pz-cur')) c.remove();
+  TIP.mini = fm; TIP.host = null; TIP.top = r.top;
+  tipPut(res.h, isNum(res.f) ? r.left + res.f * r.width : cx, touch ? r.top : cy, touch);
+  return true;
+}
+function fmTip(fm, f) {
+  const p = poolById(fm.dataset.fid), fh = p && feeHist(p);
+  if (!fh) return { h: `<span class="tt">LP fees a day</span>${DASH} no history yet` };
+  const t0 = fh.t1 - 30 * D, t = t0 + f * 30 * D, x = fh.bars.find((q) => q.a <= t && t < q.b);
+  if (!x) return { f, h: `<span class="tt">${dm(t)}</span><span class="q">no fee rows before ${dm(fh.bars.length ? Math.max(t0, fh.bars[0].a) : fh.t1)}</span>` };
+  const n = (x.b - x.a) / D, mid = (Math.max(t0, x.a) + x.b) / 2;
+  return { f: (mid - t0) / (30 * D), h: `<span class="tt">${n > 1.5 ? `${dm(x.a)} → ${dm(x.b)}` : dayName(x.a)}</span>LP fees <b>${usd(x.v)}</b>${isNum(x.v) ? (n > 1.5 ? ' a day on average (a gap not filled yet)' : '') : ' (not read)'}${x === fh.bars[fh.bars.length - 1] ? ' · <span class="q">latest</span>' : ''}` };
+}
+function spkTip(fm, f) {
+  const row = btRows(true).find((r) => r.id === fm.dataset.rid), s = row && row.b.series;
+  if (!s || !Array.isArray(s.t) || s.t.length < 2) return null;
+  const n = s.t.length - 1, i = clamp(Math.round(f * n), 0, n);
+  return { f: i / n, h: `<span class="tt">${dayHM(s.t[i])}</span>net <b>${usd(s.net[i], { sign: true })}</b> vs holding${s.fees ? ` · fees ${usd(s.fees[i])}` : ''}` };
+}
+document.addEventListener('pointerdown', () => { if (TIP.host || TIP.mini) tipHide(); }, { capture: true, passive: true });
+function tipScroll() { // a scroll that moves what the note points at puts it away (a late scroll event that moved nothing doesn't)
+  const a = TIP.host || TIP.mini;
+  if ((G && G.scrub) || (MLP && MLP.on)) return;
+  if (!a.isConnected) { tipHide(); return; }
+  const el = TIP.mini ? TIP.mini.querySelector('svg') || TIP.mini : a;
+  const d = el.getBoundingClientRect().top - TIP.top;
+  if (Math.abs(d) <= 2) return;
+  if (TIP.pin && performance.now() - TIP.at < 700) { // a scroll still settling as the finger tapped: the note moves with the chart
+    TIP.top += d; TIP.py += d;
+    $('#ctip').style.transform = `translate(${Math.round(TIP.px)}px,${Math.round(TIP.py)}px)`;
+    return;
+  }
+  tipHide();
+}
+function tipHover() {
+  TIP.raf = 0;
+  const e = TIP.ev, t = e && e.target;
+  if (!t || !t.closest || G || PIN) return; // a press since the move: the drag decides
+  const host = t.closest('.pz');
+  if (host && !t.closest('button') && PZ[host.dataset.pz]) { tipAt(host, e.clientX, e.clientY, false); return; }
+  const fm = miniUnder(t, e.clientX, e.clientY);
+  if (fm) { miniTip(fm, e.clientX, e.clientY, false); return; }
+  if ((TIP.host || TIP.mini) && !TIP.pin) tipHide(); // a note a finger left stays until a tap elsewhere, Esc or a scroll
+}
+document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') TIP.touchAt = e.timeStamp; }, { capture: true, passive: true });
+document.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || e.timeStamp - (TIP.touchAt || -1e9) < 900) return; // a phone's mouse events after a touch are not a hover
+  if (e.buttons || G || PIN) { if (G && G.drag && TIP.host) tipHide(); return; }
+  TIP.ev = e;
+  if (!TIP.raf) TIP.raf = requestAnimationFrame(tipHover);
+}, { passive: true });
+document.documentElement.addEventListener('mouseleave', () => { if (!TIP.pin) tipHide(); });
+// a finger held on a small bar: its note (the row or card under it doesn't open)
+let MLP = null;
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;
+  const fm = miniUnder(e.target, e.clientX, e.clientY);
+  if (!fm) return;
+  const m = MLP = { id: e.pointerId, fm, x: e.clientX, y: e.clientY, on: false };
+  m.t = setTimeout(() => { if (MLP === m && miniTip(fm, m.x, m.y, true)) { m.on = true; TIP.pin = true; } }, 420);
+}, { passive: true });
+document.addEventListener('pointermove', (e) => {
+  const m = MLP;
+  if (!m || e.pointerId !== m.id) return;
+  if (m.on) miniTip(m.fm, e.clientX, m.y, true);
+  else if (Math.hypot(e.clientX - m.x, e.clientY - m.y) > 8) { clearTimeout(m.t); MLP = null; }
+}, { passive: true });
+for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, (e) => { const m = MLP; if (!m || e.pointerId !== m.id) return; clearTimeout(m.t); MLP = null; if (m.on) { TIP.pin = true; swallowClick(); } });
+document.addEventListener('touchmove', (e) => { if (MLP && MLP.on && e.cancelable) e.preventDefault(); }, { passive: false });
+
+// the notes, chart by chart
+function dayExtra(p, t) { // a day's LP fees and volume from history.json (the fee counters are exact; the fee history says which days are estimated)
+  const h = S.hist && S.hist.pools && S.hist.pools[p.id];
+  if (!h) return '';
+  let fees = null, src = null, vol = null;
+  const y = Array.isArray(h.y) ? h.y.find((r) => Array.isArray(r) && r[0] === t) : null;
+  if (y && isNum(y[1])) { fees = y[1]; src = y[2] === 'x' ? 'exact' : y[2] === 'e' ? 'estimated' : null; }
+  if (Array.isArray(h.d)) {
+    const m = t + D / 2, fb = rateRows(h.d, 2, D).bars.find((x) => x.a <= m && m < x.b), vb = rateRows(h.d, 3, D).bars.find((x) => x.a <= m && m < x.b);
+    if (fees == null && fb && isNum(fb.v)) { fees = fb.v; src = fb.b - fb.a > 1.5 * D ? 'a gap’s average' : 'exact'; }
+    if (vb && isNum(vb.v)) vol = vb.v;
+  }
+  return (isNum(fees) ? ` · LP fees <b>${usd(fees)}</b>` : '') + (isNum(vol) ? ` · volume <b>${usd(vol)}</b>` : '') + (src ? ` · <span class="q">${src}</span>` : '');
+}
+function dailyTip(p, d, v, i, med) {
+  if (i < 0 || i >= d.length) return null;
+  const x = v[i], last = i === d.length - 1;
+  return { u: i + 0.5, h: `<span class="tt">${dayName(d[i].t)}${last ? ' · last 24 h' : ''}</span>`
+    + (isNum(x) ? `fees <b>$${x.toFixed(2)}</b> per $1,000${isNum(med) && med > 0 ? ` · <b>${xMed(x / med)}</b> the median` : ''}` : `fees ${DASH} (not read)`)
+    + dayExtra(p, d[i].t) + (isNum(d[i].net) ? `<br>net APR <b>${pct(d[i].net)}</b>` : '') };
+}
+const mvTxt = (o) => { const e = Math.exp(o) - 1, a = Math.abs(e * 100); return (e < 0 ? MINUS : '+') + (a < 9.95 ? a.toFixed(1) : Math.round(a)) + '%'; };
+function liqTip(id, o) {
+  const P = PZ[id], p = P.p, b = P.ex.bars.find((x) => o >= x.a && o < x.b);
+  if (!b) return null;
+  const r = P.w && isNum(P.w.range) ? P.w.range : null, tot = p.tvlUsd || sum(P.depth.map((x) => x.v)), u = p.t0 && p.t1 ? ` ${esc(p.t1.sym)} per ${esc(p.t0.sym)}` : '';
+  return { u: (b.a + b.b) / 2, h: `<span class="tt">${px(p.price * Math.exp(b.a))} – ${px(p.price * Math.exp(b.b))}${u}</span>${mvTxt(b.a)} to ${mvTxt(b.b)} from the price`
+    + (isNum(b.v) ? `<br>liquidity <b>${usd(b.v)}</b> · <b>${pct(tot > 0 ? b.v / tot : null)}</b> of the pool · ${r != null && Math.abs(b.o) <= r + 1e-9 ? 'in the suggested range' : 'parked outside the range'}` : `<br>liquidity ${DASH} (not read)`) };
+}
+function rpTip(row, u, cut, kind) {
+  const s = row.b.series, n = s.t.length - 1, i = clamp(Math.round(u), 0, n), when = `${dayHM(s.t[i])} · day ${((s.t[i] - s.t[0]) / D).toFixed(1)}`;
+  if (i > cut) return { u: i, h: `<span class="tt">${when}</span><span class="q">not played yet: drag the scrubber or press play</span>` };
+  if (kind === 'px') {
+    const k = Math.max(0, i - 1), lo = s.lo[k], hi = s.hi[k], x = s.px[i], inr = isNum(x) && isNum(lo) && isNum(hi) ? x >= lo && x <= hi : null;
+    const rec = i > 0 && isNum(s.lo[i]) && isNum(s.lo[i - 1]) && s.lo[i] !== s.lo[i - 1];
+    return { u: i, h: `<span class="tt">${when}</span>price <b>${px(x)}</b> · range ${px(lo)}–${px(hi)} · in range <b>${inr == null ? DASH : inr ? 'yes' : 'no'}</b>${rec ? ' · <span class="q">re-centred here</span>' : ''}` };
+  }
+  return { u: i, h: `<span class="tt">${when}</span>net <b>${usd(s.net[i], { sign: true })}</b> vs holding<br>fees <b>${usd(s.fees[i], { sign: true })}</b> · LVR <b>${usd(s.lvr[i], { sign: true })}</b> · costs <b>${usd(s.costs[i], { sign: true })}</b>` };
+}
+function labTip(row, strats, u) {
+  const t = row.b.series.t, n = t.length - 1, i = clamp(Math.round(u), 0, n);
+  const ls = strats.map((st) => ({ st, v: st.series[i] })).sort((a, b) => (isNum(b.v) ? b.v : -Infinity) - (isNum(a.v) ? a.v : -Infinity));
+  return { u: i, h: `<span class="tt">${dayHM(t[i])} · day ${((t[i] - t[0]) / D).toFixed(1)}</span>` + ls.map((x) => `<span class="sw" style="background:${SCOL[x.st.id] || 'var(--s6)'}"></span>${esc(x.st.name || x.st.id)} <b>${usd(x.v, { sign: true })}</b>`).join('<br>') + '<br><span class="q">net $ vs holding</span>' };
+}
+
 // a window opened from a chart shows just that chart, from the same sealed data (the stored key opens it)
 const SOLO = /^[a-z-]{2,20}$/.test(QP.get('view') || '') ? QP.get('view') : null;
 const SOLO_POOL = SOLO ? QP.get('pool') : null;
@@ -2609,7 +2895,7 @@ function isolate() {
   if (!box) return;
   document.body.classList.add('solo');
   for (let el = box; el && el !== document.body; el = el.parentElement)
-    for (const sib of el.parentElement.children) if (sib !== el && !sib.matches('header.top, .scrim')) sib.style.display = 'none';
+    for (const sib of el.parentElement.children) if (sib !== el && !sib.matches('header.top, .scrim, #ctip')) sib.style.display = 'none';
   box.classList.add('solo-box');
   const pool = SOLO_POOL && poolById(SOLO_POOL);
   if (!box.querySelector('.solo-cap')) box.insertAdjacentHTML('afterbegin', `<div class="lbl solo-cap">${pool ? esc(pool.pair) + ' · ' : ''}${WIN_LABEL[S.win]} · opened from the dashboard</div>`);
@@ -2743,9 +3029,10 @@ function spread(items, gap, top, bottom) {
 const path = (arr, X, Y, upto, from = 0) => { let s = '', pen = false; for (let i = from; i <= upto; i++) { if (!isNum(arr[i])) { pen = false; continue; } s += (pen ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(arr[i]).toFixed(1); pen = true; } return s; };
 const tLabel = (t, span) => (span <= 1.5 * D ? hm(t) : dm(t));
 const boxW = (el, min = 280) => Math.max(min, Math.floor((el && el.clientWidth) || 0));
-function spark(arr, w = 74, h = 22) {
+function spark(arr, w = 74, h = 22, ts = null, rid = null) { // with ts and rid: a span that says its dates and shows a note per point
   const v = arr.filter(isNum);
   if (v.length < 2) return `<span class="muted">${DASH}</span>`;
+  if (rid != null && Array.isArray(ts) && ts.length === arr.length) return `<span class="spk" data-rid="${esc(rid)}" role="img" aria-label="Net dollars versus holding, ${dm(ts[0])} to ${dm(ts[ts.length - 1])}: ends at ${usd(v[v.length - 1], { sign: true })}">${spark(arr, w, h)}</span>`;
   const mn = Math.min(0, ...v), mx = Math.max(0, ...v), n = arr.length - 1;
   const X = (i) => 1 + (i / n) * (w - 5), Y = (x) => 2 + ((mx - x) / ((mx - mn) || 1)) * (h - 4);
   const end = v[v.length - 1], col = end >= 0 ? '#16C784' : '#E2664C', d = path(arr, X, Y, n);
@@ -2810,7 +3097,7 @@ function renderBt() {
     + `<th style="text-align:center"><span class="lbl" style="display:block;padding:6px 8px">Cum. net<br>${WIN_LABEL[S.win]}</span></th><th><span class="lbl" style="display:block;padding:6px 8px">Re-<br>ranges</span></th><th><span class="lbl" style="display:block;padding:6px 8px">In<br>range</span></th><th><span class="lbl" style="display:block;padding:6px 8px">Gem</span></th></tr></thead><tbody>`
     + rows.map((r) => `<tr class="row${r.bench ? ' bench' : ''}${r.id === S.replay ? ' sel' : ''}" data-act="bt-row" data-id="${esc(r.id)}" tabindex="0"><td><span class="pn2">${esc(r.p ? r.p.pair : r.id)}</span><span class="pm">${r.p ? metaTxt(r.p) : DASH}${r.bench ? ' · benchmark' : ''}${keptStable(r.p) ? ' · ★ STABLE' : ''}${r.b.partial ? ' · ' + (+r.b.days.toFixed(1)) + ' d' : ''}</span></td>`
       + `<td><span class="muted">${pct(r.b.forecastNet)}</span> → <b class="${r.b.net < 0 ? 'neg' : ''}">${pct(r.b.net)}</b></td><td style="text-align:left">${verdict(r.b)}</td>`
-      + `<td>${spark(r.b.series.net)}</td><td>${int(r.b.reranges)}</td><td>${pct(r.b.tir, { dp: 0 })}</td><td>${r.p ? gemPill(r.p) : DASH}</td></tr>`).join('')
+      + `<td>${spark(r.b.series.net, 74, 22, r.b.series.t, r.id)}</td><td>${int(r.b.reranges)}</td><td>${pct(r.b.tir, { dp: 0 })}</td><td>${r.p ? gemPill(r.p) : DASH}</td></tr>`).join('')
     + `</tbody></table></div><p class="caption">Tap a row to open its replay. Sorted by backtest; the benchmark stays last.<span class="swipe"> Swipe the table for more columns.</span></p></div>`;
   drawScatter(rows);
   stickyHead($('#bt-lead .tbl-box'));
@@ -2846,12 +3133,26 @@ function drawScatter(rows) {
     vw: () => [P.x() - h(), P.x() + h()], ext: () => [lo0, hi0],
     isDef: () => Math.abs(pan()[0]) < 1e-6 && Math.abs(pan()[1]) < 1e-6,
     rezoom: () => { if (panned('scatter', '')) { const [a, b] = lim(); P.setX(clamp(P.x(), a, b)); P.setY(clamp(P.y(), a, b)); } },
+    tipXY: (cx, cy, host) => { // the dot nearest the pointer, within 24 px
+      const sv = host.querySelector('svg'), m = P.map;
+      if (!sv || !m) return null;
+      const r = sv.getBoundingClientRect(), k = r.width / Wd;
+      let best = null, bd = 24;
+      for (const o of pts2) {
+        const x = r.left + m.X(o.x) * k, y = r.top + m.Y(o.y) * k, dd = Math.hypot(x - cx, y - cy);
+        if (dd < bd && x >= r.left + L * k - 1 && x <= r.left + (L + pw) * k + 1 && y >= r.top + T * k - 1 && y <= r.top + (T + ph) * k + 1) { bd = dd; best = { o, x, y }; }
+      }
+      if (!best) return null;
+      const o = best.o, q = o.r.p;
+      return { x: best.x, y: best.y, h: `<span class="tt">${esc(q ? q.pair : o.r.id)}${q ? ' · ' + feeTxt(q.feeTier) + ' · ' + chainShort(q.chain) : ''}${o.r.bench ? ' · benchmark' : ''}</span>forecast <b>${pct(o.r.b.forecastNet)}</b> · backtest <b>${pct(o.r.b.net)}</b> · miss <b>${pts(o.r.b.net - o.r.b.forecastNet)}</b>` };
+    },
     inner: () => {
       const zoomed = zget('scatter') > 1e-6;
       let xlo = P.x() - h(), xhi = P.x() + h(), ylo = P.y() - h(), yhi = P.y() + h(), xt = linTicks(xlo, xhi, 4), yt = linTicks(ylo, yhi, 4);
       if (!zoomed) { xlo = ylo = Math.min(xlo, xt[0]); xhi = yhi = Math.max(xhi, xt[xt.length - 1]); yt = xt; } // the full view ends on round numbers
       else { xt = xt.filter((v) => v >= xlo && v <= xhi); yt = yt.filter((v) => v >= ylo && v <= yhi); }
       const X = (v) => L + ((v - xlo) / (xhi - xlo)) * pw, Y = (v) => T + ((yhi - v) / (yhi - ylo)) * ph, A = Math.min(xlo, ylo) - 50, Z = Math.max(xhi, yhi) + 50;
+      P.map = { X, Y };
       let g = `<svg viewBox="0 0 ${Wd} ${Ht}" style="max-width:${Wd}px" role="img" aria-label="Forecast net APR against backtested net APR for each pool"><defs><clipPath id="sc-clip"><rect x="${L}" y="${T}" width="${pw}" height="${ph}"/></clipPath></defs>`;
       for (const v of xt) g += `<line class="gridl" x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${T}" y2="${T + ph}"/><text x="${X(v).toFixed(1)}" y="${T + ph + 14}" text-anchor="middle">${v}</text>`;
       for (const v of yt) g += `<line class="gridl" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${v}</text>`;
@@ -2913,9 +3214,9 @@ function renderReplay(row) {
   // the price pane (log scale) and the money pane (one $ axis) each drag along the window on their own
   const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58, MR = 78, inset = [+((ML / Wd) * 100).toFixed(2), +((MR / Wd) * 100).toFixed(2)];
   const tw = { plot: [ML / Wd, MR / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier' };
-  const P1 = pzTime('rp', row.id, n, { ...tw, inner: () => rpPrice(row, P1, Wd, ML, MR, cut, re, span) });
+  const P1 = pzTime('rp', row.id, n, { ...tw, tip: (u) => rpTip(row, u, cut, 'px'), inner: () => rpPrice(row, P1, Wd, ML, MR, cut, re, span) });
   pzMount(pbox, 'rp', 'pz-line', inset);
-  const P2 = pzTime('rp-money', row.id, n, { ...tw, inner: () => rpMoney(row, P2, Wd, ML, MR, cut, span) });
+  const P2 = pzTime('rp-money', row.id, n, { ...tw, tip: (u) => rpTip(row, u, cut, 'money'), inner: () => rpMoney(row, P2, Wd, ML, MR, cut, span) });
   pzMount($('#rp-money'), 'rp-money', 'pz-line', inset);
   liqDeclutter('liq-replay');
   putHtml('rp-tools1', `<span id="rp-tools1">${ztools('rp', row.id)}</span>`, true);
@@ -2976,7 +3277,7 @@ function rpPrice(row, P, Wd, ML, MR, cut, re, span) {
   if (isNum(s.px[cut]) && cut >= a - 1e-9 && cut <= b + 1e-9) g += `<circle cx="${X(cut).toFixed(1)}" cy="${Y(s.px[cut]).toFixed(1)}" r="3" fill="#E6EDF3"/><text x="${(X(cut) + 7).toFixed(1)}" y="${(Y(s.px[cut]) + 3.5).toFixed(1)}" class="t-fg">${px(s.px[cut])}</text>`;
   if (pw >= 500) g += `<text x="${countAt}" y="${T1 - 5}" class="t-acc">${re.length} re-range${re.length === 1 ? '' : 's'}</text>`;
   g += `<line class="axisl" x1="${ML}" x2="${ML + pw}" y1="${T1 + ph}" y2="${T1 + ph}"/>`;
-  for (const i of dateTicksIn(s.t, Math.max(2, Math.floor(pw / 90)), a, b)) g += `<text x="${clamp(X(i), ML + 12, Wd - 24).toFixed(1)}" y="${H1 - 5}" text-anchor="middle">${tLabel(s.t[i], span)}</text>`;
+  g += svgTaxis(s.t, a, b, X, H1 - 5, pw, ML + 12, Wd - 24);
   return g + '</svg>';
 }
 function rpMoney(row, P, Wd, ML, MR, cut, span) {
@@ -3005,7 +3306,7 @@ function rpMoney(row, P, Wd, ML, MR, cut, span) {
   m += hits.join('') + '</g>' + dots.join('');
   if (end) for (const l of spread(labs, 12, T2 + 4, H2 - B2 + 4)) m += `<text x="${(X(cut) + 7).toFixed(1)}" y="${l.y.toFixed(1)}" class="${l.c}">${esc(l.t)}</text>`;
   m += `<line class="axisl" x1="${ML}" x2="${ML + pw}" y1="${T2 + qh}" y2="${T2 + qh}"/>`;
-  for (const i of dateTicksIn(s.t, Math.max(2, Math.floor(pw / 90)), a, b)) m += `<text x="${clamp(X(i), ML + 12, Wd - 24).toFixed(1)}" y="${H2 - 5}" text-anchor="middle">${tLabel(s.t[i], span)}</text>`;
+  m += svgTaxis(s.t, a, b, X, H2 - 5, pw, ML + 12, Wd - 24);
   return m + '</svg>';
 }
 function renderLab(row) {
@@ -3062,7 +3363,7 @@ function renderLab(row) {
   lab.innerHTML = h + '</div>';
   // lines
   const box = $('#lab-lines'), Wd = boxW(box), L = 52, R = 12;
-  const PL = pzTime('lab', row.id, n, { plot: [L / Wd, R / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', inner: () => labLines(row, strats, PL, Wd, L, R) });
+  const PL = pzTime('lab', row.id, n, { plot: [L / Wd, R / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', tip: (u) => labTip(row, strats, u), inner: () => labLines(row, strats, PL, Wd, L, R) });
   pzMount(box, 'lab', 'pz-line', [+((L / Wd) * 100).toFixed(2), +((R / Wd) * 100).toFixed(2)]);
   const lt = lab.querySelector('[data-chartbox="lab"] .ctools'); if (lt) lt.outerHTML = ztools('lab', row.id); // its zoom range is known now
 }
@@ -3087,7 +3388,7 @@ function labLines(row, strats, P, Wd, L, R) {
     if (d) hits.push(`<path class="hit" data-act="hl" data-g="lab" data-s="${esc(st.id)}" d="${d}" fill="none" stroke="transparent" stroke-width="12"/>`);
   }
   s += hits.join('') + `</g><line class="axisl" x1="${L}" x2="${L + pw}" y1="${T + ph}" y2="${T + ph}"/>`;
-  for (const i of dateTicksIn(b.series.t, Math.max(2, Math.floor(pw / 90)), a, z)) s += `<text x="${clamp(X(i), L + 12, Wd - 24).toFixed(1)}" y="${Ht - 5}" text-anchor="middle">${tLabel(b.series.t[i], b.series.t[n] - b.series.t[0])}</text>`;
+  s += svgTaxis(b.series.t, a, z, X, Ht - 5, pw, L + 12, Wd - 24);
   return s + '</svg>';
 }
 function openReplay(id) {
@@ -3141,9 +3442,11 @@ function renderHealth() {
   let bars = '';
   const hh = S.hist && Array.isArray(S.hist.health) ? S.hist.health.slice(-48) : null;
   if (hh && hh.length) {
-    const N = hh.length, mx = Math.max(1, ...hh.map((r) => (isNum(r[2]) ? r[2] : 0)));
+    const N = hh.length, mx = Math.max(1, ...hh.map((r) => (isNum(r[2]) ? r[2] : 0))), ht = hh.map((r) => r[0]);
     const PH = pzTime('health', '', N, {
       words: ['older', 'newer'], aria: ['Show older hours', 'Show newer hours'], hint: '◂ drag for older hours',
+      tAt: (u) => kAt(ht, u, H), uAt: (t) => kU(ht, t, H), axis: () => taxOf('health'),
+      tip: (u) => { const i = Math.floor(u); if (i < 0 || i >= N) return null; const r = hh[i]; return { u: i + 0.5, h: `<span class="tt">${spanTxt(r[0], r[0] + H)}</span>passes <b>${int(r[2])}</b> · OK <b>${int(r[1])}</b> · failed <b>${isNum(r[1]) && isNum(r[2]) ? int(r[2] - r[1]) : DASH}</b>${isNum(r[3]) ? ` · unread ${int(r[3])}` : ''}` }; },
       caps: () => [`Passes per hour · ${Math.round(PH.span())} h`],
       inner: () => {
         const [a, b] = PH.vw(), len = b - a, Wd = 300, Ht = 44, bw = Wd / len;
@@ -3262,13 +3565,19 @@ function closeDetail() {
   const o = S.opener; S.opener = null;
   if (o && document.contains(o)) o.focus({ preventScroll: true });
 }
-function miniLine(arr0, label, logScale, id, pool) {
+function miniLine(arr0, label, logScale, id, pool, tm) { // tm: { t1, span, r, unit }: the window's end and length (the points sit evenly in it)
   const ok = (x) => isNum(x) && (!logScale || x > 0), arr = (arr0 || []).map((x) => (ok(x) ? x : null));
   if (arr.filter(ok).length < 2) { delete PZ[id]; return `<div class="dsec"><span class="lbl">${esc(label)}</span><p class="sub">${DASH} not read</p></div>`; }
   const Wd = 300, Ht = 64, n = arr.length - 1, f = logScale ? Math.log : (x) => x;
   const seen = () => { const [a, b] = P.vw(), [j0, j1] = inView(a, b, n); return arr.slice(j0, j1 + 1).filter(ok); };
+  const tmOk = tm && isNum(tm.t1) && tm.span > 0;
   const P = pzTime(id, pool, n, {
     words: ['older', 'newer'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier',
+    ...(tmOk ? { tAt: (u) => tm.t1 - ((n - u) / n) * tm.span, uAt: (t) => n - ((tm.t1 - t) / tm.span) * n, axis: () => taxOf(id),
+      tip: (u) => {
+        const i = clamp(Math.round(u), 0, n), x = arr[i], t = tm.t1 - ((n - i) / n) * tm.span, inr = isNum(tm.r) && ok(x) && ok(arr[n]) ? Math.abs(Math.log(x / arr[n])) <= tm.r + 1e-9 : null;
+        return { u: i, h: `<span class="tt">≈ ${dayHM(t)}</span>price <b>${ok(x) ? px(x) : DASH}</b>${tm.unit ? ' ' + esc(tm.unit) : ''}${inr == null ? '' : ` · in today’s range ${rangeTxt(tm.r)}: <b>${inr ? 'yes' : 'no'}</b>`}` };
+      } } : {}),
     caps: () => { const v = seen(); return [null, v.length ? `${px(v[0])} → ${px(v[v.length - 1])}` : DASH]; },
     inner: () => {
       const [a, b] = P.vw(), [j0, j1] = inView(a, b, n), v = seen();
@@ -3281,12 +3590,15 @@ function miniLine(arr0, label, logScale, id, pool) {
   });
   return `<div class="dsec chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">${esc(label)}</span>${pzCapsHtml(id)}${ztools(id, pool)}</div>${pzShell(id, 'pz-line')}</div>`;
 }
-function miniBars(arr0, label, id, pool) {
+function miniBars(arr0, label, id, pool, tm) { // tm: { t1, span }: N bars of equal length end at t1
   const v = (arr0 || []).map((x) => (isNum(x) && x >= 0 ? x : null));
   if (!v.some(isNum)) { delete PZ[id]; return `<div class="dsec"><span class="lbl">${esc(label)}</span><p class="sub">${DASH} not read</p></div>`; }
   const N = v.length, Wd = 300, Ht = 64, mx = Math.max(...v.filter(isNum)) || 1; // one scale for every bar: a drag never rescales
+  const st = tm && isNum(tm.t1) && tm.span > 0 ? tm.span / N : null, tB = (u) => tm.t1 - (N - u) * st;
   const P = pzTime(id, pool, N, {
     words: ['older', 'newer'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier',
+    ...(st ? { tAt: tB, uAt: (t) => N - (tm.t1 - t) / st, axis: () => taxOf(id),
+      tip: (u) => { const i = Math.floor(u); if (i < 0 || i >= N) return null; return { u: i + 0.5, h: `<span class="tt">≈ ${spanTxt(tB(i), tB(i + 1))}</span>LP fees <b>${usd(v[i])}</b>${isNum(v[i]) ? '' : ' (not read)'}` }; } } : {}),
     caps: () => { const [a, b] = P.vw(), i0 = clamp(Math.round(a), 0, N - 1), i1 = clamp(Math.round(b), i0 + 1, N), sv = v.slice(i0, i1).filter(isNum); return [null, `max ${usd(sv.length ? Math.max(...sv) : null)}`]; },
     inner: () => {
       const [a, b] = P.vw(), len = b - a, bw = Wd / len;
@@ -3329,10 +3641,10 @@ function feeSvg(fh, Wd, Ht) {
   return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true">${g}<rect x="0" y="${Ht - 0.6}" width="${Wd}" height="0.6" fill="#2B3542"/></svg>`;
 }
 const feeTxt2 = (fh) => (!fh ? DASH : `${usd(fh.day)}/d${isNum(fh.ch) ? ` · <span class="${fh.ch >= 0 ? 'up' : 'dn'}">${fh.ch >= 0 ? '▲' : '▼'} ${Math.round(Math.abs(fh.ch) * 100)}%</span>` : ''}`);
-const feeAria = (fh) => (!fh ? 'LP fees a day: no history yet' : `LP fees a day over the last 30 days: ${usd(fh.day)} a day over the last 7${isNum(fh.ch) ? `, ${fh.ch >= 0 ? 'up' : 'down'} ${Math.round(Math.abs(fh.ch) * 100)}% on the 7 before` : ''}`);
+const feeAria = (fh) => (!fh ? 'LP fees a day: no history yet' : `LP fees a day over the last 30 days, ${dm(fh.t1 - 30 * D)} to ${dm(fh.t1)}: ${usd(fh.day)} a day over the last 7${isNum(fh.ch) ? `, ${fh.ch >= 0 ? 'up' : 'down'} ${Math.round(Math.abs(fh.ch) * 100)}% on the 7 before` : ''}`);
 function feeMini(p, Wd = 90, Ht = 22, fit = false) { // fit: the svg may be drawn narrower by CSS (the header on a small phone)
   const fh = feeHist(p), pa = fit ? ' preserveAspectRatio="none"' : '';
-  return `<span class="fmini" role="img" aria-label="${esc(feeAria(fh))}" data-fm="${fh ? fh.bars.length : 0}">${fh ? feeSvg(fh, Wd, Ht).replace('<svg ', `<svg${pa} `) : `<svg${pa} width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true"><rect x="0" y="${Ht - 0.6}" width="${Wd}" height="0.6" fill="#2B3542"/></svg>`}<span class="fm-t" aria-hidden="true">${feeTxt2(fh)}</span></span>`;
+  return `<span class="fmini" role="img" aria-label="${esc(feeAria(fh))}" data-fid="${esc(p.id)}" data-fm="${fh ? fh.bars.length : 0}">${fh ? feeSvg(fh, Wd, Ht).replace('<svg ', `<svg${pa} `) : `<svg${pa} width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true"><rect x="0" y="${Ht - 0.6}" width="${Wd}" height="0.6" fill="#2B3542"/></svg>`}<span class="fm-t" aria-hidden="true">${feeTxt2(fh)}</span></span>`;
 }
 function feeJump() { // the header's bar: the full daily fee chart, zoomed out to every day it has
   if (!PZ['d-day']) return;
@@ -3348,7 +3660,7 @@ function rateRows(rows, vi, unit) {
   const ok = (Array.isArray(rows) ? rows : []).filter((r) => Array.isArray(r) && isNum(r[0])).sort((a, b) => a[0] - b[0]), bars = [];
   for (let i = 1; i < ok.length; i++) {
     const a = ok[i - 1][0], b = ok[i][0], v = ok[i][vi];
-    if (b > a) bars.push({ a, b, v: isNum(v) && v >= 0 ? v / ((b - a) / unit) : null });
+    if (b > a) bars.push({ a, b, v: isNum(v) && v >= 0 ? v / ((b - a) / unit) : null, r: ok[i] });
   }
   return { t0: ok.length ? ok[0][0] : null, t1: ok.length ? ok[ok.length - 1][0] : null, bars };
 }
@@ -3359,6 +3671,15 @@ function rateBars(rows, vi, unit, label, id, pool) {
   const N = (t1 - t0) / unit, Wd = 300, Ht = 64, mx = Math.max(...vals) || 1, U = (t) => (t - t0) / unit; // one scale for every bar
   const P = pzTime(id, pool, N, {
     words: ['older', 'newer'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', zmax: unit < D ? 4 : 3,
+    mid: unit >= D, tAt: (u) => t0 + u * unit, uAt: (t) => (t - t0) / unit, axis: () => taxOf(id),
+    tip: (u) => {
+      const t = t0 + u * unit, x = bars.find((q) => q.a <= t && t < q.b);
+      if (!x) return null;
+      const k = (x.b - x.a) / unit, day = unit >= D, gap = k > 1.5, r = x.r, vol = day && isNum(r[3]) ? r[3] / k : null;
+      return { u: (U(x.a) + U(x.b)) / 2, h: `<span class="tt">${day && !gap ? dayName(x.a) : spanTxt(x.a, x.b)}</span>`
+        + (isNum(x.v) ? `LP fees <b>${usd(x.v)}</b>${gap ? (day ? ' a day' : ' an hour') + ' on average (a gap not filled yet)' : ''}` : `LP fees ${DASH} (not read)`)
+        + (isNum(vol) ? ` · volume <b>${usd(vol)}</b>${gap ? ' a day' : ''}` : '') + (isNum(r[1]) ? ` · price <b>${px(r[1])}</b>` : '') };
+    },
     caps: () => { const [a, b] = P.vw(), sv = bars.filter((x) => U(x.b) > a && U(x.a) < b && isNum(x.v)).map((x) => x.v); return [null, `max ${usd(sv.length ? Math.max(...sv) : null)}`]; },
     inner: () => {
       const [a, b] = P.vw(), len = b - a, X = (u) => ((u - a) / len) * Wd;
@@ -3433,7 +3754,7 @@ function renderDetail() {
     + (parts ? `<div class="dsec"><span class="lbl">Gem now parts · ${WIN_LABEL[wk]}</span><div class="parts">${parts}</div></div>` : '')
     + (gem && ((gem.warnings || []).length || (gem.missing || []).length) ? `<div class="dsec"><span class="lbl">Warnings and missing inputs</span><ul class="plain">${(gem.warnings || []).map((x) => `<li>${esc(x)}</li>`).join('')}${(gem.missing || []).map((x) => `<li>${esc(x)} not read</li>`).join('')}</ul></div>` : '')
     + (w && Array.isArray(w.lenses) && w.lenses.length ? `<div class="dsec"><span class="lbl">Lenses</span><div class="tags">${w.lenses.map((l) => `<span class="tag">${esc(LENS_NAME[l] || l)}</span>`).join('')}</div></div>` : '')
-    + `<div class="minis">${miniLine(w && w.spark && w.spark.px, `Price · ${WIN_LABEL[wk]} · log`, true, 'd-px', p.id)}${miniBars(w && w.spark && w.spark.fees, `LP fees · ${WIN_LABEL[wk]}`, 'd-fees', p.id)}`
+    + `<div class="minis">${miniLine(w && w.spark && w.spark.px, `Price · ${WIN_LABEL[wk]} · log`, true, 'd-px', p.id, w && { t1: L.t, span: w.days * D, r: w.range, unit: p.t0 && p.t1 ? p.t1.sym + ' per ' + p.t0.sym : '' })}${miniBars(w && w.spark && w.spark.fees, `LP fees · ${WIN_LABEL[wk]}`, 'd-fees', p.id, w && { t1: L.t, span: w.days * D })}`
     + (hist && Array.isArray(hist.h) ? rateBars(hist.h, 3, H, 'LP fees per hour', 'd-hr', p.id) : '')
     + (hist && Array.isArray(hist.d) ? rateBars(hist.d, 2, D, 'LP fees per day', 'd-day', p.id) : '') + '</div>'
     + `<div class="dsec"><span class="lbl">Checks</span>${checksLine(p).replace('class="checks"', 'class="checks" style="margin:0;border:0;padding:0"')}</div>`
@@ -4131,6 +4452,7 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.target && e.target.id === 'f-q') { qKey(e); if (e.defaultPrevented) return; }
+  if (e.key === 'Escape' && (TIP.host || TIP.mini)) tipHide(); // and whatever else Esc closes
   if (e.key === 'Escape' && S.popFor) { const a = S.popFor; popClose(); a.focus({ preventScroll: true }); return; }
   if (e.key === 'Escape' && !$('#sheet').hidden) { closeDetail(); return; }
   const tab = e.target.closest && e.target.closest('[role="tab"]');
@@ -4166,7 +4488,7 @@ document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q' && e.tar
 document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q')) qClose(); }, 120); });
 document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list')) e.preventDefault(); });
 // card strips: fades follow the scroll; a pop-up note follows its control
-document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); }, { capture: true, passive: true });
+document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); if (TIP.host || TIP.mini) tipScroll(); }, { capture: true, passive: true });
 for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) addEventListener(ev, () => { S.touched = true; cancelSettle(); }, { passive: true, capture: true });
 for (const ev of ['pointerdown', 'wheel', 'touchstart', 'keydown']) addEventListener(ev, (e) => { if (S.fl && !(e.target && e.target.closest && e.target.closest('[data-act="flash"]'))) flEnd(); }, { passive: true, capture: true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.key) refresh(); });
