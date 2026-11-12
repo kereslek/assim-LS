@@ -13,7 +13,7 @@
 // class) only, never text: the live audit runs on real data.
 export const TEXT_OVERLAP = (opts = {}) => {
   const out = [], root = (opts.root && document.querySelector(opts.root)) || document.body;
-  const LAYERS = '#pop, #q-list, .sh, #sheet, .pz-hint, #totop, header.top, .mc-nav';
+  const LAYERS = '#pop, #ctip, #q-list, .sh, #sheet, .pz-hint, #totop, header.top, .mc-nav';
   const seen = (el) => {
     if (el.closest('[hidden], template, script, style, noscript, option, select, textarea')) return false;
     if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;

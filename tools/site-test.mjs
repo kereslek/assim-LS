@@ -8,7 +8,7 @@
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
-//                                                    merge feebar stablewalk flash
+//                                                    merge feebar stablewalk flash dates
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -48,7 +48,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -2865,7 +2865,165 @@ async function testFlash(browser) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash };
+// ---------- 4z. dates (v0.4.6): every chart over time has a date axis, and a hover or a tap shows the date and the values there ----------
+const DATE_RE = /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2,3}\b|\b\d{1,2} [A-Z][a-z]{2,3}\b/;
+// a chart's axis: the visible tick labels, whether they read as dates or hours, and whether any two touch or leave the box
+const AXIS = ({ id }) => {
+  const h = document.querySelector(`[data-pz="${id}"]`);
+  if (!h) return { n: -1, labs: [], ok: false, clash: 0, out: 0 };
+  const tx = document.querySelector(`[data-tax="${id}"]`);
+  const els = tx ? [...tx.children].filter((s) => s.style.visibility !== 'hidden' && s.offsetWidth > 0) : [...h.querySelectorAll('svg text.dt')];
+  const rs = els.map((e) => e.getBoundingClientRect()), box = (tx || h).getBoundingClientRect();
+  let clash = 0;
+  for (let i = 1; i < rs.length; i++) if (rs[i].left < rs[i - 1].right + 1) clash++;
+  const labs = els.map((e) => e.textContent);
+  return { n: labs.length, labs, ok: labs.length >= 2 && labs.every((l) => /^(\d{1,2} [A-Z][a-z]{2,3}( \d\d:\d\d)?|\d\d:\d\d)$/.test(l)), clash, out: rs.filter((r) => r.left < box.left - 1 || r.right > box.right + 1).length };
+};
+const TIPR = () => {
+  const e = document.querySelector('#ctip');
+  if (!e || e.hidden) return null;
+  const r = e.getBoundingClientRect(), hd = document.querySelector('#sheet').hidden ? document.querySelector('header.top') : document.querySelector('#sheet .sheet-head');
+  return { txt: e.innerText.replace(/\s+/g, ' '), inside: r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight + 0.5, below: !hd || r.top >= hd.getBoundingClientRect().bottom - 1 };
+};
+// point at a chart: a mouse hover (laptop) or a finger's tap (phone), at a share fx of its width
+async function pointAt(p, id, phone, { fx = 0.5, fy = 0.5, root = '' } = {}) {
+  const b = await p.evaluate(HOST_BOX, { id, root });
+  if (!b) return null;
+  const x = b.x + b.w * fx, y = b.y + b.h * fy;
+  if (phone) await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 71, x0: x, y0: y, x1: x, y1: y }] });
+  else { await p.mouse.move(x - 3, y); await p.mouse.move(x, y); }
+  await sleep(90);
+  return p.evaluate(TIPR);
+}
+async function testDates(browser, page = null) {
+  const planted = page != null;
+  for (const phone of planted ? [false] : [true, false]) {
+    let t;
+    if (planted) { // a copy of the page with one chart's axis taken out: the axis check must catch it
+      t = await newPage(browser, { width: 1440, storage: { 'lps.hint': '1' } });
+      await t.ctx.route((u) => new URL(u).pathname === '/app/index.html', (r) => r.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: page }));
+      await t.page.goto(url('default')); await unlockWith(t.page, FIXTURE_PASSPHRASE); await waitApp(t.page); await setWin(t.page, '30d');
+    } else t = await openUnlocked(browser, 'default', { phone, width: 1440, storage: { 'lps.hint': '1' } });
+    const p = t.page, tag = planted ? 'planted' : phone ? 'phone' : 'laptop', bad = [], tips = [];
+    const axisAt = async (id) => { const a = await p.evaluate(AXIS, { id }); if (!(a.ok && a.clash === 0 && a.out === 0)) bad.push(`${id} ${JSON.stringify(a).slice(0, 120)}`); return a; };
+    const tipAt2 = async (id, re, o) => { const r = await pointAt(p, id, phone, o); tips.push(r && r.txt); if (!(r && re.test(r.txt) && r.inside && r.below)) bad.push(`${id} tip ${JSON.stringify(r).slice(0, 140)}`); return r; };
+    if (planted) {
+      await axisAt('daily-best');
+      ok('dates: planted: a daily strip without its axis is caught', bad.length > 0, 'not caught');
+      await t.ctx.close();
+      return;
+    }
+    // the main page: the best find's daily strip, the scanner's health, the scatter and the liquidity chart
+    const shot = async (name) => { if (!SHOTS) return; await p.evaluate(() => { if (!document.querySelector('#fx-rib')) document.body.insertAdjacentHTML('beforeend', '<div id="fx-rib" style="position:fixed;left:0;right:0;bottom:0;z-index:99;padding:3px;text-align:center;font:700 11px/1.3 monospace;letter-spacing:.08em;background:#E8B84A;color:#06080B;pointer-events:none">TEST FIXTURES · MADE-UP NUMBERS</div>'); }); await snap(p, name); };
+    for (const id of ['daily-best', 'health']) { await axisAt(id); await tipAt2(id, DATE_RE); if (id === 'daily-best') await shot(`dates-${tag}-daily`); }
+    const d1 = tips[0] || '';
+    ok(`dates ${tag}: a daily fee bar's note says the day, its fees per $1,000 and how it compares with the median`, /\$\d+\.\d\d per \$1,000/.test(d1) && /× the median/.test(d1) && DATE_RE.test(d1), d1.slice(0, 120));
+    await tipAt2('liq-best', /liquidity .*(of the pool|not read)/);
+    // the replay, its money pane and the strategy lab
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#bt-lead tr.row'); r.scrollIntoView({ block: 'center' }); r.click(); }); await sleep(900);
+    for (const id of ['rp', 'rp-money', 'lab']) { await axisAt(id); await tipAt2(id, DATE_RE); }
+    const rp = tips[tips.length - 3] || '', mo = tips[tips.length - 2] || '';
+    ok(`dates ${tag}: the replay's notes give the price and whether it was in range, and net, fees, LVR and costs`, /price .* in range (yes|no)/.test(rp) && /net .*fees .*LVR .*costs/.test(mo), rp.slice(0, 80) + ' | ' + mo.slice(0, 80));
+    // the scatter: the dot nearest the pointer
+    const dot = await p.evaluate(() => { const c = document.querySelector('#bt-scatter circle'); if (!c) return null; c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    if (dot) {
+      if (phone) await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 72, x0: dot.x + 2, y0: dot.y, x1: dot.x + 2, y1: dot.y }] }); else await p.mouse.move(dot.x + 2, dot.y);
+      await sleep(90);
+      const r = await p.evaluate(TIPR); tips.push(r && r.txt);
+      ok(`dates ${tag}: a dot of the forecast-vs-backtest scatter names its pool, forecast and backtest`, r && /forecast .*backtest .*miss/.test(r.txt) && r.inside, JSON.stringify(r));
+    } else ok(`dates ${tag}: the scatter has dots`, false);
+    // dismissed: a tap elsewhere, or Esc
+    if (phone) {
+      await pointAt(p, 'rp', true);
+      const h = await p.evaluate(() => { const r = document.querySelector('#rp-pl').getBoundingClientRect(); return { x: r.left + 4, y: r.top + r.height / 2 }; });
+      const pre = await p.evaluate(TIPR), hit = await p.evaluate(({ x, y }) => { const e = document.elementFromPoint(x, y); return e ? e.tagName + '.' + e.className : null; }, h);
+      await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 73, x0: h.x, y0: h.y, x1: h.x, y1: h.y }] }); await sleep(80);
+      ok(`dates ${tag}: a tap elsewhere puts the note away`, pre && !(await p.evaluate(TIPR)), JSON.stringify({ pre: !!pre, hit, h, after: await p.evaluate(TIPR) }));
+      // a sideways drag still pans and shows no note; a finger held still, then slid, scrubs the note along and pans nothing
+      const b = await p.evaluate(HOST_BOX, { id: 'rp' }), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      const res = await p.evaluate(async ({ cx, cy }) => {
+        const h = document.querySelector('[data-pz="rp"]'), el = document.elementFromPoint(cx, cy), view = () => h.dataset.view;
+        const pe = (type, x) => el.dispatchEvent(new PointerEvent(type, { pointerId: 74, pointerType: 'touch', isPrimary: true, clientX: x, clientY: cy, bubbles: true, cancelable: true, buttons: /up/.test(type) ? 0 : 1 }));
+        const tip = () => { const e = document.querySelector('#ctip'); return e && !e.hidden ? e.innerText : ''; };
+        const v0 = view(); pe('pointerdown', cx); await new Promise((r) => setTimeout(r, 560));
+        const t0 = tip(), tr = []; for (let i = 1; i <= 6; i++) { pe('pointermove', cx + i * 14); tr.push(tip().slice(0, 20)); await new Promise((r) => setTimeout(r, 20)); }
+        window.__tr = tr;
+        const t1 = tip(), v1 = view(); pe('pointerup', cx + 84); await new Promise((r) => setTimeout(r, 60));
+        return { held: !!t0, moved: t1 && t1 !== t0, still: v0 === v1, kept: !!tip(), tr: window.__tr, t0 };
+      }, { cx, cy });
+      ok(`dates ${tag}: a finger held on a chart shows the note, sliding scrubs it along without panning, and it stays after the finger lifts`, res.held && res.moved && res.still && res.kept, JSON.stringify(res));
+      await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 75, x0: 5, y0: 300, x1: 5, y1: 300 }] }); await sleep(60);
+      const v0 = await pzSettled(p, 'rp');
+      await p.evaluate(() => document.querySelector('[data-act="zoom"][data-chart="rp"][data-dir="1"]').click()); await sleep(200);
+      const v1 = await pzSettled(p, 'rp');
+      await finger(p, 'rp', 120, { steps: 10, ms: 20 }); await sleep(80);
+      const v2 = await pzSettled(p, 'rp'), after = await p.evaluate(TIPR);
+      ok(`dates ${tag}: a sideways drag still pans the chart, with no note left behind`, v1 && v2 && v2.c < v1.c - 0.5 && !after, JSON.stringify({ v0, v1, v2, after }));
+    } else {
+      await pointAt(p, 'rp', false); await p.keyboard.press('Escape'); await sleep(60);
+      ok(`dates ${tag}: Esc puts the note away`, !(await p.evaluate(TIPR)));
+      await p.mouse.move(5, 5); await sleep(60);
+    }
+    // the leaderboard's net sparkline and the table's fee bars: their dates in their label, a note on hover or a long press
+    const mini = async (sel) => {
+      const b = await p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const e = document.querySelector(sel); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = (e.querySelector('svg') || e).getBoundingClientRect(); return { x: r.left + r.width * 0.8, y: r.top + r.height / 2, aria: e.getAttribute('aria-label') }; }, sel);
+      if (!b) return null;
+      await sleep(60);
+      if (phone) await p.evaluate(async ({ x, y }) => { const el = document.elementFromPoint(x, y), pe = (type) => el.dispatchEvent(new PointerEvent(type, { pointerId: 76, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1 })); pe('pointerdown'); await new Promise((r) => setTimeout(r, 520)); pe('pointerup'); }, b);
+      else await p.mouse.move(b.x, b.y);
+      await sleep(90);
+      return { ...b, tip: await p.evaluate(TIPR), sheet: await p.isVisible('#sheet') };
+    };
+    const sp = await mini('#bt-lead .spk'), fm = await mini('#all tbody tr.row td.fees .fmini');
+    ok(`dates ${tag}: the leaderboard's sparkline says its dates and shows the date and net there`, sp && / to /.test(sp.aria) && DATE_RE.test(sp.aria) && sp.tip && DATE_RE.test(sp.tip.txt) && /net /.test(sp.tip.txt), JSON.stringify(sp).slice(0, 160));
+    ok(`dates ${tag}: a row's fee bar says its dates and shows the day and its LP fees${phone ? ' (a long press, which opens nothing)' : ''}`, fm && / to /.test(fm.aria) && fm.tip && DATE_RE.test(fm.tip.txt) && /LP fees/.test(fm.tip.txt) && !fm.sheet, JSON.stringify(fm).slice(0, 160));
+    if (phone) { await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 77, x0: 5, y0: 300, x1: 5, y1: 300 }] }); await sleep(60); }
+    // the detail panel: its daily strip, price and fee sparklines, the hourly and daily fee history
+    const nr = Object.entries(FXD.history.pools).find(([, h]) => Array.isArray(h.h) && h.h.slice(2, -2).some((r) => r[3] === null));
+    await openPool(p, nr ? nr[0].slice(0, 10) : FXD.live.pools[0].id.slice(0, 10));
+    for (const id of ['daily-detail', 'd-px', 'd-fees', 'd-hr', 'd-day']) { await axisAt(id); await tipAt2(id, DATE_RE, { root: '#sheet' }); if (id === 'd-hr') await shot(`dates-${tag}-hourly`); }
+    const px1 = tips[tips.length - 4] || '';
+    ok(`dates ${tag}: a price point's note gives the price and whether today's range holds it`, /price .*range .*(yes|no)/.test(px1), px1.slice(0, 100));
+    await tipAt2('liq-detail', /liquidity/);
+    // an unread hour reads as a dash, never as 0
+    const un = await p.evaluate(() => { const r = document.querySelector('#sheet [data-pz="d-hr"] rect.unread'); if (!r) return null; r.scrollIntoView({ block: 'center' }); const b = r.getBoundingClientRect(), h = document.querySelector('#sheet [data-pz="d-hr"]').getBoundingClientRect(); return { fx: (b.left + b.width / 2 - h.left) / h.width }; });
+    if (un) { const r = await pointAt(p, 'd-hr', phone, { fx: un.fx, root: '#sheet' }); ok(`dates ${tag}: an unread hour's note says ${'—'} (not read), never $0`, r && /LP fees — \(not read\)/.test(r.txt) && !/\$0\b/.test(r.txt), JSON.stringify(r)); }
+    else ok(`dates ${tag}: the pool with an unread hour shows it`, false, 'no unread bar');
+    // zoomed all the way in, the hourly fees show hours; zoomed out, days
+    for (let k = 0; k < 6 && (await p.evaluate(() => { const b = document.querySelector('#sheet [data-act="zoom"][data-chart="d-hr"][data-dir="1"]'); if (!b || b.disabled) return false; b.click(); return true; })); k++) await sleep(80);
+    const zin = await axisAt('d-hr');
+    for (let k = 0; k < 6 && (await p.evaluate(() => { const b = document.querySelector('#sheet [data-act="zoom"][data-chart="d-hr"][data-dir="-1"]'); if (!b || b.disabled) return false; b.click(); return true; })); k++) await sleep(80);
+    const zout = await axisAt('d-hr');
+    ok(`dates ${tag}: the axis follows the zoom: hours zoomed in (${zin.labs.slice(0, 3).join(', ')}), days zoomed out (${zout.labs.slice(0, 3).join(', ')})`, zin.labs.some((l) => /\d\d:\d\d/.test(l)) && zout.labs.every((l) => !/^\d\d:\d\d$/.test(l)), JSON.stringify([zin.labs, zout.labs]));
+    // panned, the ticks move with the data and stay inside the box, none touching
+    await p.evaluate(() => { const b = document.querySelector('#sheet [data-pz="d-day"] > .pz-edge.l:not([hidden])'); if (b) b.click(); }); await sleep(500);
+    const pan = await axisAt('d-day');
+    ok(`dates ${tag}: every time chart has a date axis, none touching or past its box, zoomed or panned, and every note has a date (${tips.length} notes)`, bad.length === 0 && pan.ok, bad.slice(0, 3).join(' | '));
+    ok(`dates ${tag}: no note reads NaN, undefined or a blank`, tips.every((x) => x && !/NaN|undefined|Infinity|null/.test(x)), JSON.stringify(tips.filter((x) => !x || /NaN|undefined|Infinity|null/.test(x))).slice(0, 160));
+    await p.click('#sheet-close'); await sleep(120);
+    // the pop-out window (the owner's screenshot: a daily strip opened from the dashboard): the same axis and notes there
+    await fillQ(p, '');
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#best [data-act="openchart"][data-chart="daily-best"]').click(); }); await sleep(150);
+    const u = await p.evaluate(() => (window.__opened || []).slice(-1)[0] || '');
+    const w2 = await t.ctx.newPage(), e2 = [];
+    w2.on('pageerror', (e) => e2.push(String(e.message).slice(0, 100)));
+    await w2.goto(u);
+    await w2.waitForSelector('.solo-box [data-pz="daily-best"]', { timeout: 20000 }).catch(() => {});
+    await sleep(300);
+    const sa = await w2.evaluate(AXIS, { id: 'daily-best' }), st = await pointAt(w2, 'daily-best', phone, { fx: 0.3 });
+    ok(`dates ${tag}: the pop-out window's daily strip has its date axis (${sa.labs.join(', ')}) and its note (${st ? st.txt.slice(0, 40) : '-'})`, sa.ok && sa.clash === 0 && sa.out === 0 && st && DATE_RE.test(st.txt) && /per \$1,000/.test(st.txt) && st.inside && e2.length === 0, JSON.stringify({ sa, st, e: e2[0] }).slice(0, 200));
+    if (!phone) await (async () => { if (!SHOTS) return; await w2.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div style="position:fixed;left:0;right:0;bottom:0;z-index:99;padding:3px;text-align:center;font:700 11px/1.3 monospace;letter-spacing:.08em;background:#E8B84A;color:#06080B;pointer-events:none">TEST FIXTURES · MADE-UP NUMBERS</div>')); await snap(w2, `dates-${tag}-popout`); })();
+    await w2.close();
+    ok(`dates ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // the planted fault: the same check on a page whose daily strip lost its axis
+  const html = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8'), cut = html.replace('mid: true, tAt: (u) => kAt(ts, u, D), uAt: (t) => kU(ts, t, D), axis: () => taxOf(id), ', 'mid: true, tAt: (u) => kAt(ts, u, D), uAt: (t) => kU(ts, t, D), ');
+  if (cut === html) ok('dates: planted: the axis line to take out is in the page', false);
+  else await testDates(browser, cut.replace(/script-src [^;]*;/, `script-src ${scriptHashes(cut).join(' ')};`));
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates };
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
