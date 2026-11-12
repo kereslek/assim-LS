@@ -2892,6 +2892,13 @@ async function pointAt(p, id, phone, { fx = 0.5, fy = 0.5, root = '' } = {}) {
   const x = b.x + b.w * fx, y = b.y + b.h * fy;
   let dbg = null;
   if (phone) {
+    await p.evaluate(() => { // which code put the note away (a trace for a failing check only)
+      const c = document.querySelector('#ctip'); if (c.__traced) return; c.__traced = true;
+      const d = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'hidden');
+      Object.defineProperty(c, 'hidden', { get() { return d.get.call(this); }, set(v) { if (v && !d.get.call(this)) window.__hid = String(new Error().stack).split('\n').slice(1, 6).map((l) => l.replace(/@.*$|\(.*\)|^\s*at /g, '').trim()).join('<'); d.set.call(this, v); } });
+      for (const t of ['pointerdown', 'pointerup', 'pointercancel']) document.addEventListener(t, (e) => { (window.__ev ||= []).push(t[7] + (e.pointerType || '?')[0] + (e.isTrusted ? 'T' : '')); if (window.__ev.length > 8) window.__ev.shift(); }, true);
+    });
+    await p.evaluate(() => { window.__hid = ''; window.__ev = []; });
     const el = await p.evaluate(({ x, y }) => { const e = document.elementFromPoint(x, y); return e ? e.tagName + '.' + String(e.getAttribute('class') || '').slice(0, 24) + (e.closest('.pz') ? ' in ' + e.closest('.pz').dataset.pz : '') : null; }, { x, y });
     await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 71, x0: x, y0: y, x1: x, y1: y }] });
     dbg = { el, y: Math.round(y), tip0: await p.evaluate(() => !document.querySelector('#ctip').hidden), ih: await p.evaluate(() => innerHeight) };
@@ -2899,6 +2906,7 @@ async function pointAt(p, id, phone, { fx = 0.5, fy = 0.5, root = '' } = {}) {
   else { await p.mouse.move(x - 3, y); await p.mouse.move(x, y); }
   await sleep(90);
   const r = await p.evaluate(TIPR);
+  if (dbg) Object.assign(dbg, await p.evaluate(() => ({ hid: window.__hid, ev: (window.__ev || []).join(' ') })));
   return r || (dbg ? { dbg } : null);
 }
 async function testDates(browser, page = null) {
