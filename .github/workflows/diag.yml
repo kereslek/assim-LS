@@ -1,13 +1,18 @@
 name: diag
 # Diagnostics for the cross-checks. Public market data only: counts, ratios, block numbers, status codes.
 # parts: any of probe (price-history sources), events (v3 creation events per provider), scan (a fast
-# pool list, then the full scan). Inputs are public: never pass a private value here.
+# pool list, then the full scan), spikes (fee spikes in the sealed history, scripts/feespike.mjs: opens the
+# sealed data here and prints dates, ratios, spans and counts only). Inputs are public: never pass a private
+# value here (pool: public market terms, "PAIR FEE CHAIN VERSION").
 on:
   workflow_dispatch:
     inputs:
       parts:
-        description: 'probe, events, scan, withevents (comma list)'
+        description: 'probe, events, scan, withevents, spikes (comma list)'
         default: 'probe'
+      pool:
+        description: 'spikes: the pool to look at, in public market terms'
+        default: 'UNI/WETH 0.01 ethereum 3'
 permissions:
   contents: read
 concurrency:
@@ -24,6 +29,12 @@ jobs:
           node-version: 22
       - name: Unit tests first
         run: node --test test/*.test.mjs
+      - name: Fee spikes (the sealed history opened here; public log dates, ratios, spans and counts only)
+        if: contains(inputs.parts, 'spikes')
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+          SPIKE_POOL: ${{ inputs.pool }}
+        run: node scripts/publish-data.mjs --restore && node scripts/feespike.mjs
       - name: Price-history sources
         if: contains(inputs.parts, 'probe')
         env:
