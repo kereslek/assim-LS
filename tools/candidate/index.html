@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rC9QJyPryby+VacVIKHI99ATqp4ZNA4hDAa6q2TNyxY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-EIf1LnZpV5TondGN9XYAmculY4bOk5vM+meI8S/5t+s='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2689,14 +2689,20 @@ function axFit(el) { // inside the box, none touching (left to right, the first 
     if (!off) last = c + w / 2;
   });
 }
-function taxFitAll() { // a chart drawn by a render: fitted at once; drawn for a width it doesn't have, redrawn
-  for (const el of document.querySelectorAll('.tax:not([data-fit])')) {
+// an axis drawn by a render is fitted once it is laid out (and again when its width changes: a tab shown, a window
+// resized); drawn for a width it doesn't have, its chart is redrawn. No layout is forced while charts redraw.
+const taxRO = new ResizeObserver((es) => {
+  for (const en of es) {
+    const el = en.target;
+    if (!el.isConnected) { taxRO.unobserve(el); continue; }
+    if (!el.clientWidth) continue;
     axFit(el);
     const P = PZ[el.dataset.tax];
-    if (el.dataset.fit && P && Math.abs(el.clientWidth - (P.aw || 0)) > 24) pzDraw(el.dataset.tax);
+    if (P && Math.abs(el.clientWidth - (P.aw || 0)) > 24) pzDraw(el.dataset.tax);
   }
-}
-new MutationObserver(taxFitAll).observe(document.body, { childList: true, subtree: true });
+});
+const taxEach = (n, f) => { if (n.nodeType !== 1) return; if (n.classList.contains('tax')) f(n); else if (n.firstElementChild) for (const x of n.getElementsByClassName('tax')) f(x); };
+new MutationObserver((rs) => { for (const r of rs) { for (const n of r.addedNodes) taxEach(n, (x) => taxRO.observe(x)); for (const n of r.removedNodes) taxEach(n, (x) => taxRO.unobserve(x)); } }).observe(document.body, { childList: true, subtree: true });
 let taxR = 0, taxW = innerWidth;
 addEventListener('resize', () => { // only a new width: a phone's toolbars sliding away on a scroll resize the height alone
   if (innerWidth === taxW) return;
