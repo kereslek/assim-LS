@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WKtNlFxtLvsxC3yWSv4/gOXszmkV9TOjfrFZPdyMF0w='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-frQwVb/7pxTxPPIVtTybAocf6obNBEYJVKjwx6IDgtI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -241,7 +241,17 @@ button.tile:hover{border-color:var(--line3)}
 .pill{display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:26px;padding:0 6px;border-radius:13px;border:1px solid var(--line3);font:700 13px/1 var(--mono);color:var(--fg);flex:none}
 .pill.gem{background:rgba(232,184,74,.1);border-color:rgba(232,184,74,.55);color:var(--gold)}
 .pill.void{color:var(--muted);text-decoration:line-through;border-style:dashed}
-.apr{width:56px;flex:none;text-align:right;font:700 14px/1.1 var(--mono);font-variant-numeric:tabular-nums}
+.apr{min-width:56px;flex:none;text-align:right;font:700 14px/1.1 var(--mono);font-variant-numeric:tabular-nums}
+.pd{color:var(--muted);font-weight:500;white-space:nowrap}
+.pd.blk{display:block;margin-top:2px;font:500 10px/1.2 var(--mono);letter-spacing:0}
+.pd .pds{display:none}
+@media (max-width:400px){#all-tbl .pd .pdu{display:none}#all-tbl .pd .pds{display:inline}} /* Pool, Gem, Net APR and Why fit a 360 px phone */
+.lead{margin:6px 0 0;font:500 13px/1.45 var(--sans);color:var(--fg2)}
+.lead b{color:var(--fg);font-weight:700}.lead b.neg{color:var(--neg)}
+.big .pd{font-size:12px}
+.mstrip .px .ps{font:500 10px/1 var(--mono);color:var(--muted);letter-spacing:0}
+.mstrip .px .ps .s{display:none}
+@media (max-width:379px){.mstrip .px .ps .l{display:none}.mstrip .px .ps .s{display:inline}}
 .neg{color:var(--neg)}
 
 /* best find */
@@ -407,18 +417,25 @@ tr.sel td{background:rgba(22,199,132,.08)}
 .sheet{position:fixed;inset:0;z-index:50}
 .scrim{position:absolute;inset:0;background:rgba(2,4,6,.72);touch-action:none}
 .sheet-card{position:absolute;top:0;right:0;bottom:0;width:min(680px,100%);background:var(--bg);border-left:1px solid var(--line2);display:flex;flex-direction:column;outline:none}
-.sheet-head{display:flex;align-items:flex-start;gap:12px;padding:12px max(16px,env(safe-area-inset-right)) 12px 16px;border-bottom:1px solid var(--line);background:var(--head)}
-.sheet-head .grow{flex:1 1 auto;min-width:0}
-.sheet-head h2{font:700 18px/1.25 var(--sans);overflow-wrap:anywhere;margin-top:3px}
+/* v0.4.7: the pinned top is one slim row of a fixed height (chain mark, pair, window, close): nothing in it changes height
+   while the content scrolls; the pool's kicker, meta, star, pair view, fee bar and similar pools scroll with the content */
+.sheet-head{flex:none;display:flex;align-items:center;gap:8px;height:56px;box-sizing:border-box;padding:6px max(12px,env(safe-area-inset-right)) 6px 16px;border-bottom:1px solid var(--line);background:var(--head)}
+.sheet-head .ttl{flex:1 1 auto;min-width:0}
+.sheet-head h2{font:700 16px/1.25 var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sheet-head .winsel{flex:none}
+.sheet-head #sheet-close{flex:none;min-width:44px;padding:0 10px}
+.sheet-info{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;min-width:0;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.si-top{display:flex;align-items:center;gap:6px;min-height:28px}
+#sheet-main{display:contents}
 .sheet-ctl{display:flex;flex-wrap:wrap;gap:0 14px;align-items:center;margin-top:2px}
 .sheet-body{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:14px max(16px,env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) 16px;display:grid;gap:14px;align-content:start;-webkit-overflow-scrolling:touch}
 /* on a phone the panel is a sheet: a grab handle on top, swipe it down (or the content, once scrolled to the top) to close */
-.grab{display:none;flex:none;justify-content:center;align-items:center;height:20px;background:var(--head);touch-action:none;cursor:grab}
+.grab{display:none;position:absolute;top:0;left:0;right:0;z-index:3;justify-content:center;align-items:flex-start;padding-top:5px;box-sizing:border-box;height:16px;touch-action:none;cursor:grab}
 .grab i{display:block;width:40px;height:5px;border-radius:3px;background:var(--line3)}
 @media (max-width:700px){
   .sheet-card{top:max(10px,env(safe-area-inset-top));border-left:0;border-top:1px solid var(--line2);border-radius:14px 14px 0 0;overflow:hidden;box-shadow:0 -10px 30px rgba(0,0,0,.55)}
   .grab{display:flex}
-  .sheet-head{padding-top:2px}
+  .sheet-head{height:58px;padding-top:14px;padding-bottom:0}
 }
 .dsec{display:grid;gap:6px;min-width:0}
 .wtbl td,.wtbl th{padding:5px 8px}
@@ -547,7 +564,6 @@ button.ring{padding:0;border:0;background:transparent;color:inherit;font:inherit
 button.ring:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* the detail panel's top folds while its content scrolls down, and opens again on the way back up */
 .sheet-head{position:relative;z-index:1}
-.sheet-card.cond #sheet-kicker,.sheet-card.cond #sheet-meta,.sheet-card.cond .sim{display:none}
 
 /* why it's interesting: small pictograms */
 .wi{width:14px;height:14px;flex:none;display:block}
@@ -613,7 +629,7 @@ td.pool{min-width:150px;max-width:230px}
 .pcell .pcm{min-width:0;flex:1 1 auto;padding-top:5px}
 .pcell .pn2{overflow-wrap:normal;word-break:keep-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.pool{padding-left:2px}
-.best-head .star,.sheet-head .star{margin:-8px 0 -8px -6px}
+.best-head .star,.sheet-info .star{margin:-8px 0 -8px -6px}
 .ttl{display:flex;align-items:center;gap:4px;min-width:0}
 
 /* mini cards: favourites and similar pools */
@@ -666,7 +682,8 @@ div.mc-name{cursor:inherit;pointer-events:none}
 .sim .mc .fmini,.sim .mc-v .k{display:none}
 .sim .mc-v{position:absolute;top:5px;line-height:1.1;right:10px;max-width:66px;justify-content:flex-end}
 .sim .mc-v .v{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:66px}
-.sim .mc-relb{position:absolute;right:8px;bottom:5px;line-height:1;margin:0;z-index:1;max-width:70px}
+.sim .mc-relb{position:absolute;right:8px;bottom:5px;line-height:1;margin:0;z-index:1;max-width:70px;display:inline-flex;align-items:flex-end}
+.sim .mc-v .pd.blk{margin-top:1px}
 .sim .mc-relb>.mc-rel{display:block;line-height:1.1;font-size:8.5px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68px}
 .sim .mc.end{width:auto;min-width:72px;flex-direction:column;align-items:center}
 .sim .mc.end .big{font-size:15px}
@@ -795,10 +812,23 @@ td.fees{width:96px}
 .feeh .fmini{flex-direction:row;align-items:center;gap:8px}
 .feeh .lbl{color:var(--muted)}
 .feeh:hover .fm-t{color:var(--fg)}
-.sheet-card.cond #sheet-fee{display:none}
-.sheet-head:has(#sim-list:not([hidden])) #sheet-fee{display:none} /* the similar list open: the header keeps its old height, the panel stays in view */
 .feeh .fmini{flex:none}
 @media (max-width:400px){.feeh svg{width:100px}.feeh .lbl{display:none}}
+/* v0.4.7 fee charts: a $ scale on the left, the switches, the legend, the exact days so far */
+.fcw{display:grid;grid-template-columns:42px minmax(0,1fr);gap:4px;align-items:start}
+.yax{position:relative}
+.yax>span{position:absolute;right:0;transform:translateY(-50%);font:500 10px/1 var(--mono);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.yax>span.t{transform:none}.yax>span.b{transform:translateY(-100%)}
+.fc .pz-c>svg{display:block}
+.fc-ctl{display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;margin:-6px 0 -4px}
+.fc-t b{color:var(--fg2);font-weight:600}
+.sw.fc-x{background:#16C784}.sw.fc-e{background:rgba(22,199,132,.38)}
+.sw.fc-u{background:repeating-linear-gradient(-45deg,#16C784 0 2px,rgba(22,199,132,.18) 2px 4px);box-shadow:0 0 0 1px #16C784}
+.sw.fc-m{height:0;width:14px;border-radius:0;border-top:1px dashed #E6EDF3}
+.fc-prog{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:0;font:500 11px/1.4 var(--mono);color:var(--muted)}
+.fc-prog b{color:var(--fg2);font-weight:600}
+.fc-pb{position:relative;flex:1 1 80px;max-width:160px;height:4px;border-radius:2px;background:var(--grid);overflow:hidden}
+.fc-pb>i{position:absolute;left:0;top:0;bottom:0;background:#16C784}
 </style>
 </head>
 <body>
@@ -944,12 +974,13 @@ td.fees{width:96px}
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1">
     <div class="grab" aria-hidden="true" title="Swipe down to close"><i></i></div>
     <div class="sheet-head">
-      <div class="grow"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><div class="ttl"><h2 id="sheet-title">—</h2><span id="sheet-star"></span></div><div class="lbl" id="sheet-meta" style="margin-top:3px"></div>
-        <div class="sheet-ctl"><div class="seg pills winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button></div><button type="button" class="linkbtn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button><span id="sheet-fee"></span></div>
-        <div class="sim" id="sim" hidden></div></div>
+      <div class="ttl"><h2 id="sheet-title">—</h2></div>
+      <div class="seg pills winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button></div>
       <button type="button" class="btn" id="sheet-close" data-act="close-detail">Close</button>
     </div>
-    <div class="sheet-body" id="sheet-body"></div>
+    <div class="sheet-body" id="sheet-body"><div class="sheet-info" id="sheet-info"><div class="si-top"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><span id="sheet-star"></span></div><div class="lbl" id="sheet-meta"></div>
+        <div class="sheet-ctl"><button type="button" class="linkbtn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button><span id="sheet-fee"></span></div>
+        <div class="sim" id="sim" hidden></div></div><div id="sheet-main"></div></div>
   </div>
 </div>
 
@@ -966,7 +997,7 @@ td.fees{width:96px}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.4.6';
+const BUILD = 'v0.4.7';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1034,6 +1065,15 @@ function usd(x, o = {}) {
   return (x < 0 && !zero ? MINUS : o.sign && x > 0 && !zero ? '+' : '') + '$' + s;
 }
 const int = (n) => (isNum(n) ? Math.round(n).toLocaleString('en-US') : DASH);
+// "$ per day at the ticket" (v0.4.7): next to every APR the page shows, one formatter. perDay = APR × ticket ÷ 365, the
+// ticket from live.json; aprPd() is the APR with its $/day (data-apr carries the rate for the tests).
+const ticketUsd = () => (S.live && isNum(S.live.ticket) && S.live.ticket > 0 ? S.live.ticket : null);
+const perDay = (apr) => (isNum(apr) && ticketUsd() ? (apr * ticketUsd()) / 365 : null);
+const pdTxt = (apr) => { const v = perDay(apr); return isNum(v) ? usd(v) + '/day' : DASH; };
+const aprPd = (apr, o = {}) => (!isNum(apr) ? DASH : `<span class="apr-v" data-apr="${apr}">${pct(apr, o)}</span>`
+  + (o.block ? `<span class="pd blk">${isNum(perDay(apr)) ? `${usd(perDay(apr))}<span class="pdu">/day</span><span class="pds">/d</span>` : DASH}</span>` : `<span class="pd"> (${pdTxt(apr)})</span>`)); // a narrow phone's table: "/d"
+// the lead line: what the example ticket earns a day, then the yearly rate
+const leadLine = (w) => (w ? `At ${usdFull(ticketUsd())}: fees ≈ <b>${pdTxt(w.feeApr)}</b> · ${term('lvr', 'LVR')} <b>${pdTxt(isNum(w.lvr) ? -w.lvr : null)}</b> · net ≈ <b class="${w.net < 0 ? 'neg' : ''}">${pdTxt(w.net)}</b> (${pct(w.net)} a year)` : '');
 const usdFull = (x) => (isNum(x) ? '$' + int(x) : DASH); // the ticket reads "$1,000", never "$1.0K"
 const times = (x) => (isNum(x) ? x.toFixed(2) + '×' : DASH);
 const rangeTxt = (r) => (isNum(r) ? '±' + (r >= 0.0995 ? Math.round(r * 100) : +(r * 100).toFixed(1)) + '%' : DASH);
@@ -1421,7 +1461,7 @@ async function unlocked() {
   startTimer();
 }
 // the page as it loads, before any data: signing out puts every part that shows data back to this
-const APP_TEMPLATE = $('#app').innerHTML, SHEET_HEAD = $('#sheet .sheet-head').innerHTML, SUBHEAD = $('#subhead').innerHTML, TITLE0 = document.title;
+const APP_TEMPLATE = $('#app').innerHTML, SHEET_HEAD = $('#sheet .sheet-head').innerHTML, SHEET_BODY = $('#sheet-body').innerHTML, SUBHEAD = $('#subhead').innerHTML, TITLE0 = document.title;
 // what names a pool (pair names, pool and token addresses): after a sign-out none of it may be left anywhere in the page
 function lockWords(L) {
   const w = new Set();
@@ -1430,7 +1470,7 @@ function lockWords(L) {
 }
 function wipeData(words) {
   $('#app').innerHTML = APP_TEMPLATE;
-  $('#sheet .sheet-head').innerHTML = SHEET_HEAD; sheetChain(null); $('#sheet-body').innerHTML = ''; $('#sheet-body').scrollTop = 0;
+  $('#sheet .sheet-head').innerHTML = SHEET_HEAD; $('#sheet-body').innerHTML = SHEET_BODY; sheetChain(null); $('#sheet-body').scrollTop = 0;
   $('#subhead').innerHTML = SUBHEAD;
   const pop = $('#pop'); pop.hidden = true; pop.innerHTML = '';
   $('#foot-r').textContent = ''; $('#refresh-msg').textContent = ''; $('#banner').textContent = '';
@@ -1570,7 +1610,7 @@ function renderGlance() {
   $('#ns-body').innerHTML = !fresh.length ? '<span class="big" style="font-size:16px">Nothing new</span><span class="line">No pool reached the gem bar since then.</span>'
     : fresh.slice(0, 3).map((p) => {
       const w = W(p);
-      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)}${keptStable(p) ? ' · ★ STABLE' : ''} · since ${dmhm(p.gemFirstAt)}</span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></button>`;
+      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)}${keptStable(p) ? ' · ★ STABLE' : ''} · since ${dmhm(p.gemFirstAt)}</span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprPd(w && w.net, { block: true })}</span></button>`;
     }).join('') + (fresh.length > 3 ? `<span class="line">and ${fresh.length - 3} more in the table</span>` : '');
   if (nsHid) $('#ns-body').insertAdjacentHTML('beforeend', `<span class="line hidn">${hidTxt(nsHid)}</span>`);
   // scanner
@@ -1594,9 +1634,9 @@ function renderGlance() {
   const bench = $('#bench');
   bench.dataset.id = bp ? bp.id : '';
   bench.disabled = !bp;
-  bench.innerHTML = `<span class="lbl">BENCH ${bp ? esc(bp.pair) : DASH}</span><span class="big${bw && bw.net < 0 ? ' neg' : ''}">${pct(bw && bw.net, { sign: true })} net</span>`
+  bench.innerHTML = `<span class="lbl">BENCH ${bp ? esc(bp.pair) : DASH}</span><span class="big${bw && bw.net < 0 ? ' neg' : ''}">${aprPd(bw && bw.net, { sign: true })} net</span>`
     + `<span class="line">edge ${times(be)}${isNum(be) ? (be >= 1 ? ': fees cover LVR' : ': fees don’t cover LVR') : ''}</span>`
-    + `<span class="line">${WIN_WORD[wk]} · fees ${pct(bw && bw.feeApr)} · LVR ${pct(bw && bw.lvr)}</span>`;
+    + `<span class="line">${WIN_WORD[wk]} · fees ${aprPd(bw && bw.feeApr)} · LVR ${aprPd(bw && bw.lvr)}</span>`;
 }
 
 // ---------- best find ----------
@@ -1616,9 +1656,9 @@ function breakdown(w) {
     + (n < 0 ? `<div class="fee-mark" style="left:${Math.min(100, (f / tot) * 100).toFixed(1)}%" title="fees reach here"></div>` : '');
   const aria = n >= 0 ? `Fee APR ${pct(f)} splits into net ${pct(n)}, LVR ${pct(l)}, swaps ${pct(s)} and gas ${pct(g)}` : `Costs ${pct(tot)} are more than the fee APR ${pct(f)}: net ${pct(n)}`;
   return `<div><div class="bar" role="img" aria-label="${esc(aria)}">${bar}</div><div class="legend" style="margin-top:8px">`
-    + (n >= 0 ? termB('net', `<span><i class="sw" style="background:var(--accent2)"></i>Net to you ${pct(n)}</span>`) : termB('feeApr', `<span><i class="sw" style="background:var(--fg);width:2px;height:12px"></i>Fees ${pct(f)} cover ${pct(f / tot)} of the costs</span>`))
-    + termB('lvr', `<span><i class="sw" style="background:var(--lvr)"></i>LVR (arbs) ${pct(l)}</span>`) + termB('swaps', `<span><i class="sw" style="background:var(--swap)"></i>Re-centre swaps ${pct(s)}</span>`)
-    + termB('gascost', `<span><i class="sw" style="background:var(--gas)"></i>Gas ${pct(g)}</span>`) + `<span>${n >= 0 ? 'fees ' + pct(f) + ' in all' : 'net <b class="neg">' + pct(n) + '</b>'}</span></div></div>`;
+    + (n >= 0 ? termB('net', `<span><i class="sw" style="background:var(--accent2)"></i>Net to you ${aprPd(n)}</span>`) : termB('feeApr', `<span><i class="sw" style="background:var(--fg);width:2px;height:12px"></i>Fees ${aprPd(f)} cover ${pct(f / tot)} of the costs</span>`))
+    + termB('lvr', `<span><i class="sw" style="background:var(--lvr)"></i>LVR (arbs) ${aprPd(l)}</span>`) + termB('swaps', `<span><i class="sw" style="background:var(--swap)"></i>Re-centre swaps ${aprPd(s)}</span>`)
+    + termB('gascost', `<span><i class="sw" style="background:var(--gas)"></i>Gas ${aprPd(g)}</span>`) + `<span>${n >= 0 ? 'fees ' + aprPd(f) + ' in all' : 'net <b class="neg">' + aprPd(n) + '</b>'}</span></div></div>`;
 }
 const LIQ_L = 0.45;
 // every bar's own edges, in log price: the scanner's depthEdges (bar i spans edges[i]..edges[i + 1]: fine bars, coarser ones,
@@ -2058,8 +2098,8 @@ function sentence(outside, tvl, w, lps, perDay) {
   const who = `the ${isNum(lps) ? int(lps) + ' ' : ''}LP${lps === 1 ? '' : 's'} at the price`;
   let a = isNum(outside) && isNum(tvl) ? `${pct(outside)} of the ${usd(tvl)} sits outside ${rangeTxt(w.range)}` : `Share outside ${rangeTxt(w.range)} not read yet`;
   a += isNum(perDay) ? `${isNum(outside) && isNum(tvl) ? ', so' : ';'} <b>${who} split ${usd(perDay)} a day</b>.` : '.';
-  const b = isNum(w.aggApr) && isNum(w.feeApr) ? ` Aggregators show ${pct(w.aggApr)} APR; inside the range it is ${pct(w.feeApr)}.`
-    : isNum(w.feeApr) ? ` Inside the range it is ${pct(w.feeApr)}.` : '';
+  const b = isNum(w.aggApr) && isNum(w.feeApr) ? ` Aggregators show ${aprPd(w.aggApr)} APR; inside the range it is ${aprPd(w.feeApr)}.`
+    : isNum(w.feeApr) ? ` Inside the range it is ${aprPd(w.feeApr)}.` : '';
   return a + b;
 }
 // the window's top 10 by gem, then net; unverified pools only after the others, always tagged
@@ -2126,7 +2166,7 @@ function renderBest() {
     + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div><div class="fmrow"><span class="lbl">LP fees · 30 d</span>${feeMini(p)}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + `<div class="best-body"><div class="best-l">`
     + `<div class="bigline"><span class="bignum${w.net < 0 ? ' neg' : ''}">${pct(w.net)}</span><span class="bigsub">${daysTxt} ${term('net', 'net APR')} at ${usdFull(L.ticket)}<br>after ${term('lvr', 'LVR')}, swaps and gas</span></div>`
-    + breakdown(w)
+    + `<p class="lead" data-lead>${leadLine(w)}</p>` + breakdown(w)
     + `<p class="sentence">${sentence(outside, tvl, w, lps, perDay)}</p>`
     + `<div class="chips">${termB('edge', `<span class="chip">EDGE ${times(w.edge)}</span>`)}${termB('sigma', `<span class="chip">σ ${pct(w.sigma, { dp: 1 })}/DAY</span>`)}`
     + `${termB('rerange', `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span>`)}${termB('room', `<span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`)}`
@@ -2218,7 +2258,7 @@ const near1 = (a, b) => Math.abs(a - b) < 1e-6;
 function zrange(id) { const P = PZ[id]; return P && P.zr ? P.zr() : [0, ZMAX[zkind(id)]]; }
 const zkind = (id) => (id.startsWith('liq') ? 'liq' : id === 'scatter' ? 'scatter' : 'time');
 // a phone opens the daily fee strip on its latest 15 days, bars wide enough to tell apart: a drag shows the older ones
-const zdef = (id) => ((id.startsWith('daily') || id === 'd-hr') && !SOLO && innerWidth < 600 ? 1 : ZDEF[zkind(id)]); // the hourly fees open on 7 of 14 days there
+const zdef = (id) => (PZ[id] && isNum(PZ[id].zd) ? PZ[id].zd : (id.startsWith('daily') || id === 'd-hr') && !SOLO && innerWidth < 600 ? 1 : ZDEF[zkind(id)]); // the fee history opens on its latest 90 days // the hourly fees open on 7 of 14 days there
 const zget = (id) => (S.zoom && isNum(S.zoom[id]) ? S.zoom[id] : zdef(id));
 const tlenAt = (n, lv) => { const f = Math.pow(0.5, lv); return f >= 1 ? n : Math.min(n, Math.max(2, n * f)); }; // index units in view
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
@@ -2359,6 +2399,7 @@ function pzRedraw(id) {
   if (!h.classList.contains('still')) h.classList.add('still');
   pzCaps(id);
   if (P.axis) { const ax = h.nextElementSibling; if (ax && ax.dataset.tax === id) { ax.innerHTML = P.axis(); axFit(ax); } }
+  if (P.yax) { const y = document.querySelector(`[data-yax="${id}"]`); if (y) y.innerHTML = P.yax(); }
   if (P.kind === 'liq') liqDeclutter(id);
 }
 const pzq = new Set();
@@ -2849,7 +2890,7 @@ function dailyTip(p, d, v, i, med) {
   const x = v[i], last = i === d.length - 1;
   return { u: i + 0.5, h: `<span class="tt">${dayName(d[i].t)}${last ? ' · last 24 h' : ''}</span>`
     + (isNum(x) ? `fees <b>$${x.toFixed(2)}</b> per $1,000${isNum(med) && med > 0 ? ` · <b>${xMed(x / med)}</b> the median` : ''}` : `fees ${DASH} (not read)`)
-    + dayExtra(p, d[i].t) + (isNum(d[i].net) ? `<br>net APR <b>${pct(d[i].net)}</b>` : '') };
+    + dayExtra(p, d[i].t) + (isNum(d[i].net) ? `<br>net APR <b>${aprPd(d[i].net)}</b>` : '') };
 }
 const mvTxt = (o) => { const e = Math.exp(o) - 1, a = Math.abs(e * 100); return (e < 0 ? MINUS : '+') + (a < 9.95 ? a.toFixed(1) : Math.round(a)) + '%'; };
 function liqTip(id, o) {
@@ -2925,7 +2966,7 @@ function renderNext() {
   const rows = ranked.map((p) => {
     const w = W(p, wk);
     return `<div class="nb-row chs" style="${chainCol(p.chain)}" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<span class="nb-main"><span class="pn">${esc(p.pair)}</span>`
-      + `<span class="nb-meta"><span class="lbl">${chainMark(p.chain)}${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${feeMini(p)}${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${pct(w && w.net)}</span></div>`;
+      + `<span class="nb-meta"><span class="lbl">${chainMark(p.chain)}${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${feeMini(p)}${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprPd(w && w.net, { block: true })}</span></div>`;
   }).join('');
   $('#next').innerHTML = `<div class="sec-head"><h2 id="next-h">Next best</h2><span class="sub" style="margin:0">${int(gems)} gem${gems === 1 ? '' : 's'} ≥ ${gemAt()} · ${int(watch)} on watch · ${WIN_WORD[wk]} net at ${usdFull(L.ticket)}${hid ? `<span class="hidn"> · ${hidTxt(hid)}</span>` : ''}</span></div>`
     + (rows || `<p class="empty" style="margin:0 12px 12px">No other scored pool in the ${WIN_WORD[wk]} window.</p>`)
@@ -2937,13 +2978,13 @@ function renderNext() {
 const COLS = [
   { k: 'pair', h: 'Pool', v: (p) => String(p.pair || '').toLowerCase() },
   { k: 'gem', h: 'Gem', t: 'Gem now, 0–100: 60 or more is a gem', v: (p, w) => (p.verified === false ? null : w && w.gem ? w.gem.total : null) },
-  { k: 'net', h: 'Net APR', t: 'Yearly return at the ticket after LVR, re-centre swaps and gas', v: (p, w) => w && w.net, f: (x) => pct(x) },
+  { k: 'net', h: 'Net APR', t: 'Yearly return at the ticket after LVR, re-centre swaps and gas', v: (p, w) => w && w.net, f: (x) => aprPd(x, { block: true }) },
   { k: 'why', h: 'Why', t: 'Why it stands out: tap the icons', v: (p, w) => whyKeys(p, w).length || null },
   { k: 'fees', h: 'Fees 30 d', t: 'LP fees a day over the last 30 days; the figure is the last 7 days’ average, the arrow vs the 7 days before', v: (p) => { const f = feeHist(p); return f ? f.day : null; } },
   { k: 'vol', h: 'Vol / day', t: 'Trading volume per day in this window', v: (p, w) => (w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : null), f: (x) => usd(x) },
   { k: 'tvl', h: 'TVL', t: 'Value in the pool', v: (p) => p.tvlUsd, f: (x) => usd(x) },
   { k: 'room', h: 'Room', t: 'Value already inside the suggested range: what a new position shares the fees with', v: (p, w) => w && w.inRangeUsd, f: (x) => usd(x) },
-  { k: 'feeApr', h: 'Fee APR', t: 'Fees alone, inside the suggested range', v: (p, w) => w && w.feeApr, f: (x) => pct(x) },
+  { k: 'feeApr', h: 'Fee APR', t: 'Fees alone, inside the suggested range', v: (p, w) => w && w.feeApr, f: (x) => aprPd(x, { block: true }) },
   { k: 'edge', h: 'Edge', t: 'Fees ÷ LVR: above 1× the fees outrun the arbitrage loss', v: (p, w) => w && w.edge, f: times },
   { k: 'sigma', h: 'σ / day', t: 'Daily volatility', v: (p, w) => w && w.sigma, f: (x) => pct(x, { dp: 1 }) },
   { k: 'age', h: 'Age', t: 'Days since the pool was created', v: (p) => ageDays(p), f: (x) => (isNum(x) ? (x < 1 ? '<1 d' : Math.round(x) + ' d') : DASH) },
@@ -3096,7 +3137,7 @@ function renderBt() {
     + `<div class="tbl-box"><table><thead><tr><th><span class="lbl" style="display:block;padding:6px 8px">Pool</span></th><th><span class="lbl" style="display:block;padding:6px 8px">Net APR<br>forecast → test</span></th><th style="text-align:left"><span class="lbl" style="display:block;padding:6px 8px">Verdict</span></th>`
     + `<th style="text-align:center"><span class="lbl" style="display:block;padding:6px 8px">Cum. net<br>${WIN_LABEL[S.win]}</span></th><th><span class="lbl" style="display:block;padding:6px 8px">Re-<br>ranges</span></th><th><span class="lbl" style="display:block;padding:6px 8px">In<br>range</span></th><th><span class="lbl" style="display:block;padding:6px 8px">Gem</span></th></tr></thead><tbody>`
     + rows.map((r) => `<tr class="row${r.bench ? ' bench' : ''}${r.id === S.replay ? ' sel' : ''}" data-act="bt-row" data-id="${esc(r.id)}" tabindex="0"><td><span class="pn2">${esc(r.p ? r.p.pair : r.id)}</span><span class="pm">${r.p ? metaTxt(r.p) : DASH}${r.bench ? ' · benchmark' : ''}${keptStable(r.p) ? ' · ★ STABLE' : ''}${r.b.partial ? ' · ' + (+r.b.days.toFixed(1)) + ' d' : ''}</span></td>`
-      + `<td><span class="muted">${pct(r.b.forecastNet)}</span> → <b class="${r.b.net < 0 ? 'neg' : ''}">${pct(r.b.net)}</b></td><td style="text-align:left">${verdict(r.b)}</td>`
+      + `<td><span class="muted">${aprPd(r.b.forecastNet)}</span> → <b class="${r.b.net < 0 ? 'neg' : ''}">${aprPd(r.b.net, { block: true })}</b></td><td style="text-align:left">${verdict(r.b)}</td>`
       + `<td>${spark(r.b.series.net, 74, 22, r.b.series.t, r.id)}</td><td>${int(r.b.reranges)}</td><td>${pct(r.b.tir, { dp: 0 })}</td><td>${r.p ? gemPill(r.p) : DASH}</td></tr>`).join('')
     + `</tbody></table></div><p class="caption">Tap a row to open its replay. Sorted by backtest; the benchmark stays last.<span class="swipe"> Swipe the table for more columns.</span></p></div>`;
   drawScatter(rows);
@@ -3144,7 +3185,7 @@ function drawScatter(rows) {
       }
       if (!best) return null;
       const o = best.o, q = o.r.p;
-      return { x: best.x, y: best.y, h: `<span class="tt">${esc(q ? q.pair : o.r.id)}${q ? ' · ' + feeTxt(q.feeTier) + ' · ' + chainShort(q.chain) : ''}${o.r.bench ? ' · benchmark' : ''}</span>forecast <b>${pct(o.r.b.forecastNet)}</b> · backtest <b>${pct(o.r.b.net)}</b> · miss <b>${pts(o.r.b.net - o.r.b.forecastNet)}</b>` };
+      return { x: best.x, y: best.y, h: `<span class="tt">${esc(q ? q.pair : o.r.id)}${q ? ' · ' + feeTxt(q.feeTier) + ' · ' + chainShort(q.chain) : ''}${o.r.bench ? ' · benchmark' : ''}</span>forecast <b>${aprPd(o.r.b.forecastNet)}</b> · backtest <b>${aprPd(o.r.b.net)}</b> · miss <b>${pts(o.r.b.net - o.r.b.forecastNet)}</b>` };
     },
     inner: () => {
       const zoomed = zget('scatter') > 1e-6;
@@ -3202,7 +3243,7 @@ function renderReplay(row) {
   let inr = 0;
   for (let i = 1; i <= cut; i++) if (isNum(s.lo[i - 1]) && s.px[i] >= s.lo[i - 1] && s.px[i] <= s.hi[i - 1]) inr++;
   const re = recentres(s).filter((i) => i <= cut);
-  $('#rp-strip').innerHTML = `<div><span class="lbl">Net APR</span><span class="v acc">${pct(apr, { sign: true })}</span><span class="s">${usdFull(ticket)} · ${entry == null ? 'incl. entry' : 'entry ' + usd(entry) + ' aside'}</span></div>`
+  $('#rp-strip').innerHTML = `<div><span class="lbl">Net APR</span><span class="v acc">${aprPd(apr, { sign: true, block: true })}</span><span class="s">${usdFull(ticket)} · ${entry == null ? 'incl. entry' : 'entry ' + usd(entry) + ' aside'}</span></div>`
     + `<div><span class="lbl">vs holding</span><span class="v${net < 0 ? ' neg' : ''}">${usd(net, { sign: true })}</span><span class="s">${days.toFixed(days < 2 ? 1 : 0)} days</span></div>`
     + `<div><span class="lbl">In range</span><span class="v">${pct(inr / cut)}</span><span class="s">of ${int(cut)} steps</span></div>`
     + `<div><span class="lbl">Re-ranges</span><span class="v">${re.length}</span><span class="s">${usd(s.costs[cut])} swap + gas</span></div>`
@@ -3320,10 +3361,10 @@ function renderLab(row) {
   if (hl.lab && !strats.some((x) => x.id === hl.lab)) hl.lab = null;
   h += `<div class="pane lab-legend${hl.lab ? ' hl' : ''}" role="group" aria-label="Highlight one strategy on the chart"><div class="strat-h lbl"><span></span><span>Strategy · tap to highlight</span><span style="text-align:right">Net APR</span><span style="text-align:right">Re-rng · net</span></div>`
     + order.map((st) => `<button type="button" class="strat${st.id === 'ours' ? ' ours' : ''}" data-act="hl" data-g="lab" data-s="${esc(st.id)}" aria-pressed="${hl.lab === st.id}" title="${hl.lab === st.id ? 'Tap again to show every line' : 'Highlight this line on the chart'}"><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" stroke="${SCOL[st.id] || 'var(--s6)'}" stroke-width="${st.id === 'ours' ? 3 : 2}"/></svg><span class="nm">${esc(st.name || st.id)}</span>`
-      + `<span class="ap${st.net < 0 ? ' neg' : ''}">${pct(st.net, { sign: true })}</span><span class="rr">${int(st.reranges)} · ${usd(st.netUsd, { sign: true })}</span></button>`).join('')
-    + `<div class="strat"><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" stroke="#8B96A3" stroke-width="1.4" stroke-dasharray="3 2"/></svg><span class="nm muted">Hold the starting tokens (baseline)</span><span class="ap muted">0%</span><span class="rr">0 · $0</span></div>`;
+      + `<span class="ap${st.net < 0 ? ' neg' : ''}">${aprPd(st.net, { sign: true, block: true })}</span><span class="rr">${int(st.reranges)} · ${usd(st.netUsd, { sign: true })}</span></button>`).join('')
+    + `<div class="strat"><svg width="14" height="8" aria-hidden="true"><line x1="0" y1="4" x2="14" y2="4" stroke="#8B96A3" stroke-width="1.4" stroke-dasharray="3 2"/></svg><span class="nm muted">Hold the starting tokens (baseline)</span><span class="ap muted">${aprPd(0, { block: true })}</span><span class="rr">0 · $0</span></div>`;
   const rv = b.revert || {};
-  h += `<p class="caption" style="margin-top:8px">${isNum(rv.net) ? `Revert’s backtest of the same range: <b>${pct(rv.net, { sign: true })}</b>, ${rv.within10 === true ? 'within 10 pts of ours' : rv.within10 === false ? 'more than 10 pts from ours' : 'gap not read'}.` : `Revert’s backtest of the same range: not compared, it has no public API (${DASH}).`}</p></div>`;
+  h += `<p class="caption" style="margin-top:8px">${isNum(rv.net) ? `Revert’s backtest of the same range: <b>${aprPd(rv.net, { sign: true })}</b>, ${rv.within10 === true ? 'within 10 pts of ours' : rv.within10 === false ? 'more than 10 pts from ours' : 'gap not read'}.` : `Revert’s backtest of the same range: not compared, it has no public API (${DASH}).`}</p></div>`;
   // heat map: width × trigger
   const gr = b.grid || {};
   const ok = Array.isArray(gr.widths) && Array.isArray(gr.triggers) && Array.isArray(gr.net) && gr.net.length === gr.widths.length;
@@ -3353,7 +3394,7 @@ function renderLab(row) {
     let det = '';
     if (hl.cell) {
       const [ci, cj] = hl.cell.split(',').map(Number), cv = gr.net[ci] ? gr.net[ci][cj] : null, mine = ci === oi && cj === oj;
-      det = `<p class="heat-detail" aria-live="polite"><b>${rangeTxt(gr.widths[ci])} · ${esc((TRIG[gr.triggers[cj]] || gr.triggers[cj]).toLowerCase())}</b> → <b>${pct(cv, { sign: true })}</b> net APR`
+      det = `<p class="heat-detail" aria-live="polite"><b>${rangeTxt(gr.widths[ci])} · ${esc((TRIG[gr.triggers[cj]] || gr.triggers[cj]).toLowerCase())}</b> → <b>${aprPd(cv, { sign: true })}</b> net APR`
         + (mine ? ': this is ours, highlighted on the chart.' : `${isNum(cv) && isNum(ours) ? `, ${pts(cv - ours)} vs ours` : ''}. No strategy line runs these settings, so the chart stays as it is.`) + ' Tap the tile again to let go.</p>';
     }
     h += `<div class="pane lab-heat"><div class="pane-title"><span class="lbl">Range width × re-centre trigger → net APR % · tap a tile</span></div><div class="heat-box"><div class="heat${hl.cell ? ' sel' : ''}">${hh}</div></div>`
@@ -3505,10 +3546,10 @@ function renderPair() {
     + rows.map((r) => `<tr class="row${r === best ? ' gold' : ''}" data-act="pair-row" data-id="${esc(r.p.id)}" tabindex="0"><td><span class="pn2">${label(r.p)}</span><span class="tags">${r === best ? '<span class="tag gold">BEST TO ENTER</span>' : ''}${tagsHtml(r.p, wk)}</span></td>`
       + `<td><span class="share"><i style="width:${isNum(r.share) ? Math.max(2, Math.round(r.share * 60)) : 0}px"></i>${pct(r.share, { dp: 0 })}</span></td>`
       + `<td>${usd(r.perDay)}</td><td>${usd(r.w && r.w.inRangeUsd)}</td><td>${isNum(r.per1k) ? '$' + r.per1k.toFixed(2) : DASH}</td>`
-      + `<td class="${r.net < 0 ? 'neg' : ''}">${pct(r.net)}</td><td>${shapeSpark(r.p, r.w)}</td></tr>`).join('') + '</tbody></table></div>';
+      + `<td class="${r.net < 0 ? 'neg' : ''}">${aprPd(r.net, { block: true })}</td><td>${shapeSpark(r.p, r.w)}</td></tr>`).join('') + '</tbody></table></div>';
   const hidNote = hid ? `<p class="caption hidnote">${hid} pool${hid === 1 ? '' : 's'} of this pair ${hid === 1 ? 'is' : 'are'} hidden: stablecoin pairs are off. <button type="button" class="linkbtn" data-act="stable-on">Show stablecoin pairs</button></p>` : '';
-  if (!rows.length) { $('#sheet-body').innerHTML = `<div class="dsec">${hidNote}</div>`; return; }
-  $('#sheet-body').innerHTML = hidNote + `<div class="dsec"><span class="lbl">Where the ${WIN_WORD[wk]} volume trades</span>${bar}</div>`
+  if (!rows.length) { $('#sheet-main').innerHTML = `<div class="dsec">${hidNote}</div>`; return; }
+  $('#sheet-main').innerHTML = hidNote + `<div class="dsec"><span class="lbl">Where the ${WIN_WORD[wk]} volume trades</span>${bar}</div>`
     + `<div class="dsec"><span class="lbl">Every pool of the pair · tap one to open it in the best-find card</span>${tbl}`
     + `<p class="caption">${best ? `Best to enter: <b>${label(best.p)}</b>, the highest net APR at ${usdFull(L.ticket)} among pools whose fees can be checked.` : `No pool of this pair has a net APR to compare (${DASH}).`} Value at the price = what already sits inside the suggested range.</p></div>`;
 }
@@ -3535,7 +3576,6 @@ function openDetail(id, opener) {
 }
 function showSheet() {
   sheetReset();
-  sheetCard.classList.remove('cond'); foldY = 0; foldAcc = 0;
   $('#sheet').hidden = false;
   document.documentElement.classList.add('modal-open');
   $('#sheet-body').scrollTop = 0; sheetCard.scrollTop = 0; $('#sheet').scrollTop = 0; // a card that hides overflow never stays shifted
@@ -3559,7 +3599,6 @@ function closeDetail() {
   $('#sheet').hidden = true;
   S.simFor = null;
   sheetReset();
-  sheetCard.classList.remove('cond');
   document.documentElement.classList.remove('modal-open');
   S.detail = null; S.pair = null;
   const o = S.opener; S.opener = null;
@@ -3648,7 +3687,7 @@ function feeMini(p, Wd = 90, Ht = 22, fit = false) { // fit: the svg may be draw
 }
 function feeJump() { // the header's bar: the full daily fee chart, zoomed out to every day it has
   if (!PZ['d-day']) return;
-  zreset('d-day');
+  pzStop('d-day'); (S.zoom ||= {})['d-day'] = 0; if (S.pan) delete S.pan['d-day']; rerender('d-day'); // every day it has (its default is the latest 90)
   const box = $('#sheet-body [data-chartbox="d-day"]'), sb = $('#sheet-body');
   // the panel's own scroll only: scrollIntoView would also shift the card (it hides overflow) in Safari
   if (box) sb.scrollTo({ top: Math.max(0, sb.scrollTop + box.getBoundingClientRect().top - sb.getBoundingClientRect().top - 8), behavior: reduced() ? 'auto' : 'smooth' });
@@ -3664,40 +3703,169 @@ function rateRows(rows, vi, unit) {
   }
   return { t0: ok.length ? ok[0][0] : null, t1: ok.length ? ok[ok.length - 1][0] : null, bars };
 }
-function rateBars(rows, vi, unit, label, id, pool) {
-  const { t0, t1, bars } = rateRows(rows, vi, unit), vals = bars.map((x) => x.v).filter(isNum);
-  const head = `${esc(label)}${isNum(t0) && t1 > t0 ? ' · ' + Math.max(1, Math.round((t1 - t0) / D)) + ' d' : ''}`;
-  if (!vals.length) { delete PZ[id]; return `<div class="dsec"><span class="lbl">${head}</span><p class="sub">${DASH} not read</p></div>`; }
-  const N = (t1 - t0) / unit, Wd = 300, Ht = 64, mx = Math.max(...vals) || 1, U = (t) => (t - t0) / unit; // one scale for every bar
-  const P = pzTime(id, pool, N, {
-    words: ['older', 'newer'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', zmax: unit < D ? 4 : 3,
-    mid: unit >= D, tAt: (u) => t0 + u * unit, uAt: (t) => (t - t0) / unit, axis: () => taxOf(id),
+// ---------- the fee charts (v0.4.7): a $ scale, linear or log, the typical day, and which pool the bars are for ----------
+// LP fees per hour (history.json h) and per day: the fee history (y, up to a year: exact days solid, estimated days pale,
+// unread days hatched "—"), else the daily rows (d). A y-axis with $ ticks and gridlines for the view; a dashed "typical
+// day" line at the view's median (the note gives each bar ×median); a day the scanner marks unconfirmed is hatched with a ⚠.
+// The day chart switches between this pool, each tier of the pair side by side (each pool in its colour) and the whole
+// pair stacked (the total in the note). Missing is never zero: a day a pool wasn't read is null, never a 0 in a total.
+const FC_MODES = [['this', 'this pool'], ['tiers', 'each tier'], ['pair', 'whole pair']], FC_ZC = [[14, '14 D'], [90, '90 D'], [365, '1 Y'], [0, 'ALL']];
+const fcLog = () => store.get('lps.flog') === '1';
+// unconfirmed: history.json u.y lists the exact y days, u.d the d rows (by their t, the end of the span they cover), whose fees
+// are 20× their 30-day median without the day's volume behind them (the scanner, 12 Nov 2026)
+const fcUnconf = (h, k, t) => !!(h.u && Array.isArray(h.u[k]) && h.u[k].includes(t));
+function fcDays(q) { // a pool's LP fees a UTC day: { m: day → { v, s, u }, y, yp, first, last }; s 'x' exact, 'e' estimated, 'g' a gap's average
+  const h = S.hist && S.hist.pools && S.hist.pools[q.id], m = new Map();
+  if (!h) return null;
+  const y = Array.isArray(h.y) && h.y.some((r) => Array.isArray(r) && isNum(r[0]));
+  if (y) { for (const r of h.y) if (Array.isArray(r) && isNum(r[0])) m.set(r[0], { v: isNum(r[1]) && r[1] >= 0 ? r[1] : null, s: isNum(r[1]) && r[1] >= 0 ? (r[2] === 'e' ? 'e' : 'x') : null, u: fcUnconf(h, 'y', r[0]) }); }
+  else if (Array.isArray(h.d)) {
+    for (const b of rateRows(h.d, 2, D).bars) for (let t = Math.ceil((b.a - D / 2) / D) * D; t + D / 2 < b.b; t += D) m.set(t, { v: b.v, s: isNum(b.v) ? (b.b - b.a > 1.5 * D ? 'g' : 'x') : null, u: fcUnconf(h, 'd', b.b) });
+  }
+  if (!m.size) return null;
+  const ks = [...m.keys()].sort((a, b) => a - b);
+  return { m, y, yp: y && h.yp && typeof h.yp === 'object' ? h.yp : null, first: ks[0], last: ks[ks.length - 1] };
+}
+const fcName = (q) => `${feeTxt(q.feeTier)} v${esc(q.v)}`;
+function fcPools(p, mode) { // the pools the day chart shows, each with its days and colour (the pair's chips' colours)
+  const self = { q: p, col: '#16C784', f: fcDays(p) };
+  if (mode === 'this') return self.f ? [self] : [];
+  const out = self.f ? [self] : [];
+  mgPeers(p).forEach((q, k) => { const f = fcDays(q); if (f) out.push({ q, col: MG_COL[k % MG_COL.length], f }); });
+  return out;
+}
+function fcVal(e, t) { // a pool's value on day t: { v, s, u }, or undefined where it has no row (before it existed)
+  const x = e.f.m.get(t);
+  if (x) return x;
+  if (t > e.f.last) return { v: null, s: null, u: false }; // newer than its last row: not read
+  if (t < e.f.first && !(e.f.y && e.f.yp && isNum(e.f.yp.age)) && !(isNum(e.q.createdAt) && t + D <= e.q.createdAt)) return { v: null, s: null, u: false };
+  return undefined;
+}
+function fcNice(x) { const e = Math.pow(10, Math.floor(Math.log10(x))), f = x / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
+function fcScale(vals, log, Ht) { // the y-axis for the values in view: Y(v) in px from the top, ticks with labels
+  const pos = vals.filter((v) => v > 0), mx = pos.length ? Math.max(...pos) : 0;
+  if (log && pos.length) {
+    let lo = Math.floor(Math.log10(Math.min(...pos))), hi = Math.ceil(Math.log10(mx));
+    if (hi <= lo) hi = lo + 1;
+    const Y = (v) => (v > 0 ? Ht - clamp((Math.log10(v) - lo) / (hi - lo), 0, 1) * Ht : Ht), ticks = [];
+    for (let k = lo; k <= hi; k++) { ticks.push(Math.pow(10, k)); if (hi - lo <= 2 && k < hi) ticks.push(3 * Math.pow(10, k)); }
+    return { Y, ticks: ticks.map((v) => ({ v, y: Y(v) })), log: true };
+  }
+  const step = fcNice((mx || 1) / 3), top = Math.max(step, Math.ceil(mx / step - 1e-9) * step), Y = (v) => Ht - clamp(v / top, 0, 1) * Ht, ticks = [];
+  for (let v = 0; v <= top + step * 1e-6; v += step) ticks.push({ v, y: Y(v) });
+  return { Y, ticks, log: false };
+}
+const usdT = (v) => usd(v).replace(/\.0(?=[KMB]$)/, ''); // "$1K", never "$1.0K" (that reads as a rounded ticket)
+const fcAx = (v) => (v === 0 ? '$0' : usdT(v));
+const fcMed = (vals) => { const s = vals.filter(isNum).sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
+const fcSrc = (x) => (!x || !isNum(x.v) ? 'not read' : x.s === 'e' ? 'estimated' : x.s === 'g' ? 'a gap’s average' : 'exact');
+function feeChart(p, id) {
+  const hr = id === 'd-hr', unit = hr ? H : D, hd = S.hist && S.hist.pools && S.hist.pools[p.id], word = hr ? 'hour' : 'day';
+  const peers = hr ? [] : fcPools(p, 'pair').filter((e) => e.q.id !== p.id), mode = hr || !peers.length ? 'this' : S.fmode || 'this';
+  let pools, slots;
+  if (hr) {
+    const rr = rateRows(hd && hd.h, 3, H);
+    pools = [{ q: p, col: '#16C784' }];
+    slots = rr.bars.map((b) => ({ a: b.a, b: b.b, x: [{ v: b.v, s: isNum(b.v) ? (b.b - b.a > 1.5 * H ? 'g' : 'x') : null, u: false }] }));
+  } else {
+    pools = fcPools(p, mode);
+    const days = [...new Set(pools.flatMap((e) => [...e.f.m.keys()]))].sort((a, b) => a - b);
+    slots = days.map((t) => ({ a: t, b: t + D, x: pools.map((e) => fcVal(e, t)) }));
+  }
+  const tot = (sl) => { let v = 0, k = 0, un = 0; for (const x of sl.x) { if (!x) continue; if (isNum(x.v)) { v += x.v; k++; } else un++; } return { v: un ? null : v, part: v, k, un }; };
+  const valOf = (sl) => (mode === 'pair' ? tot(sl).v : sl.x[0] ? sl.x[0].v : null); // what the median and the ×median read
+  const ttl = `${esc(p.pair)} · ${fcName(p)} · ${mode === 'this' ? 'this pool' : mode === 'tiers' ? `each tier (${pools.length} pools)` : `whole pair (${pools.length} pools combined)`}`;
+  const yp = !hr && pools[0] && pools[0].q.id === p.id ? pools[0].f.yp : null;
+  const head = `LP fees per ${word}`;
+  if (!slots.length || !slots.some((sl) => sl.x.some((x) => x && isNum(x.v)))) { delete PZ[id]; return `<div class="dsec fc" data-fc="${id}"><span class="lbl">${head} · ${ttl}</span><p class="sub">${DASH} not read</p></div>`; }
+  const T0 = slots[0].a, T1 = slots[slots.length - 1].b, N = (T1 - T0) / unit, U = (t) => (t - T0) / unit, Wd = 300, Ht = hr ? 72 : 96;
+  if (!hr && S.fwant) { (S.zoom ||= {})[id] = clamp(Math.log2(N / S.fwant), 0, Math.max(0, Math.log2(N / 7))); S.fwant = null; }
+  const inView = () => { const [a, b] = P.vw(); return slots.filter((sl) => U(sl.b) > a && U(sl.a) < b); };
+  const seen = () => { const sv = inView(), vals = sv.map(valOf); return { sv, med: fcMed(vals), hi: Math.max(0, ...vals.filter(isNum)) }; };
+  // the scale reads the confirmed values in view: a day the scanner couldn't confirm (a 30× outlier) runs off the top, hatched
+  const scaleOf = (sv) => {
+    const pick = (ok) => (mode === 'pair' ? sv.map((sl) => sum(sl.x.filter((x) => x && isNum(x.v) && ok(x)).map((x) => x.v))) : sv.flatMap((sl) => sl.x.map((x) => (x && isNum(x.v) && ok(x) ? x.v : null))).filter(isNum));
+    const c = pick((x) => !x.u);
+    return fcScale(c.some((v) => v > 0) ? c : pick(() => true), fcLog(), Ht);
+  };
+  const P = pzTime(id, p.id, N, {
+    words: ['older', 'newer'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier · pinch to zoom', zmax: hr ? 4 : Math.max(3, Math.log2(N / 7)),
+    zd: hr ? undefined : N > 100 ? Math.log2(N / 90) : 0, mid: !hr, tAt: (u) => T0 + u * unit, uAt: (t) => (t - T0) / unit, axis: () => taxOf(id),
+    yax: () => { const sc = scaleOf(inView()); return sc.ticks.map((k) => `<span style="top:${((k.y / Ht) * 100).toFixed(2)}%"${k.y < 6 ? ' class="t"' : k.y > Ht - 6 ? ' class="b"' : ''}>${fcAx(k.v)}</span>`).join(''); },
     tip: (u) => {
-      const t = t0 + u * unit, x = bars.find((q) => q.a <= t && t < q.b);
-      if (!x) return null;
-      const k = (x.b - x.a) / unit, day = unit >= D, gap = k > 1.5, r = x.r, vol = day && isNum(r[3]) ? r[3] / k : null;
-      return { u: (U(x.a) + U(x.b)) / 2, h: `<span class="tt">${day && !gap ? dayName(x.a) : spanTxt(x.a, x.b)}</span>`
-        + (isNum(x.v) ? `LP fees <b>${usd(x.v)}</b>${gap ? (day ? ' a day' : ' an hour') + ' on average (a gap not filled yet)' : ''}` : `LP fees ${DASH} (not read)`)
-        + (isNum(vol) ? ` · volume <b>${usd(vol)}</b>${gap ? ' a day' : ''}` : '') + (isNum(r[1]) ? ` · price <b>${px(r[1])}</b>` : '') };
-    },
-    caps: () => { const [a, b] = P.vw(), sv = bars.filter((x) => U(x.b) > a && U(x.a) < b && isNum(x.v)).map((x) => x.v); return [null, `max ${usd(sv.length ? Math.max(...sv) : null)}`]; },
-    inner: () => {
-      const [a, b] = P.vw(), len = b - a, X = (u) => ((u - a) / len) * Wd;
-      let g = '', nr = '';
-      for (const x of bars) {
-        const u0 = U(x.a), u1 = U(x.b);
-        if (u1 < a || u0 > b) continue;
-        const x0 = X(u0), full = X(u1) - x0, bw = Math.max(0.4, full - Math.min(1, full * 0.25));
-        if (isNum(x.v)) { if (x.v > 0) g += `<rect x="${x0.toFixed(2)}" y="${(Ht - (x.v / mx) * Ht).toFixed(1)}" width="${bw.toFixed(2)}" height="${((x.v / mx) * Ht).toFixed(1)}" fill="#16C784"/>`; }
-        else nr += `<rect class="unread" x="${x0.toFixed(2)}" y="0" width="${Math.max(0.6, full).toFixed(2)}" height="${Ht}" fill="url(#nr-${id})"/>`;
+      const t = T0 + u * unit, sl = slots.find((q) => q.a <= t && t < q.b);
+      if (!sl) return null;
+      const z = seen(), med = z.med, gap = (sl.b - sl.a) / unit > 1.5, vv = valOf(sl), xm = isNum(vv) && isNum(med) && med > 0 ? ` · <b>${xMed(vv / med)}</b> the median` : '';
+      const one = (x, e, lead) => `${lead}${!x ? `${DASH} no row (before it existed)` : isNum(x.v) ? `${x.s === 'e' ? '≈ ' : ''}<b>${usd(x.v)}</b> <span class="q">${fcSrc(x)}${x.s === 'g' ? (hr ? ' an hour' : ' a day') : ''}</span>${x.u ? '<br>⚠ <b>unconfirmed</b>: no matching trading volume found yet' : ''}` : `${DASH} (not read)`}`;
+      let h = `<span class="tt">${!hr && !gap ? dayName(sl.a) : spanTxt(sl.a, sl.b)}</span>`;
+      if (mode === 'this') { const x = sl.x[0]; h += one(x, pools[0], 'LP fees ') + xm; }
+      else {
+        const tt = tot(sl);
+        if (mode === 'pair') h += `whole pair <b>${isNum(tt.v) ? usd(tt.v) : DASH}</b>${isNum(tt.v) ? xm : ` · <span class="q">${tt.un} pool${tt.un === 1 ? '' : 's'} not read${tt.k ? `, the others ${usd(tt.part)}` : ''}</span>`}<br>`;
+        h += sl.x.map((x, k) => one(x, pools[k], `<i class="sw" style="background:${pools[k].col}"></i>${fcName(pools[k].q)}${pools[k].q.id === p.id ? ' this' : ''} `)).join('<br>');
+        if (mode === 'tiers') h += xm ? `<br><span class="q">this pool</span>${xm}` : '';
       }
-      return `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" aria-hidden="true">`
-        + (nr ? `<defs><pattern id="nr-${id}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.32)"/></pattern></defs>${nr}` : '') + g + '</svg>'
+      return { u: (U(sl.a) + U(sl.b)) / 2, h };
+    },
+    caps: () => { const z = seen(); return [null, `max ${usdT(z.sv.length ? z.hi : null)}`, `typical ${word} (median) ${usdT(z.med)}`]; },
+    inner: () => {
+      const [a, b] = P.vw(), len = b - a, X = (u) => ((u - a) / len) * Wd, z = seen(), sc = scaleOf(z.sv), Y = sc.Y;
+      let g = '', nr = '', grid = '', uc = new Set();
+      for (const k of sc.ticks) grid += `<line class="grid" x1="0" x2="${Wd}" y1="${k.y.toFixed(1)}" y2="${k.y.toFixed(1)}" stroke="#1E2731" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+      const rect = (x0, w, y1, y0, col, s, u) => { // one bar or stack piece from y0 (lower) up to y1
+        if (!(y0 - y1 > 0.05)) return '';
+        if (u) uc.add(col);
+        return `<rect class="b-${s || 'x'}${u ? ' uc' : ''}" x="${x0.toFixed(2)}" y="${y1.toFixed(2)}" width="${w.toFixed(2)}" height="${(y0 - y1).toFixed(2)}" fill="${u ? `url(#uc-${id}-${col.slice(1)})` : col}"${s === 'e' ? ' fill-opacity=".38"' : ''}${u ? ` stroke="${col}" stroke-width="1" vector-effect="non-scaling-stroke"` : ''}/>`;
+      };
+      for (const sl of z.sv) {
+        const x0 = X(U(sl.a)), full = X(U(sl.b)) - x0, bw = Math.max(0.4, full - Math.min(1, full * 0.25));
+        if (mode === 'pair') { // stacked: each pool's piece on the ones before it; a pool not read hatches the rest of the column
+          let cum = 0, un = false;
+          sl.x.forEach((x, k) => {
+            if (!x) return;
+            if (!isNum(x.v)) { un = true; return; }
+            if (x.v > 0) { const y0 = cum > 0 ? Y(cum) : Ht; cum += x.v; g += rect(x0, bw, Y(cum), y0, pools[k].col, x.s, x.u); }
+          });
+          if (un) nr += `<rect class="unread" x="${x0.toFixed(2)}" y="0" width="${Math.max(0.6, full).toFixed(2)}" height="${(cum > 0 ? Y(cum) : Ht).toFixed(2)}" fill="url(#nr-${id})"/>`;
+        } else {
+          const k = sl.x.length, sw = bw / k;
+          sl.x.forEach((x, i) => {
+            if (!x) return;
+            if (!isNum(x.v)) { nr += `<rect class="unread" x="${(x0 + i * sw).toFixed(2)}" y="0" width="${Math.max(0.6, k === 1 ? full : sw).toFixed(2)}" height="${Ht}" fill="url(#nr-${id})"/>`; return; }
+            if (x.v > 0) g += rect(x0 + i * sw, Math.max(0.3, k === 1 ? bw : sw - Math.min(0.6, sw * 0.15)), Y(x.v), Ht, pools[i].col, x.s, x.u);
+          });
+        }
+      }
+      const med = z.med, my = isNum(med) && med > 0 ? Y(med) : null;
+      const defs = `<pattern id="nr-${id}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.32)"/></pattern>`
+        + [...uc].map((c) => `<pattern id="uc-${id}-${c.slice(1)}" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="5" height="5" fill="${c}" fill-opacity=".18"/><rect width="2" height="5" fill="${c}"/></pattern>`).join('');
+      return `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" aria-hidden="true"><defs>${defs}</defs>${grid}${nr}${g}`
+        + (my != null ? `<line class="median" x1="0" x2="${Wd}" y1="${my.toFixed(1)}" y2="${my.toFixed(1)}" stroke="#E6EDF3" stroke-dasharray="4 3" stroke-width="1" vector-effect="non-scaling-stroke"/>` : '') + '</svg>'
         + pzEnds(-a / len, (b - N) / len, 'START', 'NOW');
     },
   });
-  P.label = `${plain(label)}: bars over the last ${Math.max(1, Math.round((t1 - t0) / D))} days`;
-  return `<div class="dsec chartbox" data-chartbox="${id}"><div class="pane-title"><span class="lbl">${head}</span>${pzCapsHtml(id)}${ztools(id, pool)}</div>${pzShell(id, 'pz-bars')}</div>`;
+  P.label = `LP fees per ${word}, ${plain(ttl)}: bars over ${Math.max(1, Math.round((T1 - T0) / D))} days on a ${fcLog() ? 'log' : 'linear'} dollar scale, the median dashed`;
+  const has = (f) => slots.some((sl) => sl.x.some((x) => x && f(x)));
+  const seg = (act, items, on, lab) => `<div class="seg pills fcs" role="group" aria-label="${lab}">${items.map(([k, t]) => `<button type="button" data-act="${act}" data-v="${k}" aria-pressed="${k === on}"><span>${t}</span></button>`).join('')}</div>`;
+  const len = P.span(), zc = hr ? '' : FC_ZC.filter(([d]) => !d || d < N * 0.97).map(([d, t]) => [String(d), t]);
+  const zOn = hr ? '' : (FC_ZC.find(([d]) => d && d < N * 0.97 && Math.abs(len - d) / d < 0.04) || [Math.abs(len - N) / N < 0.02 ? 0 : -1])[0];
+  const ctl = `<div class="fc-ctl">${!hr && peers.length ? seg('fmode', FC_MODES, mode, 'Which pools the bars are for') : ''}${seg('fscale', [['lin', 'linear'], ['log', 'log']], fcLog() ? 'log' : 'lin', 'Dollar scale')}${zc ? seg('fzc', zc, String(zOn), 'Days shown') : ''}</div>`;
+  const prog = yp && (isNum(yp.exact) || isNum(yp.age)) ? (() => { const ex = isNum(yp.exact) ? yp.exact : 0, age = isNum(yp.age) ? yp.age : null;
+    return `<p class="fc-prog"><span>exact <b>${int(ex)}</b>${age ? ` of <b>${int(age)}</b>` : ''} days${isNum(yp.est) && yp.est ? ` · ${int(yp.est)} estimated` : ''}${age ? '' : ' · start not known'}${yp.dyn ? ' · estimates at today’s dynamic fee' : ''}</span>${age ? `<i class="fc-pb" role="img" aria-label="${int(ex)} of ${int(age)} days exact"><i style="width:${clamp((ex / age) * 100, 0, 100).toFixed(1)}%"></i></i>` : ''}</p>`; })() : '';
+  const leg = `<div class="legend fc-leg">${mode !== 'this' ? pools.map((e) => `<span><i class="sw" style="background:${e.col}"></i>${chainMark(e.q.chain)}${fcName(e.q)}${e.q.id === p.id ? ' this' : ''}</span>`).join('') : ''}`
+    + (has((x) => x.s === 'x' || x.s === 'g') ? '<span><i class="sw fc-x"></i>exact</span>' : '') + (has((x) => x.s === 'e') ? '<span><i class="sw fc-e"></i>estimated (volume × fee)</span>' : '')
+    + (has((x) => x && !isNum(x.v)) ? termB('unread', `<span><i class="sw hatch"></i>${DASH} not read</span>`) : '') + (has((x) => x.u) ? '<span class="fc-uc"><i class="sw fc-u"></i>⚠ unconfirmed: no matching volume found yet</span>' : '')
+    + `<span><i class="sw fc-m"></i><span class="pz-cap3">${esc(P.caps()[2])}</span></span></div>`;
+  return `<div class="dsec chartbox fc" data-chartbox="${id}" data-fc="${mode}"><div class="pane-title"><span class="lbl fc-t">${head}${isNum(T0) ? ' · ' + Math.max(1, Math.round((T1 - T0) / D)) + ' d' : ''} · <b>${ttl}</b></span><span class="lbl pz-cap2">${esc(P.caps()[1])}</span>${ztools(id, p.id)}</div>`
+    + ctl + `<div class="fcw"><div class="yax" data-yax="${id}" aria-hidden="true" style="height:${Ht}px">${P.yax()}</div><div class="fcp">${pzShell(id, 'pz-bars')}</div></div>` + leg + prog + '</div>';
+}
+function fcSet(act, v) { // the switches: which pools, the scale (kept on this device), the days shown
+  const id = 'd-day';
+  if (act === 'fscale') { store.set('lps.flog', v === 'log' ? '1' : '0'); renderDetail(); return; }
+  const P = PZ[id];
+  if (act === 'fmode') { S.fwant = P ? P.span() : null; S.fmode = v; renderDetail(); }
+  else if (act === 'fzc' && P) { const d = +v; pzStop(id); (S.zoom ||= {})[id] = d ? clamp(Math.log2(P.n / d), 0, P.zr()[1]) : 0; if (S.pan) delete S.pan[id]; renderDetail(); }
+  const b = $(`#sheet-body [data-act="${act}"][data-v="${v}"]`); if (b) b.focus({ preventScroll: true });
 }
 function renderDetail() {
   const p = poolById(S.detail);
@@ -3717,8 +3885,8 @@ function renderDetail() {
     ['Volume', (x) => usd(x.volUsd)], ['LP fees', (x) => usd(x.lpFeesUsd)], ['Protocol fees', (x) => usd(x.protocolFeesUsd)],
     ['Swaps', (x) => int(x.swaps)], ['Traders', (x) => int(x.traders)], ['σ / day', (x) => pct(x.sigma, { dp: 1 })], ['Range', (x) => rangeTxt(x.range)],
     ['Re-range every', (x) => (isNum(x.rerangeDays) ? x.rerangeDays.toFixed(1) + ' d' : DASH)], ['Room (in range)', (x) => usd(x.inRangeUsd)],
-    ['Fee APR', (x) => pct(x.feeApr)], ['LVR', (x) => pct(x.lvr)], ['Re-centre swaps', (x) => pct(x.swapCost)], ['Gas', (x) => pct(x.gas)],
-    ['Net APR', (x) => pct(x.net)], ['Edge', (x) => times(x.edge)], ['Aggregator APR', (x) => pct(x.aggApr)],
+    ['Fee APR', (x) => aprPd(x.feeApr, { block: true })], ['LVR', (x) => aprPd(x.lvr, { block: true })], ['Re-centre swaps', (x) => aprPd(x.swapCost, { block: true })], ['Gas', (x) => aprPd(x.gas, { block: true })],
+    ['Net APR', (x) => aprPd(x.net, { block: true })], ['Edge', (x) => times(x.edge)], ['Aggregator APR', (x) => aprPd(x.aggApr, { block: true })],
     ['Parked (avg)', (x) => pct(x.parkedAvg)], ['Stranded share', (x) => pct(x.strandedShare)], ['Markout ÷ fee', (x) => (isNum(x.markout) ? x.markout.toFixed(2) : DASH)],
     ['Gem now', (x) => (p.verified === false ? 'never (unverified)' : x.gem && isNum(x.gem.total) ? String(x.gem.total) : DASH)],
   ];
@@ -3745,9 +3913,9 @@ function renderDetail() {
     ['Token 0', tok(p.t0)], ['Token 1', tok(p.t1)],
   ];
   const lq = liqChart(p, w, 'liq-detail');
-  $('#sheet-body').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · ${term('logscale', 'log')} · <span class="pz-cap1">${liqCap('liq-detail')}</span></span>${ztools('liq-detail', p.id)}</div>${lq}</div>` // the shape first
+  $('#sheet-main').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · ${term('logscale', 'log')} · <span class="pz-cap1">${liqCap('liq-detail')}</span></span>${ztools('liq-detail', p.id)}</div>${lq}</div>` // the shape first
     + `<div class="best-head"><div class="grow"><div class="tags">${tagsHtml(p, wk, false, true)}</div>`
-    + `<p class="sentence" style="margin-top:8px">${w ? `${WIN_WORD[wk]} ${term('net', 'net APR')} <b class="${w.net < 0 ? 'neg' : ''}">${pct(w.net)}</b> at ${usdFull(L.ticket)} · fees ${pct(w.feeApr)} · ${term('lvr', 'LVR')} ${pct(w.lvr)}.` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
+    + `<p class="sentence lead" data-lead style="margin-top:8px">${w ? `${leadLine(w)} · ${term('net', 'net APR')} ${WIN_LABEL[wk]}` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + (w ? `<div class="dsec"><span class="lbl">Breakdown · ${WIN_LABEL[wk]}</span>${breakdown(w)}</div>` : '')
     + `<div class="dsec"><span class="lbl">Every window</span>${wt}</div>`
     + `<div class="dsec">${dailyStrip(p, w, 'daily-detail')}</div>`
@@ -3755,8 +3923,8 @@ function renderDetail() {
     + (gem && ((gem.warnings || []).length || (gem.missing || []).length) ? `<div class="dsec"><span class="lbl">Warnings and missing inputs</span><ul class="plain">${(gem.warnings || []).map((x) => `<li>${esc(x)}</li>`).join('')}${(gem.missing || []).map((x) => `<li>${esc(x)} not read</li>`).join('')}</ul></div>` : '')
     + (w && Array.isArray(w.lenses) && w.lenses.length ? `<div class="dsec"><span class="lbl">Lenses</span><div class="tags">${w.lenses.map((l) => `<span class="tag">${esc(LENS_NAME[l] || l)}</span>`).join('')}</div></div>` : '')
     + `<div class="minis">${miniLine(w && w.spark && w.spark.px, `Price · ${WIN_LABEL[wk]} · log`, true, 'd-px', p.id, w && { t1: L.t, span: w.days * D, r: w.range, unit: p.t0 && p.t1 ? p.t1.sym + ' per ' + p.t0.sym : '' })}${miniBars(w && w.spark && w.spark.fees, `LP fees · ${WIN_LABEL[wk]}`, 'd-fees', p.id, w && { t1: L.t, span: w.days * D })}`
-    + (hist && Array.isArray(hist.h) ? rateBars(hist.h, 3, H, 'LP fees per hour', 'd-hr', p.id) : '')
-    + (hist && Array.isArray(hist.d) ? rateBars(hist.d, 2, D, 'LP fees per day', 'd-day', p.id) : '') + '</div>'
+    + '</div>' + (hist && Array.isArray(hist.h) ? feeChart(p, 'd-hr') : '')
+    + (hist && (Array.isArray(hist.y) || Array.isArray(hist.d)) ? feeChart(p, 'd-day') : '')
     + `<div class="dsec"><span class="lbl">Checks</span>${checksLine(p).replace('class="checks"', 'class="checks" style="margin:0;border:0;padding:0"')}</div>`
     + `<div class="dsec"><span class="lbl">Pool facts</span><dl class="facts">${facts.map(([k, v]) => `<dt>${FACT_TERM[k] ? term(FACT_TERM[k], esc(k)) : esc(k)}</dt><dd>${v}</dd>`).join('')}</dl></div>`;
   liqDeclutter('liq-detail');
@@ -3860,7 +4028,6 @@ function onScroll() {
     const t = $('#totop');
     if (t.classList.contains('on') !== on) t.classList.toggle('on', on);
     stickySync();
-    sheetFold();
   });
 }
 function toTop() {
@@ -3873,32 +4040,15 @@ addEventListener('scroll', onScroll, { passive: true });
 $('#sheet-body').addEventListener('scroll', onScroll, { passive: true });
 
 // ---------- sheets: swipe down to close on a phone ----------
-// From the grab handle or the header, or anywhere in the content once it is scrolled to the top: the sheet follows the
+// Only from the grab handle or the header row (v0.4.7: never from the content, even at its top: a downward drag there
+// scrolls or rubber-bands, so a chart can't be dragged away): the sheet follows the
 // finger down (a little give upwards), closes past a quarter of its height or on a quick flick, else springs back.
 // A sideways or upward swipe stays the content's own scroll. Under reduced motion it closes or settles at once.
 const SW = { on: false, off: 0 };
 const sheetCard = $('#sheet .sheet-card'), sheetScrim = $('#sheet .scrim'), sheetBody = $('#sheet-body');
 const phoneSheet = () => matchMedia('(max-width:700px)').matches;
-// the panel's top (its kicker, the pool's meta line and the similar-pools strip) folds away while the content scrolls
-// down and opens again on the way back up or at the top; the content slides instead of jumping
-let foldY = 0, foldAcc = 0, foldLock = 0;
-function foldSet(on) {
-  const head = $('#sheet .sheet-head'), h0 = head.offsetHeight;
-  sheetCard.classList.toggle('cond', on);
-  const d = h0 - head.offsetHeight;
-  foldLock = Date.now() + 280; foldAcc = 0;
-  if (d && !reduced()) sheetBody.animate([{ transform: `translateY(${d}px)` }, { transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' });
-}
-function sheetFold() {
-  if ($('#sheet').hidden) return;
-  const y = sheetBody.scrollTop, dy = y - foldY, cond = sheetCard.classList.contains('cond');
-  foldY = y;
-  if (Date.now() < foldLock) return;
-  if (y <= 2) { foldAcc = 0; if (cond) foldSet(false); return; }
-  foldAcc = Math.sign(dy) === Math.sign(foldAcc) ? foldAcc + dy : dy;
-  if (!cond && foldAcc > 24 && y > 48 && sheetBody.scrollHeight - sheetBody.clientHeight > 320) foldSet(true);
-  else if (cond && foldAcc < -40) foldSet(false);
-}
+// v0.4.7: the panel's top no longer folds (the owner's iPhone: a top that changed height under the finger made the
+// scroll jump); it is one slim row of a fixed height, and everything else scrolls as plain content
 function sheetReset() { for (const a of sheetCard.getAnimations()) if (a.id === 'swipe') a.cancel(); sheetCard.style.transform = ''; sheetScrim.style.opacity = ''; sheetCard.classList.remove('swiping'); SW.off = 0; }
 function sheetFollow(dy) {
   const off = dy > 0 ? dy : -Math.min(24, Math.sqrt(-dy) * 2.5); // rubber band upwards
@@ -3919,9 +4069,7 @@ function sheetRelease(v) { // v: px per ms, downwards positive
 sheetCard.addEventListener('touchstart', (e) => {
   SW.on = false;
   if (e.touches.length !== 1 || !phoneSheet() || e.target.closest('input, select, textarea')) return;
-  const head = !!e.target.closest('.grab, .sheet-head'), list = e.target.closest('.sim-list');
-  if (!head && sheetBody.scrollTop > 0) return;
-  if (list && list.scrollTop > 0) return; // the similar-pools list scrolls back up first
+  if (!e.target.closest('.grab, .sheet-head')) return; // the content always scrolls
   const t = e.touches[0];
   Object.assign(SW, { on: true, drag: false, x0: t.clientX, y0: t.clientY, off: 0, s: [[t.clientY, e.timeStamp]] });
 }, { passive: true });
@@ -4097,9 +4245,9 @@ function gasPop() {
 function mkt(x) { if (!isNum(x) || x <= 0) return DASH; return x >= 1e4 ? '$' + (x / 1e3).toFixed(1) + 'K' : x >= 1000 ? '$' + Math.round(x).toLocaleString('en-US') : x >= 100 ? '$' + Math.round(x) : '$' + x.toFixed(2); }
 function pxChip(c, q0) {
   const q = q0 || {}, ch = isNum(q.ch24) ? q.ch24 : null, dir = ch == null ? 'na' : ch > 0 ? 'up' : ch < 0 ? 'dn' : 'na';
-  const src = q.src === 'defillama' ? ' · DefiLlama' : q.src === 'coingecko' ? ' · CoinGecko' : '';
+  const SRC = { defillama: 'DefiLlama', coinbase: 'Coinbase', coingecko: 'CoinGecko' }, src = SRC[q.src] ? ' · ' + SRC[q.src] : '';
   const ttl = `${c} ${isNum(q.usd) ? '$' + q.usd.toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'not read'} · 24 h ${ch == null ? 'not read' : pct(ch, { sign: true, dp: 2 })}${src}`;
-  return `<span class="px" data-c="${c}" title="${esc(ttl)}"><b>${c}</b><span class="v">${mkt(q.usd)}</span><i class="${dir}">${ch == null ? DASH : (ch > 0 ? '▲' : ch < 0 ? '▼' : '') + pct(Math.abs(ch), { dp: 1 })}</i></span>`;
+  return `<span class="px" data-c="${c}" title="${esc(ttl)}"><b>${c}</b><span class="v">${mkt(q.usd)}</span><i class="${dir}">${ch == null ? DASH : (ch > 0 ? '▲' : ch < 0 ? '▼' : '') + pct(Math.abs(ch), { dp: 1 })}</i>${q.src === 'coinbase' ? `<span class="ps" title="Price from Coinbase (DefiLlama didn’t have it)"><span class="l">coinbase</span><span class="s" aria-hidden="true">cb</span></span>` : ''}</span>`;
 }
 function renderStrip() {
   const el = $('#mstrip');
@@ -4140,7 +4288,7 @@ function armNext() { // pick the next pass up soon after it lands, besides the o
 
 // ---------- mini cards: the favourites strip and the similar-pools strip share them ----------
 const SIM_M = [
-  ['net APR', (p, w) => w && w.net, (x) => pct(x)],
+  ['net APR', (p, w) => w && w.net, (x) => aprPd(x, { block: true })],
   ['volume / day', (p, w) => (w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : null), (x) => usd(x)],
   ['gem', (p) => (p.verified === false ? null : gemOf(p)), (x) => (isNum(x) ? String(x) : DASH)],
   ['TVL', (p) => p.tvlUsd, (x) => usd(x)],
@@ -4431,6 +4579,7 @@ document.addEventListener('click', (e) => {
     case 'flash': flStart(el.dataset.id, false); break;
     case 'flash-open': if (el.dataset.id) { openDetail(el.dataset.id, el); flStart(el.dataset.id, false); } break;
     case 'feehist': feeJump(); break;
+    case 'fmode': case 'fscale': case 'fzc': fcSet(el.dataset.act, el.dataset.v); break;
     case 'pan': pzStep(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'totop': toTop(); break;
     case 'openchart': openChart(el.dataset.chart, el.dataset.pool); break;
