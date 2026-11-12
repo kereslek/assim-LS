@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-09ijvlNegTmThm1UWTvEggl6HiqHxW/WylHuAwV/XOM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-frQwVb/7pxTxPPIVtTybAocf6obNBEYJVKjwx6IDgtI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -244,6 +244,8 @@ button.tile:hover{border-color:var(--line3)}
 .apr{min-width:56px;flex:none;text-align:right;font:700 14px/1.1 var(--mono);font-variant-numeric:tabular-nums}
 .pd{color:var(--muted);font-weight:500;white-space:nowrap}
 .pd.blk{display:block;margin-top:2px;font:500 10px/1.2 var(--mono);letter-spacing:0}
+.pd .pds{display:none}
+@media (max-width:400px){#all-tbl .pd .pdu{display:none}#all-tbl .pd .pds{display:inline}} /* Pool, Gem, Net APR and Why fit a 360 px phone */
 .lead{margin:6px 0 0;font:500 13px/1.45 var(--sans);color:var(--fg2)}
 .lead b{color:var(--fg);font-weight:700}.lead b.neg{color:var(--neg)}
 .big .pd{font-size:12px}
@@ -1068,7 +1070,8 @@ const int = (n) => (isNum(n) ? Math.round(n).toLocaleString('en-US') : DASH);
 const ticketUsd = () => (S.live && isNum(S.live.ticket) && S.live.ticket > 0 ? S.live.ticket : null);
 const perDay = (apr) => (isNum(apr) && ticketUsd() ? (apr * ticketUsd()) / 365 : null);
 const pdTxt = (apr) => { const v = perDay(apr); return isNum(v) ? usd(v) + '/day' : DASH; };
-const aprPd = (apr, o = {}) => (!isNum(apr) ? DASH : `<span class="apr-v" data-apr="${isNum(apr) ? apr : ''}">${pct(apr, o)}</span><span class="pd${o.block ? ' blk' : ''}">${o.block ? '' : ' ('}${pdTxt(apr)}${o.block ? '' : ')'}</span>`);
+const aprPd = (apr, o = {}) => (!isNum(apr) ? DASH : `<span class="apr-v" data-apr="${apr}">${pct(apr, o)}</span>`
+  + (o.block ? `<span class="pd blk">${isNum(perDay(apr)) ? `${usd(perDay(apr))}<span class="pdu">/day</span><span class="pds">/d</span>` : DASH}</span>` : `<span class="pd"> (${pdTxt(apr)})</span>`)); // a narrow phone's table: "/d"
 // the lead line: what the example ticket earns a day, then the yearly rate
 const leadLine = (w) => (w ? `At ${usdFull(ticketUsd())}: fees ≈ <b>${pdTxt(w.feeApr)}</b> · ${term('lvr', 'LVR')} <b>${pdTxt(isNum(w.lvr) ? -w.lvr : null)}</b> · net ≈ <b class="${w.net < 0 ? 'neg' : ''}">${pdTxt(w.net)}</b> (${pct(w.net)} a year)` : '');
 const usdFull = (x) => (isNum(x) ? '$' + int(x) : DASH); // the ticket reads "$1,000", never "$1.0K"

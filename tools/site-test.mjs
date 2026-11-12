@@ -2315,9 +2315,10 @@ async function testFold(browser) {
     await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(100);
     const bb = await p.locator('#sheet-body').boundingBox(), seq = [];
     await p.mouse.move(bb.x + bb.width / 2, bb.y + Math.min(300, bb.height / 2));
-    for (let i = 0; i < 8; i++) { await p.mouse.wheel(0, 90); await sleep(60); seq.push(await p.evaluate(() => [document.querySelector('#sheet-body').scrollTop, Math.round(document.querySelector('#sheet .sheet-head').getBoundingClientRect().height)])); }
+    const push = async () => { try { await p.mouse.wheel(0, 90); } catch (e) { await p.evaluate(() => document.querySelector('#sheet-body').scrollBy({ top: 90, behavior: 'smooth' })); } }; // mobile WebKit has no wheel: a smooth scroll
+    for (let i = 0; i < 8; i++) { await push(); await sleep(60); seq.push(await p.evaluate(() => [document.querySelector('#sheet-body').scrollTop, Math.round(document.querySelector('#sheet .sheet-head').getBoundingClientRect().height)])); }
     await sleep(300);
-    ok(`slim ${tag}: the wheel scrolls the content evenly down, never back (${seq.map((x) => Math.round(x[0])).join(',')}), the top unchanged`, seq.every((x, i) => !i || x[0] >= seq[i - 1][0] - 0.5) && seq[seq.length - 1][0] > 200 && new Set(seq.map((x) => x[1])).size === 1, JSON.stringify(seq));
+    ok(`slim ${tag}: the wheel (or a smooth scroll) moves the content evenly down, never back (${seq.map((x) => Math.round(x[0])).join(',')}), the top unchanged`, seq.every((x, i) => !i || x[0] >= seq[i - 1][0] - 0.5) && seq[seq.length - 1][0] > 200 && new Set(seq.map((x) => x[1])).size === 1, JSON.stringify(seq));
     if (SHOTS && tag === 'phone') { await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 520; }); await sleep(200); await p.screenshot({ path: path.join(SHOTS, 'slim-phone-scrolled.png') }); }
     // the pair view: the same slim top
     await p.click('#sheet-close'); await sleep(120);
