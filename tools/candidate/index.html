@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-EIf1LnZpV5TondGN9XYAmculY4bOk5vM+meI8S/5t+s='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WKtNlFxtLvsxC3yWSv4/gOXszmkV9TOjfrFZPdyMF0w='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2802,10 +2802,11 @@ function tipHover() {
   if (host && !t.closest('button') && PZ[host.dataset.pz]) { tipAt(host, e.clientX, e.clientY, false); return; }
   const fm = miniUnder(t, e.clientX, e.clientY);
   if (fm) { miniTip(fm, e.clientX, e.clientY, false); return; }
-  if (TIP.host || TIP.mini) tipHide();
+  if ((TIP.host || TIP.mini) && !TIP.pin) tipHide(); // a note a finger left stays until a tap elsewhere, Esc or a scroll
 }
+document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') TIP.touchAt = e.timeStamp; }, { capture: true, passive: true });
 document.addEventListener('pointermove', (e) => {
-  if (e.pointerType !== 'mouse') return;
+  if (e.pointerType !== 'mouse' || e.timeStamp - (TIP.touchAt || -1e9) < 900) return; // a phone's mouse events after a touch are not a hover
   if (e.buttons || G || PIN) { if (G && G.drag && TIP.host) tipHide(); return; }
   TIP.ev = e;
   if (!TIP.raf) TIP.raf = requestAnimationFrame(tipHover);
@@ -4451,7 +4452,7 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.target && e.target.id === 'f-q') { qKey(e); if (e.defaultPrevented) return; }
-  if (e.key === 'Escape' && (TIP.host || TIP.mini)) { const pin = TIP.pin; tipHide(); if (pin) return; } // a note a finger left: Esc closes it first
+  if (e.key === 'Escape' && (TIP.host || TIP.mini)) tipHide(); // and whatever else Esc closes
   if (e.key === 'Escape' && S.popFor) { const a = S.popFor; popClose(); a.focus({ preventScroll: true }); return; }
   if (e.key === 'Escape' && !$('#sheet').hidden) { closeDetail(); return; }
   const tab = e.target.closest && e.target.closest('[role="tab"]');
