@@ -200,12 +200,20 @@ Check ids in `health.checks` (each across every chain scanned: false if any chai
   pools: { "<id>": { h: [[t, price, liquidity, lpFeesUsd, parked]],    // hourly, last 14 days (≤ 337 rows)
                      d: [[t, price, lpFeesUsd, volUsd, parked]],       // daily, last 90 days (≤ 91 rows)
                      y: [[t, feesUsd, src]],                           // the fee history: one row a UTC day, up to 365
-                     yp: { exact, est, age, dyn } } },                 //   days (yesterday last), and its progress
+                     yp: { exact, est, age, dyn },                     //   days (yesterday last), and its progress
+                     u: { d: [t], y: [t] } } },                         // unconfirmed fee spikes (absent when none)
   health: [[t, okPasses, passes, unread]]                              // hourly, last 7 days
 }
 ```
 
 Built by `lib/charts.mjs` from `snapshots.json`, one row per stored snapshot row, ascending by `t` (the row's own time: a pass time, or a backfilled block's timestamp). `price` = token1 per token0 (8 significant digits); `liquidity` = the pool's active liquidity (8 significant digits); `parked` 0..1 (4 decimals). `lpFeesUsd` = the pool's LP fees **from the row before to this one** (fee growth × the interval's liquidity, at the pass's token prices), `volUsd` = those fees ÷ the LP fee rate. Rows are not always exactly an hour or a day apart (a gap the backfill has not filled yet, or a row a few minutes off its mark), so a chart of fees per hour or per day divides by the gap to the row before. `null` = unread: the first row, a row whose counters were not read and the row after it. A pool's rows start where its data starts: hours and days before the pool existed have **no row at all** (absent, never a 0 row), and a pool younger than the span simply has fewer rows. Size, sealed, for about 100 pools: about 0.55 MB with 7 and 30 days, about 1.1 MB with 14 and 90 (made-up data of the same shape; 60 days instead of 90 would save under 10%, the 14 days of hours are most of it).
+
+### Unconfirmed fee spikes: `u` (12 Nov 2026)
+
+A day at **20× its 30-day median** or more (the median of the other rows' fees per day within 15 days either side, at least 5 of them; a day under $10 is never one) is shown as real only when the day's traded volume backs it: GeckoTerminal's day candles (the `gt` cache) × the LP fee rate over the row's own span must reach at least a quarter of the counters' figure (`lib/spikes.mjs`). Otherwise the row's `t` is listed in `u`, and the page marks the bar **unconfirmed**: never shown silently as checked.
+- `u.d`: `t` of `d` rows (the row's fees are per its span, so a gap row is judged per day, never as one day); `u.y`: `t` of exact (`'x'`) `y` days. Estimated days are the volume itself and are not judged. `u` is absent when nothing is listed; a pool with no candles read yet lists every spike it has.
+- Public log, counts only: `fee spikes: N days at 20× … M backed by the day's volume, K marked unconfirmed in P pools`.
+- Why (diag run 43303357358, 12 Nov 2026): the UNI/WETH 1% days the owner doubted (26 and 27 Sep, about 900× and 1,200× their median) were real: the rows re-read the same at archive nodes, their block times matched, and that day's 81 and 113 swaps carried exactly the fees the counters show (ratio 1.00). The rule makes the page say so, or say "unconfirmed", instead of leaving it to trust.
 
 ### The fee history: `y` and `yp` (the owner's option C, 8 Nov 2026)
 

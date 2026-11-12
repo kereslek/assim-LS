@@ -80,10 +80,10 @@ say(`scan d by date (days with 2+ pools): ${[...byDay].filter(([, v]) => v >= 2)
 for (const id of targets) {
   const h = hist.pools[id];
   const rr = rowRates((h?.d || []).map((r) => [r[0], r[2]]));
-  const sp = spikes(rr, { k: 0 }).sort((a, b) => b.ratio - a.ratio).slice(0, 5);
+  const sp = spikes(rr, { k: 0, minUsd: 0 }).sort((a, b) => b.ratio - a.ratio).slice(0, 5);
   say(`target d rows: ${h?.d?.length ?? 0}, read ${rr.filter((r) => isNum(r.rate)).length}; spans over 28 h ${rr.filter((r) => r.span > 28 * 3600e3).length}; worst days: ${sp.map((s) => `${bar(s)} ${r1(s.ratio)}× (span ${r1(s.span / 3600e3)} h)`).join(', ')}`);
   const yx = (h?.y || []).filter((r) => r[2] === 'x');
-  const ys = spikes(yx.map((r) => ({ t: r[0], span: DAY, rate: r[1] })), { k: 0 }).sort((a, b) => b.ratio - a.ratio).slice(0, 3);
+  const ys = spikes(yx.map((r) => ({ t: r[0], span: DAY, rate: r[1] })), { k: 0, minUsd: 0 }).sort((a, b) => b.ratio - a.ratio).slice(0, 3);
   say(`target y: ${h?.y?.length ?? 0} rows (${yx.length} exact); worst exact days: ${ys.map((s) => `${day(s.t)} ${r1(s.ratio)}×`).join(', ') || 'none'}`);
   for (const s of sp.filter((x) => x.ratio >= 5)) if (!found.some((f) => f.id === id && f.tier === 'd' && f.t === s.t)) found.push({ id, tier: 'd', ...s });
 }

@@ -43,6 +43,7 @@ import { FEEHIST, DEEP_RANK, deepMoments, foldDeep, feeYear, fetchVolumes, packG
 import { allWindows, gemWarnings, isHooked } from '../lib/windows.mjs';
 import { buildPairs } from '../lib/pairs.mjs';
 import { historyRows } from '../lib/charts.mjs';
+import { feeSpikes } from '../lib/spikes.mjs';
 import { CHAINS, CHAIN_IDS, timeOfBlock, blockAtTime, blocksBack, ageOfBlocksBack, chainOn } from '../lib/chains.mjs';
 import { classifySwaps, retailShare, driftCorr, routingShare, sendersOf, txSample, dailyFlow, nextFlowDaily, FLOWQ } from '../lib/flowq.mjs';
 import { routerName } from '../lib/routers.mjs';
@@ -1025,7 +1026,7 @@ async function writeOutputs() {
   };
   store.put('live.json', live);
   let histWritten = false;
-  const fh = { pools: 0, exact: 0, est: 0, rows: 0, xc: [], xcPools: 0, aged: 0, full: 0, left: 0 };
+  const fh = { pools: 0, exact: 0, est: 0, rows: 0, xc: [], xcPools: 0, aged: 0, full: 0, left: 0, spikes: 0, backed: 0, uPools: 0 };
   if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/history.json`))) {
     // history.json's charts (lib/charts.mjs): 14 days hourly, 90 days daily, nothing before a pool existed
     // plus y, up to a year of daily LP fees (lib/feehist.mjs): exact from the fee counters, estimated from the day
@@ -1037,7 +1038,12 @@ async function writeOutputs() {
       const x = out.find((o) => o.id === p.id), rate = x.feeTier && x.lpKeeps ? x.feeTier * x.lpKeeps : null;
       const fy = feeYear({ series: s2, gt: gtCache.get(p.id) ?? null, now: passT,
         pool: { d0: t0.decimals, d1: t1.decimals, rate, dyn: !!x.dynamicFee, usd0: t0.usd ?? null, usd1: t1.usd ?? null, pxNow: x.price ?? null, createdAt: x.createdAt } });
-      hp[p.id] = { ...historyRows(windowSeries(s2), { d0: t0.decimals, d1: t1.decimals, usd0: t0.usd, usd1: t1.usd, rate }), y: fy.y, yp: fy.yp };
+      const hr = historyRows(windowSeries(s2), { d0: t0.decimals, d1: t1.decimals, usd0: t0.usd, usd1: t1.usd, rate });
+      // a day 20× its 30-day median or more stands only with the day's volume behind it; else it is listed in u
+      // (unconfirmed), which the page marks (lib/spikes.mjs)
+      const sp = feeSpikes({ d: hr.d, y: fy.y, gt: gtCache.get(p.id) ?? null, rate });
+      fh.spikes += sp.spikes; fh.backed += sp.backedN; if (sp.u) fh.uPools++;
+      hp[p.id] = { ...hr, y: fy.y, yp: fy.yp, ...(sp.u ? { u: sp.u } : {}) };
       fh.pools++; fh.exact += fy.yp.exact; fh.est += fy.yp.est; fh.rows += fy.y.length; fh.xc.push(...fy.xc); if (fy.xc.length) fh.xcPools++;
       if (fy.yp.age != null) { fh.aged++; fh.left += fy.yp.age - fy.yp.exact; if (fy.yp.exact === fy.yp.age) fh.full++; }
     }
@@ -1059,6 +1065,9 @@ async function writeOutputs() {
       + `deep backfill ${bf.deepRows} rows from ${bf.deepJobs} batches planned of ${bf.deepWanted} pool-days wanted (${bf.deepUnborn} before a pool existed, ${bf.deepUnread} unread, ${bf.deepBroke} left after unread ones)`;
     say(xm == null || fh.xc.length < 20 ? null : Math.abs(xm - 1) <= 0.25, 'fee history', line + (g.lastError ? `; last GeckoTerminal error ${g.lastError}` : ''));
     pub(`fee history: ${line}; ${timing['fee history volumes'] ?? 0} s for the volumes`);
+    const spl = `${fh.spikes} days at 20× their 30-day median or more (daily chart and exact fee history), ${fh.backed} backed by the day's volume, ${fh.spikes - fh.backed} marked unconfirmed in ${fh.uPools} pools`;
+    say(true, 'fee spikes', spl);
+    pub(`fee spikes: ${spl}`);
   }
   say(snapsOk ? true : false, 'sealed outputs', `live.json written with ${out.length} pools; history.json ${histWritten ? 'written' : 'kept (no new hourly row)'}; snapshots ${snapsOk ? (changed ? 'updated' : 'unchanged') : 'stored copy did not open: left as it was'}`);
 }
