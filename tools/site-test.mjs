@@ -2985,8 +2985,10 @@ async function testDates(browser, page = null) {
     const px1 = tips[tips.length - 4] || '';
     ok(`dates ${tag}: a price point's note gives the price and whether today's range holds it`, /price .*range .*(yes|no)/.test(px1), px1.slice(0, 100));
     await tipAt2('liq-detail', /liquidity/);
-    // an unread hour reads as a dash, never as 0
-    const un = await p.evaluate(() => { const r = document.querySelector('#sheet [data-pz="d-hr"] rect.unread'); if (!r) return null; r.scrollIntoView({ block: 'center' }); const b = r.getBoundingClientRect(), h = document.querySelector('#sheet [data-pz="d-hr"]').getBoundingClientRect(); return { fx: (b.left + b.width / 2 - h.left) / h.width }; });
+    // an unread hour reads as a dash, never as 0 (zoomed in, so its bar is wide enough to point at on any screen)
+    for (let k = 0; k < 3 && (await p.evaluate(() => { const b = document.querySelector('#sheet [data-act="zoom"][data-chart="d-hr"][data-dir="1"]'); if (!b || b.disabled) return false; b.click(); return true; })); k++) await sleep(80);
+    for (let k = 0; k < 12 && (await p.evaluate(() => { const h = document.querySelector('#sheet [data-pz="d-hr"]'), hr = h.getBoundingClientRect(), r = [...h.querySelectorAll('rect.unread')].find((x) => { const b = x.getBoundingClientRect(); return b.left > hr.left + 40 && b.right < hr.right - 40; }); if (r) return false; const e = h.querySelector(':scope > .pz-edge.l:not([hidden])'); if (!e) return false; e.click(); return true; })); k++) await pzSettled(p, 'd-hr');
+    const un = await p.evaluate(() => { const h0 = document.querySelector('#sheet [data-pz="d-hr"]').getBoundingClientRect(), r = [...document.querySelectorAll('#sheet [data-pz="d-hr"] rect.unread')].find((x) => { const b = x.getBoundingClientRect(); return b.left > h0.left + 40 && b.right < h0.right - 40; }); if (!r) return null; r.scrollIntoView({ block: 'center' }); const b = r.getBoundingClientRect(), h = document.querySelector('#sheet [data-pz="d-hr"]').getBoundingClientRect(); return { fx: (b.left + b.width / 2 - h.left) / h.width }; });
     if (un) { const r = await pointAt(p, 'd-hr', phone, { fx: un.fx, root: '#sheet' }); ok(`dates ${tag}: an unread hour's note says ${'—'} (not read), never $0`, r && /LP fees — \(not read\)/.test(r.txt) && !/\$0\b/.test(r.txt), JSON.stringify(r)); }
     else ok(`dates ${tag}: the pool with an unread hour shows it`, false, 'no unread bar');
     // zoomed all the way in, the hourly fees show hours; zoomed out, days

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-D49f8FjXqf+Oej4RZWZXAQI/p+jv/0bOGumIyVGOrxs='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iQfyrIi91V+nJbItqPFXMv9vwaTGZdf1stmh5LD4LuQ='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2736,7 +2736,7 @@ function tipAt(host, cx, cy, touch) {
   let cur = host.querySelector(':scope > .pz-cur');
   if (!P.tipXY) { if (!cur) { cur = document.createElement('i'); cur.className = 'pz-cur'; cur.setAttribute('aria-hidden', 'true'); host.appendChild(cur); } cur.style.left = (ax - r.left).toFixed(1) + 'px'; }
   for (const c of $$('.pz-cur')) if (c !== cur) c.remove();
-  TIP.host = host; TIP.mini = null;
+  TIP.host = host; TIP.mini = null; TIP.top = r.top;
   tipPut(res.h, ax, ay, touch);
   return true;
 }
@@ -2752,7 +2752,7 @@ function miniTip(fm, cx, cy, touch) {
   const res = fm.classList.contains('spk') ? spkTip(fm, f) : fmTip(fm, f);
   if (!res) { tipHide(); return false; }
   for (const c of $$('.pz-cur')) c.remove();
-  TIP.mini = fm; TIP.host = null;
+  TIP.mini = fm; TIP.host = null; TIP.top = r.top;
   tipPut(res.h, isNum(res.f) ? r.left + res.f * r.width : cx, touch ? r.top : cy, touch);
   return true;
 }
@@ -2771,10 +2771,17 @@ function spkTip(fm, f) {
   return { f: i / n, h: `<span class="tt">${dayHM(s.t[i])}</span>net <b>${usd(s.net[i], { sign: true })}</b> vs holding${s.fees ? ` · fees ${usd(s.fees[i])}` : ''}` };
 }
 document.addEventListener('pointerdown', () => { if (TIP.host || TIP.mini) tipHide(); }, { capture: true, passive: true });
+function tipScroll() { // a scroll that moves what the note points at puts it away (a late scroll event that moved nothing doesn't)
+  const a = TIP.host || TIP.mini;
+  if ((G && G.scrub) || (MLP && MLP.on)) return;
+  if (!a.isConnected) { tipHide(); return; }
+  const el = TIP.mini ? TIP.mini.querySelector('svg') || TIP.mini : a;
+  if (Math.abs(el.getBoundingClientRect().top - TIP.top) > 2) tipHide();
+}
 function tipHover() {
   TIP.raf = 0;
   const e = TIP.ev, t = e && e.target;
-  if (!t || !t.closest) return;
+  if (!t || !t.closest || G || PIN) return; // a press since the move: the drag decides
   const host = t.closest('.pz');
   if (host && !t.closest('button') && PZ[host.dataset.pz]) { tipAt(host, e.clientX, e.clientY, false); return; }
   const fm = miniUnder(t, e.clientX, e.clientY);
@@ -4464,7 +4471,7 @@ document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q' && e.tar
 document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q')) qClose(); }, 120); });
 document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list')) e.preventDefault(); });
 // card strips: fades follow the scroll; a pop-up note follows its control
-document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); if ((TIP.host || TIP.mini) && !(G && G.scrub) && !(MLP && MLP.on)) tipHide(); }, { capture: true, passive: true });
+document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); if (TIP.host || TIP.mini) tipScroll(); }, { capture: true, passive: true });
 for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) addEventListener(ev, () => { S.touched = true; cancelSettle(); }, { passive: true, capture: true });
 for (const ev of ['pointerdown', 'wheel', 'touchstart', 'keydown']) addEventListener(ev, (e) => { if (S.fl && !(e.target && e.target.closest && e.target.closest('[data-act="flash"]'))) flEnd(); }, { passive: true, capture: true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.key) refresh(); });
