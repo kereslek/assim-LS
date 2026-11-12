@@ -89,7 +89,15 @@ for (const id of targets) {
 }
 
 // ---- the deep check of the worst rows: their two raw rows at archive nodes -----------------------------
-const pick = [...found.filter((x) => x.tier === 'd' && targets.includes(x.id)), ...found.filter((x) => x.tier === 'd' && !targets.includes(x.id)).sort((a, b) => b.ratio - a.ratio).slice(0, 8)];
+// the worst rows of pools with a real baseline (a median of $1+ a day, a day of $10+: never printed), and a
+// sample of the dates many pools share (a systematic fault would show there)
+const real = (x) => x.base >= 1 && x.rate >= 10;
+const others = found.filter((x) => x.tier === 'd' && !targets.includes(x.id) && real(x));
+const crowd = [...byDay].filter(([, v]) => v >= 10).map(([k]) => k);
+say(`scan d with a real baseline ($1+ a day median, $10+ that day): ${others.length} days in ${new Set(others.map((x) => x.id)).size} pools; crowded dates ${crowd.join(' ') || 'none'}`);
+const pick = [...found.filter((x) => x.tier === 'd' && targets.includes(x.id)),
+  ...others.filter((x) => crowd.includes(bar(x))).slice(0, 8),
+  ...others.filter((x) => !crowd.includes(bar(x))).sort((a, b) => b.ratio - a.ratio).slice(0, 4)];
 const rpcs = new Map();
 const rpcOf = (ch) => rpcs.get(ch) || rpcs.set(ch, makeRpc(CHAINS[ch].archive, { timeout: 25000, maxRefusals: 6 })).get(ch);
 const logRpcOf = (ch) => rpcs.get(ch + ':logs') || rpcs.set(ch + ':logs', makeRpc(CHAINS[ch].rpcs.filter((u) => !CHAINS[ch].noLogs.some((x) => u.includes(x))), { timeout: 30000, maxRefusals: 6 })).get(ch + ':logs');
@@ -135,7 +143,7 @@ async function gtDay(p, t) {
     const want = Math.floor(t / DAY) * DAY / 1000;
     const c = list.find((x) => x[0] === want);
     const vols = list.filter((x) => Math.abs(x[0] - want) <= 15 * 86400 && x[0] !== want).map((x) => x[5]);
-    return { status: 'read', vol: c ? c[5] : null, med: median(vols) };
+    return { status: 'read', vol: c ? Number(c[5]) : null, med: median(vols.map(Number)), n: list.length };
   } catch (e) { return { status: cat(e) }; }
 }
 
@@ -182,9 +190,11 @@ for (const s of pick) {
       facts.push(`fee growth ÷ growth the swaps imply at their own liquidity ${gk ? r1(cUsd / gk) : '—'}`);
       facts.push(`row liquidity ÷ median swap liquidity ${Lsw.length ? r1(Number(Luse) / median(Lsw)) : '—'}`);
     }
-    if (lab === 'target') {
-      const g = await gtDay(p, b.t - DAY / 2);
-      facts.push(g.status === 'read' ? `GeckoTerminal day volume ÷ its 30-day median ${g.vol != null && g.med ? r1(g.vol / g.med) : '—'}` : `GeckoTerminal ${g.status}`);
+    if (lab === 'target' || crowd.includes(bar(s))) {
+      if (lab !== 'target') await new Promise((r) => setTimeout(r, 3000));
+      const g = await gtDay(p, a.t + 6 * 3600e3);
+      const rate = (p.feeTier ?? 0) * (p.lpKeeps ?? 0), cu = isNum(s.rate) ? s.rate : null;
+      facts.push(g.status === 'read' ? `GeckoTerminal (${g.n} candles): day volume ÷ its 30-day median ${g.vol != null && g.med ? r1(g.vol / g.med) : '—'}; volume × LP fee rate ÷ counter fees ${g.vol != null && cu ? r1((g.vol * rate) / cu) : '—'}` : `GeckoTerminal ${g.status}`);
     }
   } catch (e) { facts.push(`error: ${cat(e)}`); }
   say(`${head}; ${facts.join('; ')}`);
