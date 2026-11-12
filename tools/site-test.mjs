@@ -2890,10 +2890,16 @@ async function pointAt(p, id, phone, { fx = 0.5, fy = 0.5, root = '' } = {}) {
   const b = await p.evaluate(HOST_BOX, { id, root });
   if (!b) return null;
   const x = b.x + b.w * fx, y = b.y + b.h * fy;
-  if (phone) await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 71, x0: x, y0: y, x1: x, y1: y }] });
+  let dbg = null;
+  if (phone) {
+    const el = await p.evaluate(({ x, y }) => { const e = document.elementFromPoint(x, y); return e ? e.tagName + '.' + String(e.getAttribute('class') || '').slice(0, 24) + (e.closest('.pz') ? ' in ' + e.closest('.pz').dataset.pz : '') : null; }, { x, y });
+    await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 71, x0: x, y0: y, x1: x, y1: y }] });
+    dbg = { el, y: Math.round(y), tip0: await p.evaluate(() => !document.querySelector('#ctip').hidden), ih: await p.evaluate(() => innerHeight) };
+  }
   else { await p.mouse.move(x - 3, y); await p.mouse.move(x, y); }
   await sleep(90);
-  return p.evaluate(TIPR);
+  const r = await p.evaluate(TIPR);
+  return r || (dbg ? { dbg } : null);
 }
 async function testDates(browser, page = null) {
   const planted = page != null;
@@ -2990,7 +2996,7 @@ async function testDates(browser, page = null) {
     for (let k = 0; k < 12 && (await p.evaluate(() => { const h = document.querySelector('#sheet [data-pz="d-hr"]'), hr = h.getBoundingClientRect(), r = [...h.querySelectorAll('rect.unread')].find((x) => { const b = x.getBoundingClientRect(); return b.left > hr.left + 40 && b.right < hr.right - 40; }); if (r) return false; const e = h.querySelector(':scope > .pz-edge.l:not([hidden])'); if (!e) return false; e.click(); return true; })); k++) await pzSettled(p, 'd-hr');
     const un = await p.evaluate(() => { const h0 = document.querySelector('#sheet [data-pz="d-hr"]').getBoundingClientRect(), r = [...document.querySelectorAll('#sheet [data-pz="d-hr"] rect.unread')].find((x) => { const b = x.getBoundingClientRect(); return b.left > h0.left + 40 && b.right < h0.right - 40; }); if (!r) return null; r.scrollIntoView({ block: 'center' }); const b = r.getBoundingClientRect(), h = document.querySelector('#sheet [data-pz="d-hr"]').getBoundingClientRect(); return { fx: (b.left + b.width / 2 - h.left) / h.width }; });
     if (un) { const r = await pointAt(p, 'd-hr', phone, { fx: un.fx, root: '#sheet' }); ok(`dates ${tag}: an unread hour's note says ${'—'} (not read), never $0`, r && /LP fees — \(not read\)/.test(r.txt) && !/\$0\b/.test(r.txt), JSON.stringify(r)); }
-    else ok(`dates ${tag}: the pool with an unread hour shows it`, false, 'no unread bar');
+    else ok(`dates ${tag}: the pool with an unread hour shows it`, false, 'no unread bar ' + JSON.stringify(await p.evaluate(() => { const h = document.querySelector('#sheet [data-pz="d-hr"]'), hr = h.getBoundingClientRect(); return { view: h.dataset.view, hw: Math.round(hr.width), hl: Math.round(hr.left), un: [...h.querySelectorAll('rect.unread')].map((x) => { const b = x.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.width)]; }).slice(0, 6), edge: !!h.querySelector(':scope > .pz-edge.l:not([hidden])') }; })));
     // zoomed all the way in, the hourly fees show hours; zoomed out, days
     for (let k = 0; k < 6 && (await p.evaluate(() => { const b = document.querySelector('#sheet [data-act="zoom"][data-chart="d-hr"][data-dir="1"]'); if (!b || b.disabled) return false; b.click(); return true; })); k++) await sleep(80);
     const zin = await axisAt('d-hr');
