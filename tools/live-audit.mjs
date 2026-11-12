@@ -234,7 +234,24 @@ async function gestures(page, R, tag, errTotal) {
       if (how === 'mouse') { const g = await page.locator('#sheet .grab').boundingBox(); await page.mouse.move(g.x + g.width / 2, g.y + 8); await page.mouse.down(); for (let i = 1; i <= 10; i++) { await page.mouse.move(g.x + g.width / 2, g.y + 8 + i * 32); await sleep(16); } await page.mouse.up(); }
       await sleep(600);
       run('gestures: a swipe down closes the detail sheet', !(await page.isVisible('#sheet')));
-    } else skip();
+      // v0.4.7: a pull down on the content (a chart at its top) never drags or closes the sheet: it scrolls or rubber-bands
+      if (await press('#best [data-act="detail"]')) {
+        await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(400);
+        const moved = await page.evaluate(async () => {
+          document.querySelector('#sheet-body').scrollTop = 0;
+          const el = document.querySelector('#sheet-body [data-pz]') || document.querySelector('#sheet-body'), r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + Math.min(40, r.height / 2), c = document.querySelector('#sheet .sheet-card');
+          let mx = 0;
+          const T = (yy) => { try { return new Touch({ identifier: 6, target: el, clientX: x, clientY: yy }); } catch (e) { return { identifier: 6, target: el, clientX: x, clientY: yy }; } };
+          const ev = (type, t) => { try { return new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true }); } catch (e) { const v = new Event(type, { bubbles: true, cancelable: true }); Object.defineProperty(v, 'touches', { value: type === 'touchend' ? [] : [t] }); Object.defineProperty(v, 'changedTouches', { value: [t] }); return v; } };
+          el.dispatchEvent(ev('touchstart', T(y)));
+          for (let i = 1; i <= 10; i++) { await new Promise((r2) => setTimeout(r2, 16)); el.dispatchEvent(ev('touchmove', T(y + i * 30))); mx = Math.max(mx, Math.abs(new DOMMatrix(getComputedStyle(c).transform).m42)); }
+          el.dispatchEvent(ev('touchend', T(y + 300)));
+          await new Promise((r2) => setTimeout(r2, 500));
+          return mx;
+        });
+        run('gestures: a pull down on the panel\'s content (its chart, at the top) never drags or closes it', moved === 0 && (await page.isVisible('#sheet')));
+      } else skip();
+    } else { skip(); skip(); }
     if (await page.isVisible('#sheet')) { await page.click('#sheet-close').catch(() => {}); await sleep(300); }
   } else skip();
   // the All pools header sticks while its rows scroll by, and leaves at the top
@@ -249,6 +266,7 @@ async function gestures(page, R, tag, errTotal) {
   await part2(page, run, skip, box, press);
   await part3(page, run, skip);
   await part4(page, run, skip, press);
+  await part5(page, run, skip, press);
   await overlaps(page, run, tag);
   // back to top
   await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
@@ -336,7 +354,7 @@ async function part2(page, run, skip, box, press) {
         const id0 = await page.evaluate(() => (document.querySelector('#sheet-star [data-id]') || {}).dataset.id || ''); // the pool open now (same-pair cards share its name)
         const want = await page.evaluate(() => document.querySelector('#sim button.mc-name').dataset.id);
         await page.evaluate(() => document.querySelector('#sim button.mc-name').click()); await sleep(500);
-        run('part 2: a card\'s name opens that pool, shape first', await page.evaluate(({ id0, want }) => { const id = (document.querySelector('#sheet-star [data-id]') || {}).dataset.id; return id === want && id !== id0 && document.querySelector('#sheet-body').firstElementChild.dataset.chartbox === 'liq-detail'; }, { id0, want }));
+        run('part 2: a card\'s name opens that pool, shape first', await page.evaluate(({ id0, want }) => { const id = (document.querySelector('#sheet-star [data-id]') || {}).dataset.id; return id === want && id !== id0 && (document.querySelector('#sheet-main') || document.querySelector('#sheet-body')).firstElementChild.dataset.chartbox === 'liq-detail'; }, { id0, want }));
       } else skip();
       run('part 2: the window pills look small (≤ 26 px) with 44 px taps', await page.evaluate(() => [...document.querySelectorAll('#sheet-win button')].every((b) => b.getBoundingClientRect().height >= 43.5 && b.firstElementChild.getBoundingClientRect().height <= 26)));
     } else skip();
@@ -444,17 +462,14 @@ async function part3(page, run, skip) {
     await page.keyboard.press('Escape'); await sleep(200);
     run('part 3: a tap on an explainable word opens a short note inside the screen, below the bar; Esc closes it', pop.on && pop.gl >= 25 && pop.inside && !(await page.isVisible('#pop')));
   } else skip();
-  // the detail panel's top folds while its content scrolls down
+  // v0.4.7: the detail panel's pinned top is one slim row (≤ 60 px) that keeps its height while the content scrolls
   if (await press('#best [data-act="detail"]')) {
     await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
     const long = await page.evaluate(() => { const b = document.querySelector('#sheet-body'); return b.scrollHeight - b.clientHeight > 400; });
     if (long) {
-      for (const y of [80, 220, 420]) { await page.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(130); await rest(); }
-      await sleep(350); await rest();
-      const f1 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
-      await page.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(450); await rest();
-      const f2 = await page.evaluate(() => document.querySelector('#sheet .sheet-card').classList.contains('cond'));
-      run('part 3: the panel\'s top folds while its content scrolls down and opens at the top', f1 && !f2);
+      const hs = new Set(), jumps = [];
+      for (const y of [0, 80, 220, 420, 220, 0]) { await page.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(130); await rest(); const r = await page.evaluate(() => { const c = document.querySelector('#sheet .sheet-card'), h = document.querySelector('#sheet .sheet-head').getBoundingClientRect(); return [Math.round(h.bottom - c.getBoundingClientRect().top), document.querySelector('#sheet-body').scrollTop]; }); hs.add(r[0]); jumps.push(Math.abs(r[1] - y) > 1); }
+      run('part 3: the panel\'s pinned top is one slim row (≤ 60 px) that keeps its height while the content scrolls, which never jumps', hs.size === 1 && [...hs][0] <= 60 && !jumps.some(Boolean));
     } else skip();
     const lb = await box('liq-detail', '#sheet');
     if (lb) {
@@ -511,6 +526,39 @@ async function part4(page, run, skip, press) {
     } else skip();
     await page.click('#sheet-close').catch(() => {}); await sleep(300);
   } else skip();
+}
+// ---------- 2d3. v0.4.7: the fee charts' scale and pool switch, "$ per day at the ticket" next to every APR ----------
+// Booleans and counts only.
+async function part5(page, run, skip, press) {
+  // every APR the home page shows carries its $/day (found by structure: APR columns, the lists, the bench, the breakdown)
+  const apr = await page.evaluate(() => {
+    let n = 0, bad = 0;
+    const has = (el) => { if (!el || !el.getClientRects().length || !/\d%/.test(el.textContent)) return; n++; if (!/\$[\d.,]+[KMB]?\/day/.test(el.textContent)) bad++; };
+    for (const tb of document.querySelectorAll('table')) { const hs = [...(tb.tHead ? tb.tHead.rows[0].cells : [])].map((c) => c.textContent); hs.forEach((h, i) => { if (/APR/.test(h) && !/forecast/.test(h)) for (const tr of tb.tBodies[0] ? tb.tBodies[0].rows : []) has(tr.cells[i]); }); }
+    for (const e of document.querySelectorAll('.apr, #bench .big')) has(e);
+    const lead = [...document.querySelectorAll('#best [data-lead]')].some((e) => /At \$[\d,]+: fees ≈ .*\/day · LVR .*\/day · net ≈ .*\/day \(.*% a year\)/.test(e.textContent));
+    return { n, bad, lead };
+  });
+  run('part 5: every APR on the home page carries its $ a day at the ticket, and the best find leads with it', apr.n >= 5 && apr.bad === 0 && apr.lead);
+  if (!(await press('#best [data-act="detail"]'))) { skip(); skip(); skip(); return; }
+  await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(600);
+  const fc = () => page.evaluate(() => { const b = document.querySelector('[data-chartbox="d-day"]'); if (!b) return null; const v = b.querySelector('[data-pz="d-day"]').dataset.view.split(',').map(Number);
+    return { ys: b.querySelectorAll('.yax > span').length, grid: b.querySelectorAll('line.grid').length, med: !!b.querySelector('line.median'), ttl: /this pool|each tier|whole pair/.test(b.querySelector('.fc-t').textContent), mode: b.dataset.fc, w: v[1], modes: b.querySelectorAll('[data-act="fmode"]').length, log: !!b.querySelector('[data-act="fscale"][data-v="log"][aria-pressed="true"]') }; });
+  const a = await fc();
+  if (!a) { skip(); skip(); } else {
+    run('part 5: the daily fee chart has a $ axis with gridlines, the typical-day line and says which pool it shows', a.ys >= 2 && a.grid === a.ys && a.med && a.ttl);
+    const was = a.log;
+    await press(`#sheet-body [data-act="fscale"][data-v="${was ? 'lin' : 'log'}"]`); await sleep(400);
+    const b = await fc();
+    await press(`#sheet-body [data-act="fscale"][data-v="${was ? 'log' : 'lin'}"]`); await sleep(400);
+    const c = await fc();
+    let modes = true;
+    if (a.modes === 3) for (const m of ['tiers', 'pair', 'this']) { await press(`#sheet-body [data-act="fmode"][data-v="${m}"]`); await sleep(400); const x = await fc(); modes = modes && x && x.mode === m && x.ys >= 2; }
+    run('part 5: the linear / log switch and the pool switch (this pool · each tier · whole pair) redraw the chart and come back', b && b.log === !was && b.ys >= 2 && c && c.log === was && modes);
+  }
+  const h = await page.evaluate(() => { const b = document.querySelector('[data-chartbox="d-hr"]'); return b ? b.querySelectorAll('.yax > span').length >= 2 && !!b.querySelector('line.median') : null; });
+  if (h == null) skip(); else run('part 5: the hourly fee chart has its $ axis and typical-hour line', h);
+  await page.click('#sheet-close').catch(() => {}); await sleep(300);
 }
 // ---------- 2e. text that collides or is cut off, in the views a phone and a laptop show ----------
 // The report names sections and element kinds (tag and first class) with counts: never a word of the page's text.

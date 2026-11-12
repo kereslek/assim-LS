@@ -515,7 +515,7 @@ function makeMarket(r, now) {
   return {
     t: now,
     gas: { gwei, p10: q(0.1), p50: q(0.5), p90: q(0.9), band, basis: 'history', histDays: 6.5, source: 'feeHistory', hist },
-    px: { ETH: { usd: 3400, ch24: 0.0123, src: 'defillama' }, BTC: { usd: 96240, ch24: -0.0041, src: 'defillama' }, SOL: { usd: 182.4, ch24: 0.031, src: 'coingecko' } },
+    px: { ETH: { usd: 3400, ch24: 0.0123, src: 'defillama' }, BTC: { usd: 96240, ch24: -0.0041, src: 'coinbase' }, SOL: { usd: 182.4, ch24: 0.031, src: 'coingecko' } },
   };
 }
 // the same pass with the strip's reads failed: missing is never zero
@@ -589,7 +589,7 @@ export function longCase(data) {
     for (const k of ['netUsd', 'feesUsd', 'lvrUsd', 'costsUsd', 'entryUsd']) b[k] = money(b[k]);
     b.grid.net = b.grid.net.map((row) => row.map((x) => (isNum(x) ? sig(x * 97, 5) : x)));
   }
-  for (const h of Object.values(hist.pools)) { h.d = h.d.map((r) => [r[0], r[1], money(r[2]), money(r[3]), r[4]]); h.h = h.h.map((r) => [r[0], r[1], r[2], money(r[3]), r[4]]); }
+  for (const h of Object.values(hist.pools)) { h.d = h.d.map((r) => [r[0], r[1], money(r[2]), money(r[3]), r[4]]); h.h = h.h.map((r) => [r[0], r[1], r[2], money(r[3]), r[4]]); if (h.y) h.y = h.y.map((r) => [r[0], money(r[1]), ...r.slice(2)]); }
   return { live, history: hist, backtest: bt };
 }
 
@@ -651,8 +651,10 @@ function makeHistory(r, pools, now) {
   // null. Some pools carry a gap the backfill hasn't filled (the next row covers it all), an unread row (its fees and the
   // next row's are null) and a row a few minutes off its mark.
   const out = { v: 1, t: now, pools: {}, health: [] };
+  const ry = rng(9173); // the fee history's own stream: h and d stay as they were
   const hourNow = Math.floor(now / H) * H, dayNow = Math.floor(now / D) * D;
-  pools.slice(0, 60).forEach((p, k) => {
+  const pk = (p) => [p.t0.sym, p.t1.sym].sort().join('/'), first = pools.slice(0, 60), fk = new Set(first.map(pk));
+  [...first, ...pools.slice(60).filter((p) => fk.has(pk(p)))].forEach((p, k) => { // and the other pools of their pairs (v0.4.7: the fee chart's tiers)
     const spec = p._spec;
     const sigma = spec.sigma ?? 0.02, rate = isNum(p.lpKeeps) ? spec.fee * p.lpKeeps : null;
     const series = (n, step, t0, perStep, lpStep, gap, unread, off) => {
@@ -679,6 +681,31 @@ function makeHistory(r, pools, now) {
     const d = series(days, D, dayNow, feeD, sigma, k % 7 === 3 ? [20, 17] : null, k % 11 === 5 ? days - 12 : null, 0)
       .map((x) => [x[0], x[1], x[2], x[2] == null || !rate ? null : Math.round(x[2] / rate), p.shape.parked == null ? null : sig(clamp(p.shape.parked + between(r, -0.05, 0.05)), 3)]);
     out.pools[p.id] = { h, d };
+    // the fee history (v0.4.7 fixtures): one row a UTC day to yesterday, up to 365, from the pool's first day; the last 90
+    // days exact (the daily rows' own fees), older days mostly estimated, a few unread (null, never 0); some pools have no
+    // y at all (the page falls back to d), one pool's start is not known (yp.age null), and one day is a 30× outlier the
+    // scanner marks unconfirmed (history.json u.y)
+    if (k % 9 === 4) { // no fee history: the page draws d; one d row a 30× spike the scanner lists unconfirmed (u.d)
+      const i = d.length - 20;
+      if (i > 1 && d[i][2] != null && d[i - 1][0] > d[i][0] - 1.5 * D) { d[i][2] = sig(d[i][2] * 30, 4); out.pools[p.id].u = { d: [d[i][0]] }; }
+      return;
+    }
+    const yd = dayNow - D, ny = Math.min(365, Math.max(1, Math.floor(spec.ageDays))), fromD = new Map();
+    d.forEach((row, i) => { if (i && row[0] - d[i - 1][0] < 1.5 * D) fromD.set(Math.floor((row[0] - D / 2) / D) * D, row[2]); });
+    const y = [];
+    for (let j = ny - 1; j >= 0; j--) {
+      const t = yd - j * D, wave = 1 + 0.45 * Math.sin((j / 365) * 2 * Math.PI * 1.5 + k), noise = Math.exp(0.45 * gauss(ry));
+      let v = feeD == null ? null : sig(feeD * wave * noise * (j === ny - 1 ? 0.4 : 1), 4), src = j < 90 ? 'x' : ry() < 0.12 ? 'x' : 'e';
+      if (j < 90 && fromD.has(t)) v = fromD.get(t);
+      if (ry() < (j < 90 ? 0.015 : 0.04) || v == null) { v = null; src = null; }
+      if (j === ny - 1 && src) src = 'e'; // the creation day is partial and usually estimated
+      y.push(v == null ? [t, null, null] : [t, v, src]);
+    }
+    const out1 = k % 4 === 0 && ny > 60 ? y[y.length - 41] : null; // a 30× day 40 days back, unconfirmed
+    if (out1 && out1[1] != null) { const sv = y.map((x) => x[1]).filter((x) => x != null).sort((a, b) => a - b); out1[1] = sig(30 * sv[Math.floor(sv.length / 2)], 4); out1[2] = 'x'; out.pools[p.id].u = { y: [out1[0]] }; }
+    const ex = y.filter((x) => x[2] === 'x').length, es = y.filter((x) => x[2] === 'e').length;
+    out.pools[p.id].y = y;
+    out.pools[p.id].yp = { exact: ex, est: es, age: k % 17 === 6 ? null : ny, dyn: !!p.dynamicFee };
   });
   for (let i = 47; i >= 0; i--) {
     const passes = 9 + (r() < 0.3 ? 1 : 0) - (i === 30 ? 6 : 0);

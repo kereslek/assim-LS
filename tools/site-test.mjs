@@ -8,7 +8,7 @@
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
-//                                                    merge feebar stablewalk flash dates
+//                                                    merge feebar stablewalk flash dates feescale perday
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -48,7 +48,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -927,23 +927,24 @@ async function testDepth(browser) {
   await od.ctx.close();
 }
 
-// ---------- 4f3. history.json: LP fees per hour (14 days) and per day (90 days) ----------
-// Each row's fees cover the time since the row before: a bar spans that stretch at fees ÷ its hours or days (a gap the
-// backfill hasn't filled is one wide bar at its average), the first row draws nothing, an unread row is hatched; the
-// view pans and zooms in time and zooming out stops at the rows' own span.
+// ---------- 4f3. history.json: LP fees per hour (14 days) ----------
+// Each row's fees cover the time since the row before: a bar spans that stretch at fees ÷ its hours (a gap the backfill
+// hasn't filled is one wide bar at its average), the first row draws nothing, an unread row is hatched; the view pans and
+// zooms in time and zooming out stops at the rows' own span. v0.4.7: heights on the view's own $ scale (0 to a round top).
+// The day chart (the fee history) has its own group: feescale.
 const RATE_LOOK = (id) => {
   const h = document.querySelector(`[data-pz="${id}"]`), box = h.closest('[data-chartbox]');
-  return { view: h.dataset.view, rects: [...h.querySelectorAll('.pz-c svg > rect:not(.unread)')].map((r) => ({ x: +r.getAttribute('x'), w: +r.getAttribute('width'), h: +r.getAttribute('height') })),
+  return { view: h.dataset.view, rects: [...h.querySelectorAll('.pz-c svg > rect[class^="b-"]')].map((r) => ({ x: +r.getAttribute('x'), w: +r.getAttribute('width'), h: +r.getAttribute('height') })),
     unread: h.querySelectorAll('.pz-c svg > rect.unread').length, title: box.querySelector('.pane-title > .lbl').textContent, cap: (box.querySelector('.pz-cap2') || {}).textContent || '',
-    out: box.querySelector('[data-act="zoom"][data-dir="-1"]').disabled };
+    out: box.querySelector('[data-act="zoom"][data-dir="-1"]').disabled, Ht: +h.querySelector('.pz-c svg').getAttribute('height') };
 };
-function rateExpect(rows, vi, unit, view) {
+function rateExpect(rows, vi, unit, view, Ht) {
   const t0 = rows[0][0], U = (t) => (t - t0) / unit, bars = [];
   for (let i = 1; i < rows.length; i++) { const a = rows[i - 1][0], b = rows[i][0], v = rows[i][vi]; bars.push({ a: U(a), b: U(b), r: typeof v === 'number' ? v / ((b - a) / unit) : null }); }
-  const mx = Math.max(...bars.filter((x) => x.r != null).map((x) => x.r)), [c, len] = view, v0 = c - len;
-  const seen = bars.filter((x) => x.b >= v0 && x.a <= c);
-  return { n: U(rows.at(-1)[0]), unread: seen.filter((x) => x.r == null).length, max: Math.max(...seen.filter((x) => x.r != null).map((x) => x.r)),
-    bars: seen.filter((x) => x.r > 0).map((x) => { const full = ((x.b - x.a) / len) * 300; return { x: ((x.a - v0) / len) * 300, w: Math.max(0.4, full - Math.min(1, full * 0.25)), h: (x.r / mx) * 64 }; }) };
+  const [c, len] = view, v0 = c - len, seen = bars.filter((x) => x.b > v0 && x.a < c), mx = Math.max(...seen.filter((x) => x.r != null).map((x) => x.r));
+  const step = fcNiceT(mx / 3), top = Math.ceil(mx / step - 1e-9) * step;
+  return { n: U(rows.at(-1)[0]), unread: seen.filter((x) => x.r == null).length, max: mx,
+    bars: seen.filter((x) => x.r > 0).map((x) => { const full = ((x.b - x.a) / len) * 300; return { x: ((x.a - v0) / len) * 300, w: Math.max(0.4, full - Math.min(1, full * 0.25)), h: (x.r / top) * Ht }; }) };
 }
 function rectsMatch(got, want) {
   const bad = [], used = new Set();
@@ -956,27 +957,25 @@ function rectsMatch(got, want) {
 }
 const money = (txt) => { const m = /\$([\d.,]+)([KMB]?)/.exec(txt || ''); return m ? +m[1].replace(/,/g, '') * ({ K: 1e3, M: 1e6, B: 1e9 }[m[2]] || 1) : null; };
 async function testHistory(browser) {
-  const H = 3600e3, D = 24 * H, ents = Object.entries(FXD.history.pools);
-  const gapP = ents.find(([, e]) => e.d.length >= 80 && e.d.some((r, i) => i && r[0] - e.d[i - 1][0] > 1.5 * D) && e.h.some((r, i) => i && r[0] - e.h[i - 1][0] > 1.5 * H));
+  const H = 3600e3, ents = Object.entries(FXD.history.pools);
+  const gapP = ents.find(([, e]) => e.h.some((r, i) => i && r[0] - e.h[i - 1][0] > 1.5 * H) && e.h.length > 300);
   const nrP = ents.find(([, e]) => e.h.slice(1).some((r) => r[3] === null) && e.h.length > 300);
   for (const phone of [false, true]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
     for (const [id, e] of [gapP, nrP]) {
       await openPool(p, id.slice(0, 12));
-      for (const [cid, rows, vi, unit, word, days] of [['d-hr', e.h, 3, H, 'hour', 14], ['d-day', e.d, 2, D, 'day', 90]]) {
-        let a = await p.evaluate(RATE_LOOK, cid);
-        const view = a.view.split(',').map(Number), x = rateExpect(rows, vi, unit, view), m = rectsMatch(a.rects, x.bars);
-        const lv = phone && cid === 'd-hr' ? 2 : 1; // a phone opens the hourly fees on their latest 7 days
-        ok(`history ${tag}: fees per ${word} over ${days} days, one bar per row at fees ÷ the ${word}s since the row before (${a.title})`, new RegExp(`per ${word} · ${days} d$`).test(a.title) && near(view[1], x.n / lv, 0.02) && m.ok, a.title + ' ' + a.view + ' ' + m.why);
-        ok(`history ${tag}: …unread rows hatched (${x.unread}), the first row and gaps never drawn as 0, its max ${a.cap} the data's`, a.unread === x.unread && Math.abs(money(a.cap) - x.max) / x.max < 0.06, `${a.unread}/${x.unread} ${a.cap} vs ${x.max.toFixed(2)}`);
-        if (lv === 1) {
-          ok(`history ${tag}: …zoomed all the way out it shows the whole span and − stops there`, a.out && near(view[1], x.n, 0.02), a.view);
-        } else {
-          await zoomAllOut(p, cid, '#sheet');
-          a = await p.evaluate(RATE_LOOK, cid);
-          ok(`history ${tag}: …− shows the rest of the span, then stops at it`, a.out && near(+a.view.split(',')[1], x.n, 0.02), a.view);
-          await p.evaluate((cid) => document.querySelector(`#sheet [data-act="zreset"][data-chart="${cid}"]`).click(), cid); await sleep(120); // zoom is kept per chart
-        }
+      const cid = 'd-hr', rows = e.h;
+      let a = await p.evaluate(RATE_LOOK, cid);
+      const view = a.view.split(',').map(Number), x = rateExpect(rows, 3, H, view, a.Ht), m = rectsMatch(a.rects, x.bars);
+      const lv = phone ? 2 : 1; // a phone opens the hourly fees on their latest 7 days
+      ok(`history ${tag}: fees per hour over 14 days, one bar per row at fees ÷ the hours since the row before, on the view's $ scale (${a.title.slice(0, 40)})`, /^LP fees per hour · 14 d · /.test(a.title) && near(view[1], x.n / lv, 0.02) && m.ok, a.title + ' ' + a.view + ' ' + m.why);
+      ok(`history ${tag}: …unread rows hatched (${x.unread}), the first row and gaps never drawn as 0, its max ${a.cap} the data's`, a.unread === x.unread && Math.abs(money(a.cap) - x.max) / x.max < 0.06, `${a.unread}/${x.unread} ${a.cap} vs ${x.max.toFixed(2)}`);
+      if (lv === 1) ok(`history ${tag}: …zoomed all the way out it shows the whole span and − stops there`, a.out && near(view[1], x.n, 0.02), a.view);
+      else {
+        await zoomAllOut(p, cid, '#sheet');
+        a = await p.evaluate(RATE_LOOK, cid);
+        ok(`history ${tag}: …− shows the rest of the span, then stops at it`, a.out && near(+a.view.split(',')[1], x.n, 0.02), a.view);
+        await p.evaluate((cid) => document.querySelector(`#sheet [data-act="zreset"][data-chart="${cid}"]`).click(), cid); await sleep(120); // zoom is kept per chart
       }
       await closePool(p);
     }
@@ -1079,13 +1078,15 @@ async function swipe(page, sel, dy, { ms = 16, steps = 10, dx = 0, at = 0.5 } = 
   return page.evaluate(async ({ sel, dy, ms, steps, dx, at }) => {
     const el = document.querySelector(sel), r = el.getBoundingClientRect(), x0 = r.left + r.width / 2, y0 = r.top + Math.min(r.height * at, 40);
     const target = document.elementFromPoint(x0, y0) || el;
-    let T;
-    try { T = (x, y) => new Touch({ identifier: 7, target, clientX: x, clientY: y, pageX: x, pageY: y }); T(0, 0); } catch (e) { return 'no-touch'; }
-    const fire = (type, x, y) => { const t = T(x, y); target.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
+    let T, real = true;
+    try { T = (x, y) => new Touch({ identifier: 7, target, clientX: x, clientY: y, pageX: x, pageY: y }); T(0, 0); } catch (e) { real = false; T = (x, y) => ({ identifier: 7, target, clientX: x, clientY: y, pageX: x, pageY: y }); }
+    // WebKit has no Touch(): the same events as plain events carrying their touches, so the sheet's own handlers run there too
+    const mk = (type, init) => { if (real) return new TouchEvent(type, init); const e = new Event(type, { bubbles: true, cancelable: true }); for (const k of ['touches', 'targetTouches', 'changedTouches']) Object.defineProperty(e, k, { value: init[k] }); return e; };
+    const fire = (type, x, y) => { const t = T(x, y); target.dispatchEvent(mk(type, { touches: type === 'touchend' ? [] : [t], targetTouches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
     fire('touchstart', x0, y0);
     for (let i = 1; i <= steps; i++) { await new Promise((r2) => setTimeout(r2, ms)); fire('touchmove', x0 + (dx * i) / steps, y0 + (dy * i) / steps); }
     fire('touchend', x0 + dx, y0 + dy);
-    return 'touch';
+    return real ? 'touch' : 'touch-like';
   }, { sel, dy, ms, steps, dx, at });
 }
 // a pull: touch events where the browser can make them, else a mouse drag on the grab handle (WebKit has no Touch())
@@ -1126,26 +1127,25 @@ async function testSheets(browser) {
   how = await pull(p, '#sheet .grab', 320);
   await sleep(500);
   ok(`sheets phone: a long pull down closes the sheet (${how})`, !(await isOpen()));
-  // from the content: only when it is scrolled to the top (touch only: a mouse doesn't drag content)
+  // from the content: never (v0.4.7, the owner's iPhone: a drag down on a chart at the top made it "disappear into nothing");
+  // a downward drag there scrolls or rubber-bands. Only the handle and the header row drag the sheet.
   await open();
-  await p.$eval('#sheet-body', (b) => { b.scrollTop = 300; });
-  await sleep(100);
-  how = await pull(p, '#sheet-body', 260, { at: 0.5 });
-  await sleep(500);
-  if (how === 'none') ok('sheets phone: pulls inside the content (no synthetic touch in this browser: skipped)', true);
-  else {
-    ok('sheets phone: a pull inside scrolled content doesn\'t close (it scrolls)', await isOpen());
-    await p.$eval('#sheet-body', (b) => { b.scrollTop = 0; });
-    await sleep(100);
-    await pull(p, '#sheet-body', 260, { at: 0.5 });
+  for (const [st, sel, what] of [[300, '#sheet-body', 'scrolled content'], [0, '#sheet-body', 'content at its top'], [0, '#sheet-body [data-pz="liq-detail"]', 'chart at the top of the content']]) {
+    await p.$eval('#sheet-body', (b, st) => { b.scrollTop = st; }, st); await sleep(100);
+    const mv = await p.evaluate(() => { window.__swMax = 0; const c = document.querySelector('#sheet .sheet-card'), f = () => { if (!window.__swOn) return; window.__swMax = Math.max(window.__swMax, Math.abs(new DOMMatrix(getComputedStyle(c).transform).m42)); requestAnimationFrame(f); }; window.__swOn = true; requestAnimationFrame(f); return true; });
+    how = await pull(p, sel, 260, { at: 0.5 });
     await sleep(500);
-    ok('sheets phone: …at the top of the content, the same pull closes it', !(await isOpen()));
-    await open();
-    await pull(p, '#sheet-body', 30, { dx: 200, at: 0.5 });
-    await sleep(450);
-    ok('sheets phone: a sideways swipe doesn\'t close it', await isOpen());
+    const moved = await p.evaluate(() => { window.__swOn = false; return window.__swMax; });
+    ok(`sheets phone: a pull down on the ${what} never moves or closes the sheet (${how})`, mv && (await isOpen()) && (await ty()) === 0 && moved === 0, String(moved));
   }
-  // the similar-pools list scrolls inside the sheet's header: a pull there scrolls it back up before it drags the sheet
+  how = await pull(p, '#sheet .sheet-head h2', 320);
+  await sleep(500);
+  ok(`sheets phone: a pull down on the header row closes it (${how})`, !(await isOpen()));
+  await open();
+  await pull(p, '#sheet .sheet-head h2', 30, { dx: 200 });
+  await sleep(450);
+  ok('sheets phone: a sideways swipe on the header doesn\'t close it', await isOpen());
+  // the similar-pools list scrolls inside the content: a pull there scrolls it, never drags the sheet
   if (!(await isOpen())) await open();
   await p.evaluate(() => document.querySelector('#sim [data-act="sim-all"]').click()); await sleep(200);
   await p.$eval('#sim-list', (l) => { l.scrollTop = 80; });
@@ -1381,7 +1381,7 @@ async function testRows(browser) {
       await tap(sel);
       await sleep(400);
       const good = (await p.isVisible('#sheet')) && (await shapeIn('#sheet [data-chartbox="liq-detail"]'))
-        && (await p.evaluate(() => document.querySelector('#sheet-body').firstElementChild.dataset.chartbox)) === 'liq-detail';
+        && (await p.evaluate(() => document.querySelector('#sheet-main').firstElementChild.dataset.chartbox)) === 'liq-detail';
       into.push([name, good]);
       await close();
     }
@@ -1469,8 +1469,8 @@ async function testMarket(browser) {
     ok(`market ${tag}: gas shows 2 significant digits in gwei, coloured by its band`, /^0\.\d\d gwei( normal)?$/.test(a.gas) && /g-normal/.test(a.cls), a.gas + ' ' + a.cls);
     ok(`market ${tag}: the gas button is a 44 px tap target`, a.h >= 43.5, String(a.h));
     ok(`market ${tag}: its tooltip gives p10 / p50 / p90 and what it is compared with`, /p10 0\.\d+ · p50 0\.\d+ · p90 0\.\d+ gwei/.test(a.title) && /days of hourly readings/.test(a.title), a.title);
-    ok(`market ${tag}: ETH, BTC and SOL with a 24 h arrow each (▲ up, ▼ down)`, a.px.map((x) => x.c).join() === 'ETH,BTC,SOL' && a.px[0].up && a.px[1].dn && a.px[2].up
-      && /^ETH \$3,400 ▲1\.2%$/.test(a.px[0].t) && /^BTC \$96\.2K ▼0\.4%$/.test(a.px[1].t) && /^SOL \$182 ▲3\.1%$/.test(a.px[2].t), a.px.map((x) => x.t).join(' | '));
+    ok(`market ${tag}: ETH, BTC and SOL with a 24 h arrow each (▲ up, ▼ down), a price from Coinbase labelled "coinbase" ("cb" under 380 px)`, a.px.map((x) => x.c).join() === 'ETH,BTC,SOL' && a.px[0].up && a.px[1].dn && a.px[2].up
+      && /^ETH \$3,400 ▲1\.2%$/.test(a.px[0].t) && /^BTC \$96\.2K ▼0\.4% (coinbase|cb)$/.test(a.px[1].t) && (tag === 'w360') === / cb$/.test(a.px[1].t) && /^SOL \$182 ▲3\.1%$/.test(a.px[2].t), a.px.map((x) => x.t).join(' | '));
     ok(`market ${tag}: the three prices fit without scrolling`, a.pxFit);
     ok(`market ${tag}: a countdown to the next pass and "updated hh:mm" CET`, /next( pass)? in ([1-7] min|<1 min) · updated \d\d:\d\d( (CET|CEST))?$/.test(a.mt) && (tag !== 'laptop' || / (CET|CEST)$/.test(a.mt)), a.mt); // the fixture's next pass is 6 min after it was written
     await p.click('#gas'); await sleep(200);
@@ -1485,7 +1485,7 @@ async function testMarket(browser) {
   // unread: dashes, never 0
   const t = await openUnlocked(browser, 'nomarket', { phone: true }), p = t.page, a = await p.evaluate(STRIP);
   ok('market: unread gas shows — gwei, uncoloured, with no band', /^— gwei$/.test(a.gas) && /g-none/.test(a.cls), a.gas);
-  ok('market: an unread price and an unread 24 h change show —, never 0', /^SOL — —$/.test(a.px[2].t) && /^BTC \$96\.2K —$/.test(a.px[1].t) && !/\$0\b|0\.0%|\b0 gwei/.test(a.px.map((x) => x.t).join(' ') + a.gas), a.px.map((x) => x.t).join(' | '));
+  ok('market: an unread price and an unread 24 h change show —, never 0', /^SOL — —$/.test(a.px[2].t) && /^BTC \$96\.2K —( coinbase)?$/.test(a.px[1].t) && !/\$0\b|0\.0%|\b0 gwei/.test(a.px.map((x) => x.t).join(' ') + a.gas), a.px.map((x) => x.t).join(' | '));
   ok('market: no next pass known → the countdown says —', /next( pass)? — · updated \d\d:\d\d/.test(a.mt), a.mt);
   await p.click('#gas'); await sleep(150);
   ok('market: the unread gauge’s note says so plainly', /— gwei/.test(await p.innerText('#pop')) && /Not enough history/.test(await p.innerText('#pop')));
@@ -1529,7 +1529,7 @@ async function testFav(browser) {
     if (SHOTS) await snap(p, `p2-fav-${tag}`, '#fav');
     // a card opens its pool; its star removes it, the keyboard stays in the section
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#fav .mc-name').click(); }); await sleep(300);
-    ok(`fav ${tag}: a favourite card opens that pool, shape first`, (await p.isVisible('#sheet')) && (await p.evaluate(() => document.querySelector('#sheet-body').firstElementChild.dataset.chartbox)) === 'liq-detail');
+    ok(`fav ${tag}: a favourite card opens that pool, shape first`, (await p.isVisible('#sheet')) && (await p.evaluate(() => document.querySelector('#sheet-main').firstElementChild.dataset.chartbox)) === 'liq-detail');
     await p.click('#sheet-close');
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#fav').scrollIntoView({ block: 'center' }); }); await sleep(150);
     const cb = await p.locator('#fav .mc .mc-v').first().boundingBox();
@@ -1627,11 +1627,11 @@ async function testSimilar(browser) {
     await sleep(500);
     const read = () => p.evaluate(() => ({ ids: [...document.querySelectorAll('#sim .mc[data-id]')].map((c) => c.dataset.id), self: [...document.querySelectorAll('#sim .mc.self')].map((c) => c.dataset.id),
       ks: [...new Set([...document.querySelectorAll('#sim .mc-v .k')].map((k) => k.textContent))], dots: [...document.querySelectorAll('#sim .mdots i')].findIndex((i) => i.classList.contains('on')),
-      end: (document.querySelector('#sim [data-act="sim-all"]') || {}).innerText, head: document.querySelector('#sim .mc-head').innerText, inHead: !!document.querySelector('.sheet-head #sim'),
-      first: document.querySelector('#sheet-body').firstElementChild.dataset.chartbox }));
+      end: (document.querySelector('#sim [data-act="sim-all"]') || {}).innerText, head: document.querySelector('#sim .mc-head').innerText, inHead: !!document.querySelector('#sheet-info #sim') && !document.querySelector('.sheet-head #sim'),
+      first: document.querySelector('#sheet-main').firstElementChild.dataset.chartbox }));
     let a = await read();
     const want = expectSimilar(live, pool, '30d');
-    ok(`similar ${tag}: a strip of mini cards sits under the pool's header, this pool first and outlined`, a.inHead && a.self.length === 1 && a.ids[0] === id && a.self[0] === id && a.first === 'liq-detail', JSON.stringify(a).slice(0, 100));
+    ok(`similar ${tag}: a strip of mini cards sits at the top of the pool's content (under the slim header), this pool first and outlined`, a.inHead && a.self.length === 1 && a.ids[0] === id && a.self[0] === id && a.first === 'liq-detail', JSON.stringify(a).slice(0, 100));
     ok(`similar ${tag}: ranked same pair, then tier + token, then tier, then token; by volume; unverified last (fixture order)`, JSON.stringify(a.ids.slice(1)) === JSON.stringify(want.slice(0, 8)), `${a.ids.slice(1, 4).map((x) => x.slice(0, 8))} vs ${want.slice(0, 3).map((x) => x.slice(0, 8))}`);
     const uv = live.pools.filter((x) => x.verified === false && want.includes(x.id)).map((x) => x.id);
     ok(`similar ${tag}: planted: the pair's unverified pool has the most volume, yet ranks after every verified one`, uv.length > 0 && want.slice(-uv.length).every((x) => uv.includes(x)) && live.pools.find((x) => x.pairKey === pool.pairKey && x.verified === false).w['30d'].volUsd > pool.w['30d'].volUsd);
@@ -2278,50 +2278,72 @@ async function testTerms(browser) {
   await m.ctx.close();
 }
 
-// ---------- 4n. the detail panel's top folds while its content scrolls down, and opens again on the way up ----------
-const FOLD = () => { const c = document.querySelector('#sheet .sheet-card'), h = document.querySelector('#sheet .sheet-head'); return { cond: c.classList.contains('cond'), h: Math.round(h.getBoundingClientRect().height), sim: !document.querySelector('#sim').hidden && document.querySelector('#sim').getBoundingClientRect().height > 0, st: document.querySelector('#sheet-body').scrollTop, anim: document.getAnimations().length }; };
+// ---------- 4n. v0.4.7: the detail panel's pinned top is one slim row that never changes height ----------
+// The owner's iPhone: a top of about 320 px that folded part-way while scrolling made the scroll jump. Now one row (chain
+// mark, pair, window, close) of 60 px at most; the kicker, meta, star, pair view, fee bar and similar pools scroll as content.
+const SLIM = () => {
+  const c = document.querySelector('#sheet .sheet-card'), h = document.querySelector('#sheet .sheet-head'), r = h.getBoundingClientRect(), b = document.querySelector('#sheet-body');
+  return { pinned: Math.round(r.bottom - c.getBoundingClientRect().top), h: Math.round(r.height * 10) / 10, bodyTop: Math.round(b.getBoundingClientRect().top * 10) / 10, st: b.scrollTop, cls: c.className, tf: getComputedStyle(c).transform,
+    mark: !!h.querySelector('.ttl > .cg'), title: !!h.querySelector('#sheet-title') && h.querySelector('#sheet-title').textContent.length > 2, win: h.querySelectorAll('#sheet-win button').length, close: !!h.querySelector('#sheet-close'),
+    info: !!h.querySelector('#sheet-kicker, #sheet-meta, #sim, #sheet-fee, #sheet-star, #sheet-pair'), inBody: !!b.querySelector('#sheet-info #sheet-kicker') && !!b.querySelector('#sheet-info #sim') };
+};
 async function testFold(browser) {
-  for (const [tag, o] of [['phone', { phone: true }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
-    const t = await openUnlocked(browser, 'default', o), p = t.page;
+  for (const [tag, o] of [['phone', { phone: true }], ['w360', { width: 360, height: 760 }], ['laptop', { width: 1440 }], ['phone reduced', { phone: true, reducedMotion: 'reduce' }]]) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page, lap = tag === 'laptop';
     await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(400);
-    const f0 = await p.evaluate(FOLD);
-    for (const y of [80, 200, 400]) { await p.evaluate((y) => { document.querySelector('#sheet-body').scrollTop = y; }, y); await sleep(120); }
+    const s0 = await p.evaluate(SLIM);
+    ok(`slim ${tag}: the pinned top is one row of ${s0.pinned} px (≤ 60): chain mark, pair, 24H/7D/30D, close`, s0.pinned <= 60 && s0.h <= 60 && s0.mark && s0.title && s0.win === 3 && s0.close, JSON.stringify(s0));
+    ok(`slim ${tag}: the kicker, meta, star, pair view, fee bar and similar pools sit in the scrolling content`, !s0.info && s0.inBody, JSON.stringify(s0));
+    // scroll the content a frame at a time: the top keeps its height, the content's box never moves, scrollTop follows exactly
+    const walk = await p.evaluate(async (SLIMs) => {
+      const SL = new Function('return (' + SLIMs + ')()'), b = document.querySelector('#sheet-body'), out = { jumps: 0, hs: new Set(), tops: new Set(), cls: new Set(), max: b.scrollHeight - b.clientHeight };
+      const mo = new MutationObserver(() => { out.mut = (out.mut || 0) + 1; }); mo.observe(document.querySelector('#sheet .sheet-card'), { attributes: true, attributeFilter: ['class', 'style'] });
+      mo.observe(document.querySelector('#sheet .sheet-head'), { attributes: true, attributeFilter: ['class', 'style'] });
+      for (let y = 0; y <= Math.min(900, out.max); y += 18) {
+        b.scrollTop = y;
+        await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+        const s = SL();
+        if (Math.abs(s.st - y) > 1) out.jumps++;
+        out.hs.add(s.h); out.tops.add(s.bodyTop); out.cls.add(s.cls);
+      }
+      for (let y = Math.min(900, out.max); y >= 0; y -= 30) { b.scrollTop = y; await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); const s = SL(); if (Math.abs(s.st - y) > 1) out.jumps++; out.hs.add(s.h); out.tops.add(s.bodyTop); }
+      mo.disconnect();
+      return { jumps: out.jumps, hs: [...out.hs], tops: [...out.tops], cls: [...out.cls], mut: out.mut || 0, max: out.max };
+    }, SLIM.toString());
+    ok(`slim ${tag}: scrolling down and back up, the top keeps one height (${walk.hs.join('/')} px), the content's box never moves and scrollTop never jumps`, walk.max > 400 && walk.hs.length === 1 && walk.tops.length === 1 && walk.cls.length === 1 && walk.jumps === 0 && walk.mut === 0, JSON.stringify(walk));
+    // the wheel (a laptop) or a real scroll (WebKit too): it only ever moves the way it was pushed
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(100);
+    const bb = await p.locator('#sheet-body').boundingBox(), seq = [];
+    await p.mouse.move(bb.x + bb.width / 2, bb.y + Math.min(300, bb.height / 2));
+    for (let i = 0; i < 8; i++) { await p.mouse.wheel(0, 90); await sleep(60); seq.push(await p.evaluate(() => [document.querySelector('#sheet-body').scrollTop, Math.round(document.querySelector('#sheet .sheet-head').getBoundingClientRect().height)])); }
     await sleep(300);
-    const f1 = await p.evaluate(FOLD);
-    ok(`fold ${tag}: scrolling the panel's content down folds its top (${f0.h} → ${f1.h} px; the similar pools tuck away)`, f0.sim && !f0.cond && f1.cond && !f1.sim && f1.h < f0.h - 60, JSON.stringify([f0, f1]));
-    if (/reduced/.test(tag)) ok(`fold ${tag}: under reduced motion it folds without sliding`, f1.anim === 0, String(f1.anim));
-    if (SHOTS && tag === 'phone') await p.screenshot({ path: path.join(SHOTS, 'fold-phone-folded.png') });
-    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop -= 30; }); await sleep(80);
-    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop -= 30; }); await sleep(380);
-    const f2 = await p.evaluate(FOLD);
-    ok(`fold ${tag}: a scroll back up opens it again`, !f2.cond && f2.sim, JSON.stringify(f2));
-    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 600; }); await sleep(420);
-    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(380);
-    ok(`fold ${tag}: back at the top it is open`, !(await p.evaluate(FOLD)).cond);
-    // a short panel (the pair view) never folds back and forth
+    ok(`slim ${tag}: the wheel scrolls the content evenly down, never back (${seq.map((x) => Math.round(x[0])).join(',')}), the top unchanged`, seq.every((x, i) => !i || x[0] >= seq[i - 1][0] - 0.5) && seq[seq.length - 1][0] > 200 && new Set(seq.map((x) => x[1])).size === 1, JSON.stringify(seq));
+    if (SHOTS && tag === 'phone') { await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 520; }); await sleep(200); await p.screenshot({ path: path.join(SHOTS, 'slim-phone-scrolled.png') }); }
+    // the pair view: the same slim top
     await p.click('#sheet-close'); await sleep(120);
     await p.evaluate(() => document.querySelector('#best h2 button[data-act="pair"]').click()); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
-    const flips = await p.evaluate(async () => { let n = 0; const mo = new MutationObserver(() => n++); mo.observe(document.querySelector('#sheet .sheet-card'), { attributes: true, attributeFilter: ['class'] }); const b = document.querySelector('#sheet-body'); for (let i = 0; i < 12; i++) { b.scrollTop = i % 2 ? b.scrollHeight : b.scrollHeight - 30; await new Promise((r) => setTimeout(r, 60)); } await new Promise((r) => setTimeout(r, 400)); mo.disconnect(); return n; });
-    ok(`fold ${tag}: a short panel never flips between folded and open`, flips <= 2, String(flips));
-    ok(`fold ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    const pv = await p.evaluate(SLIM);
+    ok(`slim ${tag}: the pair view has the same slim top (${pv.pinned} px)`, pv.pinned <= 60 && pv.win === 3 && pv.close && !pv.info, JSON.stringify(pv));
+    ok(`slim ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
 }
 
+
 // ---------- 5. click audit: press every control, check the DOM answered ----------
-const SIG = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
+const SIG = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '') + (el.dataset.v ? ':' + el.dataset.v : '');
 async function controls(page) {
   return page.evaluate(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && el.offsetParent !== null; };
     const all = [...document.querySelectorAll('button, select, input, [tabindex="0"], a[href]')].filter(vis);
-    const sig = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
+    const sig = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '') + (el.dataset.v ? ':' + el.dataset.v : '');
     return { untagged: all.filter((el) => !el.dataset.act && !el.disabled).map((el) => el.outerHTML.slice(0, 60)), sigs: [...new Set(all.filter((el) => el.dataset.act && !el.disabled).map(sig))], disabled: all.filter((el) => el.disabled).map((el) => el.textContent.trim()) };
   });
 }
 async function press(page, sig) {
   // beat scroll-settle races: a wheel event first, then bring the control into view
   return page.evaluate((sig) => {
-    const sigOf = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '');
+    const sigOf = (el) => el.dataset.act + (el.dataset.w ? ':' + el.dataset.w : '') + (el.dataset.k ? ':' + el.dataset.k : '') + (el.dataset.to ? ':' + el.dataset.to : '') + (el.dataset.chart ? ':' + el.dataset.chart : '') + (el.dataset.dir ? ':' + el.dataset.dir : '') + (el.dataset.v ? ':' + el.dataset.v : '');
     const el = [...document.querySelectorAll('[data-act]')].find((e) => sigOf(e) === sig && !e.disabled && !e.closest('svg') && e.getBoundingClientRect().width > 0 && e.offsetParent !== null); // a chart's tap line: its legend button is pressed instead
     if (!el) return false;
     window.dispatchEvent(new WheelEvent('wheel'));
@@ -2611,7 +2633,7 @@ async function testFeeBar(browser) {
     await p.evaluate(() => document.querySelector('#sheet-body').scrollTo(0, 0)); await sleep(150);
     await p.click('#sheet-fee [data-act="feehist"]'); await sleep(900);
     const land = await p.evaluate(() => { const b = document.querySelector('#sheet-body [data-chartbox="d-day"]').getBoundingClientRect(), sb = document.querySelector('#sheet-body').getBoundingClientRect(); return { top: b.top - sb.top, h: sb.height, view: document.querySelector('[data-pz="d-day"]').dataset.view }; });
-    const rr = pick && H[pick.id].d.filter((x) => typeof x[0] === 'number'), span = (rr[rr.length - 1][0] - rr[0][0]) / 864e5;
+    const rr = pick && H[pick.id].d.filter((x) => typeof x[0] === 'number'), yy = pick && H[pick.id].y, span = yy ? yy.length : (rr[rr.length - 1][0] - rr[0][0]) / 864e5; // v0.4.7: the fee history's days (y), else the daily rows'
     ok(`feebar ${tag}: a tap scrolls to the daily fee chart and zooms it out to all ${Math.round(span)} days (was ${zin.toFixed(1)})`, land.top >= -4 && land.top < land.h * 0.5 && Math.abs(+land.view.split(',')[1] - span) < 0.05 && span > 85 && zin < span - 1, JSON.stringify(land));
     await pzClick(p, '#sheet-body [data-act="zoom"][data-chart="d-day"][data-dir="1"]'); await sleep(150);
     const v0 = await p.getAttribute('[data-pz="d-day"]', 'data-view');
@@ -3039,7 +3061,165 @@ async function testDates(browser, page = null) {
   else await testDates(browser, cut.replace(/script-src [^;]*;/, `script-src ${scriptHashes(cut).join(' ')};`));
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates };
+// ---------- 4p. v0.4.7: the fee charts' scale, which pool the bars are for, and a year of fee history ----------
+const FCLOOK = (id) => {
+  const box = document.querySelector(`[data-chartbox="${id}"]`), h = box.querySelector(`[data-pz="${id}"]`), svg = h.querySelector('.pz-c svg');
+  const rc = (sel) => [...svg.querySelectorAll(sel)].map((r) => ({ x: +r.getAttribute('x'), w: +r.getAttribute('width'), y: +r.getAttribute('y'), h: +r.getAttribute('height'), f: r.getAttribute('fill'), op: r.getAttribute('fill-opacity'), cls: r.getAttribute('class') || '' }));
+  const yb = box.querySelector('.yax').getBoundingClientRect();
+  return { view: h.dataset.view.split(',').map(Number), title: box.querySelector('.fc-t').textContent, mode: box.dataset.fc, Ht: +svg.getAttribute('height'),
+    ys: [...box.querySelectorAll('.yax > span')].map((s) => ({ t: s.textContent, y: s.getBoundingClientRect().top + s.getBoundingClientRect().height / 2 - yb.top })),
+    grid: [...svg.querySelectorAll('line.grid')].map((l) => +l.getAttribute('y1')), med: svg.querySelector('line.median') ? +svg.querySelector('line.median').getAttribute('y1') : null,
+    bars: rc('rect[class^="b-"]'), unread: rc('rect.unread').length, legend: box.querySelector('.fc-leg').textContent, prog: (box.querySelector('.fc-prog') || {}).textContent || '',
+    cap3: (box.querySelector('.pz-cap3') || {}).textContent || '', btn: [...box.querySelectorAll('.fc-ctl button')].map((b) => b.dataset.act + ':' + b.dataset.v + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')),
+    tax: [...box.querySelectorAll('.tax > span')].map((s) => s.textContent).join('|') };
+};
+const fcNiceT = (x) => { const e = Math.pow(10, Math.floor(Math.log10(x))), f = x / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; };
+const medOf = (a) => { const s = a.filter((x) => typeof x === 'number').sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
+const closeTo = (txtV, v) => txtV != null && v != null && Math.abs(txtV - v) <= Math.max(0.006, Math.abs(v) * 0.051);
+async function fcPick(p, act, v) { await p.evaluate(({ act, v }) => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector(`#sheet-body [data-act="${act}"][data-v="${v}"]`).click(); }, { act, v }); await sleep(250); }
+async function testFeeScale(browser) {
+  const D = 864e5, HP = FXD.history.pools, pools = FXD.live.pools;
+  const self = pools.find((q) => q.pair === 'NUMA/USDC' && HP[q.id] && HP[q.id].y && q.feeTier === 0.003), peer = pools.find((q) => q.pair === 'NUMA/USDC' && q.id !== self.id && HP[q.id] && HP[q.id].y);
+  const noY = pools.find((q) => HP[q.id] && !HP[q.id].y && HP[q.id].d.length > 30 && HP[q.id].u) || pools.find((q) => HP[q.id] && !HP[q.id].y && HP[q.id].d.length > 30);
+  for (const phone of [true, false]) {
+    const tag = phone ? 'phone' : 'laptop', t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page;
+    await openPool(p, self.id.slice(0, 12));
+    const ys = HP[self.id].y, N = ys.length;
+    let a = await p.evaluate(FCLOOK, 'd-day');
+    // the title says which pool; the default view is the latest 90 days of the year's fee history
+    ok(`feescale ${tag}: the fee chart's title says which pool the bars are for (${a.title.slice(0, 70)})`, /LP fees per day · \d+ d · NUMA\/USDC · 0\.30% v4 · this pool$/.test(a.title) && a.mode === 'this', a.title);
+    ok(`feescale ${tag}: it reads the fee history (y, ${N} days) and opens on the latest 90 (view ${a.view.map((x) => x.toFixed(1)).join(',')})`, near(a.view[0], N, 0.01) && near(a.view[1], 90, 0.2), JSON.stringify(a.view));
+    // what is in view, from the made-up data: exact solid, estimated pale, unread hatched, unconfirmed hatched
+    const inV = (v) => ys.filter((r, i) => i + 1 > v[0] - v[1] + 1e-9 && i < v[0] - 1e-9);
+    const uy = new Set((HP[self.id].u && HP[self.id].u.y) || []), isU = (r) => uy.has(r[0]); // history.json u.y: unconfirmed days
+    let vis = inV(a.view), vals = vis.map((r) => r[1]).filter((x) => typeof x === 'number');
+    const mx = Math.max(...vis.filter((r) => typeof r[1] === 'number' && !isU(r)).map((r) => r[1])), step = fcNiceT(mx / 3), top = Math.ceil(mx / step - 1e-9) * step; // the scale: confirmed days only (an unconfirmed outlier runs off the top)
+    const nx = vis.filter((r) => r[2] === 'x' && r[1] > 0).length, ne = vis.filter((r) => r[2] === 'e' && r[1] > 0).length, nn = vis.filter((r) => r[1] == null).length, nu = vis.filter(isU).length;
+    ok(`feescale ${tag}: one bar a day in view: ${nx} exact solid, ${ne} estimated pale, ${nn} unread hatched (never 0)`, a.bars.filter((b) => b.cls.startsWith('b-x')).length === nx && a.bars.filter((b) => b.cls.startsWith('b-e') && b.op === '.38').length === ne && a.unread === nn && a.bars.filter((b) => / uc/.test(b.cls)).length === nu, JSON.stringify([a.bars.length, nx, ne, a.unread, nn, nu]));
+    const yv = a.ys.map((x) => money(x.t) ?? (x.t === '$0' ? 0 : null));
+    ok(`feescale ${tag}: a $ y-axis (${a.ys.map((x) => x.t).join(' ')}) with a gridline at each tick, 0 to ${money(a.ys[0] && a.ys[a.ys.length - 1].t) ?? '?'} ≥ the view's max`, a.ys.length >= 3 && a.grid.length === a.ys.length && yv[0] === 0 && closeTo(yv[yv.length - 1], top) && yv.every((v, i) => !i || v > yv[i - 1]) && a.ys.every((x, i) => !i || x.y < a.ys[i - 1].y), JSON.stringify([a.ys, top]));
+    const tall = a.bars.filter((b) => b.cls.startsWith('b-x') && !/uc/.test(b.cls)).sort((x, y) => y.h - x.h)[0];
+    ok(`feescale ${tag}: bar heights follow that scale (the tallest ${tall ? tall.h.toFixed(1) : '-'} px of ${a.Ht})`, tall && Math.abs(tall.h - (Math.max(...vis.filter((r) => r[2] === 'x' && !isU(r)).map((r) => r[1])) / top) * a.Ht) < 0.2, JSON.stringify([tall, top]));
+    const med = medOf(vals);
+    ok(`feescale ${tag}: a dashed "typical day (median)" line at the view's median with its value (${a.cap3})`, a.med != null && Math.abs(a.med - (a.Ht - (med / top) * a.Ht)) < 0.2 && /typical day \(median\)/.test(a.cap3) && closeTo(money(a.cap3), med) && /exact/.test(a.legend) && /estimated/.test(a.legend), JSON.stringify([a.med, med, a.cap3]));
+    const yp = HP[self.id].yp;
+    ok(`feescale ${tag}: the progress reads "exact ${yp.exact} of ${yp.age} days"`, a.prog.includes(`exact ${yp.exact} of ${yp.age} days`) && a.prog.includes(`${yp.est} estimated`), a.prog);
+    // the note: the day, its fees, exact or estimated, ×median
+    let r = await pointAt(p, 'd-day', phone, { fx: 0.995, root: '#sheet' });
+    const last = ys[N - 1];
+    ok(`feescale ${tag}: the latest day's note: its date, fees, "exact" and ×median (${r ? r.txt.slice(0, 70) : '-'})`, r && DATE_RE.test(r.txt) && closeTo(money(r.txt), last[1]) && /exact/.test(r.txt) && new RegExp(`${(last[1] / med >= 10 ? Math.round(last[1] / med) : (last[1] / med).toFixed(1)).toString().replace('.', '\\.')}× the median`).test(r.txt) && r.inside, JSON.stringify(r).slice(0, 200));
+    await p.evaluate(() => { const c = document.querySelector('#ctip'); if (c) c.hidden = true; }); // (Escape would close the panel too)
+    // log: decades, remembered on this device
+    await fcPick(p, 'fscale', 'log');
+    a = await p.evaluate(FCLOOK, 'd-day');
+    const lv = a.ys.map((x) => money(x.t)), dec = lv.every((v) => v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-6 || Math.abs(Math.log10(v / 3) - Math.round(Math.log10(v / 3))) < 1e-6);
+    ok(`feescale ${tag}: "log" turns the scale to decades (${a.ys.map((x) => x.t).join(' ')}), kept on this device`, dec && a.ys.length >= 2 && a.btn.includes('fscale:log*') && (await p.evaluate(() => localStorage.getItem('lps.flog'))) === '1', JSON.stringify([a.ys, a.btn]));
+    const p2 = await t.ctx.newPage();
+    await p2.goto(url('default')); await waitApp(p2); await openPool(p2, self.id.slice(0, 12));
+    ok(`feescale ${tag}: …and still log after a reload`, (await p2.evaluate(FCLOOK, 'd-day')).btn.includes('fscale:log*'));
+    await p2.close();
+    await fcPick(p, 'fscale', 'lin');
+    // zoom chips: 14 D · 90 D · 1 Y · ALL, the date axis follows
+    const views = {};
+    for (const [v, want] of [['14', 14], ['0', N], ['90', 90]]) { await fcPick(p, 'fzc', v); a = await p.evaluate(FCLOOK, 'd-day'); views[v] = { w: a.view[1], tax: a.tax, on: a.btn.includes(`fzc:${v}*`), want }; }
+    ok(`feescale ${tag}: the chips show 14 days, all ${N} and 90 again, each pressed, the date axis following`, Object.values(views).every((x) => Math.abs(x.w - x.want) < 0.3 && x.on) && views['14'].tax !== views['0'].tax, JSON.stringify(views).slice(0, 300));
+    // which pools: each tier side by side in its own colour; the whole pair stacked, the total in the note
+    await fcPick(p, 'fmode', 'tiers');
+    a = await p.evaluate(FCLOOK, 'd-day');
+    const cols = new Set(a.bars.map((b) => (b.f.startsWith('url(') ? b.f.replace(/^url\(#uc-d-day-(\w+)\)$/, '#$1') : b.f).toUpperCase()));
+    ok(`feescale ${tag}: "each tier" draws both NUMA/USDC pools side by side in their colours (${[...cols].join(' ')})`, a.mode === 'tiers' && /each tier \(2 pools\)$/.test(a.title) && cols.has('#16C784') && cols.has('#6EA9FF') && /0\.30% v4 this/.test(a.legend) && /0\.05% v3/.test(a.legend), JSON.stringify([a.title, [...cols], a.legend.slice(0, 80)]));
+    await fcPick(p, 'fmode', 'pair');
+    a = await p.evaluate(FCLOOK, 'd-day');
+    r = await pointAt(p, 'd-day', phone, { fx: 0.995, root: '#sheet' });
+    const lt = ys[N - 1][0], pv = (HP[peer.id].y.find((x) => x[0] === lt) || [])[1], want = typeof pv === 'number' && typeof last[1] === 'number' ? pv + last[1] : null;
+    ok(`feescale ${tag}: "whole pair" stacks them, the note gives the total (${r ? r.txt.slice(0, 60) : '-'} vs ${want && want.toFixed(2)})`, a.mode === 'pair' && /whole pair \(2 pools combined\)$/.test(a.title) && r && closeTo(money((/whole pair (\S+)/.exec(r.txt) || [])[1]), want), JSON.stringify([a.title, r && r.txt.slice(0, 120)]));
+    await p.evaluate(() => { const c = document.querySelector('#ctip'); if (c) c.hidden = true; });
+    if (SHOTS && phone) { await p.evaluate(() => document.querySelector('[data-chartbox="d-day"]').scrollIntoView({ block: 'center' })); await sleep(200); await p.screenshot({ path: path.join(SHOTS, 'feescale-phone-pair.png') }); }
+    await fcPick(p, 'fmode', 'tiers');
+    if (SHOTS && phone) { await p.evaluate(() => document.querySelector('[data-chartbox="d-day"]').scrollIntoView({ block: 'center' })); await sleep(200); await p.screenshot({ path: path.join(SHOTS, 'feescale-phone-tiers.png') }); }
+    await fcPick(p, 'fmode', 'this');
+    // an outlier the scanner marked unconfirmed: hatched, ⚠ in the legend and the note
+    await closePool(p); await openPool(p, peer.id.slice(0, 12)); await fcPick(p, 'fzc', '0');
+    a = await p.evaluate(FCLOOK, 'd-day');
+    const uc = a.bars.find((b) => / uc/.test(b.cls));
+    if (uc) { r = await pointAt(p, 'd-day', phone, { fx: (uc.x + uc.w / 2) / 300, root: '#sheet' }); }
+    ok(`feescale ${tag}: a 30× day the scanner lists in u.y is hatched, with ⚠ in the legend and "unconfirmed: no matching trading volume found yet" in its note (${r ? r.txt.slice(0, 60) : '-'})`, uc && uc.f.startsWith('url(#uc-') && /⚠ unconfirmed/.test(a.legend) && r && /⚠ unconfirmed: no matching trading volume found yet/.test(r.txt), JSON.stringify([uc, a.legend.slice(-60), r && r.txt.slice(0, 100)]));
+    await p.evaluate(() => { const c = document.querySelector('#ctip'); if (c) c.hidden = true; });
+    if (SHOTS && !phone) await snap(p, 'feescale-laptop-year', '[data-chartbox="d-day"]');
+    // no fee history yet: the daily rows draw it, no progress line
+    await closePool(p); await openPool(p, noY.id.slice(0, 12));
+    a = await p.evaluate(FCLOOK, 'd-day');
+    const ud = HP[noY.id].u && HP[noY.id].u.d;
+    ok(`feescale ${tag}: without a fee history the daily rows draw it (${a.bars.length} bars, no progress line)${ud ? ', a row listed in u.d hatched unconfirmed' : ''}`, a.bars.length > 20 && a.prog === '' && a.ys.length >= 3 && /this pool$/.test(a.title) && (!ud || (a.bars.some((b) => / uc/.test(b.cls)) && /⚠ unconfirmed/.test(a.legend))), JSON.stringify([a.bars.length, a.prog, a.title, !!ud]));
+    // the hourly chart has the same scale
+    const hh = await p.evaluate(FCLOOK, 'd-hr');
+    ok(`feescale ${tag}: the hourly fees have the $ axis, gridlines and the typical hour too (${hh.ys.map((x) => x.t).join(' ')})`, hh.ys.length >= 3 && hh.grid.length === hh.ys.length && hh.med != null && /typical hour \(median\)/.test(hh.cap3) && /LP fees per hour · 14 d · .* · this pool$/.test(hh.title), JSON.stringify([hh.ys, hh.cap3, hh.title]));
+    await closePool(p);
+    ok(`feescale ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- 4q. v0.4.7: "$ per day at $1,000" next to every APR ----------
+// Every APR the page shows carries what the example ticket earns a day (APR × ticket ÷ 365, one formatter). Found by
+// structure, not by the formatter's own marks: every table column headed APR, every window-table row of an APR, the
+// lists' APR figures, the bench, the breakdown and the lead line.
+const APR_AUDIT = ({ ticket, txt: LOCAL_TXT = false }) => { // LOCAL_TXT: name the failing figure (made-up fixtures only)
+  const bad = [], seen = { n: 0 };
+  const mon = (t) => { const m = /(−|-)?\$([\d.,]+)([KMB]?)\/day/.exec(t || ''); return m ? (m[1] ? -1 : 1) * +m[2].replace(/,/g, '') * ({ K: 1e3, M: 1e6, B: 1e9 }[m[3]] || 1) : null; };
+  const pctOf = (t) => { const m = /(−|-|\+)?([\d.,]+)%/.exec(t || ''); return m ? (m[1] === '−' || m[1] === '-' ? -1 : 1) * +m[2].replace(/,/g, '') / 100 : null; };
+  const check = (el, where) => {
+    if (!el || !el.getClientRects().length) return;
+    const t = el.textContent, ex = el.matches('[data-apr]') ? el : el.querySelector('[data-apr]'), a = ex && ex.dataset.apr !== '' ? +ex.dataset.apr : pctOf(t); // the rate itself where marked, else the % shown
+    if (a == null) return; // a dash: nothing to give a day
+    seen.n++;
+    const d = mon(t), want = (a * ticket) / 365;
+    if (d == null || Math.abs(d - want) > Math.max(0.006, Math.abs(want) * 0.051) + Math.abs(want) * 0.005 + 0.6 * (Math.abs(want) >= 9.995)) bad.push(where + (LOCAL_TXT ? ' ' + t.replace(/\s+/g, ' ').slice(0, 40) : ''));
+  };
+  for (const tb of document.querySelectorAll('table')) {
+    if (!tb.tBodies[0] || tb.closest('.sh')) continue; // a sticky header's copy has no rows
+    const hs = [...(tb.tHead ? tb.tHead.rows[0].cells : [])].map((c) => c.textContent);
+    if (tb.classList.contains('wtbl')) { for (const tr of tb.tBodies[0].rows) if (/APR|^LVR|Re-centre|^Gas/.test(tr.cells[0].textContent.trim())) [...tr.cells].slice(1).forEach((c) => check(c, 'window table ' + tr.cells[0].textContent.trim())); continue; }
+    hs.forEach((h, i) => { if (!/APR/.test(h) || /forecast/.test(h)) return; for (const tr of tb.tBodies[0] ? tb.tBodies[0].rows : []) if (tr.cells[i]) check(tr.cells[i], 'column ' + h.trim()); });
+  }
+  for (const e of document.querySelectorAll('.apr, #bench .big, .lab-legend .ap, #rp-strip .v.acc')) check(e, e.className);
+  for (const e of document.querySelectorAll('.bar + .legend > button > span, .bar + .legend > span')) if (/Net to you|LVR|swaps|Gas|Fees/.test(e.textContent)) check(e, 'breakdown');
+  const leads = [...document.querySelectorAll('[data-lead]')].filter((e) => e.getClientRects().length).map((e) => e.textContent.replace(/\s+/g, ' '));
+  return { n: seen.n, bad, leads };
+};
+const LEAD_RE = /At \$1,000: fees ≈ \$[\d.,]+K?\/day · LVR −\$[\d.,]+K?\/day · net ≈ −?\$[\d.,]+K?\/day \(−?[\d.,]+% a year\)/;
+async function testPerDay(browser, html = null) {
+  const planted = html != null, ticket = FXD.live.ticket;
+  for (const [tag, o] of planted ? [['laptop', { width: 1440 }]] : [['phone', { phone: true }], ['laptop', { width: 1440 }]]) {
+    const t = await newPage(browser, o), p = t.page;
+    if (planted) await t.ctx.route((u) => new URL(u).pathname === '/app/index.html', (r) => r.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html }));
+    await p.goto(url('default')); await unlockWith(p, FIXTURE_PASSPHRASE); await waitApp(p); await setWin(p, '30d');
+    await p.click('[data-act="more"]').catch(() => {}); await sleep(200);
+    const home = await p.evaluate(APR_AUDIT, { ticket, txt: true });
+    if (planted) { ok('perday: planted: an APR column without its $/day is caught', home.bad.length > 0, JSON.stringify(home.bad.slice(0, 3))); await t.ctx.close(); return; }
+    ok(`perday ${tag}: the home page's ${home.n} APR figures (table columns, lists, bench, breakdown) each carry $/day at $1,000`, home.n >= 40 && !home.bad.length, JSON.stringify(home.bad.slice(0, 4)));
+    ok(`perday ${tag}: the best find's lead line (${(home.leads[0] || '').slice(0, 90)})`, home.leads.length >= 1 && LEAD_RE.test(home.leads[0]), JSON.stringify(home.leads));
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    const det = await p.evaluate(APR_AUDIT, { ticket, txt: true });
+    ok(`perday ${tag}: the pool panel's ${det.n} APR figures (every window, breakdown) and its lead line`, det.n >= 18 && !det.bad.length && det.leads.some((x) => LEAD_RE.test(x)), JSON.stringify([det.n, det.bad.slice(0, 3), det.leads]));
+    await p.click('#sheet-pair'); await sleep(300);
+    const pv = await p.evaluate(APR_AUDIT, { ticket, txt: true });
+    ok(`perday ${tag}: the pair view's Net APR column (${pv.n})`, pv.n >= 1 && !pv.bad.length, JSON.stringify(pv.bad));
+    await p.click('#sheet-close'); await sleep(150);
+    const bt = await p.evaluate(() => { const r = document.querySelector('#bt-lead tr.row'); if (r) r.click(); return !!r; }); await sleep(400);
+    const b2 = await p.evaluate(APR_AUDIT, { ticket, txt: true });
+    ok(`perday ${tag}: the backtest's net APRs (leaderboard, replay, strategies: ${b2.n})`, bt && b2.n >= home.n && !b2.bad.length, JSON.stringify(b2.bad.slice(0, 3)));
+    ok(`perday ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  if (!planted) { // the planted fault: the table's Net APR column printed as a bare percentage
+    const h0 = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8'), cut = h0.replace("v: (p, w) => w && w.net, f: (x) => aprPd(x, { block: true }) },", "v: (p, w) => w && w.net, f: (x) => pct(x) },");
+    if (cut === h0) ok('perday: planted: the line to change is in the page', false);
+    else await testPerDay(browser, cut.replace(/script-src [^;]*;/, `script-src ${scriptHashes(cut).join(' ')};`));
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay };
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
