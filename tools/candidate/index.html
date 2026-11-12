@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iQfyrIi91V+nJbItqPFXMv9vwaTGZdf1stmh5LD4LuQ='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rC9QJyPryby+VacVIKHI99ATqp4ZNA4hDAa6q2TNyxY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2697,8 +2697,10 @@ function taxFitAll() { // a chart drawn by a render: fitted at once; drawn for a
   }
 }
 new MutationObserver(taxFitAll).observe(document.body, { childList: true, subtree: true });
-let taxR = 0;
-addEventListener('resize', () => { tipHide(); clearTimeout(taxR); taxR = setTimeout(() => { for (const el of $$('.tax')) if (PZ[el.dataset.tax]) pzDraw(el.dataset.tax); }, 180); });
+let taxR = 0, taxW = innerWidth;
+addEventListener('resize', () => { // only a new width: a phone's toolbars sliding away on a scroll resize the height alone
+  if (innerWidth === taxW) return;
+  taxW = innerWidth; tipHide(); clearTimeout(taxR); taxR = setTimeout(() => { for (const el of $$('.tax')) if (PZ[el.dataset.tax]) pzDraw(el.dataset.tax); }, 180); });
 
 // the one note: inside the window, never under the bar on top (or the panel's head), above the finger
 const TIP = { host: null, mini: null, pin: false, ev: null, raf: 0 };
@@ -2720,6 +2722,7 @@ function tipPut(html, ax, ay, touch) {
   y = clamp(y, top0, Math.max(top0, innerHeight - h - 8));
   const x = clamp(ax - w / 2, 8, Math.max(8, innerWidth - w - 8));
   el.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
+  TIP.px = x; TIP.py = y; TIP.at = performance.now();
 }
 function tipAt(host, cx, cy, touch) {
   const P = PZ[host.dataset.pz];
@@ -2776,7 +2779,14 @@ function tipScroll() { // a scroll that moves what the note points at puts it aw
   if ((G && G.scrub) || (MLP && MLP.on)) return;
   if (!a.isConnected) { tipHide(); return; }
   const el = TIP.mini ? TIP.mini.querySelector('svg') || TIP.mini : a;
-  if (Math.abs(el.getBoundingClientRect().top - TIP.top) > 2) tipHide();
+  const d = el.getBoundingClientRect().top - TIP.top;
+  if (Math.abs(d) <= 2) return;
+  if (TIP.pin && performance.now() - TIP.at < 700) { // a scroll still settling as the finger tapped: the note moves with the chart
+    TIP.top += d; TIP.py += d;
+    $('#ctip').style.transform = `translate(${Math.round(TIP.px)}px,${Math.round(TIP.py)}px)`;
+    return;
+  }
+  tipHide();
 }
 function tipHover() {
   TIP.raf = 0;
