@@ -285,6 +285,13 @@ test('cexVolumes with the quota out: no CoinGecko call, the exchanges serve (src
   // planted fault: without meta there is no fallback, and the coin stays null (never 0)
   const r3 = await cexVolumes(out.wrap(venueFake().fn), ['bbb-coin'], { cache: makeCexCache(path.join(dir(), 'c3.json'), { now: NOW }), now: NOW, budget, apis: out });
   assert.deepEqual([r3.vol.get('bbb-coin'), r3.fallback], [null, null]);
+  // a CoinGecko value under its own 24 h stays (it covers more exchanges); one older is replaced by the fallback's
+  const mixed = makeCexCache(path.join(dir(), 'c5.json'), { now: NOW, seed: [{ coin: 'aaa-coin', t: NOW - 10 * 3600e3, vol: 9e6 }, { coin: 'bbb-coin', t: NOW - 30 * 3600e3, vol: 8e6 }] });
+  const f5 = venueFake();
+  const r5 = await cexVolumes(out.wrap(f5.fn), ['aaa-coin', 'bbb-coin'], { cache: mixed, now: NOW, budget, apis: out, meta: new Map([['aaa-coin', { symbol: 'QQQ', usd: 2 }], ['bbb-coin', { symbol: 'AAA', usd: 2 }]]) });
+  assert.deepEqual([r5.vol.get('aaa-coin').src, r5.vol.get('aaa-coin').usd], ['coingecko', 9e6], '10 h old CoinGecko value kept');
+  assert.equal(r5.vol.get('bbb-coin').src, 'exchanges', '30 h old: the fallback read it again');
+  assert.equal(r5.fallback.asked, 1);
   // CoinGecko serving (not out, budget room): no fallback, CoinGecko's tickers as before
   const fine = makeApiCounter({ now: NOW });
   const cgFake = async (u) => (u.includes('coingecko') ? { tickers: [{ base: 'AAA', target: 'USDT', market: { name: 'Ex', identifier: 'ex' }, converted_volume: { usd: 1e6 } }] } : venueFake().fn(u));

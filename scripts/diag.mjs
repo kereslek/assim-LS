@@ -78,11 +78,12 @@ if (mode === 'probe') {
     } else say(`coingecko ${name}`, `HTTP ${r.status}: ${clean(r.json?.error || r.json?.status?.error_message || r.text)}`);
     await pause(2500);
   }
-  // the monthly mark (lib/apicount.mjs): one call through the scanner's own fetcher; a refusal for the month must set it,
+  // the monthly mark (lib/apicount.mjs): one call through the scanner's own fetcher (an endpoint the quota refuses;
+  // /simple/price was still answered with the quota out, 14 Nov 2026); a refusal for the month must set it,
   // and the next call must not be sent
   const apis = makeApiCounter({});
   const gj = apis.wrap(getJson);
-  const one = () => gj(`${G}/simple/price?ids=ethereum&vs_currencies=usd`, { headers: { accept: 'application/json', ...H } }, 20000).then(() => 'answered', (e) => (e?.budget ? 'not sent (the mark)' : `refused (HTTP ${statusOf(e) ?? '—'})`));
+  const one = () => gj(`${G}/coins/ethereum/contract/${UNI}/market_chart?vs_currency=usd&days=30`, { headers: { accept: 'application/json', ...H } }, 20000).then(() => 'answered', (e) => (e?.budget ? 'not sent (the mark)' : `refused (HTTP ${statusOf(e) ?? '—'})`));
   const first = await one(), second = await one();
   say('coingecko monthly mark', `through the scanner's fetcher: first call ${first}, second ${second}; quota out: ${apis.isOut() ? `yes (${apis.health().coingecko.out})` : 'no'}; calls sent ${apis.used()}${apis.outLine() ? `; ${apis.outLine()}` : ''}`);
   done();
