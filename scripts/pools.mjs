@@ -23,8 +23,8 @@ import { geckoTokenPools, dexScreenerTokenPairs, eachSpaced } from '../lib/aggre
 import { pageLogs, rpcLogs } from '../lib/logs.mjs';
 import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 import { BASE, PANCAKE_V3, V3_FEES } from '../lib/pools.mjs';
-import { CHAINS, timeOfBlock, blocksBack, chainOn } from '../lib/chains.mjs';
-import { lookupV3, lookupV4, readState, priceTvl, recentCreations, stampCreations, firstTradedAt } from '../lib/discover.mjs';
+import { CHAINS, timeOfBlock, blockAtTime, blocksBack, chainOn } from '../lib/chains.mjs';
+import { lookupV3, lookupV4, readState, priceTvl, recentCreations, stampCreations, firstTradedAt, keysFromInitialize, initWindow } from '../lib/discover.mjs';
 import { makeBudget, capRpc, capGetJson } from '../lib/budget.mjs';
 
 // every market-data call is counted by source (lib/apicount.mjs), and CoinGecko's within its daily budget; the
@@ -234,22 +234,46 @@ const gt = await timed('geckoterminal', () => eachSpaced(gtTokens, 2400, (t) => 
 const bigListed = (lists) => { const m = new Map(); for (const l of lists) for (const p of l || []) if (p.venue && p.reserveUsd >= FLOOR && scoped(p) && !m.has(p.id)) m.set(p.id, p); return m; };
 
 // 11. v4 pools the aggregators list but our list still lacks: their key comes from the v4
-//     PositionManager on-chain (poolKeys), and must hash back to the same pool id.
+//     PositionManager on-chain (poolKeys), and must hash back to the same pool id. A pool initialised
+//     straight on the PoolManager (liquidity through a custom router or hook) has no poolKeys entry: its key
+//     comes from its Initialize event instead (lib/discover.mjs keysFromInitialize), first near the creation
+//     time the aggregator lists, then back from the head to the PoolManager's deployment, within a read cap;
+//     again it must hash back to the id. What stays unread is left out (null), never a guessed key.
+// The first listed creation time of each pool (ms), for the event search's first window.
+const listedAt = (rows) => { const m = new Map(); for (const p of rows) if (Number.isFinite(p.createdAt)) m.set(p.id, Math.min(m.get(p.id) ?? Infinity, p.createdAt)); return m; };
 const have4 = new Set(v4.map((p) => p.id));
-const want = [...new Set([...bigListed(ds).values(), ...bigListed(gt).values()].filter((p) => p.venue === 4 && !have4.has(p.id)).map((p) => p.id))];
+const rows4 = [...bigListed(ds).values(), ...bigListed(gt).values()].filter((p) => p.venue === 4 && !have4.has(p.id));
+const want = [...new Set(rows4.map((p) => p.id))];
 if (want.length) {
   const keys = await mc(want.map((id) => poolKeysCall(C.v4PositionManager, id)), tag);
   let unregistered = 0, unread = 0;
-  const found = [];
+  const found = [], left = [];
   want.forEach((id, i) => {
     const k = readPoolKey(keys[i], id);
-    if (k === null) { unread++; return; }
-    if (k === false) { unregistered++; return; }
+    if (k === null) { unread++; left.push(id); return; }
+    if (k === false) { unregistered++; left.push(id); return; }
     found.push({ v: 4, id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator' });
   });
+  const fromPm = found.length, keyCap = makeBudget(CHAINS.ethereum.caps.v4keys);
+  let evNote = '', evUnread = 0, rejected = 0;
+  if (left.length) {
+    const blockAt = (t) => block - (nowTs - t) / 12; // 12 s slots; missed slots put the real block higher (slack)
+    const windows = new Map([...listedAt(rows4)].map(([id, t]) => [id, initWindow(t, { head: block, blockAt, back: 86400, ahead: 3600, slack: 0.015 })]).filter(([, w]) => w));
+    const ev = await timed('v4 key events', () => keysFromInitialize(logRpc, { poolManager: C.v4PoolManager, ids: left, from: C.v4PoolManagerBlock, to: block, step: CHAINS.ethereum.logMax, windows, confirmEmpty: CHAINS.ethereum.confirmEmpty, budget: keyCap, concurrency: 6 }));
+    let evFound = 0, evNone = 0;
+    for (const id of left) {
+      const k = ev.keys.get(id);
+      if (k === false) { evNone++; continue; }
+      if (!k) { evUnread++; continue; }
+      evFound++;
+      found.push({ v: 4, id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator', keyFrom: 'initialize', createdBlock: k.block, createdAt: k.time ?? timeOf(k.block) });
+    }
+    rejected = ev.rejected;
+    evNote = `; for those ${left.length}: ${evFound} read from Initialize events and matched to their ids, ${evNone} with no Initialize event since the PoolManager's deployment, ${evUnread} unread${rejected ? `, ${rejected} logs rejected (key not hashing to the id, or off the filter)` : ''} (${windows.size} with a listed creation time; reads ${keyCap.note()})`;
+  }
   await readV4State(found);
   v4.push(...found.filter((p) => p.slot0));
-  say(unread ? null : true, 'v4 keys', `${want.length} listed v4 pools ≥ ${usd(FLOOR)} not in our list yet: ${found.length} keys read on-chain and matched to their ids, ${unregistered} not registered with the PositionManager, ${unread} unread`);
+  say(evUnread || rejected ? null : true, 'v4 keys', `${want.length} listed v4 pools ≥ ${usd(FLOOR)} not in our list yet: ${fromPm} keys read on-chain and matched to their ids, ${unregistered} not registered with the PositionManager, ${unread} unread${evNote}`);
 }
 const hooked = v4.filter((p) => p.hooks && p.hooks !== ZERO);
 say(true, 'v4 list', `${v4.length} v4 pools: ${v4.filter((p) => !p.source).length} from standard keys, ${v4.filter((p) => p.source === 'event').length} from creation events, ${v4.filter((p) => p.source === 'aggregator').length} from listed ids; ${hooked.length} with hooks, ${v4.filter((p) => p.fee === DYNAMIC_FEE).length} with dynamic fees`);
@@ -419,23 +443,34 @@ async function discoverBase() {
   const scopedB = (p) => p.base && p.quote && inPairB(p.base, p.quote);
   const listedB = new Map();
   for (const l of bds) for (const p of l || []) if (p.venue && p.reserveUsd >= FLOOR && scopedB(p) && !listedB.has(p.id)) listedB.set(p.id, p);
-  const have4 = new Set(bv4.map((p) => p.id)), want = [...listedB.values()].filter((p) => p.venue === 4 && !have4.has(p.id)).map((p) => p.id);
-  let keyFound = 0;
+  // the PositionManager first; what it can't resolve, from the Initialize event near the listed creation time
+  // (no sweep back to the deployment: 30M+ blocks of 0.2 s at 10,000 a chunk is far past the cap)
+  const have4 = new Set(bv4.map((p) => p.id)), rowsB4 = [...listedB.values()].filter((p) => p.venue === 4 && !have4.has(p.id)), want = rowsB4.map((p) => p.id);
+  const kCap = part(CAP.keys);
+  let keyFound = 0, keyEv = 0, keyLeft = 0;
   if (want.length) {
     const keys = await bmc(want.map((id) => poolKeysCall(BC.v4PositionManager, id)), btag);
-    const found = [];
-    want.forEach((id, i) => { const k = readPoolKey(keys[i], id); if (k) found.push({ v: 4, dex: 'uniswap', id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator' }); });
+    const found = [], left = [];
+    want.forEach((id, i) => { const k = readPoolKey(keys[i], id); if (k) found.push({ v: 4, dex: 'uniswap', id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator' }); else left.push(id); });
+    keyLeft = left.length;
+    if (left.length) {
+      const blockAt = (t) => blockAtTime(B, t);
+      const windows = new Map([...listedAt(rowsB4)].map(([id, t]) => [id, initWindow(t, { head: bblock, blockAt, back: 3 * 3600, ahead: 600 })]).filter(([, w]) => w));
+      const ev = windows.size ? await timed('base key events', () => keysFromInitialize(blogRpc, { poolManager: BC.v4PoolManager, ids: left, from: BC.v4PoolManagerBlock, to: bblock, step: B.logMax, windows, sweep: false, confirmEmpty: B.confirmEmpty, budget: kCap })) : null;
+      for (const id of left) { const k = ev?.keys.get(id); if (k) found.push({ v: 4, dex: 'uniswap', id, t0: k.currency0, t1: k.currency1, fee: k.fee, tickSpacing: k.tickSpacing, hooks: k.hooks, source: 'aggregator', keyFrom: 'initialize', createdBlock: k.block, createdAt: k.time ?? timeOfB(k.block) }); }
+    }
     await readState(bmc, btag, { v4: found, stateView: BC.v4StateView });
     const ok = found.filter((p) => p.slot0);
     bv4.push(...ok);
-    keyFound = ok.length;
+    keyEv = ok.filter((p) => p.keyFrom === 'initialize').length;
+    keyFound = ok.length - keyEv;
   }
   const allB = new Map([...bv3, ...bv4].map((p) => [p.id, p]));
   const inScope = [...listedB.values()], haveB = inScope.filter((p) => allB.has(p.id));
   const pcsListed = [...pcsRows(bds).values()].filter((p) => scopedB(p));
   const readB = bds.filter(Boolean).length;
-  say(readB ? haveB.length >= 0.9 * inScope.length : null, 'base recall', `DexScreener: ${readB} of ${btoks.length} tokens read; ${inScope.length} Uniswap pools ≥ ${usd(FLOOR)} in scope (v3 ${inScope.filter((p) => p.venue === 3).length}, v4 ${inScope.filter((p) => p.venue === 4).length}): we have ${haveB.length} (${pct(haveB.length, inScope.length)}), ${keyFound} v4 keys read from the PositionManager; PancakeSwap pairs ≥ ${usd(FLOOR)} listed ${pcsListed.length}, in our v3 list ${pcsListed.filter((p) => allB.has(p.id)).length}`);
-  const caps = [['events: Uniswap v3', evCaps[0]], ['PancakeSwap v3', evCaps[1]], ['Uniswap v4', evCaps[2]], ['liquidity events', mlCap], ['DexScreener', dsCap], ['the whole list', all]];
+  say(readB ? haveB.length >= 0.9 * inScope.length : null, 'base recall', `DexScreener: ${readB} of ${btoks.length} tokens read; ${inScope.length} Uniswap pools ≥ ${usd(FLOOR)} in scope (v3 ${inScope.filter((p) => p.venue === 3).length}, v4 ${inScope.filter((p) => p.venue === 4).length}): we have ${haveB.length} (${pct(haveB.length, inScope.length)}), ${keyFound} v4 keys read from the PositionManager, ${keyEv} of ${keyLeft} it can't resolve from Initialize events; PancakeSwap pairs ≥ ${usd(FLOOR)} listed ${pcsListed.length}, in our v3 list ${pcsListed.filter((p) => allB.has(p.id)).length}`);
+  const caps = [['events: Uniswap v3', evCaps[0]], ['PancakeSwap v3', evCaps[1]], ['Uniswap v4', evCaps[2]], ['liquidity events', mlCap], ['DexScreener', dsCap], ['v4 keys', kCap], ['the whole list', all]];
   const hit = caps.filter(([, b]) => b.why());
   say(hit.length ? null : true, 'base caps', `${caps.map(([k, b]) => `${k} ${b.note()}`).join('; ')}${hit.length ? ` — what a cap stopped is unread (null) this run: ${hit.map(([k]) => k).join(', ')}` : ''}`);
   const bagg = aggOf(bds);
