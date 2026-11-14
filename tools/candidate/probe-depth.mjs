@@ -19,11 +19,12 @@ const VIEW = () => { const h = document.querySelector('[data-pz="liq-best"]'); r
 const VARIANTS = [
   ['2d', '2d', ''],
   ['3d', '3d', ''],
-  ['3d no ambient', '3d', '.fx3d i,*::after{animation:none!important}'],
-  ['3d no canvas', '3d', 'canvas.d3c{display:none!important}'],
-  ['3d no bar rise', '3d', '.pz-c>svg *{animation:none!important}'],
-  ['3d flat cards', '3d', '.card,.tile,.mc{background:#114A4E!important;box-shadow:none!important}.bignum,.cmp-b{text-shadow:none!important}.ring svg{filter:none!important}'],
-  ['3d no fx layer', '3d', '.fx3d{display:none!important}'],
+  ['3d no filter', '3d', '.ring svg{filter:none!important}'],
+  ['3d no text glow', '3d', '.bignum,.cmp-b{text-shadow:none!important}'],
+  ['3d no shadows', '3d', '.card,.tile,.mc,.best,.best.chs,.mc.chs,.mc.self.chs{box-shadow:none!important}'],
+  ['3d no gradients', '3d', '.card,.tile,.mc{background:#114A4E!important}'],
+  ['3d no glow loop', '3d', '.cmp-b::after,.dot::after,.newdot::after{display:none!important}'],
+  ['3d all 4', '3d', '.ring svg{filter:none!important}.bignum,.cmp-b{text-shadow:none!important}.card,.tile,.mc,.best,.best.chs,.mc.chs,.mc.self.chs{box-shadow:none!important}.cmp-b::after{display:none!important}'],
 ];
 for (const [tag, mode, css] of VARIANTS) {
   const dev = { ...pw.devices[DEVICE] }; delete dev.defaultBrowserType;
