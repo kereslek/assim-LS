@@ -237,6 +237,7 @@ async function gestures(page, R, tag, errTotal) {
       // v0.4.7: a pull down on the content (a chart at its top) never drags or closes the sheet: it scrolls or rubber-bands
       if (await press('#best [data-act="detail"]')) {
         await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(400);
+        await page.evaluate(REST); // the panel has finished sliding in (its own slide is not a drag)
         const moved = await page.evaluate(async () => {
           document.querySelector('#sheet-body').scrollTop = 0;
           const el = document.querySelector('#sheet-body [data-pz]') || document.querySelector('#sheet-body'), r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + Math.min(40, r.height / 2), c = document.querySelector('#sheet .sheet-card');
@@ -637,7 +638,7 @@ async function overlaps(page, run, tag) {
       for (let z = 0; z < 5; z++) {
         for (const side of ['', 'l', 'r']) {
           if (side) for (let k = 0; k < 10 && (await page.evaluate((s) => { const e = document.querySelector(`#best [data-pz^="liq"] > .pz-edge.${s}:not([hidden])`); if (!e) return false; e.click(); return true; }, side)); k++) await sleep(30);
-          await sleep(60); await look('#best .best-r');
+          await sleep(60); await page.evaluate(REST); await look('#best .best-r'); // at the pan end, not mid-step (a step slides for 260 ms)
         }
         if (!(await page.evaluate((d) => { const b = document.querySelector(`#best [data-act="zoom"][data-dir="${d}"][data-chart^="liq"]`); if (!b || b.disabled) return false; b.click(); return true; }, dir))) break;
         await sleep(60);

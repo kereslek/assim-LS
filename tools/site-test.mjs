@@ -3529,7 +3529,13 @@ async function testView(browser) {
       const h = await p.evaluate(STILL_BOX, { sel: '[data-pz="liq-best"]' }), x0 = h.x + h.w / 2, y0 = h.y + h.h / 2;
       await p.mouse.move(x0, y0); await p.mouse.down();
       for (let i = 1; i <= 8; i++) { await p.mouse.move(x0 - i * 12, y0); await sleep(16); }
-      const mid = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-best"] > canvas.d3c'); return c ? getComputedStyle(c).opacity : null; });
+      // still held: the next drawn frame of the drag hides the depth (a slow WebKit may not have drawn one yet: keep moving a little)
+      let mid = null;
+      for (let i = 0; i < 40; i++) {
+        mid = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-best"] > canvas.d3c'); return c ? getComputedStyle(c).opacity : null; });
+        if (mid === '0') break;
+        await p.mouse.move(x0 - 96 - (i % 2 ? 2 : 0), y0); await sleep(50);
+      }
       await p.mouse.up(); await pzSettled(p, 'liq-best');
       await p.waitForFunction(() => { const c = document.querySelector('[data-pz="liq-best"] > canvas.d3c'); return c && !c.classList.contains('mv') && getComputedStyle(c).opacity === '1'; }, null, { timeout: 4000 }).catch(() => {});
       const rest = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-best"] > canvas.d3c'), h = c && c.parentElement; return c ? { op: getComputedStyle(c).opacity, view: h.dataset.view, drawn: c.__m && c.__m.X ? true : false, towers: c.__d3 && c.__d3.towers } : null; });

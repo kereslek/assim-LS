@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aRQtz7UjcUJlsdaFyJx1T+L1Dw1P5WYlef329tKvQf4='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H3snBomEGXEbUKsnAHMoKyrtEZUi9NvqBHRzIAQ+35U='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -4960,17 +4960,18 @@ function d3Drop(h) {
   D3.rise.delete(h);
   if (D3.mark && D3.mark.h === h) D3.mark = null;
 }
+// a chart that is being dragged, pinched, coasting or stepping, playing the competition flash, or whose panel is still
+// sliding in shows its flat drawing alone (each frame costs what 2D's does); its depth comes back the moment it rests
+const d3Sliding = (h) => { const c = h.closest('.sheet-card'); return !!c && c.getAnimations().some((a) => a.playState === 'running' || a.pending); };
+const d3Moving = (h) => h.classList.contains('dragging') || !!PZA[h.dataset.pz] || (!!PIN && PIN.host === h) || (!!S.fl && h.dataset.pz === 'liq-detail') || d3Sliding(h);
 // all reads first, then all writes: one layout for any number of charts
-// a chart that is being dragged, pinched, coasting or stepping shows its flat drawing alone (each frame costs what 2D's
-// does); its depth comes back the moment it rests
-const d3Moving = (h) => h.classList.contains('dragging') || !!PZA[h.dataset.pz] || (!!PIN && PIN.host === h);
 function d3Many(hosts, initial = false) {
   if (!D3.on) return;
   const ms = [];
   for (const h of hosts) {
     if (!h.isConnected || !h.matches(D3_HOSTS)) continue;
     const c = h.querySelector(':scope > canvas.d3c');
-    if (c && d3Moving(h)) { if (!c.classList.contains('mv')) c.classList.add('mv'); d3Rest(h); continue; }
+    if (d3Moving(h)) { if (c && !c.classList.contains('mv')) c.classList.add('mv'); d3Rest(h); continue; }
     if (D3.off.has(h) && c) { D3.dirty.add(h); continue; } // off screen: drawn when it shows
     ms.push(d3Model(h));
   }
