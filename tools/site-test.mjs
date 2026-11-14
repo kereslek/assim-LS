@@ -99,6 +99,7 @@ async function newPage(browser, { phone = false, width = 390, height = 860, redu
   const ctx = await browser.newContext({ ...base, reducedMotion, ...(dpr ? { deviceScaleFactor: dpr } : {}) });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
   if (!flash) await ctx.addInitScript(() => { window.__lpsNoFlash = true; });
+  await ctx.addInitScript(() => { window.__lpsHooks = {}; }); // the page hands its time axis to the dates check
   await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
   await ctx.addInitScript(() => new MutationObserver(() => { // a chart's full view (v0.5.1): its address is recorded the same way (without full=1)
     const f = document.querySelector('#fullv iframe');
@@ -2974,6 +2975,21 @@ async function testDates(browser, page = null) {
       ok('dates: planted: a daily strip without its axis is caught', bad.length > 0, 'not caught');
       await t.ctx.close();
       return;
+    }
+    // a time axis always shows at least two dates, whatever day it is (v0.5.1: on a phone the 30-day replay showed only
+    // "1 Nov" for a day each month, from just after the 16th: the CI run of 14 Nov 2026 at 22:00 UTC found it)
+    if (phone) {
+      const one = await p.evaluate(() => {
+        const D = 864e5, bad = [], timeTicks = window.__lpsHooks && window.__lpsHooks.timeTicks;
+        if (!timeTicks) return { n: -1, first: 'the page has no axis to ask' };
+        for (let s = Date.UTC(2026, 8, 1); s < Date.UTC(2026, 11, 1); s += 3 * 36e5)
+          for (const days of [7, 14, 30]) for (const W of [200, 240, 280, 320, 360]) for (const px of [66, 78]) {
+            const n = timeTicks(s, s + days * D, W, false, px).length;
+            if (n < 2) bad.push(`${new Date(s).toISOString().slice(0, 13)} ${days} d ${W} px: ${n}`);
+          }
+        return { n: bad.length, first: bad[0] || '' };
+      });
+      ok(`dates ${tag}: a 7-, 14- or 30-day axis 200-360 px wide shows at least two dates on every start hour of three months`, one.n === 0, JSON.stringify(one));
     }
     // the main page: the best find's daily strip, the scanner's health, the scatter and the liquidity chart
     const shot = async (name) => { if (!SHOTS) return; await p.evaluate(() => { if (!document.querySelector('#fx-rib')) document.body.insertAdjacentHTML('beforeend', '<div id="fx-rib" style="position:fixed;left:0;right:0;bottom:0;z-index:99;padding:3px;text-align:center;font:700 11px/1.3 monospace;letter-spacing:.08em;background:#E8B84A;color:#06080B;pointer-events:none">TEST FIXTURES · MADE-UP NUMBERS</div>'); }); await snap(p, name); };

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Le7i9s15We37EYBYznVOqyXWjxyGFpg9Zwol/XAYa8s='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kPXGBGzo4hAHEb3A46wG0++Th53MMFUJsSgiohwmHtA='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2980,16 +2980,24 @@ function timeTicks(ta, tb, W, mid = false, minPx = 66) {
     if (out.length && !out.some((x) => x.d)) out[0].dh = true; // no midnight in view: the first tick carries the date
     return out;
   }
-  const ds = [1, 2, 5, 10, 15].find((x) => T / (x * D) <= n) || 31, off = mid ? D / 2 : 0;
-  for (let w = Math.ceil((wallT(ta) - off) / D) * D, k = 0; k < 800; w += D, k++) {
-    const t = fromWall(w + off);
-    if (t > tb) break;
-    if (t < ta) continue;
-    const dt = new Date(w), dom = dt.getUTCDate(), dim = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
-    if (ds > 15 ? dom === 1 : (dom - 1) % ds === 0 && (dom === 1 || dim - dom + 1 >= ds * 0.6)) out.push({ t, d: true });
+  const DS = [1, 2, 5, 10, 15, 31], off = mid ? D / 2 : 0;
+  // v0.5.1: a step that leaves a single date in view (30 days on a phone, from just after the 16th to the 15th: only
+  // "1 Nov") takes the next smaller step once, so the axis always reads as a span
+  for (let i = DS.findIndex((x) => x === 31 || T / (x * D) <= n), tries = 0; tries < 2 && i >= 0; i--, tries++) {
+    const ds = DS[i];
+    out.length = 0;
+    for (let w = Math.ceil((wallT(ta) - off) / D) * D, k = 0; k < 800; w += D, k++) {
+      const t = fromWall(w + off);
+      if (t > tb) break;
+      if (t < ta) continue;
+      const dt = new Date(w), dom = dt.getUTCDate(), dim = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+      if (ds > 15 ? dom === 1 : (dom - 1) % ds === 0 && (dom === 1 || dim - dom + 1 >= ds * 0.6)) out.push({ t, d: true });
+    }
+    if (out.length >= 2 || T < 2 * D) break;
   }
   return out;
 }
+if (window.__lpsHooks) window.__lpsHooks.timeTicks = timeTicks; // the browser tests only (they set it before the page loads)
 // the HTML axis under a pan chart, for its view
 function taxOf(id) {
   const P = PZ[id], [a, b] = P.vw(), [e0, e1] = P.ext(), lo = Math.max(a, e0), hi = Math.min(b, e1);
