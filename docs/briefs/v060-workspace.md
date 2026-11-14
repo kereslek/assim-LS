@@ -13,6 +13,29 @@ Builds on v0.5.1, which makes the chart ⧉ button full-screen with Close, Esc a
 - **It opens History in the workspace, already on that pool,** in the last range used, or 90D by default.
 - **Tests check it:** for every pool surface, the History control is present, visible and a real button, and it opens that pool's History.
 
+## 0b · Standing rule: every view has a way out (owner, 14 Nov 2026)
+"Any new tab or side tab must include an exit or close button. Make sure it takes the user somewhere, not an empty page. Test it too and audit carefully. Think like an Apple / iOS user."
+- **A visible close on every overlay, sheet, side panel, full-screen view, workspace tab, help card and popover:**
+  - **Done or ✕, top right**, at least 44 px, always on screen. It stays put while the content scrolls.
+  - **"‹ Back" top left** wherever the user went one level deeper (e.g. History → a day → back to History; workspace → Compare picker).
+- **Every iOS way out works:**
+  - **Swipe down** on a sheet's grabber or header dismisses it.
+  - **Safari's back gesture or back button** closes the top overlay instead of leaving the dashboard. Opening an overlay pushes a history entry; `popstate` closes it. Each overlay level is one back step, and none is left behind once it's closed.
+  - **Esc** and a **tap on the dimmed background** close side panels and popovers on the laptop.
+- **It always lands somewhere real:**
+  - Closing returns to exactly where the user was: the same scroll, the panel still open if it was open, focus back on the button that opened it.
+  - A deep link opened in a new window or tab has no opener page, so its Close goes to the dashboard's main view, never a blank tab. `window.close()` is used only when the script opened that window.
+  - A deep link to a pool that no longer exists, or that isn't read yet, shows a clear message and a button back to the main view.
+  - A refresh while a view is open reopens the same view, or falls back to the main view, never to an empty page.
+- **Tests:**
+  1. For every view: the close control exists, is visible inside the viewport, and has an aria label.
+  2. Closing restores the scroll position and focus.
+  3. On WebKit iPhone: browser back closes overlays one by one and never leaves the page.
+  4. On WebKit iPhone: swipe-down dismisses the sheets.
+  5. A new-tab deep link's Close lands on the main view.
+  6. A dead deep link shows the message.
+  7. After any open/close sequence, the page is never blank: the main content is visible and nothing is left dimmed.
+
 ## 1 · Ways in
 - **Pool panel header**, next to 24H/7D/30D: a big **History ▸** button, a **⤢ Full screen** button (opens the workspace), and **Pair view ▸** kept.
 - **Every chart's ⧉** opens the workspace on that chart's tab, already focused.
