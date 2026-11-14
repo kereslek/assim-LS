@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wQiyo5HPpe7F7lqvje3R0hMnEnm+P6oSpfAqfJ48FJY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Le7i9s15We37EYBYznVOqyXWjxyGFpg9Zwol/XAYa8s='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -151,7 +151,12 @@ body.solo main{max-width:none}
    120 px above its axis), and the window is one column (the hidden side column kept 400 px of it empty) */
 .solo-box .liq .pz-c>svg[preserveAspectRatio="none"]{height:calc(100% - 40px)!important}
 body.solo main{display:block}
-.solo-cap{margin-bottom:8px}
+.solo-cap{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.solo-cap>.lbl{min-width:0}
+.solo-x{flex:none}
+.solo-dead{margin:0 0 14px;padding:14px 16px;border-radius:12px;border:1px solid var(--line3);background:var(--raised);display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.solo-dead p{margin:0;flex:1 1 240px;color:var(--fg2);font:400 13px/1.45 var(--sans)}
+.solo-dead b{color:var(--fg)}
 /* date axes and chart notes (v0.4.6): ticks under every chart over time, one note for the data under the pointer or finger */
 .tax{position:relative;height:14px;margin-top:5px;pointer-events:none}
 .tax>span{position:absolute;top:0;transform:translateX(-50%);font:500 10px/1.3 var(--mono);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -211,6 +216,28 @@ body.solo main{display:block}
 .totop svg{width:18px;height:18px;display:block}
 body.solo .totop{display:none}
 body.solo #best .best-r{margin:0}
+body.solo .sheet-card{width:100%;border-left:0} /* a pool's chart in a window of its own: the whole width, not the panel's side sheet */
+body.solo .calib,body.solo .lab{display:block} /* the scatter and the strategy lab alone: their grid's other column is hidden, so the chart takes the width */
+/* v0.5.1 · a chart's full view: the whole window, above everything (the bar, the pool panel); real fullscreen where the
+   browser allows it. A slim row with the chart's name and Close, then the chart's own page at the window's size. */
+html.full-open{overflow:hidden}
+.fullv{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;background:var(--bg);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.fullv-h{flex:none;display:flex;align-items:center;gap:10px;min-height:52px;padding:4px 8px 4px 14px;border-bottom:1px solid var(--line);background:var(--head)}
+.fullv-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 11px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--fg2)}
+.fullv-x{flex:none;min-height:44px;min-width:44px;padding:0 18px;border-radius:8px;border:1px solid var(--line3);background:var(--raised);color:var(--fg);font:600 14px/1 var(--sans);cursor:pointer}
+.fullv-b{position:relative;flex:1;min-height:0}
+.fullv-f{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:var(--bg)}
+.fullv-f.wait{visibility:hidden}
+.fullv-w{position:absolute;left:0;right:0;top:40%;margin:0;text-align:center;color:var(--muted);font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+/* the chart's own page inside it (full=1): no bar, no card around it, the chart as tall as the window allows */
+body.full header.top,body.full .solo-cap,body.full .openwin{display:none!important}
+body.full main{padding:8px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
+body.full main .card,body.full .sheet-card,body.full .sub-card,body.full .pane.chartbox{border:0;border-radius:0;background:transparent;box-shadow:none;padding:0}
+body.full .sheet-body{padding:8px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
+body.full .sheet-card{top:0;border-radius:0}
+body.full .solo-box{padding:0}
+body.full .solo-box .liq{height:max(280px,calc(100vh - 170px));height:max(280px,calc(100dvh - 170px))}
+body.full .solo-box svg[preserveAspectRatio="none"]{height:max(220px,calc(100dvh - 210px))!important}
 
 /* layout */
 main{max-width:1400px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
@@ -586,6 +613,10 @@ footer .btn{font-family:var(--sans)}
 .pop{position:fixed;z-index:70;max-width:min(320px,calc(100vw - 24px));padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:rgba(17,23,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2)}
 .pop b{color:var(--fg);font-weight:600}
 .pop .lbl{display:block;margin-bottom:6px}
+/* v0.5.1 · every note has its own way out (the owner's standing rule): a ✕ in its top right corner, a 44 px target */
+.pop-x{float:right;width:44px;height:44px;margin:-10px -12px 0 2px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--fg2);font:400 14px/44px var(--sans);text-align:center;cursor:pointer}
+.pop-x::before{content:'\2715'}
+.pop-x:hover,.pop-x:focus-visible{color:var(--fg);background:rgba(255,255,255,.06)}
 .pop .why-row{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:start;padding:3px 0}
 .pop .why-row svg{margin-top:2px}
 .pop p+p{margin-top:5px}
@@ -1158,7 +1189,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
     <div class="sheet-head">
       <div class="ttl"><h2 id="sheet-title">—</h2></div>
       <div class="seg pills winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button></div>
-      <button type="button" class="btn" id="sheet-close" data-act="close-detail">Close</button>
+      <button type="button" class="btn" id="sheet-close" data-act="close-detail" aria-label="Close the pool panel" title="Close (Esc)">Close</button>
     </div>
     <div class="sheet-body" id="sheet-body"><div class="sheet-info" id="sheet-info"><div class="si-top"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><span id="sheet-star"></span></div><div class="lbl" id="sheet-meta"></div>
         <div class="sheet-ctl"><button type="button" class="linkbtn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button><span id="sheet-fee"></span></div>
@@ -1173,7 +1204,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
   <div class="lockgrp"><button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden aria-describedby="lock-note">Sign out on this device</button>
   <span class="lock-note" id="lock-note" hidden>Forgets the saved key here. You’ll need your passphrase next time. Your data stays encrypted either way.</span></div>
 </footer>
-<div class="pop" id="pop" role="tooltip" hidden></div>
+<div class="pop" id="pop" role="dialog" aria-label="Note" hidden></div>
 <div class="ctip" id="ctip" role="tooltip" hidden></div>
 <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
@@ -2483,7 +2514,7 @@ function ztools(id, pool) {
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="-1" aria-label="Zoom out" title="Zoom out (or pinch)"${lv <= z0 + 1e-6 ? ' disabled' : ''}>−</button>`
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="1" aria-label="Zoom in" title="Zoom in (or pinch)"${lv >= z1 - 1e-6 ? ' disabled' : ''}>+</button></div>`
     + (!near1(lv, zdef(id)) || panned(id, pool || '') ? `<button type="button" class="zreset" data-act="zreset" data-chart="${id}" aria-label="Reset zoom" title="Reset zoom (or double-tap the chart)">reset</button>` : '')
-    + `<button type="button" class="openwin" data-act="openchart" data-chart="${id}" data-pool="${esc(pool || '')}" aria-label="Open this chart in a new window" title="Open in a new window">`
+    + `<button type="button" class="openwin" data-act="openchart" data-chart="${id}" data-pool="${esc(pool || '')}" aria-label="Open this chart full screen" title="Full screen">`
     + `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 2h5v5M14 2 7.5 8.5M12 9.5V14H2V4h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
 }
 function rerender(id) {
@@ -2518,7 +2549,7 @@ function zoomed(id) {
   }
   rerender(id);
 }
-function openChart(id, pool) {
+function openChart(id, pool, btn) {
   const u = new URL(location.href);
   u.hash = '';
   u.searchParams.set('view', id);
@@ -2527,8 +2558,54 @@ function openChart(id, pool) {
   u.searchParams.set('z', String(+zget(id).toFixed(3)));
   const pn = panned(id, pool || '') ? S.pan[id].v : null; // the window opens on the same stretch
   if (pn != null) u.searchParams.set('pan', Array.isArray(pn) ? pn.map((x) => +x.toFixed(4)).join(',') : String(+pn.toFixed(4))); else u.searchParams.delete('pan');
-  window.open(u.toString(), '_blank', 'noopener');
+  u.searchParams.set('full', '1');
+  fullOpen(u.toString(), id, pool, btn);
 }
+// ---------- v0.5.1 · a chart's full view ----------
+// The ⧉ button opens the chart in a view of its own that fills the whole window, above the bar and the pool panel (and
+// real fullscreen where the browser allows it, from the tap; a phone's Safari has none for a page: the view fills its
+// window): the chart's own page (?view=…&full=1, the same sealed data, the stored key) in a frame at the window's size,
+// with every control, drag, pinch and note, in the same look. Close, Esc, or leaving fullscreen bring you back where you
+// were: the same scroll, the pool panel still open.
+let fullAt = null;
+function fullOpen(src, id, pool, btn) {
+  fullClose(true);
+  const box = document.querySelector(`[data-chartbox="${id}"]`), h = box && (box.querySelector('h3') || box.querySelector('.pane-title .lbl, .lbl'));
+  const pp = pool && poolById(pool), name = ((h && h.textContent) || 'Chart').replace(/\s+/g, ' ').trim().split(' · ')[0];
+  const title = (pp ? pp.pair + ' · ' : '') + name;
+  const ov = document.createElement('div');
+  ov.className = 'fullv'; ov.id = 'fullv'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', title + ', full view');
+  ov.innerHTML = `<div class="fullv-h"><span class="fullv-t">${esc(title)} · full view</span><button type="button" class="fullv-x" data-act="fullclose" aria-label="Close the full view" title="Close (Esc)">Close</button></div>`
+    + `<div class="fullv-b"><p class="fullv-w">Opening…</p><iframe class="fullv-f wait" title="${esc(title)}, full view" src="${esc(src)}"></iframe></div>`;
+  fullAt = { btn: btn || document.activeElement, y: scrollY, sb: $('#sheet-body').scrollTop }; // focus returns to the ⧉ pressed (Safari doesn't focus a tapped button)
+  document.body.append(ov);
+  hlOpen('full');
+  document.documentElement.classList.add('full-open');
+  const f = ov.querySelector('iframe');
+  f.addEventListener('load', () => setTimeout(() => f.classList.remove('wait'), 2500), { once: true }); // shown when ready, at the latest 2.5 s after it loads
+  try { const r = ov.requestFullscreen ? ov.requestFullscreen({ navigationUI: 'hide' }) : null; if (r && r.catch) r.catch(() => {}); } catch (e) { /* refused: the view fills the window */ }
+  ov.querySelector('.fullv-x').focus({ preventScroll: true });
+}
+function fullClose(quiet = false) {
+  const ov = $('#fullv');
+  if (!ov) return;
+  ov.remove();
+  hlClosed('full');
+  document.documentElement.classList.remove('full-open');
+  if (document.fullscreenElement) { try { const r = document.exitFullscreen(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* already out */ } }
+  const a = fullAt; fullAt = null;
+  if (a) {
+    if (Math.abs(scrollY - a.y) > 1) scrollTo(0, a.y);
+    if (Math.abs($('#sheet-body').scrollTop - a.sb) > 1) $('#sheet-body').scrollTop = a.sb;
+    if (!quiet && a.btn && a.btn.isConnected) a.btn.focus({ preventScroll: true });
+  }
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && $('#fullv')) fullClose(); }); // the browser's own way out
+addEventListener('message', (e) => {
+  if (e.origin !== location.origin || typeof e.data !== 'string') return;
+  if (e.data === 'lps-full-close') fullClose();
+  else if (e.data === 'lps-full-ready') { const f = $('#fullv .fullv-f'); if (f) f.classList.remove('wait'); }
+});
 
 // ---------- pan: a drag or swipe moves the view, a flick coasts, a double-tap resets ----------
 // Every chart that pans registers here when it is drawn: PZ[id] = { x, setX, lim, span, unit, vw, ext, inner, ... }.
@@ -3131,6 +3208,8 @@ function labTip(row, strats, u) {
 // a window opened from a chart shows just that chart, from the same sealed data (the stored key opens it)
 const SOLO = /^[a-z-]{2,20}$/.test(QP.get('view') || '') ? QP.get('view') : null;
 const SOLO_POOL = SOLO ? QP.get('pool') : null;
+const FULL = !!SOLO && QP.get('full') === '1'; // v0.5.1: inside a full view (no bar, the chart at the window's size)
+if (FULL) document.body.classList.add('full');
 const TALL = SOLO ? 2.2 : 1;
 function soloSetup() {
   const wq = QP.get('w');
@@ -3145,15 +3224,35 @@ function soloSetup() {
 function isolate() {
   if (SOLO_POOL && (SOLO.endsWith('-detail') || SOLO.startsWith('d-')) && S.detail !== SOLO_POOL) openDetail(SOLO_POOL);
   const box = $(`[data-chartbox="${SOLO}"]`);
-  if (!box) return;
+  if (!box) { soloDead(); return; }
   document.body.classList.add('solo');
   for (let el = box; el && el !== document.body; el = el.parentElement)
     for (const sib of el.parentElement.children) if (sib !== el && !sib.matches('header.top, .scrim, #ctip')) sib.style.display = 'none';
   box.classList.add('solo-box');
+  // the backtest's charts were drawn at the card's width: once, again at the window's (the scatter filled a third of it)
+  if (!S.isoOnce) { S.isoOnce = true; if (S.bt && box.closest('#bt')) { try { renderBt(); } catch (e) { console.error('panel bt failed: ' + e.message); } isolate(); return; } }
   if (PZ[SOLO] && PZ[SOLO].kind === 'liq') liqDeclutter(SOLO); // its labels, for the taller map
+  if (FULL && parent !== window) parent.postMessage('lps-full-ready', location.origin); // the full view shows it now
   const pool = SOLO_POOL && poolById(SOLO_POOL);
-  if (!box.querySelector('.solo-cap')) box.insertAdjacentHTML('afterbegin', `<div class="lbl solo-cap">${pool ? esc(pool.pair) + ' · ' : ''}${WIN_LABEL[S.win]} · opened from the dashboard</div>`);
+  if (!box.querySelector('.solo-cap')) box.insertAdjacentHTML('afterbegin', `<div class="solo-cap"><span class="lbl">${pool ? esc(pool.pair) + ' · ' : ''}${WIN_LABEL[S.win]} · opened from the dashboard</span><button type="button" class="btn solo-x" data-act="soloclose" aria-label="Close this chart and go to the dashboard" title="Close">Close</button></div>`);
   document.title = (pool ? pool.pair + ' · ' : '') + 'chart · LP Shape Scanner';
+}
+
+// a link to a chart that is no longer in the data (the pool left the scan): it says so, with a way to the dashboard
+function soloDead() {
+  if (!S.rendered && !S.live) return;
+  if (FULL && parent !== window) parent.postMessage('lps-full-ready', location.origin);
+  if ($('#solo-dead')) return;
+  const m = $('main');
+  if (m) m.insertAdjacentHTML('afterbegin', `<div class="solo-dead" id="solo-dead" role="status"><p><b>This chart isn’t in the latest data.</b> The pool or the view the link points to is no longer in the scan, so the dashboard opens on its main view.</p><button type="button" class="btn" data-act="soloclose" aria-label="Go to the dashboard's main view">Go to the dashboard</button></div>`);
+}
+// Close on the chart's own page: a window the dashboard opened closes; a link opened on its own lands on the main view
+function soloClose() {
+  if (FULL && parent !== window) { parent.postMessage('lps-full-close', location.origin); return; }
+  const u = new URL(location.href); u.hash = '';
+  for (const k of ['view', 'pool', 'full', 'z', 'pan']) u.searchParams.delete(k);
+  let mine = false; try { mine = !!(window.opener && !window.opener.closed); } catch (e) { /* another origin */ }
+  if (mine) { window.close(); setTimeout(() => location.assign(u.toString()), 400); } else location.assign(u.toString());
 }
 
 // ---------- next best ----------
@@ -3426,7 +3525,7 @@ function renderBt() {
 function drawScatter(rows) {
   const box = $('#bt-scatter'); if (!box) return;
   const pts2 = rows.filter((r) => isNum(r.b.forecastNet) && isNum(r.b.net)).map((r) => ({ r, x: r.b.forecastNet * 100, y: r.b.net * 100 }));
-  const Wd = SOLO ? boxW(box, 260) : Math.min(boxW(box, 260), 640), Ht = Math.round(Math.min(Math.max(Wd * 0.72, 210), 300) * (SOLO ? 1.6 : 1));
+  const Wd = SOLO ? boxW(box, 260) : Math.min(boxW(box, 260), 640), Ht = Math.round(FULL ? Math.max(260, Math.min(innerHeight - 120, Wd * 1.2)) : Math.min(Math.max(Wd * 0.72, 210), 300) * (SOLO ? 1.6 : 1)); // a full view: as tall as the window allows
   const L = 44, R = 14, T = 10, B = 32, pw = Wd - L - R, ph = Ht - T - B;
   if (!pts2.length) { delete PZ.scatter; box.innerHTML = `<p class="empty">No forecasts to compare yet (${DASH}).</p>`; return; }
   const all = pts2.flatMap((p) => [p.x, p.y]);
@@ -3800,7 +3899,7 @@ const PV_COL = ['#16C784', '#E8B84A', '#6EA9FF', '#B6A2FF', '#F290C4', '#98A6BA'
 function openPair(key, opener) {
   if (!pairPools(key).length) return;
   const from = S.detail && !$('#sheet').hidden ? S.detail : null; S.backTo = from;
-  if (from) { try { history.pushState({ lps: 'pair' }, ''); } catch (e) {} } // a pair whose pools are all hidden still opens: it says so, with a way to show them
+  if (from) hlOpen('pair'); // one level deeper: Back returns to the pool. A pair whose pools are all hidden still opens: it says so, with a way to show them
   S.pair = key; S.detail = null; S.opener = opener || null;
   renderPair();
   showSheet();
@@ -3849,10 +3948,38 @@ function pairRowToCard(id) {
   setBestSel(id, false);
   jumpTo('#best');
 }
+// ---------- v0.5.1 · a way out of every view (the owner's standing rule), and the browser's Back closes it ----------
+// Every level that opens over the page (a note, the pool panel, the pair view inside it, a chart's full view) puts one
+// entry in the history, so Safari's back swipe or the Back button closes the top level, one per step, and never leaves
+// the dashboard. A level closed any other way (Close, ✕, Esc, the dimmed background, a swipe down, a tap elsewhere)
+// takes its entry back with it, so none is left behind. The page's own entries say how many levels they stand for (lv);
+// the browser landing on one closes whatever is above it. The chart's own page (?view=) keeps its history as it is.
+const HL = { st: [], busy: false };
+const hlAt = () => (history.state && history.state.lps ? history.state.lv | 0 : 0);
+function hlSync() { // the history catches up with the open levels
+  if (SOLO || HL.busy) return;
+  let at = hlAt();
+  try {
+    if (at > HL.st.length) { HL.busy = true; history.go(HL.st.length - at); return; } // closed here: back past their entries
+    while (at < HL.st.length) { at++; history.pushState({ lps: HL.st[at - 1], lv: at }, ''); }
+  } catch (e) { HL.busy = false; }
+}
+function hlOpen(kind) { if (SOLO) return; HL.st.push(kind); queueMicrotask(hlSync); }
+function hlClosed(kind) { const i = HL.st.lastIndexOf(kind); if (i < 0) return; HL.st.length = i; queueMicrotask(hlSync); }
+function hlShut(kind) { // the browser went back past this level
+  if (kind === 'full') fullClose();
+  else if (kind === 'pop') popClose();
+  else if (kind === 'sheet') closeDetail();
+  else if (kind === 'pair') { if (S.pair && S.backTo && !$('#sheet').hidden) { const id = S.backTo; S.backTo = null; openDetail(id); } else closeDetail(); }
+}
 window.addEventListener('popstate', () => {
-  if (S.skipPop) { S.skipPop = false; return; }
-  if (S.pair && S.backTo && !$('#sheet').hidden) { const id = S.backTo; S.backTo = null; openDetail(id); }
+  if (HL.busy) { HL.busy = false; hlSync(); return; } // the page's own step back
+  const lv = hlAt();
+  while (HL.st.length > lv) hlShut(HL.st.pop());
+  hlSync();
 });
+// a reload while a level was open: the page opens on its main view, and that entry stands for it
+try { if (!SOLO && history.state && history.state.lps) history.replaceState(null, ''); } catch (e) { /* no history here */ }
 function openDetail(id, opener) {
   if (!poolById(id)) return;
   popClose(); qClose();
@@ -3865,6 +3992,7 @@ function openDetail(id, opener) {
   flStart(id, true);
 }
 function showSheet() {
+  if ($('#sheet').hidden) hlOpen('sheet');
   sheetReset();
   $('#sheet').hidden = false;
   document.documentElement.classList.add('modal-open');
@@ -3887,6 +4015,7 @@ function closeDetail() {
   popClose();
   flEnd();
   $('#sheet').hidden = true;
+  hlClosed('sheet'); // and the pair view above it
   S.simFor = null;
   sheetReset();
   document.documentElement.classList.remove('modal-open');
@@ -4443,7 +4572,8 @@ function popOpen(anchor, html) {
   const pop = $('#pop');
   if (S.popFor === anchor && !pop.hidden) { popClose(); return; }
   popClose();
-  pop.innerHTML = html; pop.hidden = false; S.popFor = anchor;
+  hlOpen('pop');
+  pop.innerHTML = '<button type="button" class="pop-x" data-act="popclose" aria-label="Close this note" title="Close"></button>' + html; pop.hidden = false; S.popFor = anchor;
   anchor.setAttribute('aria-expanded', 'true');
   popPlace();
 }
@@ -4461,9 +4591,12 @@ function popPlace() {
 function popClose() {
   const pop = $('#pop');
   if (!pop || pop.hidden) return;
+  const back = pop.contains(document.activeElement) ? S.popFor : null; // focus inside the note goes back to what opened it
   pop.hidden = true; pop.innerHTML = '';
+  hlClosed('pop');
   if (S.popFor) S.popFor.setAttribute('aria-expanded', 'false');
   S.popFor = null;
+  if (back && back.isConnected) back.focus({ preventScroll: true });
 }
 
 // ---------- why a pool is interesting: small pictograms built from its lenses, shape, age, market and fee pattern ----------
@@ -4868,7 +5001,7 @@ document.addEventListener('click', (e) => {
     case 'view': viewPress(el); break;
     case 'tab': setBestSel(el.dataset.id, false); break;
     case 'pair': openPair(el.dataset.key, el); break;
-    case 'pair-back': if (S.backTo) { const id = S.backTo; S.backTo = null; try { if (history.state && history.state.lps === 'pair') { S.skipPop = true; history.back(); } } catch (e) {} openDetail(id, el); } break;
+    case 'pair-back': if (S.backTo) { const id = S.backTo; S.backTo = null; hlClosed('pair'); openDetail(id, el); } break;
     case 'zoom': zoom(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'zreset': zreset(el.dataset.chart); break;
     case 'merge': mgToggle(el.dataset.id); break;
@@ -4878,7 +5011,10 @@ document.addEventListener('click', (e) => {
     case 'fmode': case 'fscale': case 'fzc': fcSet(el.dataset.act, el.dataset.v); break;
     case 'pan': pzStep(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'totop': toTop(); break;
-    case 'openchart': openChart(el.dataset.chart, el.dataset.pool); break;
+    case 'openchart': openChart(el.dataset.chart, el.dataset.pool, el); break;
+    case 'fullclose': fullClose(); break;
+    case 'popclose': { const a = S.popFor; popClose(); if (a && a.isConnected) a.focus({ preventScroll: true }); break; }
+    case 'soloclose': soloClose(); break;
     case 'pair-row': pairRowToCard(el.dataset.id); break;
     case 'refresh': manualRefresh(); break;
     case 'jump': jumpTo(el.dataset.to); break;
@@ -4896,6 +5032,8 @@ document.addEventListener('click', (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('#fullv')) { fullClose(); return; } // the full view first: the panel under it stays
+  if (e.key === 'Escape' && FULL && parent !== window) { parent.postMessage('lps-full-close', location.origin); return; } // inside it
   if (e.target && e.target.id === 'f-q') { qKey(e); if (e.defaultPrevented) return; }
   if (e.key === 'Escape' && (TIP.host || TIP.mini)) tipHide(); // and whatever else Esc closes
   if (e.key === 'Escape' && S.popFor) { const a = S.popFor; popClose(); a.focus({ preventScroll: true }); return; }

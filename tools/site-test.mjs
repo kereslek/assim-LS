@@ -9,7 +9,7 @@
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
 //                                                    merge feebar stablewalk flash dates feescale perday disc view
-//                                                    balance wraps floorlab iphone back pull (v0.5.1)
+//                                                    balance wraps floorlab iphone back pull full way (v0.5.1)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -51,7 +51,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -100,6 +100,12 @@ async function newPage(browser, { phone = false, width = 390, height = 860, redu
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
   if (!flash) await ctx.addInitScript(() => { window.__lpsNoFlash = true; });
   await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
+  await ctx.addInitScript(() => new MutationObserver(() => { // a chart's full view (v0.5.1): its address is recorded the same way (without full=1)
+    const f = document.querySelector('#fullv iframe');
+    if (!f || f.dataset.rec) return;
+    f.dataset.rec = '1'; const u = new URL(f.src); u.searchParams.delete('full'); (window.__opened ||= []).push(u.toString());
+    if (!window.__keepFull) { const c = document.querySelector('#fullv [data-act="fullclose"]'); if (c) c.click(); }
+  }).observe(document, { childList: true, subtree: true }));
   await ctx.addInitScript(() => document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a && !window.__allowExt) { e.preventDefault(); (window.__opened ||= []).push(a.href); } }, true)); // explorer links: recorded, never followed
   const page = await ctx.newPage();
   // ST_CPU=6 (Chromium only, local): a slow device, to shake out checks that assume a frame every 16 ms
@@ -1125,7 +1131,7 @@ async function testSheets(browser) {
   if (SHOTS) await p.screenshot({ path: path.join(SHOTS, 'sheet-phone-handle.png') });
   // a short, slow pull springs back
   let how = await pull(p, '#sheet .grab', 50, { ms: 40, steps: 6 });
-  await sleep(450);
+  await p.waitForFunction(() => { const c = document.querySelector('#sheet .sheet-card'); return !c.getAnimations().some((a) => a.playState === 'running') && new DOMMatrix(getComputedStyle(c).transform).m42 === 0; }, null, { timeout: 4000 }).catch(() => {});
   ok(`sheets phone: a short slow pull springs back (${how})`, (await isOpen()) && (await ty()) === 0);
   // mid-pull the sheet follows the finger (mouse on the handle: the same code path past the first move)
   const gb = await p.locator('#sheet .grab').boundingBox(), gx = gb.x + gb.width / 2, gy = gb.y + gb.height / 2;
@@ -3939,11 +3945,231 @@ async function testPull(browser) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull };
+// full (v0.5.1, the owner's laptop): the ⧉ button opens a chart in a view that fills the whole window, edge to edge,
+// above the bar and the pool panel, with the chart redrawn at that size (not a side view); Close, Esc, leaving the
+// browser's fullscreen and Back each bring you back to the same scroll with the panel still open. Laptop widths in
+// Chromium; WebKit: the phone (its job runs close to its time limit), where the view fills the screen as well.
+const FULLV = () => { // the open view, measured: its cover of the window and the chart's width inside it
+  const ov = document.querySelector('#fullv'), f = ov && ov.querySelector('iframe');
+  if (!ov || !f) return null;
+  const r = ov.getBoundingClientRect(), vw = innerWidth, vh = innerHeight;
+  const cover = (Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0))) / (vw * vh);
+  const x = ov.querySelector('[data-act="fullclose"]'), xr = x && x.getBoundingClientRect();
+  const top = [...document.elementsFromPoint(vw / 2, Math.min(vh - 2, r.top + 80))][0];
+  const d = f.contentDocument, box = d && d.querySelector('.solo-box');
+  let cw = 0;
+  if (box) for (const el of box.querySelectorAll('svg, canvas')) { const q = el.getBoundingClientRect(); if (q.height > 60) cw = Math.max(cw, q.width); }
+  return { cover: +cover.toFixed(3), onTop: !!top && ov.contains(top), cw: Math.round(cw), vw, fr: Math.round(f.getBoundingClientRect().width),
+    x: !!xr && xr.width >= 44 && xr.height >= 44 && xr.right <= vw + 0.5 && xr.top >= -0.5 && xr.bottom <= vh && !!x.getAttribute('aria-label'),
+    xRight: !!xr && xr.left > vw / 2, solo: !!(d && d.body.classList.contains('full')), bar: !!(d && d.querySelector('header.top') && d.querySelector('header.top').offsetHeight) };
+};
+async function fullWait(p) {
+  await p.waitForFunction(() => { const f = document.querySelector('#fullv iframe'); const d = f && !f.classList.contains('wait') && f.contentDocument; return !!(d && d.querySelector('.solo-box')); }, null, { timeout: BROWSER === 'webkit' ? 30000 : 20000 }).catch(() => {});
+  await sleep(200);
+}
+async function testFull(browser) {
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }]] : [['w1300', { width: 1300, height: 820 }], ['w1440', { width: 1440 }], ['w1920', { width: 1920, height: 1080 }], ['phone', { phone: true }]];
+  for (const [tag, o] of SETS) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page, lap = tag !== 'phone';
+    await p.evaluate(() => { window.__keepFull = true; });
+    const ways = ['close', 'esc', 'fs', 'back'];
+    let n = 0;
+    const bad = [], miss = [], wayBad = [], seen = [];
+    // the main page's charts, then a pool's panel's (the panel stays open under the view)
+    for (const where of ['main', 'sheet']) {
+      if (where === 'sheet') { await p.evaluate(() => { scrollTo(0, 0); document.querySelector('#best [data-act="detail"]').click(); }); await p.waitForSelector('#sheet:not([hidden])'); await sleep(400); }
+      if (where === 'main' && lap && BROWSER !== 'webkit') { await p.evaluate(() => { const r = document.querySelector('[data-act="bt-row"]'); if (r) r.click(); }); await sleep(600); } // the replay's charts too
+      const ids = await p.evaluate((w) => [...document.querySelectorAll('[data-act="openchart"]')].filter((b) => b.offsetParent && (w === 'sheet') === !!b.closest('#sheet')).map((b) => b.dataset.chart + '|' + (b.dataset.pool || '')), where);
+      const pick = BROWSER === 'webkit' ? ids.slice(0, 2) : lap ? ids : ids.slice(0, 3);
+      for (const key of pick) {
+        const [id, pool] = key.split('|');
+        const y0 = await p.evaluate(({ id, pool, where }) => {
+          const b = [...document.querySelectorAll(`[data-act="openchart"][data-chart="${id}"]`)].find((e) => e.offsetParent && (e.dataset.pool || '') === pool && (where === 'sheet') === !!e.closest('#sheet'));
+          if (!b) return null;
+          b.scrollIntoView({ block: 'center' }); window.dispatchEvent(new WheelEvent('wheel')); b.setAttribute('data-fv-t', '1');
+          return { y: Math.round(scrollY), sb: Math.round(document.querySelector('#sheet-body').scrollTop) };
+        }, { id, pool, where });
+        if (!y0) { miss.push(id); continue; }
+        await sleep(150);
+        const pos = await p.evaluate(() => ({ y: Math.round(scrollY), sb: Math.round(document.querySelector('#sheet-body').scrollTop) }));
+        await p.click('[data-fv-t="1"]'); await p.evaluate(() => document.querySelector('[data-fv-t]').removeAttribute('data-fv-t'));
+        await fullWait(p);
+        const m = await p.evaluate(FULLV);
+        n++; seen.push(id);
+        if (!m || m.cover < 0.98 || !m.onTop || !m.x || !m.xRight || !m.solo || m.bar || m.cw < 0.9 * m.vw - (lap ? 0 : 24)) bad.push(`${where}:${id} ${JSON.stringify(m)}`);
+        // the way out, in turn: Close, Esc, the browser's fullscreen exit, Back
+        const way = ways[n % ways.length];
+        if (way === 'close') await p.click('#fullv [data-act="fullclose"]');
+        else if (way === 'esc') await p.keyboard.press('Escape');
+        else if (way === 'fs') await p.evaluate(() => { if (document.fullscreenElement) document.exitFullscreen(); else document.querySelector('#fullv [data-act="fullclose"]').click(); });
+        else await p.evaluate(() => history.back());
+        await p.waitForFunction(() => !document.querySelector('#fullv'), null, { timeout: 5000 }).catch(() => {});
+        await sleep(250);
+        const back = await p.evaluate(({ id }) => ({ gone: !document.querySelector('#fullv'), y: Math.round(scrollY), sb: Math.round(document.querySelector('#sheet-body').scrollTop), sheet: !document.querySelector('#sheet').hidden, lock: document.documentElement.classList.contains('full-open'),
+          focus: !!document.activeElement && document.activeElement.dataset.act === 'openchart' && document.activeElement.dataset.chart === id, lv: history.state && history.state.lps ? history.state.lv : 0 }), { id });
+        const wantLv = where === 'sheet' ? 1 : 0;
+        if (!back.gone || back.lock || Math.abs(back.y - pos.y) > 2 || Math.abs(back.sb - pos.sb) > 2 || back.sheet !== (where === 'sheet') || (way !== 'back' && way !== 'fs' && !back.focus) || back.lv !== wantLv) wayBad.push(`${where}:${id} by ${way} ${JSON.stringify(back)} vs ${JSON.stringify(pos)}`);
+      }
+    }
+    ok(`full ${tag}: every chart's ⧉ opens a view over the whole window (≥98%, above the bar and the panel), the chart ${lap ? '≥90% of its width' : 'the screen wide'}, Close top right (${n} charts)`, n >= (BROWSER === 'webkit' ? 4 : lap ? 12 : 6) && bad.length === 0 && miss.length === 0, (bad[0] || '') + (miss.length ? ' missing ' + miss.join(',') : '') + ` (${seen.join(',')})`);
+    ok(`full ${tag}: Close, Esc, leaving fullscreen and Back each return to the same scroll, the panel still open, focus on ⧉`, n > 0 && wayBad.length === 0, wayBad.slice(0, 2).join(' | '));
+    ok(`full ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    if (SHOTS && tag === 'w1440') {
+      await p.evaluate(() => document.querySelector('#sheet [data-act="openchart"]').click()); await fullWait(p);
+      await p.screenshot({ path: path.join(SHOTS, 'full-view-w1440.png') }); await p.keyboard.press('Escape');
+    }
+    await t.ctx.close();
+  }
+}
+
+// way (v0.5.1, the owner's standing rule: every view has a way out that lands somewhere real; think like an iOS user):
+// every note, the pool panel, its pair view and a full view have a visible close (44 px, labelled, on screen); Back
+// closes them one level per step and never leaves the dashboard; a view closed by its Close, Esc, the dimmed
+// background or a swipe takes its history entry with it; closing gives back the scroll and the focus; a chart's own
+// page (a link opened on its own) closes onto the dashboard; a link to a chart that is gone says so, with a way to the
+// main view; after any mix of opening and closing nothing is left blank or dimmed.
+const WAY_LOOK = () => {
+  const vis = (el) => !!el && !el.hidden && !el.closest('[hidden]') && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const sheet = document.querySelector('#sheet'), pop = document.querySelector('#pop'), scrim = document.querySelector('#sheet .scrim');
+  return { sheet: vis(sheet), pair: vis(sheet) && /PAIR VIEW/.test(document.querySelector('#sheet-kicker').textContent), pop: vis(pop), full: !!document.querySelector('#fullv'),
+    dim: vis(scrim) || document.documentElement.classList.contains('modal-open') || document.documentElement.classList.contains('full-open'),
+    lv: history.state && history.state.lps ? history.state.lv : 0, len: history.length, mark: window.__wayMark === 1, solo: document.body.classList.contains('solo') };
+};
+const CLOSE_OK = (sel) => { // a close control: there, visible, 44 px, labelled, inside the window
+  const el = document.querySelector(sel);
+  if (!el || el.closest('[hidden]')) return 'missing';
+  const r = el.getBoundingClientRect();
+  if (r.width < 44 || r.height < 44) return `small ${Math.round(r.width)}x${Math.round(r.height)}`;
+  if (r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) return 'off screen';
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  if (!hit || !(el === hit || el.contains(hit))) return 'covered';
+  return el.getAttribute('aria-label') ? '' : 'no label';
+};
+async function wayBack(p) { // the browser's Back, then the page settles
+  await p.evaluate(() => history.back());
+  await p.waitForFunction(() => !window.__wayPop0 || window.__wayPops > window.__wayPop0, null, { timeout: 3000 }).catch(() => {});
+  await sleep(250);
+}
+async function testWay(browser) {
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }]] : [['phone', { phone: true }], ['w1440', { width: 1440 }]];
+  for (const [tag, o] of SETS) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page, phone = tag === 'phone';
+    await p.evaluate(() => { window.__wayMark = 1; window.__keepFull = true; window.__wayPops = 0; addEventListener('popstate', () => { window.__wayPops++; }); });
+    const settle = async () => { await p.evaluate(() => { window.__wayPop0 = window.__wayPops; }); };
+    const L0 = (await p.evaluate(WAY_LOOK)).len;
+    // 1. every view's close: the note (ⓘ), the panel, its pair view, a full view
+    const closes = {};
+    await p.evaluate(() => { const b = document.querySelector('main [data-act="term"], main [data-act="why"]'); b.scrollIntoView({ block: 'center' }); }); await sleep(200);
+    await p.locator('main [data-act="term"], main [data-act="why"]').first().click(); await sleep(200);
+    closes.note = await p.evaluate(CLOSE_OK, '#pop [data-act="popclose"]');
+    await p.evaluate(() => { const b = document.querySelector('#pop [data-act="popclose"]'); if (b) b.click(); }); await sleep(150);
+    const noteBack = await p.evaluate(() => ({ pop: !document.querySelector('#pop').hidden, focus: !!document.activeElement && ['term', 'why'].includes(document.activeElement.dataset.act) }));
+    await p.evaluate(() => scrollTo(0, 0)); await sleep(150);
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(450);
+    closes.panel = await p.evaluate(CLOSE_OK, '#sheet-close');
+    // 2. Back closes them one level per step (a full view over the panel → the panel; the pair view → its pool; the
+    // panel → the dashboard), never the page
+    const steps = [];
+    await p.evaluate(() => document.querySelector('#sheet [data-act="openchart"]').click()); await fullWait(p);
+    closes.full = await p.evaluate(CLOSE_OK, '#fullv [data-act="fullclose"]');
+    await settle(); await wayBack(p); steps.push(['full', await p.evaluate(WAY_LOOK), true, false]);
+    const hasPair = await p.evaluate(() => { const b = document.querySelector('#sheet-pair'); return !!b && !b.hidden; });
+    if (hasPair) {
+      await p.click('#sheet-pair'); await sleep(350); closes.pair = await p.evaluate(CLOSE_OK, '#sheet-close');
+      await settle(); await wayBack(p); steps.push(['pair', await p.evaluate(WAY_LOOK), true, false]);
+    }
+    await settle(); await wayBack(p); steps.push(['panel', await p.evaluate(WAY_LOOK), false, false]);
+    const badClose = Object.entries(closes).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+    ok(`way ${tag}: every view has a visible, labelled close of 44 px on screen (${Object.keys(closes).join(', ')})`, Object.keys(closes).length >= 3 && badClose.length === 0 && !noteBack.pop && noteBack.focus, badClose.join(' | ') + ' ' + JSON.stringify(noteBack));
+    const last = steps[steps.length - 1][1];
+    const stepOk = steps.every(([, s, sh, pr]) => s.mark && !s.full && s.sheet === sh && s.pair === pr) && !last.dim && last.lv === 0;
+    ok(`way ${tag}: Back closes the top view one level at a time (${steps.map((x) => x[0]).join(' → ')}) and the dashboard stays`, stepOk, JSON.stringify(steps.map(([k, s]) => [k, s.full, s.pair, s.sheet, s.lv, s.mark])));
+    // 3. closing any other way leaves no entry behind: Back afterwards does nothing, and the history doesn't grow
+    const others = [];
+    const L1 = (await p.evaluate(WAY_LOOK)).len;
+    for (const how of ['close', 'esc', phone ? 'swipe' : 'scrim', 'note']) {
+      await p.evaluate(() => scrollTo(0, 400)); await sleep(150);
+      const y = await p.evaluate(() => Math.round(scrollY));
+      if (how === 'note') {
+        await p.evaluate(() => { const b = [...document.querySelectorAll('main [data-act="term"], main [data-act="why"], main [data-act="gas"]')].find((e) => e.offsetParent); b.scrollIntoView({ block: 'center' }); b.click(); }); await sleep(200);
+        await p.evaluate(() => document.querySelector('#foot-l').click()); await sleep(200); // a tap elsewhere puts it away
+        const after = await p.evaluate(WAY_LOOK);
+        others.push({ how, ok: !after.pop && after.lv === 0 });
+        continue;
+      }
+      await p.evaluate(() => document.querySelector('#best [data-act="detail"]').click()); await p.waitForSelector('#sheet:not([hidden])'); await sleep(450);
+      if (how === 'close') await p.click('#sheet-close');
+      else if (how === 'esc') await p.keyboard.press('Escape');
+      else if (how === 'scrim') await p.mouse.click(30, 300);
+      else await pull(p, '#sheet .grab', 420, { ms: 16, steps: 8 });
+      await p.waitForFunction(() => document.querySelector('#sheet').hidden, null, { timeout: 4000 }).catch(() => {});
+      await sleep(300);
+      const after = await p.evaluate(WAY_LOOK);
+      others.push({ how, ok: !after.sheet && !after.dim && after.lv === 0 && Math.abs((await p.evaluate(() => Math.round(scrollY))) - y) <= 2 });
+    }
+    const L2 = (await p.evaluate(WAY_LOOK)).len, still = await p.evaluate(WAY_LOOK);
+    ok(`way ${tag}: closed by Close, Esc, ${phone ? 'a swipe down' : 'the dimmed background'} or a tap elsewhere, a view takes its history entry with it (same scroll, nothing dimmed)`,
+      others.every((x) => x.ok) && L2 <= L1 + 1 && still.mark && !still.sheet && !still.dim, JSON.stringify(others) + ` history ${L0}/${L1}/${L2}`);
+    // 4. any mix of opening and closing ends on the dashboard, visible, nothing dimmed (a made-up but fixed sequence)
+    let seed = 7; const rnd = (n) => { seed = (seed * 48271) % 2147483647; return seed % n; };
+    for (let k = 0; k < 14; k++) {
+      const look = await p.evaluate(WAY_LOOK), r = rnd(6);
+      if (r === 0 && !look.sheet && !look.full) await p.evaluate(() => { scrollTo(0, 0); document.querySelector('#best [data-act="detail"]').click(); });
+      else if (r === 1 && look.sheet && !look.pair && !look.full) await p.evaluate(() => { const b = document.querySelector('#sheet-pair'); if (b && !b.hidden) b.click(); });
+      else if (r === 2 && !look.full) await p.evaluate((sh) => { const b = document.querySelector(sh ? '#sheet [data-act="openchart"]' : 'main [data-act="openchart"]'); if (b) b.click(); }, look.sheet);
+      else if (r === 3 && look.lv > 0) { await settle(); await wayBack(p); }
+      else if (r === 4) await p.keyboard.press('Escape');
+      else if (r === 5 && !look.full) await p.evaluate((sh) => { const b = [...document.querySelectorAll(sh ? '#sheet [data-act="term"], #sheet [data-act="why"]' : 'main [data-act="term"], main [data-act="why"]')].find((e) => e.offsetParent); if (b) b.click(); }, look.sheet);
+      await sleep(350);
+    }
+    for (let k = 0; k < 4 && (await p.evaluate(WAY_LOOK)).lv > 0; k++) { await settle(); await wayBack(p); }
+    await p.evaluate(() => scrollTo({ top: 0, behavior: 'instant' })); await sleep(300);
+    const fin = await p.evaluate(() => { const b = document.querySelector('#best'); const r = b.getBoundingClientRect(); const hit = document.elementFromPoint(innerWidth / 2, innerHeight / 2); return { best: r.height > 100, el: !!hit && !!hit.closest('main'), at: [Math.round(r.top), Math.round(r.height), Math.round(scrollY)], hit: hit ? hit.tagName + '.' + String(hit.className).slice(0, 20) + '#' + hit.id : '' }; });
+    const end = await p.evaluate(WAY_LOOK);
+    ok(`way ${tag}: after a mix of opening and closing, Back leads to the dashboard: visible, nothing open or dimmed, never left`, end.mark && !end.sheet && !end.pop && !end.full && !end.dim && end.lv === 0 && fin.best && fin.el, JSON.stringify({ ...end, ...fin }));
+    // 5. a reload while the panel is open opens on the main view, with nothing dimmed
+    await p.evaluate(() => document.querySelector('#best [data-act="detail"]').click()); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    await p.reload(); await p.waitForSelector('#app:not([hidden]), #lockscreen:not([hidden])', { timeout: 30000 });
+    if (await p.isVisible('#lockscreen')) await unlockWith(p, FIXTURE_PASSPHRASE);
+    await waitApp(p);
+    const rl = await p.evaluate(WAY_LOOK);
+    ok(`way ${tag}: a reload with the panel open opens on the dashboard's main view`, !rl.sheet && !rl.dim && rl.lv === 0, JSON.stringify(rl));
+    ok(`way ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 6. a chart's own page, opened from a link on its own (no opener): Close lands on the dashboard's main view; a link to
+  // a chart that is gone says so and offers the main view
+  {
+    const t = await openUnlocked(browser, 'default', { phone: true }), p = t.page;
+    const pool = await p.getAttribute('#best [data-act="detail"]', 'data-id');
+    await p.goto(url('default', `&view=liq-detail&pool=${pool}&w=30d`));
+    await p.waitForSelector('.solo-box', { timeout: 30000 }).catch(() => {});
+    const cap = await p.evaluate(CLOSE_OK, '.solo-cap [data-act="soloclose"]');
+    await p.click('.solo-cap [data-act="soloclose"]').catch(() => {});
+    await p.waitForFunction(() => !/[?&]view=/.test(location.search) && document.querySelector('#best') && document.querySelector('#best').children.length > 0, null, { timeout: 30000 }).catch(() => {});
+    const main = await p.evaluate(() => ({ view: /[?&]view=/.test(location.search), solo: document.body.classList.contains('solo'), best: !!document.querySelector('#best') && document.querySelector('#best').getBoundingClientRect().height > 100 }));
+    ok('way: a chart opened from a link on its own has a Close that lands on the dashboard\'s main view', !cap && !main.view && !main.solo && main.best, cap + ' ' + JSON.stringify(main));
+    await p.goto(url('default', '&view=liq-detail&pool=0x00000000000000000000000000000000000000ff&w=30d'));
+    await p.waitForSelector('#solo-dead', { timeout: 30000 }).catch(() => {});
+    const dead = await p.evaluate(() => { const d = document.querySelector('#solo-dead'); const b = d && d.querySelector('[data-act="soloclose"]'); const r = d && d.getBoundingClientRect(); return { msg: !!d && /isn.t in the latest data/.test(d.textContent), btn: !!b, top: r ? Math.round(r.top) : null, vh: innerHeight }; });
+    if (dead.btn) await p.click('#solo-dead [data-act="soloclose"]');
+    await p.waitForFunction(() => !/[?&]view=/.test(location.search) && document.querySelector('#best') && document.querySelector('#best').children.length > 0, null, { timeout: 30000 }).catch(() => {});
+    const home = await p.evaluate(() => !/[?&]view=/.test(location.search) && !document.querySelector('#solo-dead'));
+    ok('way: a link to a chart that is gone says so, on screen, with a button to the main view that works', dead.msg && dead.btn && dead.top != null && dead.top < dead.vh && home, JSON.stringify(dead) + ' ' + home);
+    ok('way: no page errors on the chart\'s own page', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: testWay };
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way']); // look-independent (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
     if (!groups[g]) continue;
+    // the WebKit 3D job also runs the live audit and ends within a minute or two of its time limit: checks that don't
+    // depend on the look run on WebKit in its 2D job (the same iPhone), unless asked for by name
+    if (BROWSER === 'webkit' && MODE === '3d' && !opt('only') && WK_2D_ONLY.has(g)) { console.log(`  · ${g}: in the WebKit 2D job`); continue; }
     const s = Date.now();
     try { await groups[g](browser); } catch (e) { if (process.env.ST_DEBUG) console.error(e.stack); ok(`${g}: ran to the end`, false, String(e.message).split('\n')[0].slice(0, 160)); }
     console.log(`  · ${g} ${((Date.now() - s) / 1000).toFixed(1)} s`);

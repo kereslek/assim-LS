@@ -102,6 +102,8 @@ const INIT = () => {
   window.open = function () { window.__laOpen++; return sink; };
   // explorer links (a new tab) are counted like a window, never followed: the audit never leaves the dashboard
   document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a) { e.preventDefault(); window.__laOpen++; } }, true);
+  // v0.5.1: a chart's ⧉ opens a full view in the page; it counts like a window, and the walk closes it like any overlay
+  new MutationObserver(() => { const v = document.querySelector('#fullv'); if (v && !v.dataset.la) { v.dataset.la = '1'; window.__laOpen++; } }).observe(document, { childList: true, subtree: true });
 };
 const SNAP = () => {
   let h = 0; const s = document.body.innerHTML;
