@@ -2084,8 +2084,9 @@ async function testTouch(browser) {
     ok(`touch ${tag}: pinched closed, the view stops at the whole field (${capT}): every bar, no hatch, − disabled`, near(v1.c, (SPt[0] + SPt[1]) / 2, 2e-3) && near(v1.w, SPt[1] - SPt[0], 2e-3) && rest.hatch === 0 && rest.out && /…/.test(capT), `${JSON.stringify(v1)} ${JSON.stringify(rest)} ${capT}`);
     // a double tap (two finger taps) resets
     const hb = await p.evaluate(() => { const r = document.querySelector('[data-pz="liq-best"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 70 }; });
-    // both taps from one call in the page, 90 ms apart (two calls' round trips on a slow WebKit could pass the page's 380 ms)
-    await p.evaluate(async ({ src, hb }) => { const F = new Function('return (' + src + ')')(); for (let k = 0; k < 2; k++) { await F({ steps: 1, ms: 10, pts: [{ id: 51 + k, x0: hb.x, y0: hb.y, x1: hb.x, y1: hb.y }] }); await new Promise((r) => setTimeout(r, 90)); } }, { src: FINGERS.toString(), hb });
+    // both taps (down, move, up each) dispatched back to back in one task: a slow WebKit can paint for 300-700 ms between a
+    // tap's down and up when they are apart, and the page turns a touch held 420 ms into a scrub (its note) on purpose
+    await p.evaluate((hb) => { const el = document.elementFromPoint(hb.x, hb.y); for (const id of [51, 52]) for (const t of ['pointerdown', 'pointermove', 'pointerup']) el.dispatchEvent(new PointerEvent(t, { pointerId: id, pointerType: 'touch', isPrimary: true, clientX: hb.x, clientY: hb.y, bubbles: true, cancelable: true })); }, hb);
     v1 = await pzSettled(p, 'liq-best');
     ok(`touch ${tag}: a double tap resets the chart`, near(v1.c, 0) && near(v1.w, 0.9), JSON.stringify(v1));
     // a cancelled touch (the browser took the gesture) ends the drag cleanly
@@ -3593,7 +3594,7 @@ const BEST_COLS = () => {
   // what ends each column: everything of the card's body on the right of the left column's edge, and on its left
   const parts = [L, R, D, G].filter(Boolean), right = parts.filter((x) => x.left >= R.left - 1), left = parts.filter((x) => x.right <= L.right + 1);
   const end = (xs) => Math.max(...xs.map((x) => x.bottom));
-  return { side, lw: Math.round(L.width), rw: Math.round(R.width), bodyB: Math.round(B.bottom), leftB: Math.round(end(left)), rightB: Math.round(end(right)),
+  return { side, lw: Math.round(L.width), rw: Math.round(R.width), bodyB: Math.round(B.bottom), leftB: Math.round(end(left)), rightB: Math.round(end(right)), gemGap: G ? Math.round(G.top - L.bottom) : null,
     order: [['map', R.top], ['words', r(q('#best .bigline')).top], ['fees', D.top], ['gem', G ? G.top : Infinity]].sort((a, b) => a[1] - b[1]).map((x) => x[0]).join('>') };
 };
 const LAB_COLS = () => {
@@ -3612,6 +3613,7 @@ async function testBalance(browser) {
     ok(`balance w${w}: the best find stands in two columns, the map ${a && a.rw} px and the words ${a && a.lw} px wide (as before)`, !!a && a.side && a.rw >= 400 && a.lw >= 300 && a.rw > a.lw, JSON.stringify(a));
     ok(`balance w${w}: no hole under the liquidity map: both columns end within 48 px of each other (left ${a && a.leftB}, right ${a && a.rightB}, card body ${a && a.bodyB})`,
       !!a && Math.abs(a.leftB - a.rightB) <= 48 && a.bodyB - Math.max(a.leftB, a.rightB) <= 2, JSON.stringify(a));
+    ok(`balance w${w}: …and no hole inside a column either: the gem's parts follow the words (${a && a.gemGap} px below them)`, !!a && a.gemGap != null && a.gemGap <= 40, JSON.stringify(a));
     const g = await p.evaluate(() => { const top = (s) => [...document.querySelectorAll('#best .gemnow ' + s)].map((e) => e.getBoundingClientRect().top), sp = (xs) => (xs.length ? Math.max(...xs) - Math.min(...xs) : null); return { n: top('.v').length, v: sp(top('.v')), bar: sp(top('.track')), two: [...document.querySelectorAll('#best .gemnow .lbl')].filter((e) => e.getClientRects().length > 1 || e.getBoundingClientRect().height > 20).length }; });
     ok(`balance w${w}: the gem's four parts keep their bars and values on one line (${g.two} label on two lines)`, g.n === 4 && g.v <= 1 && g.bar <= 1, JSON.stringify(g));
     if (w >= 1300) {

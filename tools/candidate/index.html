@@ -281,9 +281,11 @@ button.tile:hover{border-color:var(--line3)}
 @container best (min-width:724px){ /* (a chart opened in a window of its own stands alone: one column) */
   body:not(.solo) .best-body{display:grid;grid-template-columns:calc(300px + (100% - 724px) / 2.6) minmax(0,1fr);grid-template-areas:"l r" "l x" "g x";gap:12px 24px;align-items:start}
   body:not(.solo) .best-l{grid-area:l}body:not(.solo) .best-r{grid-area:r;margin-top:0}body:not(.solo) .best-x{grid-area:x;margin-top:6px}body:not(.solo) .best-g{grid-area:g}
-  /* when the words run longer, the fee bars grow taller (44 px up to 104) and both columns end together */
+  /* when the words run longer, the fee bars grow taller (from 44 px) and both columns end together; the bars count as
+     44 px when the columns are measured (size containment), so they only ever fill room, never make it */
   body:not(.solo) .best-x{align-self:stretch;display:flex;flex-direction:column}
-  body:not(.solo) .best-x>.daily{flex:1 1 auto;grid-template-rows:auto minmax(44px,104px) auto;align-content:start}
+  body:not(.solo) .best-x>.daily{flex:1 1 auto;grid-template-rows:auto minmax(44px,auto) auto}
+  body:not(.solo) .best-x>.daily>.pz{contain:size;min-height:44px}
   body:not(.solo) .best-x>.daily>.pz>.pz-c,body:not(.solo) .best-x>.daily>.pz>.pz-c>svg{height:100%}
 }
 .bigline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
