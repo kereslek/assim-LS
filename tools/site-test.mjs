@@ -9,7 +9,7 @@
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
 //                                                    merge feebar stablewalk flash dates feescale perday disc view
-//                                                    balance wraps floorlab iphone back pull full way (v0.5.1)
+//                                                    balance wraps floorlab iphone back pull full way qsearch (v0.5.1)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -51,7 +51,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -1032,7 +1032,7 @@ async function testStable(browser) {
     // the search's suggestions leave them out and say so
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
     await p.click('#f-q'); await p.keyboard.type('usdc', { delay: 15 }); await sleep(250);
-    const q = await p.evaluate(() => ({ opts: [...document.querySelectorAll('#q-list .qopt')].map((e) => e.textContent), note: (document.querySelector('#q-list .qnote') || {}).textContent || '', open: !document.querySelector('#q-list').hidden }));
+    const q = await p.evaluate(() => ({ opts: [...document.querySelectorAll('#q-list .qopt')].map((e) => e.textContent), note: (document.querySelector('#q-stat .qnote') || {}).textContent || '', open: !document.querySelector('#q-bar').hidden }));
     ok(`stable ${tag}: search suggestions leave stablecoin pairs out and say how many (${q.note})`, q.open && !q.opts.some((x) => /USDC/i.test(x)) && new RegExp(`^${N - 1} hidden · stablecoin pairs off$`).test(q.note), JSON.stringify(q));
     await p.keyboard.press('Escape'); await p.fill('#f-q', ''); await p.$eval('#f-q', (e) => e.blur()); await sleep(150);
     // similar pools under the best find's detail
@@ -1758,13 +1758,13 @@ async function testSearch(browser) {
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
     const list = () => p.evaluate(() => ({ on: !document.querySelector('#q-list').hidden, items: [...document.querySelectorAll('#q-list .qopt')].map((o) => o.querySelector('.qk').textContent + ' ' + o.querySelector('.qt').textContent),
-      act: document.querySelector('#f-q').getAttribute('aria-activedescendant'), exp: document.querySelector('#f-q').getAttribute('aria-expanded'), hint: document.querySelector('#q-hint').textContent, v: document.querySelector('#f-q').value,
+      act: document.querySelector('#f-q').getAttribute('aria-activedescendant'), exp: document.querySelector('#f-q').getAttribute('aria-expanded'), hint: (document.querySelector('#q-hint') || {}).textContent || '', v: document.querySelector('#f-q').value, focus: document.activeElement === document.querySelector('#f-q'),
       rows: [...document.querySelectorAll('#all tbody tr.row .pn2')].map((x) => x.textContent) }));
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#f-q').scrollIntoView({ block: 'start' }); });
     await p.click('#f-q'); await p.keyboard.type('vel', { delay: 30 }); await sleep(200);
     let a = await list();
     ok(`search ${tag}: typing opens suggestions, likeliest first (prefix, then volume)`, a.on && a.exp === 'true' && a.items[0] === 'PAIR VELNA/WETH' && a.items[1] === 'TOKEN VELNA', a.items.join(' | '));
-    ok(`search ${tag}: the top match shows inline as a hint`, a.hint === 'velNA/WETH', a.hint);
+    ok(`search ${tag}: no greyed completion: the field holds exactly what was typed`, a.hint === '' && a.v === 'vel', JSON.stringify({ hint: a.hint, v: a.v }));
     if (SHOTS) await snap(p, `p2-search-${tag}`, '#all');
     await p.keyboard.press('ArrowDown'); await p.keyboard.press('ArrowDown'); await sleep(80);
     a = await list();
@@ -1772,15 +1772,16 @@ async function testSearch(browser) {
     await p.keyboard.press('ArrowUp'); await p.keyboard.press('Enter'); await sleep(250);
     a = await list();
     ok(`search ${tag}: Enter picks it: the table filters to that pair (native ETH included)`, !a.on && a.v === 'VELNA/WETH' && a.rows.length === 4 && a.rows.every((x) => /^VELNA\/(W?ETH)$/.test(x)), a.rows.join(','));
-    // Enter takes the inline hint
-    await p.fill('#f-q', ''); await p.keyboard.type('num', { delay: 30 }); await sleep(150);
+    // Enter (the Search key) keeps what was typed and only puts the keyboard away
+    await p.focus('#f-q'); await p.fill('#f-q', ''); await p.keyboard.type('num', { delay: 30 }); await sleep(150);
     await p.keyboard.press('Enter'); await sleep(250);
     a = await list();
-    ok(`search ${tag}: Enter with the hint showing takes the top match`, a.v === 'NUMA/USDC' && a.rows.length >= 1 && a.rows.every((x) => x.includes('NUMA')), a.v);
+    ok(`search ${tag}: Enter keeps the text, filters and leaves the field (the keyboard goes)`, a.v === 'num' && !a.focus && !a.on && a.rows.length >= 1 && a.rows.every((x) => x.includes('NUMA')), JSON.stringify({ v: a.v, focus: a.focus, rows: a.rows.length }));
+    await p.focus('#f-q');
     // a tap picks too; a token beats pairs on a word start
-    await p.fill('#f-q', ''); await p.keyboard.type('weth', { delay: 20 }); await sleep(150);
+    await p.fill('#f-q', ''); await p.keyboard.type('wet', { delay: 20 }); await sleep(150);
     a = await list();
-    ok(`search ${tag}: a token that matches from its start ranks first ("weth")`, a.items[0] === 'TOKEN WETH', a.items.slice(0, 3).join(' | '));
+    ok(`search ${tag}: a token that matches from its start ranks first ("wet")`, a.items[0] === 'TOKEN WETH', a.items.slice(0, 3).join(' | '));
     await p.fill('#f-q', ''); await p.keyboard.type('kov', { delay: 20 }); await sleep(150);
     const o = await p.locator('#q-list .qopt').first().boundingBox();
     await p.mouse.click(o.x + o.width / 2, o.y + o.height / 2); await sleep(250);
@@ -1795,11 +1796,14 @@ async function testSearch(browser) {
     ok(`search ${tag}: …and picking it opens it, shape first`, (await p.isVisible('#sheet')) && (await p.textContent('#sheet-title')) === pool.pair);
     await p.click('#sheet-close');
     // Escape; planted HTML ticker
-    await p.fill('#f-q', ''); await p.keyboard.type('<img', { delay: 20 }); await sleep(150);
+    await p.focus('#f-q'); await p.fill('#f-q', ''); await p.keyboard.type('<img', { delay: 20 }); await sleep(150);
     a = await list();
     ok(`search ${tag}: planted: an HTML ticker is suggested as text, never run`, a.items.some((x) => x.includes('<img src=x')) && (await p.evaluate(() => window.__xss)) === undefined && (await p.$$('#q-list img')).length === 0);
+    await p.keyboard.press('Escape'); await sleep(150);
+    const e1 = await list();
     await p.keyboard.press('Escape'); await sleep(80);
-    ok(`search ${tag}: Escape closes the list and keeps the text`, !(await list()).on && (await p.inputValue('#f-q')) === '<img');
+    const e2 = await list();
+    ok(`search ${tag}: Esc clears the field (the rows come back), a second Esc leaves it`, !e1.on && e1.v === '' && e1.focus && !e2.focus && e2.rows.length > 2, JSON.stringify({ v: e1.v, f1: e1.focus, f2: e2.focus }));
     await fillQ(p, '');
     ok(`search ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
@@ -2396,7 +2400,7 @@ async function testClicks(browser) {
       if (sig === 'refresh') await sleep(1600); // the button ignores taps within 1.5 s of the last // lock is a danger control: tested on its own
       done.add(sig);
       const real = sig.replace(/~2$/, ''); // "~2": the same control pressed a second time
-      if (!(await press(p, real))) { if (!/^pan:/.test(sig)) bad.push(sig + ' not found'); continue; } // an edge button shows only while there is more that way: testPan presses them
+      if (!(await press(p, real))) { if (!/^(pan:|q-reset|q-clear)/.test(sig)) bad.push(sig + ' not found'); continue; } // an edge button shows only while there is more that way: testPan presses them; the search's Clear only while a filter is on: testQsearch presses it
       const act = real.split(':')[0];
       const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '') + (e.dataset.chart ? ':' + e.dataset.chart : '') + (e.dataset.dir ? ':' + e.dataset.dir : '') + (e.dataset.v ? ':' + e.dataset.v : '')) === sig && !e.disabled && !e.closest('svg') && e.offsetParent !== null), real); // (data-v too, as SIG: the look switch's two pills)
       if (act === 'lens' || act === 'chain') {
@@ -2421,6 +2425,7 @@ async function testClicks(browser) {
       if (act === 'detail' || act === 'pair' || act === 'flash-open') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
+      if (act === 'qfind') { good = await p.evaluate(() => document.activeElement === document.querySelector('#f-q')); await p.$eval('#f-q', (e) => e.blur()); } // the 🔍: to the search, ready to type
       if (act === 'win') good = good && (await p.getAttribute(`#winseg [data-w="${real.split(':')[1]}"]`, 'aria-pressed')) === 'true';
       if (act === 'sort') good = good && (await p.$$('#all-tbl thead th[aria-sort="ascending"], #all-tbl thead th[aria-sort="descending"]')).length === 1;
       // the look already on stays on (a no-op, like the other pressed pills); the other pill switches
@@ -4177,8 +4182,81 @@ async function testWay(browser) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: testWay };
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way']); // look-independent (the fit, the full view, the ways out)
+// qsearch (v0.5.1, the owner: "I fill in just 'uni' and it feels odd … I'd have to click and confirm"): the search works
+// like iOS: no greyed completion; as you type, a line says how many pools match and the matching rows show right under
+// it, in view (above where the keyboard sits) and never covered by the suggestions; a suggestion acts when tapped; the
+// Search key puts the keyboard away; ✕ clears; the 🔍 in the bar (and "/" on a laptop) goes to the search, ready to type.
+async function testQsearch(browser) {
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    const look = () => p.evaluate(() => {
+      const inp = document.querySelector('#f-q'), vh = innerHeight, kb = navigator.maxTouchPoints > 0 ? vh * 0.6 : vh; // a phone's keyboard takes about the lower 40%
+      const st = document.querySelector('#q-stat'), sr = st && st.getBoundingClientRect(), rows = [...document.querySelectorAll('#all tbody tr.row')];
+      const r0 = rows[0] && rows[0].querySelector('.pn2'), rr = r0 && r0.getBoundingClientRect();
+      const hit = rr ? document.elementFromPoint(rr.left + Math.min(20, rr.width / 2), rr.top + rr.height / 2) : null;
+      const ghost = document.querySelector('#q-hint'), x = document.querySelector('#q-x'), xr = x && x.getBoundingClientRect();
+      return { v: inp.value, focus: document.activeElement === inp, ghost: !!ghost && !!ghost.textContent, top: Math.round(inp.getBoundingClientRect().top), vh: Math.round(vh), kb: Math.round(kb),
+        stat: st && !st.closest('[hidden]') && sr.height > 0 ? st.textContent : '', statIn: !!sr && sr.top >= 0 && sr.bottom <= kb,
+        rows: rows.length, rowIn: !!rr && rr.top >= 0 && rr.bottom <= kb, rowSeen: !!hit && !!r0 && r0.contains(hit), lit: !!(r0 && r0.querySelector('b')),
+        chips: [...document.querySelectorAll('#q-list .qopt')].filter((o) => o.getClientRects().length).length, x: !!xr && !x.hidden && xr.width >= 44 && xr.height >= 44 };
+    });
+    // the 🔍 in the bar, from the top of the page
+    await p.evaluate(() => scrollTo({ top: 0, behavior: 'instant' })); await sleep(200);
+    const fb = await p.$('#qfind');
+    const fbOk = !!fb && (await fb.isVisible());
+    if (fbOk) await p.click('#qfind'); else { await p.evaluate(() => document.querySelector('#f-q').scrollIntoView({ block: 'center' })); await p.click('#f-q'); }
+    await sleep(300);
+    let a = await look();
+    ok(`qsearch ${tag}: the 🔍 in the bar goes to the search, ready to type, near the top`, fbOk && a.focus && a.top >= 0 && a.top < a.vh * 0.4, JSON.stringify({ fbOk, focus: a.focus, top: a.top, vh: a.vh }));
+    await p.keyboard.type('ko', { delay: 60 }); await sleep(350);
+    a = await look();
+    ok(`qsearch ${tag}: no greyed completion: the field holds exactly "ko"`, a.v === 'ko' && !a.ghost, JSON.stringify({ v: a.v, ghost: a.ghost }));
+    ok(`qsearch ${tag}: as you type, a line says how many match and the first matching row (its match lit) shows in view${phone ? ' above the keyboard' : ''}, not under the suggestions`,
+      /^\d+ pools? match(es)? “ko”/.test(a.stat) && a.statIn && a.rows >= 1 && a.rowIn && a.rowSeen && a.lit, JSON.stringify(a));
+    ok(`qsearch ${tag}: ✕ shows while there is text, 44 px`, a.x, JSON.stringify(a.x));
+    // a suggestion acts when tapped: a pair filters to it, and the keyboard goes
+    const chip = await p.$('#q-list .qopt');
+    if (chip) { if (phone) await chip.tap().catch(() => chip.click()); else await chip.click(); }
+    await sleep(350);
+    a = await look();
+    ok(`qsearch ${tag}: tapping a suggestion acts: the rows filter to it and the keyboard goes`, !!chip && a.v.length > 2 && !a.focus && a.rows >= 1 && /match/.test(a.stat), JSON.stringify({ v: a.v, focus: a.focus, rows: a.rows }));
+    // ✕ clears and keeps the field
+    if (await p.isVisible('#q-x')) await p.click('#q-x');
+    await sleep(250);
+    a = await look();
+    ok(`qsearch ${tag}: ✕ clears the field and every row comes back`, a.v === '' && a.rows > 2 && !a.stat, JSON.stringify({ v: a.v, rows: a.rows, stat: a.stat }));
+    // the Search key (Enter): nothing to confirm, the keyboard goes, the rows stay
+    await p.focus('#f-q'); await p.keyboard.type('xyz', { delay: 40 }); await sleep(300);
+    const none = await look();
+    await p.keyboard.press('Enter'); await sleep(250);
+    a = await look();
+    ok(`qsearch ${tag}: no match says so with a way back; Enter only puts the keyboard away`, /^No pools match “xyz”/.test(none.stat) && /Clear filters/.test(none.stat) && a.v === 'xyz' && !a.focus, JSON.stringify({ stat: none.stat, v: a.v, focus: a.focus }));
+    await p.evaluate(() => { const b = [...document.querySelectorAll('#q-stat .linkbtn')].pop(); if (b) b.click(); }); await sleep(250);
+    a = await look();
+    ok(`qsearch ${tag}: "Clear filters" brings every row back`, a.v === '' && a.rows > 2, JSON.stringify({ v: a.v, rows: a.rows }));
+    if (!phone) { // the laptop's keys: "/" goes to the search; Esc clears, then leaves
+      await p.evaluate(() => { document.activeElement && document.activeElement.blur(); scrollTo({ top: 0, behavior: 'instant' }); }); await sleep(150);
+      await p.keyboard.press('/'); await sleep(250);
+      const sl = await look();
+      await p.keyboard.type('vel', { delay: 30 }); await sleep(250);
+      await p.keyboard.press('Escape'); await sleep(150);
+      const e1 = await look();
+      await p.keyboard.press('Escape'); await sleep(150);
+      const e2 = await look();
+      ok('qsearch laptop: "/" goes to the search; Esc clears it, a second Esc leaves it', sl.focus && sl.v === '' && e1.v === '' && e1.focus && !e2.focus, JSON.stringify({ s: sl.focus, e1: [e1.v, e1.focus], e2: e2.focus }));
+    }
+    // the filters say what they did at once, the same way
+    await p.selectOption('#f-chain', { index: 1 }); await sleep(150);
+    a = await look();
+    ok(`qsearch ${tag}: a chain picked says at once how many pools it leaves`, /^\d+ pools? match(es)? [A-Z]/.test(a.stat), a.stat);
+    await p.selectOption('#f-chain', 'all'); await sleep(150);
+    ok(`qsearch ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: testWay, qsearch: testQsearch };
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch']); // look-independent (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

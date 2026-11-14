@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kPXGBGzo4hAHEb3A46wG0++Th53MMFUJsSgiohwmHtA='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-X2lezQ7zsObt/oiF1ScFEJP18DCwxGPv+gabUKpDBi8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -608,6 +608,8 @@ footer .btn{font-family:var(--sans)}
 }
 @media (max-width:400px){.top .fw{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}} /* the dot's colour and the label say it */
 @media (max-width:340px){.top .brand{display:none}}
+@media (max-width:480px){body:not(.solo) .top .brand{display:none}.top{gap:6px}}
+@media (max-width:380px){.top .seg.pills button>span{padding-left:5px;padding-right:5px}}
 
 /* pop-up notes: why a pool stands out, the gas range */
 .pop{position:fixed;z-index:70;max-width:min(320px,calc(100vw - 24px));padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:rgba(17,23,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2)}
@@ -801,19 +803,34 @@ div.mc-name{cursor:inherit;pointer-events:none}
 .qin{position:relative}
 .qin input{position:relative;z-index:1;background:transparent!important;-webkit-appearance:none;appearance:none}
 .qin::before{content:"";position:absolute;inset:0;border-radius:8px;background:var(--raised)}
-.qhint{position:absolute;left:11px;right:11px;top:0;bottom:0;z-index:0;display:flex;align-items:center;font-size:13px;white-space:pre;overflow:hidden;pointer-events:none;color:var(--muted)}
-.qhint .t{visibility:hidden}
+/* v0.5.1 · search like iOS (the owner: "it feels odd … half the search field"): what you type is what the field holds (no
+   greyed completion), the rows filter as you type, a live line says how many match, suggestions are small chips under it
+   that never cover the rows, ✕ clears, the Search key just hides the keyboard */
+.qin input{padding-right:44px}
+#f-q::-webkit-search-cancel-button,#f-q::-webkit-search-decoration{-webkit-appearance:none;appearance:none;display:none}
+.qx{position:absolute;right:0;top:50%;z-index:2;width:44px;height:44px;margin-top:-22px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--fg2);font:400 15px/44px var(--sans);text-align:center;cursor:pointer}
+.qx::before{content:'\2715'}
+.qx:hover,.qx:focus-visible{color:var(--fg)}
+.qbar{margin:8px 0 2px;min-width:0}
+.qstat{margin:0;font:500 12px/1.5 var(--sans);color:var(--fg2)}
+.qstat b{color:var(--fg);font-weight:600}
+.qstat .qnote{color:var(--muted)}
+.qstat .linkbtn{margin-left:2px}
+.pn2>b.qhit{color:var(--accent);font-weight:700}
 /* v0.5.1 · on a touch screen every field is 16 px: iOS Safari zooms into a smaller one when it is tapped and keeps that
    zoom, even when the page is opened again (the owner had to zoom out); a laptop keeps its 13 px */
 @media (hover:none) and (pointer:coarse),(max-width:520px){.filters select,.filters input,.qhint,input,select,textarea{font-size:16px}}
-.qlist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;margin:0;padding:4px 0;list-style:none;border:1px solid var(--line3);border-radius:10px;background:rgba(12,16,21,.98);box-shadow:0 14px 30px rgba(0,0,0,.55);max-height:min(60vh,380px);overflow-y:auto}
-.qopt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;min-height:44px;padding:4px 12px;cursor:pointer;font-size:13px;color:var(--fg2)}
-.qopt .qk{font:600 10px/1 var(--mono);letter-spacing:.06em;color:var(--muted);min-width:36px}
-.qopt .qt{min-width:0;overflow-wrap:anywhere;color:var(--fg)}
+.qlist-old{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;margin:0;padding:4px 0;list-style:none;border:1px solid var(--line3);border-radius:10px;background:rgba(12,16,21,.98);box-shadow:0 14px 30px rgba(0,0,0,.55);max-height:min(60vh,380px);overflow-y:auto}
+.qlist{display:flex;gap:6px;margin:6px 0 0;padding:0 0 2px;list-style:none;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.qlist::-webkit-scrollbar{display:none}
+.qopt{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border:1px solid var(--line3);border-radius:20px;background:var(--raised);cursor:pointer;font-size:13px;color:var(--fg2);white-space:nowrap}
+.qopt .qk{order:2;font:600 9px/1 var(--mono);letter-spacing:.06em;color:var(--muted)}
+.qopt .qt{color:var(--fg)}
+.qopt .qm{display:none}
 .qopt .qt b{color:var(--accent);font-weight:700}
 .qopt .qm{font:500 10px/1.2 var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
 .qopt[aria-selected="true"],.qopt:hover{background:var(--raised)}
-.qopt[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--accent)}
+.qopt[aria-selected="true"]{border-color:var(--accent);box-shadow:none}
 
 /* backtest highlights: the chosen line stays, the rest step back */
 button.strat{width:100%;min-height:44px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:opacity .15s ease,background .15s ease}
@@ -936,6 +953,8 @@ td.fees{width:96px}
    Classic 2D is the v0.4.8 look, untouched. html.m3d swaps the palette, adds depth and motion, and puts a depth canvas
    behind every bar chart; it changes no size, padding or position, so both looks share one layout. */
 .top #viewseg{margin-left:auto;flex:none}
+.top #qfind{margin-left:auto;flex:none}
+.top #qfind:not([hidden])+#viewseg{margin-left:0} /* the 🔍 leads the controls on the right */
 .top #viewseg~#refresh{margin-left:0}
 .vsw button>span{padding:5px 7px}
 .vsw button:first-child>span{padding-left:9px}
@@ -985,7 +1004,7 @@ html.m3d .sheet-card{background:linear-gradient(180deg,#0E3E42 0%,#0C3438 60%);b
 html.m3d .sheet-head{background:#0F4246}
 html.m3d .scrim{background:rgba(2,18,20,.72)}
 html.m3d .ctip,html.m3d .pop{background:rgba(10,46,50,.97);border-color:#3B7F7D;box-shadow:0 14px 32px rgba(1,16,18,.65)}
-html.m3d .qlist{background:rgba(10,46,50,.98)}
+html.m3d .qopt{background:rgba(10,46,50,.98)}
 html.m3d .totop,html.m3d .mc-nav{background:rgba(12,52,56,.94)}
 html.m3d .pz-hint{background:rgba(8,40,44,.76)}
 html.m3d .lock-card{background:linear-gradient(165deg,#155357,#0F4549);border-color:rgba(126,240,214,.2);border-radius:16px;box-shadow:0 5px 0 -1px #082C2F}
@@ -1049,6 +1068,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
     <h1 class="title">LP SHAPE SCANNER</h1>
   </div>
   <span class="badge" id="fresh" role="status"><span class="dot"></span><span id="fresh-t">NO DATA YET</span></span>
+  <button type="button" class="iconbtn" id="qfind" data-act="qfind" aria-label="Search pools" title="Search pools (/)" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.6" cy="8.6" r="5.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.8 12.8 17 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   <div class="seg pills vsw" role="group" aria-label="View: 3D or Classic 2D" id="viewseg"><button type="button" data-act="view" data-v="3d" aria-pressed="false" title="3D view"><span>3D</span></button><button type="button" data-act="view" data-v="2d" aria-pressed="false" title="Classic 2D view"><span>2D</span></button></div>
   <button type="button" class="iconbtn" id="refresh" data-act="refresh" aria-label="Refresh" title="Refresh now" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.2 2.6v3.4h-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   <div class="seg pills" role="group" aria-label="Time window" id="winseg" hidden>
@@ -1123,10 +1143,10 @@ html.m3d .g-cheap{--gc:#5EE6C8}
         <div class="stab-row"><button type="button" class="tog" id="f-stab" role="switch" aria-checked="false" aria-labelledby="f-stab-l" aria-describedby="f-stab-n" data-act="stable"><span class="knob" aria-hidden="true"></span><span class="st">Off</span></button><span class="lbl stab-n" id="f-stab-n"></span></div>
       </div>
       <div class="fld q"><span class="lbl" id="f-q-l">Search</span>
-        <div class="qin"><span class="qhint" id="q-hint" aria-hidden="true"></span><input id="f-q" type="search" data-act="search" role="combobox" aria-autocomplete="both" aria-expanded="false" aria-controls="q-list" aria-labelledby="f-q-l" placeholder="Pair, token or pool id" autocomplete="off" spellcheck="false" enterkeyhint="search">
-          <ul class="qlist" id="q-list" role="listbox" aria-label="Suggestions" hidden></ul></div>
+        <div class="qin"><input id="f-q" type="search" data-act="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="q-list" aria-labelledby="f-q-l" placeholder="Pair, token or pool id" autocomplete="off" spellcheck="false" enterkeyhint="search"><button type="button" class="qx" id="q-x" data-act="q-clear" aria-label="Clear the search" title="Clear" hidden></button></div>
       </div>
     </div>
+    <div class="qbar" id="q-bar" hidden><p class="qstat" id="q-stat" role="status" aria-live="polite"></p><ul class="qlist" id="q-list" role="listbox" aria-label="Suggestions" hidden></ul></div>
     <div class="why-key"><button type="button" class="linkbtn" id="why-tog" data-act="legend" aria-expanded="false" aria-controls="why-legend">What the “Why” icons mean</button><span class="ch-key" id="ch-key" role="note" aria-label="Chain marks"></span></div>
     <div class="why-legend" id="why-legend" hidden></div>
     <div class="tbl-box" id="all-box"><table class="tbl" id="all-tbl"><thead></thead><tbody></tbody></table></div>
@@ -1656,7 +1676,7 @@ let rmsgT = 0;
 
 // ---------- unlock / lock ----------
 function lockMsg(t, err) { const m = $('#lock-msg'); m.textContent = t || ''; m.className = 'lock-msg' + (err ? ' err' : ''); }
-function showLock() { popClose(); $('#mstrip').hidden = true; $('#lock-note').hidden = true; $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
+function showLock() { popClose(); $('#mstrip').hidden = true; $('#lock-note').hidden = true; $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#qfind').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
 async function onUnlock(ev) {
   ev.preventDefault();
   const input = $('#pass'), btn = $('#unlock-btn'), pass = input.value;
@@ -1798,7 +1818,7 @@ function renderAll() {
   seenSetup();
   if (SOLO && !S.soloReady) { soloSetup(); S.soloReady = true; }
   ensureWin();
-  $('#winseg').hidden = false; $('#refresh').hidden = false;
+  $('#winseg').hidden = false; $('#refresh').hidden = false; $('#qfind').hidden = !!SOLO;
   $('#app').hidden = false; $('#loaderr').hidden = true; $('#lockscreen').hidden = true;
   $('#ribbon').hidden = S.live.fixture !== true;
   const ph = S.live.phase;
@@ -3413,15 +3433,36 @@ function renderTable() {
   }).join('') + '</tr>';
   const fresh = vis.filter(isNew).length;
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
+    + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${qHi(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
     + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; if (c.k === 'fees') return `<td class="fees">${feeMini(p)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
   $('#ch-key').innerHTML = chainKey(L.pools);
   $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== vis.length ? ' (' + vis.length + ' IN ALL)' : ''}${fresh ? ` · ${fresh} NEW` : ''}${hid ? ' · ' + hidTxt(hid, true) : ''}`;
   $('#all-more').innerHTML = rows.length > shown.length ? `<button type="button" class="btn more" data-act="more">Show all ${int(rows.length)}</button>` : '';
+  qStat(rows.length);
   stickyHead($('#all-box'));
 }
+// the matching part of a pool's name, lit while a search is on
+function qHi(name) {
+  const q = S.filt.q.trim().toLowerCase(), i = q ? String(name).toLowerCase().indexOf(q) : -1;
+  return i < 0 ? esc(name) : esc(name.slice(0, i)) + '<b class="qhit">' + esc(name.slice(i, i + q.length)) + '</b>' + esc(name.slice(i + q.length));
+}
+// the live line under the search: how many pools match, at once, and a way back when none do
+function qStat(n) {
+  const q = S.filt.q.trim(), on = !!q || S.filt.lens !== 'all' || S.filt.chain !== 'all', st = $('#q-stat');
+  if (!st) return;
+  if (!on) { st.innerHTML = ''; qBar(); return; }
+  const parts = [];
+  if (q) parts.push(`“${esc(q)}”`);
+  if (S.filt.lens !== 'all') parts.push(esc(S.filt.lens === 'fav' ? 'favourites' : LENS_NAME[S.filt.lens] || S.filt.lens));
+  if (S.filt.chain !== 'all') parts.push(esc(S.filt.chain.charAt(0).toUpperCase() + S.filt.chain.slice(1)));
+  const hid = q ? S.live.pools.filter((p) => hideStable(p) && qMatch(p, q.toLowerCase())).length : 0;
+  st.innerHTML = (n ? `<b>${int(n)} pool${n === 1 ? '' : 's'}</b> match${n === 1 ? 'es' : ''} ${parts.join(' · ')}` : `No pools match ${parts.join(' · ')}`)
+    + (hid ? ` · <span class="qnote">${hidTxt(hid)}</span>` : '') + ` · <button type="button" class="linkbtn" data-act="q-reset">${n ? 'Clear' : 'Clear filters'}</button>`;
+  qBar();
+}
+function qBar() { const b = $('#q-bar'); if (b) b.hidden = !$('#q-stat').innerHTML && $('#q-list').hidden; const x = $('#q-x'); if (x) x.hidden = !$('#f-q').value; }
 function setSort(k) {
   if (S.sort.k === k) S.sort.dir = -S.sort.dir; else S.sort = { k, dir: k === 'pair' || k === 'age' ? 1 : -1 };
   popClose();
@@ -4883,43 +4924,40 @@ function hiMatch(label, q) {
   const i = label.toLowerCase().indexOf(q);
   return i < 0 || !q ? esc(label) : esc(label.slice(0, i)) + '<b>' + esc(label.slice(i, i + q.length)) + '</b>' + esc(label.slice(i + q.length));
 }
-const qHintItem = () => { const inp = $('#f-q'), it = Q.items[0]; return Q.open && it && it.k !== 'pool' && inp && inp.value && it.label.toLowerCase().startsWith(inp.value.toLowerCase()) && it.label.length > inp.value.length ? it : null; };
-function qHint() {
-  const h = $('#q-hint'), inp = $('#f-q');
-  if (!h || !inp) return;
-  const it = qHintItem();
-  h.innerHTML = it && inp.scrollWidth <= inp.clientWidth + 1 ? `<span class="t">${esc(inp.value)}</span>${esc(it.label.slice(inp.value.length))}` : '';
-}
 function qRender() {
   const ul = $('#q-list'), inp = $('#f-q');
   if (!ul || !inp) return;
-  if (!Q.open || (!Q.items.length && !Q.hidden)) {
+  if (!Q.open || !Q.items.length) {
     if (!ul.hidden) { ul.hidden = true; ul.innerHTML = ''; }
-    inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); qHint(); return;
+    inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); qBar(); return;
   }
   ul.innerHTML = Q.items.map((it, i) => `<li role="option" id="qo-${i}" class="qopt" data-act="q-pick" data-i="${i}" aria-selected="${i === Q.act}"><span class="qk">${it.k === 'pair' ? 'PAIR' : it.k === 'token' ? 'TOKEN' : 'POOL'}</span>`
     + `<span class="qt">${it.k === 'pool' ? esc(it.label) : hiMatch(it.label, Q.q)}</span><span class="qm">${it.k === 'pool' ? `${feeTxt(it.p.feeTier)} · ${chainShort(it.p.chain)}` : `${it.n} pool${it.n === 1 ? '' : 's'}${it.vol > 0 ? ' · ' + usd(it.vol) + '/d' : ''}`}</span></li>`).join('')
-    + (Q.hidden ? `<li class="qnote" role="presentation">${hidTxt(Q.hidden)}</li>` : '');
+;
   ul.hidden = false; inp.setAttribute('aria-expanded', 'true');
-  if (Q.act >= 0) { inp.setAttribute('aria-activedescendant', 'qo-' + Q.act); const o = $('#qo-' + Q.act); if (o) o.scrollIntoView({ block: 'nearest' }); }
+  if (Q.act >= 0) { inp.setAttribute('aria-activedescendant', 'qo-' + Q.act); const o = $('#qo-' + Q.act); if (o) o.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
   else inp.removeAttribute('aria-activedescendant');
-  qHint();
+  qBar();
 }
 function qUpdate() {
   const inp = $('#f-q');
-  Q.q = inp.value.trim().toLowerCase(); Q.items = suggest(Q.q); Q.act = -1;
-  Q.open = document.activeElement === inp && (Q.items.length > 0 || Q.hidden > 0);
+  Q.q = inp.value.trim().toLowerCase(); Q.items = suggest(Q.q).slice(0, 4); Q.act = -1;
+  // the chips: only what adds something (not the very text already typed, which the rows already show)
+  Q.items = Q.items.filter((it) => it.k === 'pool' || it.label.toLowerCase() !== Q.q);
+  Q.open = document.activeElement === inp && Q.items.length > 0;
   qRender();
 }
 function qClose() { if (Q.open) { Q.open = false; Q.act = -1; qRender(); } }
-function qApply(text) { clearTimeout(qt); S.filt.q = text; S.showAll = false; renderTable(); }
+function qApply(text) { clearTimeout(qt); S.filt.q = text; S.showAll = false; renderTable(); qBar(); }
+function qClear(keep) { const inp = $('#f-q'); inp.value = ''; qApply(''); qUpdate(); if (keep) inp.focus({ preventScroll: true }); }
 function qPick(i) {
   const it = Q.items[i], inp = $('#f-q');
   if (!it) return;
   Q.open = false; Q.act = -1;
   if (it.k === 'pool') { qRender(); qApply(inp.value); openDetail(it.id, inp); return; }
-  inp.value = it.label; Q.q = it.label.toLowerCase(); Q.items = suggest(Q.q);
+  inp.value = it.label; Q.q = it.label.toLowerCase(); Q.items = [];
   qRender(); qApply(it.label);
+  inp.blur(); // picked: the keyboard goes, the rows it filtered to show
 }
 function qKey(e) {
   const inp = e.target, n = Q.items.length;
@@ -4929,18 +4967,34 @@ function qKey(e) {
     Q.open = true;
     Q.act = e.key === 'ArrowDown' ? (Q.act + 1) % n : Q.act <= 0 ? n - 1 : Q.act - 1;
     qRender();
-  } else if (e.key === 'Enter') {
+  } else if (e.key === 'Enter') { // the Search key: nothing to confirm (the rows already show it), the keyboard goes
     e.preventDefault();
     if (Q.open && Q.act >= 0) qPick(Q.act);
-    else if (qHintItem()) qPick(0);
-    else { qClose(); qApply(inp.value); }
-  } else if (e.key === 'Escape' && Q.open) {
+    else { qClose(); qApply(inp.value); inp.blur(); }
+  } else if (e.key === 'Escape') { // Esc: clears what's typed, then leaves the field
     e.preventDefault(); e.stopPropagation();
-    qClose();
-  } else if (e.key === 'ArrowRight' && inp.selectionStart === inp.value.length && qHintItem()) {
-    e.preventDefault();
-    inp.value = Q.items[0].label; qUpdate(); qApply(inp.value);
+    if (inp.value) qClear(true); else { qClose(); inp.blur(); }
   }
+}
+// focus on a phone: the field moves near the top of what's visible, so the rows show above the keyboard
+function qLift() {
+  if (!matchMedia('(max-width:700px), (hover:none) and (pointer:coarse)').matches) return;
+  const inp = $('#f-q'), fld = inp.closest('.fld') || inp, vv = window.visualViewport;
+  const want = (vv ? vv.offsetTop : 0) + barBottom() + 6, top = fld.getBoundingClientRect().top;
+  if (Math.abs(top - want) > 8) scrollTo({ top: Math.max(0, scrollY + top - want), behavior: 'instant' });
+}
+let qLiftT = 0;
+if (window.visualViewport) visualViewport.addEventListener('resize', () => { if (document.activeElement === $('#f-q') && Date.now() - qLiftT < 1500) qLift(); }); // the keyboard coming up
+// the 🔍 in the bar (and "/" on a laptop): to the search, ready to type
+function qFind() {
+  if (SOLO || !S.live) return;
+  popClose(); if (!$('#sheet').hidden) closeDetail();
+  const inp = $('#f-q');
+  inp.focus({ preventScroll: true });
+  qLiftT = Date.now();
+  if (matchMedia('(max-width:700px), (hover:none) and (pointer:coarse)').matches) qLift();
+  else { const r = (inp.closest('.fld') || inp).getBoundingClientRect(); if (r.top < barBottom() + 8 || r.bottom > innerHeight * 0.5) scrollTo({ top: Math.max(0, scrollY + r.top - barBottom() - 16), behavior: 'instant' }); }
+  if (inp.value) qUpdate();
 }
 
 // ---------- backtest highlights: one strategy, one money line, one grid tile ----------
@@ -5021,6 +5075,9 @@ document.addEventListener('click', (e) => {
     case 'totop': toTop(); break;
     case 'openchart': openChart(el.dataset.chart, el.dataset.pool, el); break;
     case 'fullclose': fullClose(); break;
+    case 'q-clear': qClear(true); break;
+    case 'q-reset': if (!S.filt.q.trim() || /^No pools/.test($('#q-stat').textContent)) { S.filt.lens = 'all'; S.filt.chain = 'all'; } qClear(false); break; // Clear: the search (or the filters when no search); Clear filters: all
+    case 'qfind': qFind(); break;
     case 'popclose': { const a = S.popFor; popClose(); if (a && a.isConnected) a.focus({ preventScroll: true }); break; }
     case 'soloclose': soloClose(); break;
     case 'pair-row': pairRowToCard(el.dataset.id); break;
@@ -5041,6 +5098,7 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && $('#fullv')) { fullClose(); return; } // the full view first: the panel under it stays
+  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target.closest && e.target.closest('input, select, textarea, [contenteditable]')) && !$('#fullv') && $('#lockscreen').hidden && !SOLO) { e.preventDefault(); qFind(); return; }
   if (e.key === 'Escape' && FULL && parent !== window) { parent.postMessage('lps-full-close', location.origin); return; } // inside it
   if (e.target && e.target.id === 'f-q') { qKey(e); if (e.defaultPrevented) return; }
   if (e.key === 'Escape' && (TIP.host || TIP.mini)) tipHide(); // and whatever else Esc closes
@@ -5070,12 +5128,12 @@ document.addEventListener('change', (e) => {
 let qt = 0;
 document.addEventListener('input', (e) => {
   const a = e.target.dataset && e.target.dataset.act;
-  if (a === 'search') { qUpdate(); clearTimeout(qt); qt = setTimeout(() => { S.filt.q = e.target.value; S.showAll = false; renderTable(); }, 120); }
+  if (a === 'search') { qUpdate(); qBar(); clearTimeout(qt); qt = setTimeout(() => { S.filt.q = e.target.value; S.showAll = false; renderTable(); }, 90); }
   if (a === 'scrub') { stopPlay(); S.cut = +e.target.value; const r = currentReplay(); if (r) renderReplay(r); }
 });
 $('#unlock-form').addEventListener('submit', onUnlock);
 // the search's suggestions: open while its box has the focus; a press on one keeps the focus in the box
-document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q' && e.target.value) qUpdate(); });
+document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q') { qLiftT = Date.now(); qLift(); if (e.target.value) qUpdate(); } });
 document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q')) qClose(); }, 120); });
 document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list')) e.preventDefault(); });
 // card strips: fades follow the scroll; a pop-up note follows its control
