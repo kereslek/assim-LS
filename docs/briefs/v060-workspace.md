@@ -99,6 +99,19 @@ It covers 100vw × 100dvh above everything. It tries native fullscreen and other
   - One central registry of definitions, reusing the existing term notes.
   - Works in the workspace too.
 
+## 3b · Audit fixes on the page (audit of 14 Nov 2026; the owner's answers)
+- **F1 auto-lock:** after **2 weeks idle** (the owner's pick) the device's stored key is deleted and the passphrase is asked again. Idle = no visit and no interaction. The manual Lock button stays.
+- **F5 layout shift:**
+  - reserve the footer's height, and the subhead's and view switch's space, before the data arrives;
+  - target CLS < 0.1 on phone and laptop, measured with the PerformanceObserver check (scratchpad audit/cls.cjs);
+  - add a site-test check.
+- **F7 framing:** if the page is inside a frame (`top !== self`), hide everything and say "This dashboard can't be shown inside another page". Add a check.
+- **F9 contrast:** the active sort header in 3D (`#all-tbl th[aria-sort] .lbl`) reaches at least 4.5:1. Add an axe-core run (WCAG 2.2 AA tags) to site-test for 3D and 2D, locked and unlocked; 0 violations.
+- **F11 errors:**
+  - a small "Something went wrong · details" badge whenever `window.onerror` or `unhandledrejection` fires: tap it to see the message;
+  - plus a sealed error log: the error kind and the page area, never data, sealed to the inbox key and picked up by the loop. No server, never plain text.
+- **F6 phone load:** load the 3D code after the first paint (it is one file today, 415 KB, 132 KB gzipped). Target Lighthouse mobile performance ≥ 85, LCP < 2.5 s, run on the fixture page.
+
 ## 4 · Quality bar
 - **Data honesty everywhere:** missing is never 0, estimates are pale or `≈`, and every source is named.
 - **3D and 2D both complete.** Under reduced motion, nothing animates.
