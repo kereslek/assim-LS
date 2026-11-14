@@ -166,7 +166,8 @@ const HSCROLL = () => document.documentElement.scrollWidth - document.documentEl
 // The wheel event first is what a user's own scroll does: it ends the page's re-aligning after a jump.
 const REST = async (ms = 2500) => {
   window.dispatchEvent(new WheelEvent('wheel'));
-  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  // a frame, or half a second when none comes (WebKit on a busy runner once drew no frame for minutes: the walk waited on)
+  const frame = () => new Promise((r) => { requestAnimationFrame(() => setTimeout(r, 0)); setTimeout(r, 500); });
   const views = () => [...document.querySelectorAll('[data-pz]')].map((h) => h.dataset.view).join('|');
   const busy = () => document.getAnimations().some((a) => (a.playState === 'running' || a.pending) && !(a.effect && a.effect.getComputedTiming().endTime === Infinity)); // a pulse that never ends doesn't count
   let a = views(), same = 0;

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-LoGO76hFbApaLVN2gxApxfeJL3Exr2IrZH2mi88fh24='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wQiyo5HPpe7F7lqvje3R0hMnEnm+P6oSpfAqfJ48FJY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2249,6 +2249,18 @@ function liqDeclutter(id) {
   const h = pzHost(id), P = PZ[id];
   if (!h || !P || P.kind !== 'liq') return;
   const hit = (a, b) => a.left < b.right + 3 && b.left < a.right + 3 && a.top < b.bottom + 1 && b.top < a.bottom + 1;
+  // v0.5.1: the price pill keeps clear of a pan arrow at the chart's edge (panned so the price sits by it, the pill
+  // covered the arrow): it slides along, towards the middle, as far as the arrow's strip
+  const cp = h.querySelector(':scope .cpill');
+  if (cp) {
+    cp.style.marginLeft = '';
+    const a = cp.getBoundingClientRect();
+    for (const e of h.querySelectorAll(':scope > .pz-edge')) {
+      if (e.hidden || !e.getClientRects().length) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width > 0 && a.left < r.right + 3 && a.right > r.left - 3 && a.top < r.bottom && a.bottom > r.top) cp.style.marginLeft = Math.round(e.classList.contains('l') ? r.right + 3 - a.left : r.left - 3 - a.right) + 'px';
+    }
+  }
   const fixed = [...h.querySelectorAll('.cpill, .mlab, .tick')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0);
   for (const e of h.querySelectorAll('.pz-end span')) { const r = e.getBoundingClientRect(); if (fixed.some((f) => hit(r, f))) e.style.visibility = 'hidden'; else fixed.push(r); }
   for (const b of h.querySelectorAll('.bylab')) {
@@ -5215,7 +5227,7 @@ function d3Model(h) {
     m.X = (o) => L + ((o - v0) / (v1 - v0)) * W;
     m.r = r; m.trail = d3Trail(P.p);
     // the chart's own labels (on top of the canvas): the floor's label keeps clear of them
-    m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
+    m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint, :scope > .pz-edge', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
     // v0.5.1: and of its lines (the price now, the walls: thin bars the whole height), which are drawn over it
     for (const e of svg.querySelectorAll(':scope > rect')) {
       const rx = +e.getAttribute('x'), ry = +e.getAttribute('y'), rw = +e.getAttribute('width'), rh = +e.getAttribute('height');

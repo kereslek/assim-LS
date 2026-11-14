@@ -3712,13 +3712,30 @@ async function testWraps(browser) {
     await p.evaluate(() => document.querySelector('[data-pz="scatter"]').scrollIntoView({ block: 'center' })); await frames(p, 2);
     const c = await p.evaluate(SC_HITS);
     ok(`wraps ${tag}: no scatter label sits on another pool's dot (${c && c.labels} labels)`, !!c && c.labels >= 5 && c.hits.length === 0, JSON.stringify(c));
+    if (tag === 'w1440') { // the price pill never covers a pan arrow at the map's edge (panned so the price sits by it: v0.5.0 did, in 22 views)
+      await setWin(p, '24h');
+      const n = await p.$$eval('#best [data-act="tab"]', (e) => e.length), seen = { near: 0, hit: [] };
+      for (let i = 0; i < n; i++) {
+        await p.evaluate((i) => { document.querySelectorAll('#best [data-act="tab"]')[i].click(); document.querySelector('[data-pz="liq-best"]').scrollIntoView({ block: 'center' }); }, i); await frames(p, 2);
+        for (const side of ['r', 'l']) for (let s = 0; s < 2; s++) {
+          const went = await p.evaluate((side) => { const e = document.querySelector(`[data-pz="liq-best"] > .pz-edge.${side}`); if (!e || e.hidden || !e.getClientRects().length) return false; e.click(); return true; }, side);
+          if (!went) break;
+          await pzSettled(p, 'liq-best');
+          const r = await p.evaluate(() => { const h = document.querySelector('[data-pz="liq-best"]'), c = h.querySelector('.cpill'); if (!c || !c.getClientRects().length) return null; const a = c.getBoundingClientRect(), es = [...h.querySelectorAll(':scope > .pz-edge')].filter((e) => !e.hidden && e.getClientRects().length).map((e) => e.getBoundingClientRect()); return { near: es.some((x) => a.left < x.right + 40 && a.right > x.left - 40), hit: es.some((x) => a.left < x.right && a.right > x.left && a.top < x.bottom && a.bottom > x.top) }; });
+          if (r && r.near) seen.near++;
+          if (r && r.hit) seen.hit.push(`${i}${side}${s}`);
+        }
+        await p.evaluate(() => { const z = document.querySelector('[data-act="zreset"][data-chart="liq-best"]'); if (z) z.click(); });
+      }
+      ok(`wraps ${tag}: the price pill never covers a pan arrow at the map's edge (${seen.near} views with it by an arrow)`, seen.near >= 3 && seen.hit.length === 0, JSON.stringify(seen));
+    }
     ok(`wraps ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
 }
 
-// floorlab (3D): the floor's "14 d ago" keeps clear of the LP shape's own lines (the price now, the walls) and of every
-// bar, which are drawn over it (v0.5.0 let the price line cross it on a laptop and a bar hide its "1" on a phone);
+// floorlab (3D): the floor's "14 d ago" keeps clear of the LP shape's own lines (the price now, the walls), of every
+// bar and of the pan arrows, which are drawn over it (v0.5.0 let the price line cross it on a laptop and a bar hide its "1" on a phone);
 // on a narrow chart it may shorten to "14 d" or sit by the price line; it still shows wherever it finds room
 const FLOOR_CLEAR = (pz) => {
   const h = document.querySelector(`[data-pz="${pz}"]`), c = h && h.querySelector(':scope > canvas.d3c'), info = c && c.__d3;
@@ -3735,6 +3752,7 @@ const FLOOR_CLEAR = (pz) => {
     const x0 = L + (+r.getAttribute('x') - vb.x) * sx, y0 = T + (+r.getAttribute('y') - vb.y) * sy;
     hit(x0, y0, x0 + w * sx, y0 + hh * sy, 'line');
   }
+  for (const e of h.querySelectorAll(':scope > .pz-edge')) { const r = e.getBoundingClientRect(); if (r.width > 0) hit(r.left - hr.left, r.top - hr.top, r.right - hr.left, r.bottom - hr.top, 'arrow'); } // the pan arrows sit over it too
   for (const el of svg.querySelectorAll(':scope > path')) {
     const f = el.getAttribute('fill');
     if (!(f === '#16C784' || f === '#3A4452' || el.classList.contains('mg'))) continue;
