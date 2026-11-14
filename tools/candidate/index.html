@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H3snBomEGXEbUKsnAHMoKyrtEZUi9NvqBHRzIAQ+35U='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZzViSGjT3WH4Fj+iv/NNM+Mb2QXHQUm6qhShzLC7BO0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -108,7 +108,8 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 .chip.p-fading,.chip.p-mixed{color:var(--muted);border-color:var(--line3)}
 .oneoff{font-size:12px;color:var(--warn);border-left:3px solid var(--warn);padding:4px 8px;background:rgba(250,178,25,.08)}
 .gemnow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-.gemnow>div{display:grid;gap:3px;min-width:0}
+.gemnow>div{display:grid;gap:3px;min-width:0;grid-template-rows:1fr auto auto} /* v0.5.1: a label on two lines ("STAYING | POWER") keeps every bar and value on one line with the others */
+.gemnow>div>.lbl{align-self:end}
 .gemnow .track{height:6px;border-radius:3px;background:var(--grid);overflow:hidden}
 .gemnow .track i{display:block;height:100%;background:var(--gold)}
 .gemnow .v{font:600 12px/1.2 var(--mono);color:var(--fg)}
@@ -131,6 +132,10 @@ body.solo main{max-width:none}
 .solo-box .liq .pz-c>svg{height:calc(100% - 40px)}
 .solo-box .liq .tick{top:auto;bottom:4px}
 .solo-box svg[preserveAspectRatio="none"]{height:min(48vh,420px)!important}
+/* v0.5.1: the LP shape's drawing fills its window (the rule above held it to 420 px in a 560 px box: its floor stood
+   120 px above its axis), and the window is one column (the hidden side column kept 400 px of it empty) */
+.solo-box .liq .pz-c>svg[preserveAspectRatio="none"]{height:calc(100% - 40px)!important}
+body.solo main{display:block}
 .solo-cap{margin-bottom:8px}
 /* date axes and chart notes (v0.4.6): ticks under every chart over time, one note for the data under the pointer or finger */
 .tax{position:relative;height:14px;margin-top:5px;pointer-events:none}
@@ -190,6 +195,7 @@ body.solo main{max-width:none}
 .totop.on{visibility:visible;opacity:1;transform:none;transition:opacity .18s ease,transform .18s ease,visibility 0s}
 .totop svg{width:18px;height:18px;display:block}
 body.solo .totop{display:none}
+body.solo #best .best-r{margin:0}
 
 /* layout */
 main{max-width:1400px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
@@ -264,9 +270,22 @@ button.tile:hover{border-color:var(--line3)}
 .ring svg{position:absolute;inset:0;width:64px;height:64px}
 .ring .rv{position:absolute;left:0;right:0;top:17px;text-align:center;font:700 18px/1 var(--mono);color:var(--gold)}
 .ring .rl{position:absolute;left:0;right:0;top:38px;text-align:center;font:600 10px/1 var(--mono);letter-spacing:.08em;color:var(--fg2)}
-.best-body{display:flex;flex-wrap:wrap;gap:16px 24px;margin-top:14px}
-.best-l{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:12px}
-.best-r{flex:1.6 1 400px;min-width:0}
+.best-body{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.best-l{min-width:0;display:flex;flex-direction:column;gap:12px}
+.best-x,.best-g{min-width:0}
+.best-r{min-width:0;margin-top:4px}
+/* v0.5.1: once the card is wide enough for two columns (724 px inside it, as before), the charts stand together on the
+   right (the liquidity map, the fees per $1,000 under it) and the words on the left with the gem's parts under them:
+   no hole under the map (v0.4.8 left one of about 330 px on a laptop). The columns keep their widths. One column: as before. */
+#best{container:best/inline-size}
+@container best (min-width:724px){ /* (a chart opened in a window of its own stands alone: one column) */
+  body:not(.solo) .best-body{display:grid;grid-template-columns:calc(300px + (100% - 724px) / 2.6) minmax(0,1fr);grid-template-areas:"l r" "l x" "g x";gap:12px 24px;align-items:start}
+  body:not(.solo) .best-l{grid-area:l}body:not(.solo) .best-r{grid-area:r;margin-top:0}body:not(.solo) .best-x{grid-area:x;margin-top:6px}body:not(.solo) .best-g{grid-area:g}
+  /* when the words run longer, the fee bars grow taller (44 px up to 104) and both columns end together */
+  body:not(.solo) .best-x{align-self:stretch;display:flex;flex-direction:column}
+  body:not(.solo) .best-x>.daily{flex:1 1 auto;grid-template-rows:auto minmax(44px,104px) auto;align-content:start}
+  body:not(.solo) .best-x>.daily>.pz>.pz-c,body:not(.solo) .best-x>.daily>.pz>.pz-c>svg{height:100%}
+}
 .bigline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .bignum{font:700 48px/1 var(--mono);letter-spacing:-.03em;color:var(--gold);font-variant-numeric:tabular-nums}
 .bigsub{font-size:13px;line-height:1.35;color:var(--fg2)}
@@ -299,6 +318,7 @@ button.tile:hover{border-color:var(--line3)}
 .checks{display:flex;gap:8px;align-items:flex-start;margin-top:14px;padding-top:12px;border-top:1px solid var(--grid);font-size:12px;line-height:1.5;color:var(--fg2)}
 .checks b{color:var(--fg);font-weight:600}
 .ck-ok{color:var(--fg2)}.ck-bad{color:var(--neg);font-weight:600}.ck-null{color:var(--warn)}
+.ck-ok,.ck-bad,.ck-null,.nw{white-space:nowrap} /* v0.5.1: a short phrase never splits over two lines ("gas | OK", "30 | d", "since | 15:44") */
 .best .btns{margin-top:12px}
 
 /* next best */
@@ -383,6 +403,13 @@ tr.sel td{background:rgba(22,199,132,.08)}
 .strat .rr{font:500 11px/1.2 var(--mono);color:var(--muted);text-align:right;min-width:9ch}
 .strat.ours .nm{color:var(--accent);font-weight:600}
 .strat-h{border-bottom:1px solid var(--line);padding-bottom:4px}
+/* v0.5.1: every row of the strategy list shares one set of columns (each row was its own grid: "0 · $0" made the
+   baseline's Net APR stand 10-20 px right of the others) */
+@supports (grid-template-columns:subgrid){
+  .lab-legend{grid-template-columns:14px minmax(0,1fr) auto auto;column-gap:8px}
+  .lab-legend>*{grid-column:1/-1}
+  .lab-legend>.strat,.lab-legend>.strat-h{grid-template-columns:subgrid}
+}
 .heat-box{overflow-x:auto}
 .heat{display:grid;grid-template-columns:48px repeat(5,minmax(48px,1fr));gap:2px;min-width:300px}
 .heat .hh{text-align:center;align-self:end;padding:2px 1px 4px}
@@ -463,7 +490,7 @@ footer .btn{font-family:var(--sans)}
   .top .title{display:none}
   .subhead{padding:9px max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));gap:6px 12px}
   .nb-row svg{width:52px}
-  .best-r{order:-1}
+  .best-r{order:-1;margin:0 0 4px}
   .strip>div:first-child{grid-column:span 2}
 }
 .swipe{margin-top:6px;font-size:12px;color:var(--muted)}
@@ -829,6 +856,7 @@ td.fees{width:96px}
 @container (min-width:500px){.nb-row .fmini{display:inline-flex}}
 .mc .fmini{align-items:flex-start;position:relative;z-index:0;pointer-events:none;margin:0 0 4px}
 .fmrow{display:flex;align-items:center;gap:8px;margin-top:6px}
+.fmrow>.lbl{white-space:nowrap}
 .fmrow .fmini{flex-direction:row;align-items:center;gap:8px}
 .feeh{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:transparent;color:var(--fg2);cursor:pointer;font:inherit;max-width:100%}
 .feeh .fmini{flex-direction:row;align-items:center;gap:8px}
@@ -1129,7 +1157,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.5.0';
+const BUILD = 'v0.5.1';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1748,7 +1776,7 @@ function renderGlance() {
   $('#ns-body').innerHTML = !fresh.length ? '<span class="big" style="font-size:16px">Nothing new</span><span class="line">No pool reached the gem bar since then.</span>'
     : fresh.slice(0, 3).map((p) => {
       const w = W(p);
-      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)}${keptStable(p) ? ' · ★ STABLE' : ''} · since ${dmhm(p.gemFirstAt)}</span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprPd(w && w.net, { block: true })}</span></button>`;
+      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)}${keptStable(p) ? ' · ★ STABLE' : ''} · <span class="nw">since ${dmhm(p.gemFirstAt)}</span></span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprPd(w && w.net, { block: true })}</span></button>`;
     }).join('') + (fresh.length > 3 ? `<span class="line">and ${fresh.length - 3} more in the table</span>` : '');
   if (nsHid) $('#ns-body').insertAdjacentHTML('beforeend', `<span class="line hidn">${hidTxt(nsHid)}</span>`);
   // scanner
@@ -2163,12 +2191,15 @@ function liqInner(id) {
   }
   const lps = p.shape && p.shape.lpsAtPrice, room = w && w.inRangeUsd, px0 = X(0) / VW;
   // near an edge the pill hangs off the price line towards the middle, so it never leaves the chart
-  if (px0 >= 0.04 && px0 <= 0.96) s += `<span class="cpill" style="left:${pctX(0)};top:${Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24)))}px${px0 < 0.3 ? ';transform:translateX(-6px)' : px0 > 0.7 ? ';transform:translateX(calc(6px - 100%))' : ''}">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
+  // v0.5.1: in a window of its own the map is taller (its plot is the box less 40 px, not 116 px): the pill and the
+  // full-range label follow the bars there (they floated far above them)
+  const yAt = (f, c) => `calc(20px + (100% - 40px) * ${f.toFixed(4)} - ${c}px)`;
+  if (px0 >= 0.04 && px0 <= 0.96) s += `<span class="cpill" style="left:${pctX(0)};top:${SOLO ? `clamp(22px, ${yAt(1 - hin / VH, 24)}, calc(100% - 60px))` : Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24))) + 'px'}${px0 < 0.3 ? ';transform:translateX(-6px)' : px0 > 0.7 ? ';transform:translateX(calc(6px - 100%))' : ''}">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
   const off = px0 < 0.04 ? -1 : px0 > 0.96 ? 1 : 0;
   for (const t of liqTicks(v0, v1, off)) s += `<span class="tick${t === 0 ? ' now' : ''}" style="left:${pctX(Math.log(1 + t))}">${moveTxt(t)}</span>`;
   if (off) s += `<span class="tick now off ${off < 0 ? 'l">◂ PRICE' : 'r">PRICE ▸'}</span>`;
   // the full-range layer's label sits just above it (liqDeclutter moves or hides it)
-  if (frTop != null) s += `<span class="frlab" style="top:${Math.max(24, Math.round(20 + (frTop / VH) * 116 - 15))}px">full range ${usd(fr.v)}</span>`;
+  if (frTop != null) s += `<span class="frlab" style="top:${SOLO ? `max(24px, ${yAt(frTop / VH, 15)})` : Math.max(24, Math.round(20 + (frTop / VH) * 116 - 15)) + 'px'}"${SOLO ? ` data-y="max(24px, ${yAt(frTop / VH, 15)})"` : ''}>full range ${usd(fr.v)}</span>`;
   // the beyond buckets: what sits past the last bars, a label at the map's edge (never a bar); a real 0 draws nothing
   const by = (p.shape && p.shape.beyond) || {};
   for (const [k, e, dir] of [['below', ext.lo, -1], ['above', ext.hi, 1]]) {
@@ -2202,7 +2233,8 @@ function liqDeclutter(id) {
   }
   const fl = h.querySelector('.frlab');
   if (fl) { // above the layer, at the view's left end, else its right end, else a row higher; hidden if nowhere is free
-    const t0 = parseFloat(fl.style.top) || 104, hr = h.getBoundingClientRect(), edgeL = h.querySelector(':scope > .pz-edge.l:not([hidden])'), edgeR = h.querySelector(':scope > .pz-edge.r:not([hidden])');
+    if (fl.dataset.y) { fl.style.top = fl.dataset.y; fl.style.visibility = ''; } // in a window of its own: from the map's height now
+    const t0 = fl.dataset.y ? fl.offsetTop : parseFloat(fl.style.top) || 104, hr = h.getBoundingClientRect(), edgeL = h.querySelector(':scope > .pz-edge.l:not([hidden])'), edgeR = h.querySelector(':scope > .pz-edge.r:not([hidden])');
     let ok = false;
     for (const top of [t0, t0 - 16, t0 - 32]) {
       for (const sideL of [true, false]) {
@@ -2309,8 +2341,7 @@ function renderBest() {
     + `<div class="chips">${termB('edge', `<span class="chip">EDGE ${times(w.edge)}</span>`)}${termB('sigma', `<span class="chip">σ ${pct(w.sigma, { dp: 1 })}/DAY</span>`)}`
     + `${termB('rerange', `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span>`)}${termB('room', `<span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`)}`
     + `${termB('stop', `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>`)}${patternChip(p)}</div>`
-    + dailyStrip(p, w) + gemNow(p, w)
-    + `</div><div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">${term('logscale', 'LOG SCALE')} · <span class="pz-cap1">${liqCap('liq-best')}</span></span>${ztools('liq-best', p.id)}</div>${lq}</div></div>`
+    + `</div><div class="best-x">${dailyStrip(p, w)}</div>${gemBox(p, w)}<div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">${term('logscale', 'LOG SCALE')} · <span class="pz-cap1">${liqCap('liq-best')}</span></span>${ztools('liq-best', p.id)}</div>${lq}</div></div>`
     + checksLine(p)
     + `<div class="btns"><button type="button" class="btn" disabled>Paper-trade · Phase 1</button><button type="button" class="btn" disabled>Propose live · Phase 2</button>`
     + `<button type="button" class="btn" data-act="detail" data-id="${esc(p.id)}">Full breakdown</button></div>`;
@@ -2331,6 +2362,7 @@ function gemNow(p, w) {
   return `<div class="dsec"><span class="lbl">${term('gem', 'Gem now ' + (isNum(g.total) ? g.total : DASH))} · how it adds up</span><div class="gemnow">`
     + parts.map(([n, v, mx]) => `<div><span class="lbl">${esc(n)}</span><span class="track"><i style="width:${isNum(v) ? Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0) : 0}%"></i></span><span class="v">${isNum(v) ? v : DASH}/${mx}</span></div>`).join('') + '</div></div>';
 }
+const gemBox = (p, w) => { const g = gemNow(p, w); return g ? `<div class="best-g">${g}</div>` : ''; }; // the best find's gem parts (a column of their own on a laptop)
 const PATTERN_TXT = { steady: 'STEADY', bursty: 'BURSTY', emerging: 'EMERGING', fading: 'FADING', mixed: 'MIXED' };
 const patternChip = (p) => (PATTERN_TXT[p.pattern] ? termB(p.pattern, `<span class="chip p-${p.pattern}" title="How the fees arrived over 30 days">${PATTERN_TXT[p.pattern]}</span>`) : '');
 // fee tier · chain · version, each explaining itself
@@ -3077,6 +3109,7 @@ function isolate() {
   for (let el = box; el && el !== document.body; el = el.parentElement)
     for (const sib of el.parentElement.children) if (sib !== el && !sib.matches('header.top, .scrim, #ctip')) sib.style.display = 'none';
   box.classList.add('solo-box');
+  if (PZ[SOLO] && PZ[SOLO].kind === 'liq') liqDeclutter(SOLO); // its labels, for the taller map
   const pool = SOLO_POOL && poolById(SOLO_POOL);
   if (!box.querySelector('.solo-cap')) box.insertAdjacentHTML('afterbegin', `<div class="lbl solo-cap">${pool ? esc(pool.pair) + ' · ' : ''}${WIN_LABEL[S.win]} · opened from the dashboard</div>`);
   document.title = (pool ? pool.pair + ' · ' : '') + 'chart · LP Shape Scanner';
@@ -3128,7 +3161,7 @@ function dlLines(k, p, L) {
   if (k === 'newPools') {
     const age = isNum(p.createdAt) ? Math.max(0, (L.t - p.createdAt) / H) : null, w1 = W(p, '24h') || w, f1 = (w1 && w1.flow) || {};
     const why = isGem(p, dk) ? 'already a gem' : p.verified === false ? 'unverified: never a gem' : p.verified === null ? 'fee check not run yet' : isNum(f1.senders) && f1.senders >= 50 ? 'fresh, with real flow' : 'young: watching';
-    return [`${isNum(age) ? Math.round(age) + ' h old' : 'age ' + DASH}`, `<span class="k g">${int(w1 && w1.swaps)} swaps · ${int(f1.senders)} traders</span>`, `<span class="y">${why}</span>`];
+    return [`<span class="nw">${isNum(age) ? Math.round(age) + ' h old' : 'age ' + DASH}</span>`, `<span class="k g">${int(w1 && w1.swaps)} swaps · ${int(f1.senders)} traders</span>`, `<span class="y">${why}</span>`];
   }
   if (k === 'cexLed') {
     const tv = cx.tierVsSigma;
@@ -3409,8 +3442,13 @@ function drawScatter(rows) {
       // labels: only for dots in view, one per 11 px line; a label pushed out of the plot is left off (its dot stays), so
       // no label is ever drawn over another or past the axes
       const vis = pts2.filter((o) => X(o.x) >= L && X(o.x) <= L + pw && Y(o.y) >= T && Y(o.y) <= T + ph);
-      for (const o of spread(vis.map((o) => ({ y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 9, T + ph - 2).filter((o) => o.y >= T + 9 && o.y <= T + ph - 2)) {
-        const right = o.x < L + pw - 60;
+      // v0.5.1: and a label goes on the side of its dot where no other pool's dot sits (a phone drew "IXPAX" over ORARX's)
+      const dots = vis.map((o) => [X(o.x), Y(o.y)]);
+      const onDot = (o, x0, tw) => dots.some(([cx, cy], j) => j !== o.i && cx + 5 > x0 && cx - 5 < x0 + tw && cy + 5 > o.y - 8.5 && cy - 5 < o.y + 2.5);
+      for (const o of spread(vis.map((o, i) => ({ i, y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 9, T + ph - 2).filter((o) => o.y >= T + 9 && o.y <= T + ph - 2)) {
+        const tw = o.t.length * 6.4, sides = o.x < L + pw - 60 ? [true, false] : [false, true];
+        const fits = (r) => (r ? o.x + 7 + tw <= L + pw - 1 : o.x - 7 - tw >= L + 1), clear = (r) => !onDot(o, r ? o.x + 7 : o.x - 7 - tw, tw);
+        const right = [sides.find((r) => fits(r) && clear(r)), sides.find(fits), sides[0]].find((r) => r !== undefined);
         g += `<text x="${(o.x + (right ? 7 : -7)).toFixed(1)}" y="${o.y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="${o.b ? 't-mut' : 't-fg'}">${esc(o.t)}</text>`;
       }
       return g + '</g></svg>';
@@ -3604,12 +3642,23 @@ function renderLab(row) {
   lab.innerHTML = h + '</div>';
   // lines
   const box = $('#lab-lines'), Wd = boxW(box), L = 52, R = 12;
+  labFill = labFillHt(box, Wd);
   const PL = pzTime('lab', row.id, n, { plot: [L / Wd, R / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', tip: (u) => labTip(row, strats, u), inner: () => labLines(row, strats, PL, Wd, L, R) });
   pzMount(box, 'lab', 'pz-line', [+((L / Wd) * 100).toFixed(2), +((R / Wd) * 100).toFixed(2)]);
   const lt = lab.querySelector('[data-chartbox="lab"] .ctools'); if (lt) lt.outerHTML = ztools('lab', row.id); // its zoom range is known now
 }
+// v0.5.1: from 1100 px the strategy list and the grid stand beside the chart; the chart takes their height (it left
+// about 270 px empty under it on a laptop), up to as tall as it is wide
+let labFill = 0;
+function labFillHt(box, Wd) {
+  if (SOLO || !matchMedia('(min-width:1100px)').matches) return 0;
+  const lab = box.closest('.lab'), side = lab ? [...lab.querySelectorAll(':scope > .lab-legend, :scope > .lab-heat')] : [];
+  if (!side.length) return 0;
+  const bot = Math.max(...side.map((e) => e.getBoundingClientRect().bottom)), top = box.getBoundingClientRect().top;
+  return Math.max(0, Math.min(Math.round(Wd * 1.05), Math.floor(bot - top)));
+}
 function labLines(row, strats, P, Wd, L, R) {
-  const b = row.b, n = b.series.t.length - 1, Ht = Math.round((Wd >= 600 ? 440 : 220) * (SOLO ? 1.4 : 1)), T = 10, B = 20, pw = Wd - L - R, ph = Ht - T - B;
+  const b = row.b, n = b.series.t.length - 1, Ht = Math.max(Math.round((Wd >= 600 ? 440 : 220) * (SOLO ? 1.4 : 1)), labFill), T = 10, B = 20, pw = Wd - L - R, ph = Ht - T - B;
   const [a, z] = P.vw(), [j0, j1] = inView(a, z, n);
   let mn = 0, mx = 0;
   for (const st of strats) for (const v of st.series.slice(j0, j1 + 1)) if (isNum(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
@@ -5047,6 +5096,11 @@ function d3Model(h) {
     m.r = r; m.trail = d3Trail(P.p);
     // the chart's own labels (on top of the canvas): the floor's label keeps clear of them
     m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
+    // v0.5.1: and of its lines (the price now, the walls: thin bars the whole height), which are drawn over it
+    for (const e of svg.querySelectorAll(':scope > rect')) {
+      const rx = +e.getAttribute('x'), ry = +e.getAttribute('y'), rw = +e.getAttribute('width'), rh = +e.getAttribute('height');
+      if (rw > 0 && rw <= 2 && rh >= vb.height / 2) { const x0 = L + (rx - vb.x) * sx; m.avoid.push([x0 - 2, T + (ry - vb.y) * sy, x0 + rw * sx + 2, T + (ry + rh - vb.y) * sy]); }
+    }
   }
   return m;
 }
@@ -5132,12 +5186,26 @@ function d3Render(c, m, k = 1) {
           const inr = m.r == null || Math.abs(o) <= m.r + 1e-9, a = 1 - 0.65 * (j / R), rad = Math.max(1, 2.6 * (1 - gk(j)));
           x.beginPath(); x.arc(q[0], q[1], rad, 0, 2 * Math.PI); x.fillStyle = inr ? `rgba(94,230,200,${a.toFixed(3)})` : `rgba(255,138,101,${a.toFixed(3)})`; x.fill();
         }
-        const end = pts[pts.length - 1], lab = `${end[2]} d ago`;
+        const end = pts[pts.length - 1];
         x.font = '600 9px ui-monospace,Menlo,Consolas,monospace'; x.textBaseline = 'bottom';
-        const tw = x.measureText(lab).width, ly = end[0][1] - 2, free = (lx) => lx >= L + 2 && lx + tw <= L + W - 2 && !(m.avoid || []).some((q) => lx < q[2] && lx + tw > q[0] && ly - 10 < q[3] && ly > q[1]);
-        const lx = [end[0][0] + 6, end[0][0] - 6 - tw].find(free); // beside the oldest day, wherever no label of the chart's own sits
-        if (lx != null) { x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(lab, lx, ly); }
-        info.lab = lx != null;
+        // v0.5.1: never under a bar either (the flat bar in front, or its side and top going into the deep), nor across
+        // the price line or a wall; on a narrow chart it may say just "14 d", by the oldest day or by the price line
+        const bars = towers.map((t) => { const yt = Math.min(...t.segs.map((s) => s.yt)), a = pr(t.x0, yt, gT), b = pr(t.x1, yt, gT); return [Math.min(t.x0, a[0]) - 1, Math.min(yt, a[1]) - 1, Math.max(t.x1, b[0]) + 1, t.yb]; });
+        const ly0 = end[0][1] - 2, keep = [...(m.avoid || []), ...bars];
+        const free = (lx, ly, tw) => lx >= L + 2 && lx + tw <= L + W - 2 && ly - 10 >= 0 && !keep.some((q) => lx < q[2] && lx + tw > q[0] && ly - 10 < q[3] && ly > q[1]);
+        let at = null;
+        for (const lab of [`${end[2]} d ago`, `${end[2]} d`]) {
+          const tw = x.measureText(lab).width;
+          for (const dy of [0, -11, 11]) {
+            for (const lx of [end[0][0] + 6, end[0][0] - 6 - tw, X0 + 5, X0 - 5 - tw]) if (free(lx, ly0 + dy, tw)) { at = [lx, ly0 + dy, tw, lab]; break; }
+            if (at) break;
+          }
+          if (at) break;
+        }
+        if (at) { x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(at[3], at[0], at[1]); }
+        info.lab = !!at;
+        info.labBox = at ? [+at[0].toFixed(1), +(at[1] - 10).toFixed(1), +(at[0] + at[2]).toFixed(1), +at[1].toFixed(1)] : null;
+        info.labTxt = at ? at[3] : null;
         info.trail = pts.length - 1;
       }
     }

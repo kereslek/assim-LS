@@ -9,6 +9,7 @@
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
 //                                                    merge feebar stablewalk flash dates feescale perday disc view
+//                                                    balance wraps floorlab (v0.5.1)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -50,7 +51,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -3576,7 +3577,198 @@ async function testView(browser) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView };
+// ---------- v0.5.1: round-1 design fixes (each check failed on v0.5.0) ----------
+// balance: on a laptop the best find's two columns end together (v0.4.8-v0.5.0 left a hole of about 330 px under the
+// liquidity map: the fees per $1,000 now stand under the map), and the strategy lab's chart fills the height of the list
+// and the grid beside it (it left about 270 px empty). One column (a phone, a narrow window) keeps v0.5.0's order.
+const BEST_COLS = () => {
+  const q = (s) => document.querySelector(s), r = (e) => (e ? e.getBoundingClientRect() : null);
+  const body = q('#best .best-body'), l = q('#best .best-l'), lq = q('#best .best-r'), dl = q('#best .daily'), gm = q('#best .gemnow');
+  if (!body || !l || !lq || !dl) return null;
+  // a column's box can stretch to its row (v0.5.0's flex row did): what counts is where its content ends
+  const inner = (e) => { const b = r(e), k = [...e.children].map((c) => c.getBoundingClientRect()).filter((x) => x.height > 0); return k.length ? { left: b.left, right: b.right, top: b.top, width: b.width, bottom: Math.max(...k.map((x) => x.bottom)) } : b; };
+  const B = r(body), L = inner(l), R = inner(lq), D = r(dl), G = gm ? r(gm) : null, side = Math.abs(L.top - R.top) < 1.5 && R.left > L.right;
+  // what ends each column: everything of the card's body on the right of the left column's edge, and on its left
+  const parts = [L, R, D, G].filter(Boolean), right = parts.filter((x) => x.left >= R.left - 1), left = parts.filter((x) => x.right <= L.right + 1);
+  const end = (xs) => Math.max(...xs.map((x) => x.bottom));
+  return { side, lw: Math.round(L.width), rw: Math.round(R.width), bodyB: Math.round(B.bottom), leftB: Math.round(end(left)), rightB: Math.round(end(right)),
+    order: [['map', R.top], ['words', r(q('#best .bigline')).top], ['fees', D.top], ['gem', G ? G.top : Infinity]].sort((a, b) => a[1] - b[1]).map((x) => x[0]).join('>') };
+};
+const LAB_COLS = () => {
+  const r = (s) => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
+  const c = r('#bt-lab .lab-chart'), lg = r('#bt-lab .lab-legend'), ht = r('#bt-lab .lab-heat'), sv = r('[data-pz="lab"] svg');
+  if (!c || !lg || !sv) return null;
+  return { side: lg.left > c.right, chartB: Math.round(c.bottom), sideB: Math.round(Math.max(lg.bottom, ht ? ht.bottom : 0)), svgH: Math.round(sv.height), svgW: Math.round(sv.width) };
+};
+async function testBalance(browser) {
+  const t = await openUnlocked(browser, 'default', { width: 1440 }), p = t.page;
+  for (const w of [820, 1180, 1300, 1440, 1920]) {
+    await p.setViewportSize({ width: w, height: 900 });
+    // the page re-draws 120 ms after a resize (a timer): wait for the columns to settle, never a fixed time
+    await p.waitForFunction(() => new Promise((res) => { const a = document.querySelector('#best .best-body').getBoundingClientRect().height; setTimeout(() => requestAnimationFrame(() => res(document.querySelector('#best .best-body').getBoundingClientRect().height === a)), 300); }), null, { timeout: 8000 }).catch(() => {});
+    const a = await p.evaluate(BEST_COLS);
+    ok(`balance w${w}: the best find stands in two columns, the map ${a && a.rw} px and the words ${a && a.lw} px wide (as before)`, !!a && a.side && a.rw >= 400 && a.lw >= 300 && a.rw > a.lw, JSON.stringify(a));
+    ok(`balance w${w}: no hole under the liquidity map: both columns end within 48 px of each other (left ${a && a.leftB}, right ${a && a.rightB}, card body ${a && a.bodyB})`,
+      !!a && Math.abs(a.leftB - a.rightB) <= 48 && a.bodyB - Math.max(a.leftB, a.rightB) <= 2, JSON.stringify(a));
+    const g = await p.evaluate(() => { const top = (s) => [...document.querySelectorAll('#best .gemnow ' + s)].map((e) => e.getBoundingClientRect().top), sp = (xs) => (xs.length ? Math.max(...xs) - Math.min(...xs) : null); return { n: top('.v').length, v: sp(top('.v')), bar: sp(top('.track')), two: [...document.querySelectorAll('#best .gemnow .lbl')].filter((e) => e.getClientRects().length > 1 || e.getBoundingClientRect().height > 20).length }; });
+    ok(`balance w${w}: the gem's four parts keep their bars and values on one line (${g.two} label on two lines)`, g.n === 4 && g.v <= 1 && g.bar <= 1, JSON.stringify(g));
+    if (w >= 1300) {
+      await p.evaluate(() => document.querySelector('#bt-lab').scrollIntoView({ block: 'start' }));
+      await p.waitForFunction(() => { const c = document.querySelector('#bt-lab .lab-chart'), l = document.querySelector('#bt-lab .lab-legend'); return c && l && document.querySelector('[data-pz="lab"] svg'); }, null, { timeout: 8000 }).catch(() => {});
+      await frames(p, 2);
+      const b = await p.evaluate(LAB_COLS);
+      ok(`balance w${w}: the strategy lab's chart fills the height of the list and grid beside it (chart ends ${b && b.chartB}, they end ${b && b.sideB}), never taller than wide`,
+        !!b && b.side && Math.abs(b.chartB - b.sideB) <= 24 && b.svgH >= 440 && b.svgH <= b.svgW * 1.06, JSON.stringify(b));
+      await p.evaluate(() => scrollTo(0, 0));
+    }
+  }
+  // one column: the words, the fees per $1,000, the gem's parts, then the map (a phone: the map first), as in v0.5.0
+  await p.setViewportSize({ width: 700, height: 900 });
+  await p.waitForFunction(() => { const l = document.querySelector('#best .best-l'), r = document.querySelector('#best .best-r'); return l && r && r.getBoundingClientRect().top > l.getBoundingClientRect().bottom; }, null, { timeout: 8000 }).catch(() => {});
+  const n = await p.evaluate(BEST_COLS);
+  ok(`balance w700: one column keeps its order (${n && n.order})`, !!n && !n.side && n.order === 'words>fees>gem>map', JSON.stringify(n));
+  // a chart opened in a window of its own stands alone across the whole width (never in the grid's column)
+  const pid = await bestId(p);
+  for (const v of ['liq-best', 'daily-best']) {
+    const s = await t.ctx.newPage();
+    await s.setViewportSize({ width: 1440, height: 900 });
+    await s.goto(url('default', `&view=${v}&pool=${encodeURIComponent(pid)}`));
+    const w = await s.waitForSelector('.solo-box', { timeout: 20000 }).then(() => s.evaluate((v) => { const e = document.querySelector(`[data-chartbox="${v}"]`); return e ? Math.round(e.getBoundingClientRect().width) / document.documentElement.clientWidth : 0; }, v)).catch(() => 0);
+    ok(`balance: "${v}" opened in a window of its own spans the window (${(w * 100).toFixed(0)}% of it; v0.5.0: 69%, the hidden side column kept its 400 px)`, w >= 0.9, String(w));
+    if (v === 'liq-best') { // the map's drawing fills its taller box: its floor on its axis, the full-range label and the pill by the bars
+      await frames(s, 3);
+      const m = await s.evaluate(() => {
+        const h = document.querySelector('[data-pz="liq-best"]'), r = (q) => { const e = h.querySelector(q); return e && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' ? e.getBoundingClientRect() : null; };
+        const sv = r('.pz-c > svg'), tk = r('.tick'), fr = r('.frlab'), cp = r('.cpill');
+        return { axis: sv && tk ? Math.round(tk.top - sv.bottom) : null, fr: sv && fr ? Math.round(sv.bottom - fr.bottom) : null, pill: sv && cp ? Math.round(sv.bottom - cp.bottom) : null, plot: sv ? Math.round(sv.height) : null };
+      });
+      ok(`balance: the map in a window of its own: its floor sits on its axis (${m.axis} px apart; v0.5.0: 104), the full-range label on the floor (${m.fr} px above it; v0.5.0: about 300)`,
+        m.axis != null && m.axis >= 0 && m.axis <= 12 && m.fr != null && m.fr >= 0 && m.fr <= 40 && m.pill != null && m.pill >= 0 && m.pill < m.plot * 0.6, JSON.stringify(m));
+    }
+    await s.close();
+  }
+  ok('balance: no page errors', t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+  const ph = await openUnlocked(browser, 'default', { phone: true });
+  const m = await ph.page.evaluate(BEST_COLS);
+  ok(`balance phone: the map first, then the words, the fees per $1,000 and the gem's parts (${m && m.order})`, !!m && !m.side && m.order === 'map>words>fees>gem', JSON.stringify(m));
+  ok('balance phone: no page errors', ph.errors.length === 0, ph.errors[0]);
+  await ph.ctx.close();
+}
+
+// wraps: short phrases never split over two lines ("LP fees · 30 | d", "since | 15:44", "31 h | old", "gas | OK"), the
+// strategy list's columns line up on every row (the baseline's Net APR stood 10-20 px off), and no scatter label sits on
+// another pool's dot (a phone drew "IXPAX" over ORARX's)
+const SPLITS = () => {
+  const lines = (node, a, b) => { const r = document.createRange(); r.setStart(node, a); r.setEnd(node, b); const tops = []; for (const q of r.getClientRects()) if (q.width > 0.5 && !tops.some((t) => Math.abs(t - q.top) < 3)) tops.push(q.top); return tops.length; };
+  const out = [], seen = { fees: 0, since: 0, old: 0, ck: 0 };
+  const scan = (sel, re, key) => {
+    for (const el of document.querySelectorAll(sel)) {
+      if (!el.getClientRects().length) continue;
+      const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let n; (n = tw.nextNode());) { re.lastIndex = 0; for (let m; (m = re.exec(n.textContent));) { seen[key]++; if (lines(n, m.index, m.index + m[0].length) > 1) out.push(key + ' "' + m[0] + '"'); } }
+    }
+  };
+  scan('.fmrow > .lbl', /LP fees · \d+ d/g, 'fees');
+  scan('.ns-row .lbl', /since [^·]*?\d\d:\d\d/g, 'since');
+  scan('#disc .dc .m', /\d+ h old/g, 'old');
+  for (const el of document.querySelectorAll('.checks .ck-ok, .checks .ck-bad, .checks .ck-null')) { if (!el.getClientRects().length) continue; seen.ck++; const n = el.lastChild; if (n && n.nodeType === 3 && n.textContent.trim() && lines(n, 0, n.textContent.length) > 1) out.push('check "' + n.textContent.trim().slice(0, 30) + '"'); }
+  return { out, seen };
+};
+const LEGEND_COLS = () => {
+  const rows = [...document.querySelectorAll('#bt-lab .lab-legend .strat')].filter((r) => r.getClientRects().length);
+  const right = (s) => rows.map((r) => r.querySelector(s)).filter(Boolean).map((e) => e.getBoundingClientRect().right);
+  const spread = (xs) => (xs.length ? Math.max(...xs) - Math.min(...xs) : null);
+  return { rows: rows.length, ap: spread(right('.ap')), rr: spread(right('.rr')) };
+};
+const SC_HITS = () => {
+  const svg = document.querySelector('[data-pz="scatter"] svg');
+  if (!svg) return null;
+  const dots = [...svg.querySelectorAll('circle')].map((c) => c.getBoundingClientRect()), hits = [];
+  const labels = [...svg.querySelectorAll('g text')];
+  for (const t of labels) {
+    const r = t.getBoundingClientRect(), y0 = r.top + r.height * 0.18, y1 = r.bottom - r.height * 0.18;
+    const n = dots.filter((c) => c.left < r.right - 0.5 && c.right > r.left + 0.5 && c.top < y1 && c.bottom > y0).length;
+    if (n) hits.push(t.textContent);
+  }
+  return { labels: labels.length, hits };
+};
+async function testWraps(browser) {
+  for (const [tag, o] of [['w360', { width: 360, height: 760 }], ['phone', { phone: true }], ['w430', { width: 430 }], ['w1440', { width: 1440 }]]) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page;
+    const a = await p.evaluate(SPLITS);
+    ok(`wraps ${tag}: no short phrase splits over two lines (${a.seen.fees} fee labels, ${a.seen.since} "since", ${a.seen.old} "h old", ${a.seen.ck} checks)`, a.out.length === 0 && a.seen.fees >= 1 && a.seen.since >= 1 && a.seen.old >= 1 && a.seen.ck >= 5, a.out.slice(0, 3).join(', '));
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
+    const s = await p.evaluate(SPLITS);
+    ok(`wraps ${tag}: in a pool's panel too (${s.seen.ck} checks)`, s.out.length === 0 && s.seen.ck >= 5, s.out.slice(0, 3).join(', '));
+    await p.click('#sheet-close'); await calm(p, SHEET_MOVES);
+    await p.evaluate(() => document.querySelector('#bt-lab').scrollIntoView({ block: 'center' })); await frames(p, 2);
+    const l = await p.evaluate(LEGEND_COLS);
+    ok(`wraps ${tag}: the strategy list's Net APR and Re-rng · net line up on all ${l.rows} rows (off by ${l.ap} and ${l.rr} px)`, l.rows >= 5 && l.ap != null && l.ap <= 1 && l.rr <= 1, JSON.stringify(l));
+    await p.evaluate(() => document.querySelector('[data-pz="scatter"]').scrollIntoView({ block: 'center' })); await frames(p, 2);
+    const c = await p.evaluate(SC_HITS);
+    ok(`wraps ${tag}: no scatter label sits on another pool's dot (${c && c.labels} labels)`, !!c && c.labels >= 5 && c.hits.length === 0, JSON.stringify(c));
+    ok(`wraps ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// floorlab (3D): the floor's "14 d ago" keeps clear of the LP shape's own lines (the price now, the walls) and of every
+// bar, which are drawn over it (v0.5.0 let the price line cross it on a laptop and a bar hide its "1" on a phone);
+// on a narrow chart it may shorten to "14 d" or sit by the price line; it still shows wherever it finds room
+const FLOOR_CLEAR = (pz) => {
+  const h = document.querySelector(`[data-pz="${pz}"]`), c = h && h.querySelector(':scope > canvas.d3c'), info = c && c.__d3;
+  if (!info || info.kind !== 'liq' || info.k !== 1) return null;
+  if (!info.trail) return { trail: 0 };
+  if (!info.lab) return { trail: info.trail, lab: false };
+  if (!Array.isArray(info.labBox)) return { trail: info.trail, lab: true, box: false }; // drawn, but where is not told
+  const hr = h.getBoundingClientRect(), svg = h.querySelector(':scope > .pz-c > svg'), vb = svg.viewBox.baseVal, sr = svg.getBoundingClientRect();
+  const sx = sr.width / vb.width, sy = sr.height / vb.height, L = sr.left - hr.left, T = sr.top - hr.top, [a, b, c2, d] = info.labBox, hits = [];
+  const hit = (x0, y0, x1, y1, what) => { if (x0 < c2 && x1 > a && y0 < d && y1 > b) hits.push(what); };
+  for (const r of svg.querySelectorAll(':scope > rect')) {
+    const w = +r.getAttribute('width'), hh = +r.getAttribute('height');
+    if (!(w > 0 && w <= 2 && hh >= vb.height / 2)) continue; // the price now and the walls
+    const x0 = L + (+r.getAttribute('x') - vb.x) * sx, y0 = T + (+r.getAttribute('y') - vb.y) * sy;
+    hit(x0, y0, x0 + w * sx, y0 + hh * sy, 'line');
+  }
+  for (const el of svg.querySelectorAll(':scope > path')) {
+    const f = el.getAttribute('fill');
+    if (!(f === '#16C784' || f === '#3A4452' || el.classList.contains('mg'))) continue;
+    for (const q of (el.getAttribute('d') || '').matchAll(/M(-?[\d.]+) (-?[\d.]+)v(-?[\d.]+)h([\d.]+)v/g)) {
+      const x0 = L + (+q[1] - vb.x) * sx, yb = T + (+q[2] - vb.y) * sy, hh = -q[3] * sy;
+      if (hh > 0.05) hit(x0, yb - hh, x0 + +q[4] * sx, yb, 'bar');
+    }
+  }
+  return { trail: info.trail, lab: true, box: true, txt: info.labTxt || null, hits };
+};
+async function floorAt(p, pz) {
+  await p.evaluate((pz) => { const h = document.querySelector(`[data-pz="${pz}"]`); if (h) h.scrollIntoView({ block: 'center' }); }, pz);
+  await p.waitForFunction((pz) => { const c = document.querySelector(`[data-pz="${pz}"] > canvas.d3c`); return !!(c && c.__d3 && c.__d3.kind === 'liq' && c.__d3.k === 1); }, pz, { timeout: 10000 }).catch(() => {});
+  return p.evaluate(FLOOR_CLEAR, pz);
+}
+async function testFloorLab(browser) {
+  if (MODE === '2d') return; // a 3D drawing (the Classic 2D job has no floor)
+  for (const [tag, o] of [['phone', { phone: true }], ['w360', { width: 360, height: 760 }], ['w1300', { width: 1300 }], ['w1440', { width: 1440 }]]) {
+    const t = await openUnlocked(browser, 'default', { ...o, mode: '3d' }), p = t.page;
+    const n = await p.$$eval('#best [data-act="tab"]', (e) => e.length), res = [];
+    for (let i = 0; i < n; i++) {
+      await p.evaluate((i) => document.querySelectorAll('#best [data-act="tab"]')[i].click(), i);
+      await frames(p, 2);
+      res.push(await floorAt(p, 'liq-best'));
+    }
+    await p.evaluate(() => scrollTo(0, 0));
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
+    res.push(await floorAt(p, 'liq-detail'));
+    const read = res.filter(Boolean), trails = read.filter((x) => x.trail > 0), shown = trails.filter((x) => x.lab), bad = shown.filter((x) => !x.box || x.hits.length);
+    ok(`floorlab ${tag}: the 3D floor's "N d ago" never sits under a bar or across the price line or a wall (${shown.length} of ${trails.length} charts with a trail labelled, ${read.length} of ${res.length} read)`,
+      read.length === res.length && trails.length >= 4 && bad.length === 0, JSON.stringify(bad.slice(0, 2)));
+    ok(`floorlab ${tag}: …and it is still drawn where it finds room (${shown.length} of ${trails.length} charts; v0.5.0: 4-5 of 11)`, shown.length >= Math.ceil(trails.length * 0.3), JSON.stringify(trails.map((x) => x.txt || '-')));
+    ok(`floorlab ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab };
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
