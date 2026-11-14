@@ -274,19 +274,21 @@ button.tile:hover{border-color:var(--line3)}
 .best-l{min-width:0;display:flex;flex-direction:column;gap:12px}
 .best-x,.best-g{min-width:0}
 .best-r{min-width:0;margin-top:4px}
-/* v0.5.1: once the card is wide enough for two columns (724 px inside it, as before), the charts stand together on the
-   right (the liquidity map, the fees per $1,000 under it) and the words on the left with the gem's parts under them:
-   no hole under the map (v0.4.8 left one of about 330 px on a laptop). The columns keep their widths. One column: as before. */
-#best{container:best/inline-size}
-@container best (min-width:724px){ /* (a chart opened in a window of its own stands alone: one column) */
+/* v0.5.1: once the card is wide enough for two columns (724 px inside it, as before: a window of 782-999 px, or 1132 px
+   and up beside the side column), the charts stand together on the right (the liquidity map, the fees per $1,000 under
+   it) and the words on the left with the gem's parts under them: no hole under the map (v0.4.8 left one of about 330 px
+   on a laptop). The columns keep their widths. One column: as before. (A media query, not a size container: WebKit on a
+   phone missed taps on the map inside one.) A chart opened in a window of its own stands alone: one column. */
+@media (min-width:782px) and (max-width:999.98px),(min-width:1132px){
   body:not(.solo) .best-body{display:grid;grid-template-columns:calc(300px + (100% - 724px) / 2.6) minmax(0,1fr);grid-template-areas:"l r" "l x" "g x";gap:12px 24px;align-items:start}
   body:not(.solo) .best-l{grid-area:l}body:not(.solo) .best-r{grid-area:r;margin-top:0}body:not(.solo) .best-x{grid-area:x;margin-top:6px}body:not(.solo) .best-g{grid-area:g}
-  /* when the words run longer, the fee bars grow taller (from 44 px) and both columns end together; the bars count as
-     44 px when the columns are measured (size containment), so they only ever fill room, never make it */
+  /* when the words run longer, the fee bars grow taller (from 44 px) and both columns end together; the drawing sits
+     inside its box (absolutely), so the bars count as 44 px when the columns are measured: they only fill room */
   body:not(.solo) .best-x{align-self:stretch;display:flex;flex-direction:column}
   body:not(.solo) .best-x>.daily{flex:1 1 auto;grid-template-rows:auto minmax(44px,auto) auto}
-  body:not(.solo) .best-x>.daily>.pz{contain:size;min-height:44px}
-  body:not(.solo) .best-x>.daily>.pz>.pz-c,body:not(.solo) .best-x>.daily>.pz>.pz-c>svg{height:100%}
+  body:not(.solo) .best-x>.daily>.pz{min-height:44px}
+  body:not(.solo) .best-x>.daily>.pz>.pz-c{position:absolute;inset:0}
+  body:not(.solo) .best-x>.daily>.pz>.pz-c>svg{height:100%}
 }
 .bigline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .bignum{font:700 48px/1 var(--mono);letter-spacing:-.03em;color:var(--gold);font-variant-numeric:tabular-nums}

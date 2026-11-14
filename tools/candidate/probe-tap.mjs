@@ -22,6 +22,7 @@ const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? M
 // one double tap as the site test sends it: each tap down, a 10 ms timer, move, up; the second 90 ms after the first
 const DTAP = async () => {
   const h = document.querySelector('[data-pz="liq-best"]'), b = h.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + 70, el = document.elementFromPoint(x, y);
+  if (!el || !el.closest('[data-pz="liq-best"]')) return { up1: 0, gap: 0, up2: 0, miss: true, inView: b.top >= 0 && b.bottom <= innerHeight }; // nothing of the chart under the finger
   const fire = (t, id) => el.dispatchEvent(new PointerEvent(t, { pointerId: id, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const t0 = performance.now(); fire('pointerdown', 71); await wait(10); const t1 = performance.now(); fire('pointermove', 71); fire('pointerup', 71);
@@ -57,9 +58,9 @@ for (const [tag, page, port] of PAGES) {
       const t = await p.evaluate(DTAP);
       await sleep(900);
       const after = await p.evaluate(() => document.querySelector('[data-pz="liq-best"]').dataset.view);
-      taps.push({ ...t, reset: after === '0.0000,0.9000' && before !== after });
+      taps.push({ ...t, reset: !t.miss && after === '0.0000,0.9000' && before !== after });
     }
-    console.log(`${tag.padEnd(9)} ${mode.toUpperCase()} scroll: median ${med(fr)} ms, >100 ms ${fr.filter((x) => x > 100).length}/${fr.length} · tap down→up median ${med(taps.map((x) => x.up1))} ms (max ${Math.round(Math.max(...taps.map((x) => x.up1)))}), taps apart ${med(taps.map((x) => x.gap))} ms · double tap reset ${taps.filter((x) => x.reset).length}/${taps.length} · errors ${errs}`);
+    console.log(`${tag.padEnd(9)} ${mode.toUpperCase()} scroll: median ${med(fr)} ms, >100 ms ${fr.filter((x) => x > 100).length}/${fr.length} · tap down→up median ${med(taps.map((x) => x.up1))} ms (max ${Math.round(Math.max(...taps.map((x) => x.up1)))}), taps apart ${med(taps.map((x) => x.gap))} ms · double tap reset ${taps.filter((x) => x.reset).length}/${taps.length} · missed the chart ${taps.filter((x) => x.miss).length} (in view ${taps.filter((x) => x.miss && x.inView).length}) · errors ${errs}`);
     await ctx.close();
   }
   srv.kill('SIGTERM');

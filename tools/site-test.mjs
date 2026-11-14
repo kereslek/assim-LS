@@ -2083,12 +2083,12 @@ async function testTouch(browser) {
     const SPt = poolOf(await bestId(p)).shape.depthSpan, capT = await liqSpan(p, 'liq-best');
     ok(`touch ${tag}: pinched closed, the view stops at the whole field (${capT}): every bar, no hatch, − disabled`, near(v1.c, (SPt[0] + SPt[1]) / 2, 2e-3) && near(v1.w, SPt[1] - SPt[0], 2e-3) && rest.hatch === 0 && rest.out && /…/.test(capT), `${JSON.stringify(v1)} ${JSON.stringify(rest)} ${capT}`);
     // a double tap (two finger taps) resets
-    const hb = await p.evaluate(() => { const r = document.querySelector('[data-pz="liq-best"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 70 }; });
+    const sb = await p.evaluate(STILL_BOX, { sel: '[data-pz="liq-best"]' }), hb = { x: sb.x + sb.w / 2, y: sb.y + 70 }; // in view and at rest first, as the live audit does
     // both taps (down, move, up each) dispatched back to back in one task: a slow WebKit can paint for 300-700 ms between a
     // tap's down and up when they are apart, and the page turns a touch held 420 ms into a scrub (its note) on purpose
-    await p.evaluate((hb) => { const el = document.elementFromPoint(hb.x, hb.y); for (const id of [51, 52]) for (const t of ['pointerdown', 'pointermove', 'pointerup']) el.dispatchEvent(new PointerEvent(t, { pointerId: id, pointerType: 'touch', isPrimary: true, clientX: hb.x, clientY: hb.y, bubbles: true, cancelable: true })); }, hb);
+    const onChart = await p.evaluate((hb) => { const el = document.elementFromPoint(hb.x, hb.y); if (!el || !el.closest('[data-pz="liq-best"]')) return false; for (const id of [51, 52]) for (const t of ['pointerdown', 'pointermove', 'pointerup']) el.dispatchEvent(new PointerEvent(t, { pointerId: id, pointerType: 'touch', isPrimary: true, clientX: hb.x, clientY: hb.y, bubbles: true, cancelable: true })); return true; }, hb);
     v1 = await pzSettled(p, 'liq-best');
-    ok(`touch ${tag}: a double tap resets the chart`, near(v1.c, 0) && near(v1.w, 0.9), JSON.stringify(v1));
+    ok(`touch ${tag}: a double tap resets the chart`, onChart && near(v1.c, 0) && near(v1.w, 0.9), JSON.stringify({ ...v1, onChart }));
     // a cancelled touch (the browser took the gesture) ends the drag cleanly
     await finger(p, 'liq-best', 260, { end: 'pointercancel' }); await sleep(80);
     v1 = await pzSettled(p, 'liq-best');
