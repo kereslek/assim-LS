@@ -297,7 +297,7 @@ async function scanChain(CH, list) {
   for (const e of extras) { if (!extrasByPool.has(e.pool)) extrasByPool.set(e.pool, []); extrasByPool.get(e.pool).push(e); }
   const meta = new Map(mapped.map((p) => [p.id, p.v === 3 ? { fee: p.fee, feeProtocol: p.s.feeProtocol, dex: p.dex } : { protocolFee: p.s.protocolFee }]));
   const sums = summarize(swaps, meta);
-  Object.assign(X, { unreadIds, byPoolEarly, extrasByPool, meta, sums });
+  Object.assign(X, { unreadIds, byPoolEarly, extrasByPool, meta, sums, swapGroups: groups.length, unreadGroups });
   let lpUsd = 0, protoUsd = 0, volUsd = 0, unpricedPools = 0;
   const volRatio = [];
   for (const p of mapped) {
@@ -995,8 +995,9 @@ async function writeOutputs() {
     try {
       const budget = makeBudget({ ...(X.CH.caps?.exact || {}), ...(CAP_OVERRIDE[X.CH.id]?.exact || {}) });
       const pools = out.filter((x) => x.chain === X.CH.id).map((x) => mById.get(x.id)).map((p) => ({ id: p.id, v: p.v, dex: p.dex, fee: p.fee, createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
-      // a chain whose own 24 h swap read came back unread this pass waits: its log nodes are struggling
-      const r = await exactFeesChain({ chain: X.CH.id, pools, cache: sxCache, now: X.passT, io: chainIo(X.CH, { budget, head: X.block }), budget, hold: X.unreadIds.size ? 'swaps unread' : null });
+      // a chain whose own 24 h swap read got no answer at all this pass waits (its log nodes are not serving); one
+      // its swaps cap cut short still reads within its own cap
+      const r = await exactFeesChain({ chain: X.CH.id, pools, cache: sxCache, now: X.passT, io: chainIo(X.CH, { budget, head: X.block }), budget, hold: X.swapGroups && X.unreadGroups === X.swapGroups ? 'swaps unread' : null });
       return { ...r, ms: budget.elapsed(), calls: budget.used() };
     } catch (e) { console.error(e); return { chain: X.CH.id, broke: errWord(e), changed: false }; }
   }))) : [];
