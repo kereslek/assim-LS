@@ -40,6 +40,7 @@ import { marketBlock, carryMarket } from '../lib/market.mjs';
 import { parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
 import { BACKFILL, blockClock, storePoints, planBackfill, runBudgeted, retryJobs, readBackfill, probeMoments, oldestMissing } from '../lib/backfill.mjs';
 import { FEEHIST, DEEP_RANK, deepMoments, foldDeep, feeYear, fetchVolumes, packGt, unpackGt, windowSeries, median as midOf } from '../lib/feehist.mjs';
+import { exactFeesChain, chainIo, emptyCache, packSx, unpackSx, exactLine } from '../lib/exactfees.mjs';
 import { allWindows, gemWarnings, isHooked } from '../lib/windows.mjs';
 import { buildPairs } from '../lib/pairs.mjs';
 import { historyRows } from '../lib/charts.mjs';
@@ -533,8 +534,8 @@ async function writeOutputs() {
   // the stored snapshots (restored from the data branch); one that won't open or parse is never overwritten
   let snaps = new Map(), snapsOk = true;
   let rebuilt = false;
-  let gtCache = new Map();
-  if (store) { try { const o = store.get('snapshots.json'); if (o && (o.fix ?? 0) >= SNAP_FIX) snaps = parseStore(o); else if (o) rebuilt = true; gtCache = unpackGt(o?.gt); } catch { snapsOk = false; } }
+  let gtCache = new Map(), sxCache = emptyCache();
+  if (store) { try { const o = store.get('snapshots.json'); if (o && (o.fix ?? 0) >= SNAP_FIX) snaps = parseStore(o); else if (o) rebuilt = true; gtCache = unpackGt(o?.gt); sxCache = unpackSx(o?.sx); } catch { snapsOk = false; } }
   // Which chains' new rows are kept. A loop pinned to code from before Base reads every stored row's block
   // number into ONE block clock for its Ethereum backfill, so Base rows must not reach the shared store while
   // such a loop may still run: Ethereum's rows always are; another chain's only when this pass runs as the
@@ -983,6 +984,34 @@ async function writeOutputs() {
       `${f.got} of ${f.asked} coins read (${f.unlisted} listed nowhere, ${f.mismatched} price mismatch, ${f.ambiguous} ambiguous ticker, ${f.unpriced} unpriced); venues ${Object.entries(f.venues).map(([k, v]) => `${k} ${v == null ? 'unread' : `${v} markets`}`).join(', ')}; ${f.note}${f.lastError ? `, last error ${f.lastError}` : ''}`}; pools with exchange volume: CoinGecko ${srcN('coingecko')}, exchanges ${srcN('exchanges')}`);
   }
   pub(`flow quality (${defaultWindow}): retail share ${fq('retailShare')}, drift ${fq('driftCorr')}, routing ${fq('routing')} of ${out.length} pools; exchange ratio ${out.filter((x) => x.cex.cexRatio != null).length}; lanes: new ${discovery.newPools.length}, exchange-led ${discovery.cexLed.length}, retail ${discovery.retailUp.length}`);
+  // Exact fees (lib/exactfees.mjs, docs/DATA.md history.json y 's'): each pool's settled UTC days summed from its own
+  // swaps, read once and kept in snapshots.json sx; newest days first, the pools in the dashboard's order (gem first),
+  // within each chain's caps.exact (READ_CAPS {"<chain>": {"exact": {...}}} lowers them), the chains side by side.
+  // Then every pool's year of fee rows (lib/feehist.mjs feeYear: swaps over counters over estimates) and the public
+  // line: counts, one ratio and seconds only.
+  const mById = new Map(mapped.map((p) => [p.id, p]));
+  const exRuns = snapsOk ? await Promise.all(ctxs.map((X) => timed(X.CH.prefix + 'exact fees', async () => {
+    const budget = makeBudget({ ...(X.CH.caps?.exact || {}), ...(CAP_OVERRIDE[X.CH.id]?.exact || {}) });
+    const pools = out.filter((x) => x.chain === X.CH.id).map((x) => mById.get(x.id)).map((p) => ({ id: p.id, v: p.v, dex: p.dex, fee: p.fee, createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
+    // a chain whose own 24 h swap read came back unread this pass waits: its log nodes are struggling
+    const r = await exactFeesChain({ chain: X.CH.id, pools, cache: sxCache, now: X.passT, io: chainIo(X.CH, { budget, head: X.block }), budget, hold: X.unreadIds.size ? 'swaps unread' : null })
+      .catch((e) => ({ chain: X.CH.id, broke: errWord(e), changed: false }));
+    return { ...r, ms: budget.elapsed(), calls: budget.used() };
+  }))) : [];
+  const exChanged = exRuns.some((r) => r.changed);
+  const fyOf = new Map();
+  for (const p of mapped) {
+    const s2 = snaps2.get(p.id), t0 = p.X.tok.get(p.t0) || {}, t1 = p.X.tok.get(p.t1) || {};
+    if (!s2) continue;
+    const x = out.find((o) => o.id === p.id), rate = x.feeTier && x.lpKeeps ? x.feeTier * x.lpKeeps : null;
+    fyOf.set(p.id, feeYear({ series: s2, gt: gtCache.get(p.id) ?? null, sx: sxCache.p.get(p.id) ?? null, now: passT,
+      pool: { d0: t0.decimals, d1: t1.decimals, rate, dyn: !!x.dynamicFee, usd0: t0.usd ?? null, usd1: t1.usd ?? null, pxNow: x.price ?? null, createdAt: x.createdAt } }));
+  }
+  if (exRuns.length) {
+    const ef = exactLine(exRuns, { xs: [...fyOf.values()].flatMap((f) => f.xs), sDays: [...fyOf.values()].reduce((a, f) => a + f.yp.sw, 0) });
+    say(ef.ok, 'exact fees', ef.line);
+    pub(`exact fees: ${ef.line}`);
+  }
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
 
   // the top strip (lib/market.mjs): gas against its own recent range, ETH/BTC/SOL in USD. Its own time
@@ -1035,8 +1064,8 @@ async function writeOutputs() {
   };
   store.put('live.json', live);
   let histWritten = false;
-  const fh = { pools: 0, exact: 0, est: 0, rows: 0, xc: [], xcPools: 0, aged: 0, full: 0, left: 0, spikes: 0, backed: 0, uPools: 0 };
-  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/history.json`))) {
+  const fh = { pools: 0, exact: 0, est: 0, rows: 0, xc: [], xcPools: 0, aged: 0, full: 0, left: 0, spikes: 0, backed: 0, bySwaps: 0, uPools: 0 };
+  if (snapsOk && (changed || exChanged || !fs.existsSync(`${store.outDir}/history.json`))) {
     // history.json's charts (lib/charts.mjs): 14 days hourly, 90 days daily, nothing before a pool existed
     // plus y, up to a year of daily LP fees (lib/feehist.mjs): exact from the fee counters, estimated from the day
     // volumes before that, exact overriding; and yp, the pool's progress (exact days of its age within the year)
@@ -1045,13 +1074,12 @@ async function writeOutputs() {
       const s2 = snaps2.get(p.id), t0 = p.X.tok.get(p.t0) || {}, t1 = p.X.tok.get(p.t1) || {};
       if (!s2) continue;
       const x = out.find((o) => o.id === p.id), rate = x.feeTier && x.lpKeeps ? x.feeTier * x.lpKeeps : null;
-      const fy = feeYear({ series: s2, gt: gtCache.get(p.id) ?? null, now: passT,
-        pool: { d0: t0.decimals, d1: t1.decimals, rate, dyn: !!x.dynamicFee, usd0: t0.usd ?? null, usd1: t1.usd ?? null, pxNow: x.price ?? null, createdAt: x.createdAt } });
+      const fy = fyOf.get(p.id);
       const hr = historyRows(windowSeries(s2), { d0: t0.decimals, d1: t1.decimals, usd0: t0.usd, usd1: t1.usd, rate });
-      // a day 20× its 30-day median or more stands only with the day's volume behind it; else it is listed in u
-      // (unconfirmed), which the page marks (lib/spikes.mjs)
-      const sp = feeSpikes({ d: hr.d, y: fy.y, gt: gtCache.get(p.id) ?? null, rate });
-      fh.spikes += sp.spikes; fh.backed += sp.backedN; if (sp.u) fh.uPools++;
+      // a day 20× its 30-day median or more stands only with the day's swaps or volume behind it; else it is listed
+      // in u (unconfirmed), which the page marks (lib/spikes.mjs)
+      const sp = feeSpikes({ d: hr.d, y: fy.y, gt: gtCache.get(p.id) ?? null, rate, su: fy.su });
+      fh.spikes += sp.spikes; fh.backed += sp.backedN; fh.bySwaps += sp.bySwaps; if (sp.u) fh.uPools++;
       hp[p.id] = { ...hr, y: fy.y, yp: fy.yp, ...(sp.u ? { u: sp.u } : {}) };
       fh.pools++; fh.exact += fy.yp.exact; fh.est += fy.yp.est; fh.rows += fy.y.length; fh.xc.push(...fy.xc); if (fy.xc.length) fh.xcPools++;
       if (fy.yp.age != null) { fh.aged++; fh.left += fy.yp.age - fy.yp.exact; if (fy.yp.exact === fy.yp.age) fh.full++; }
@@ -1064,7 +1092,7 @@ async function writeOutputs() {
     store.put('history.json', { v: 1, t: passT, pools: hp, health });
     histWritten = true;
   }
-  if (snapsOk && (changed || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snapsKeep), t: passT, fix: SNAP_FIX, gt: packGt(gtCache, { now: passT }) });
+  if (snapsOk && (changed || exChanged || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snapsKeep), t: passT, fix: SNAP_FIX, gt: packGt(gtCache, { now: passT }), sx: packSx(sxCache, { now: passT }) });
   // the fee history in the public log: counts, one ratio and seconds only (never a pool, an amount or an address)
   if (histWritten) {
     const xm = midOf(fh.xc), g = gt || {};
@@ -1074,7 +1102,7 @@ async function writeOutputs() {
       + `deep backfill ${bf.deepRows} rows from ${bf.deepJobs} batches planned of ${bf.deepWanted} pool-days wanted (${bf.deepUnborn} before a pool existed, ${bf.deepUnread} unread, ${bf.deepBroke} left after unread ones)`;
     say(xm == null || fh.xc.length < 20 ? null : Math.abs(xm - 1) <= 0.25, 'fee history', line + (g.lastError ? `; last GeckoTerminal error ${g.lastError}` : ''));
     pub(`fee history: ${line}; ${timing['fee history volumes'] ?? 0} s for the volumes`);
-    const spl = `${fh.spikes} days at 20× their 30-day median or more (daily chart and exact fee history), ${fh.backed} backed by the day's volume, ${fh.spikes - fh.backed} marked unconfirmed in ${fh.uPools} pools`;
+    const spl = `${fh.spikes} days at 20× their 30-day median or more (daily chart and exact fee history), ${fh.backed} backed by the day's swaps or volume (${fh.bySwaps} by its swaps), ${fh.spikes - fh.backed} marked unconfirmed in ${fh.uPools} pools`;
     say(true, 'fee spikes', spl);
     pub(`fee spikes: ${spl}`);
   }

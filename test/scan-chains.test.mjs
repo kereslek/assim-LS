@@ -142,6 +142,8 @@ test('planted fault: every Base node refuses logs — the swaps cap stops the re
   assert.ok(pub.includes('N/A  base swaps'), 'the Base swaps are unread, not failed');
   assert.ok(pub.some((l) => /^caps: .*base .*swaps \d+ s, \d+ calls \((time|calls) cap\)/.test(l) && /stopped by a cap: base swaps/.test(l)), pub.join('\n'));
   assert.ok(pub.includes('PASS swaps') && pub.includes('PASS fee identity'), 'Ethereum is untouched');
+  // the exact fees wait on a chain whose own 24 h swap read came back unread: no day of its swaps asked of those nodes
+  assert.ok(pub.some((l) => /^exact fees: .*; base \+0 days in 0 of 0 jobs read \(0 unread; \d+ left by swaps unread\)/.test(l)), pub.filter((l) => l.startsWith('exact fees')).join('\n'));
   const live = store.get('live.json');
   for (const id of [A('e'), A('f')]) {
     const p = live.pools.find((x) => x.id === id), ck = (k) => p.checks.find((c) => c.id === k)?.ok;

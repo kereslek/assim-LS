@@ -112,7 +112,7 @@ test('exact overrides estimated; estimated = volume × fee tier × the LP share;
   for (const [t, f] of es.slice(0, 20)) assert.ok(Math.abs(f / c.perDay(t / DAY) - 1) < 1e-3, `${t}: ${f}`);
   // exact days at that day's prices: token1's price from the close of token0 (GeckoTerminal's base) and the pool's price
   for (const [t, f] of xs) { const k = 1 + (t / DAY % 3) / 10; assert.ok(Math.abs(f / (c.perDay(t / DAY) * k) - 1) < 2e-3, `${t}: ${f} vs ${c.perDay(t / DAY) * k}`); }
-  assert.deepEqual(yp, { exact: 30, est: 335, age: 365, dyn: false });
+  assert.deepEqual(yp, { exact: 30, est: 335, age: 365, dyn: false, sw: 0 });
   // the sanity ratio: estimated ÷ exact on days with both (the made-up close moves, so it is the close's factor back)
   assert.equal(xc.length, 30);
   // planted fault: the estimate allowed to override an exact day → a different row, caught

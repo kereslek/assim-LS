@@ -65,7 +65,7 @@ test('history.json u: a spike the day volume backs stands; one it contradicts or
   const d = dRows();
   const spikeDay = Math.floor(d[39][0] / DAY) * DAY; // the spike row spans day 39 00:05 → day 40 00:05
   const realVol = gtOf((day) => (day === spikeDay ? 1e6 : 10000));
-  assert.deepEqual(feeSpikes({ d, gt: realVol, rate: RATE }), { u: null, spikes: 1, backedN: 1 }, 'the day traded 100×: backed');
+  assert.deepEqual(feeSpikes({ d, gt: realVol, rate: RATE }), { u: null, spikes: 1, backedN: 1, bySwaps: 0 }, 'the day traded 100×: backed');
   const flat = feeSpikes({ d, gt: gtOf(), rate: RATE });
   assert.deepEqual(flat.u, { d: [d[40][0]], y: [] }, 'an ordinary volume day contradicts it');
   assert.deepEqual(feeSpikes({ d, gt: null, rate: RATE }).u, { d: [d[40][0]], y: [] }, 'no volume read: unconfirmed');

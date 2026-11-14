@@ -40,7 +40,7 @@ test('history.json carries a year of daily fees per pool, the candle cache is re
   assert.ok(/estimated ÷ exact median (—|\d\.\d{3}) over \d+ days/.test(fh) && /4 calls/.test(fh), fh);
   assert.ok(r1.pub.every((l) => !/\$\d|0x[0-9a-f]{6,}|ONE\/WETH|THREE\/WETH/i.test(l)), 'counts and one ratio only in the public log');
   const spl = r1.pub.find((l) => l.startsWith('fee spikes: '));
-  assert.ok(spl && /^fee spikes: \d+ days at 20× .* \d+ backed by the day's volume, \d+ marked unconfirmed in \d+ pools$/.test(spl), spl);
+  assert.ok(spl && /^fee spikes: \d+ days at 20× .* \d+ backed by the day's swaps or volume \(\d+ by its swaps\), \d+ marked unconfirmed in \d+ pools$/.test(spl), spl);
   const live = w.store.get('live.json'), hist = w.store.get('history.json'), snaps = w.store.get('snapshots.json');
   const today = Math.floor(live.t / DAY) * DAY;
   assert.equal(Object.keys(snaps.gt).length, 4, 'the cache holds what was fetched');
@@ -50,12 +50,13 @@ test('history.json carries a year of daily fees per pool, the candle cache is re
     assert.ok(h.y.length <= 365 && h.y.length > 0, `${p.pair}: ${h.y.length} rows`);
     assert.ok(h.y.every((r, i) => r.length === 3 && (i === 0 || r[0] - h.y[i - 1][0] === DAY)), 'one row a UTC day');
     assert.equal(h.y.at(-1)[0], today - DAY, 'yesterday last');
-    assert.ok(h.y.every((r) => (r[2] === null) === (r[1] === null) && [null, 'x', 'e'].includes(r[2]) && (r[1] === null || r[1] >= 0)), 'null fees only with no source; never a negative');
-    assert.equal(h.yp.exact, h.y.filter((r) => r[2] === 'x').length);
+    assert.ok(h.y.every((r) => (r[2] === null) === (r[1] === null) && [null, 's', 'x', 'e'].includes(r[2]) && (r[1] === null || r[1] >= 0)), 'null fees only with no source; never a negative');
+    assert.equal(h.yp.exact, h.y.filter((r) => r[2] === 'x' || r[2] === 's').length, 'exact = the counters\' days and the swaps\'');
+    assert.equal(h.yp.sw, h.y.filter((r) => r[2] === 's').length);
     if ('u' in h) assert.ok(Array.isArray(h.u.d) && Array.isArray(h.u.y) && h.u.d.length + h.u.y.length > 0 && [...h.u.d, ...h.u.y].every(Number.isFinite), `${p.pair}: u lists times only`);
     assert.equal(h.yp.est, h.y.filter((r) => r[2] === 'e').length);
     // Ethereum's daily backfill has no cap: its last 20 days are exact on the first pass (Base's fill within its cap)
-    if (p.chain === 'ethereum') assert.ok(h.y.slice(-20).every((r) => r[2] === 'x'), `${p.pair}: the recent days are exact`);
+    if (p.chain === 'ethereum') assert.ok(h.y.slice(-20).every((r) => r[2] === 'x' || r[2] === 's'), `${p.pair}: the recent days are exact`);
     if (p.createdAt) assert.ok(h.y[0][0] >= Math.floor(p.createdAt / DAY) * DAY, `${p.pair}: no row before the pool existed (planted candles before it)`);
   }
   assert.ok(live.pools.some((p) => hist.pools[p.id].yp.est > 300), 'pools the cap reached show older days estimated');
@@ -90,9 +91,17 @@ test('absurd estimates (volumes × 1,000,000) leave every window and gem as they
 
 test('planted fault: nodes answering old blocks with today\'s state — the deep backfill drops those batches, no exact day from them', () => {
   const w = world();
-  const r = w.run({ FAKE_GT: '1', READ_CAPS: fast(), FAULT: 'deep-today', FAKE_NOON: '1' }); // noon: no honest 00:05 moment of today in the plan
+  // the exact fees' caps opened up so their reads reach past 90 days in this one pass
+  const caps = JSON.stringify({ ...JSON.parse(fast()), ethereum: { exact: { ms: 120e3, calls: 1e6 } }, base: { exact: { ms: 120e3, calls: 1e6 } } });
+  const r = w.run({ FAKE_GT: '1', READ_CAPS: caps, FAULT: 'deep-today', FAKE_NOON: '1' }); // noon: no honest 00:05 moment of today in the plan
   const fh = r.pub.find((l) => l.startsWith('fee history: '));
   assert.match(fh, /deep backfill 0 rows from [1-9]\d* batches planned/);
   const live = w.store.get('live.json'), hist = w.store.get('history.json'), today = Math.floor(live.t / DAY) * DAY;
   for (const h of Object.values(hist.pools)) assert.ok(h.y.every((x) => x[2] !== 'x' || x[0] >= today - 91 * DAY), 'no exact day older than the honest blocks');
+  // the exact fees' state reads carry each block's own timestamp: the old blocks answered with today's are dropped
+  // (the day unread), the honest ones count
+  const ex = r.pub.find((l) => l.startsWith('exact fees: '));
+  assert.match(ex, /ethereum \+[1-9]\d* days in .*unread: state/, ex);
+  for (const h of Object.values(hist.pools)) assert.ok(h.y.every((x) => x[2] !== 's' || x[0] >= today - 91 * DAY), 'no swap day older than the honest blocks');
+  assert.ok(Object.values(hist.pools).some((h) => h.y.some((x) => x[2] === 's' && x[0] < today - 60 * DAY)), 'the honest old days are read');
 });

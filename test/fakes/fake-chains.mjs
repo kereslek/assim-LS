@@ -164,6 +164,7 @@ function rpc(chain, q) {
   const N = NET[chain];
   if (q.method === 'eth_blockNumber') return r('0x' + N.block.toString(16));
   if (q.method === 'eth_gasPrice') return r('0x' + (chain === 'base' ? 5e6 : 2e9).toString(16));
+  if (q.method === 'eth_getBlockByNumber') { const b = parseInt(q.params[0], 16); return r(b >= 0 && b <= N.block ? { number: '0x' + b.toString(16), timestamp: '0x' + Math.floor(N.ts(b)).toString(16) } : null); }
   if (q.method === 'eth_call' && q.params[0].to.toLowerCase() === '0xca11bde05977b3631167028862be2a173976ca11') return r(aggregate3(chain, q.params[0].data, q.params[1]));
   if (q.method === 'eth_getLogs') { const f = q.params[0], span = parseInt(f.toBlock, 16) - parseInt(f.fromBlock, 16); if (span > (chain === 'base' ? 10000 : 1500)) return { jsonrpc: '2.0', id: q.id, error: { code: -32005, message: 'range too large' } }; return r(swapsFor(chain, f)); }
   if (q.method === 'eth_getTransactionByHash') { const t = txOf(chain, q.params[0]); return t ? r(t) : r(null); }
