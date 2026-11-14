@@ -604,6 +604,15 @@ const pzView = (page, id) => page.evaluate(async (id) => { await new Promise((r)
 async function pzBox(page, id) {
   return page.evaluate(STILL_BOX, { sel: `[data-pz="${id}"]` }).then((b) => b && { x: b.x, y: b.y, width: b.w, height: b.h });
 }
+// the rubber-band end a held drag shows: wait (frames, up to 2 s) until the page has drawn it, then read it; WebKit on a
+// CI runner can take longer than any fixed sleep to paint the frame that adds it
+const pzEndRead = (page, id, side) => page.evaluate(async ({ id, side }) => {
+  const frame = () => new Promise((r) => requestAnimationFrame(() => r())), t0 = performance.now(), sel = `[data-pz="${id}"] .pz-end${side ? '.' + side : ''}`;
+  await frame(); await frame();
+  while (!document.querySelector(sel) && performance.now() - t0 < 2000) await frame();
+  await frame();
+  return [...document.querySelectorAll(sel)].map((x) => x.className + '|' + x.textContent).join();
+}, { id, side });
 // a mouse drag across a chart (pointer events, as a finger gives them): dx, dy in px; `up: false` keeps the button down
 async function pzDrag(page, id, dx, { dy = 0, steps = 10, ms = 16, y = 0.5, up = true, settle = 650, hold = 0 } = {}) {
   const b = await pzBox(page, id), x0 = b.x + b.width / 2, y0 = b.y + b.height * y;
@@ -657,8 +666,7 @@ async function testPan(browser) {
     ok(`pan ${tag}: the liquidity chart opens on the price, ±45% wide`, near(v.c, 0) && near(v.w, 0.9), JSON.stringify(v));
     const SP = poolOf(await bestId(p)).shape.depthSpan, edge0 = SP[0] + 0.45; // the view's centre can go no lower
     await pzDrag(p, 'liq-best', phone ? 140 : 260, { up: false });
-    await sleep(60);
-    const mid = await pzView(p, 'liq-best'), end = await p.$$eval('[data-pz="liq-best"] .pz-end', (e) => e.map((x) => x.className + '|' + x.textContent).join());
+    const end = await pzEndRead(p, 'liq-best', ''), mid = await pzView(p, 'liq-best');
     await p.mouse.up();
     v = await pzSettled(p, 'liq-best');
     ok(`pan ${tag}: the bars past ±45% are reachable, and past the map's end a drag rubber-bands over a plain end (nothing lies beyond: no hatch, no "no data"), then springs back`, mid.c < edge0 - 0.005 && /pz-end l none\|$/.test(end) && near(v.c, edge0, 2e-3), `${mid.c} ${end} ${v.c}`);
@@ -870,8 +878,8 @@ async function testDepth(browser) {
     ok(`depth ${tag}: …the far bars are as wide as their edges (widest ${wr.toFixed(0)}× the narrowest), drawn by value per width, the band across the whole field`, m.ok && wr > 8, m.why);
     ok(`depth ${tag}: …on a log axis marked as moves of the price (${a.ticks.join(' ')})`, a.ticks.includes('PRICE') && a.ticks.some((x) => /^×\d/.test(x)), a.ticks.join(' '));
     // past the right end a drag rubber-bands over a plain end: nothing lies beyond (a real 0), never "no data"
-    await pzDrag(p, 'liq-best', -160, { up: false }); await sleep(60);
-    const endR = await p.$$eval('[data-pz="liq-best"] .pz-end.r', (e) => e.map((x) => x.className + '|' + x.textContent).join());
+    await pzDrag(p, 'liq-best', -160, { up: false });
+    const endR = await pzEndRead(p, 'liq-best', 'r');
     await p.mouse.up(); await pzSettled(p, 'liq-best');
     ok(`depth ${tag}: past the end of the field a drag shows a plain end (no hatch: nothing is there)`, endR === 'pz-end r none|', endR);
     await pzClick(p, '[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
@@ -897,8 +905,8 @@ async function testDepth(browser) {
     ok(`depth ${tag}: unread bars are hatched (${a.unread} of ${nulls}) and the unread "beyond" says so, never $0; no layer where it couldn't be measured`, a.unread === nulls && a.by.some((x) => /not read beyond/.test(x.t)) && /Not read/.test(a.legend) && !/\$0 /.test(a.by.map((x) => x.t).join(' ')) && a.fr === 0 && /×10/.test(a.cap), JSON.stringify({ u: a.unread, by: a.by, cap: a.cap }));
     m = barsMatch(a.bars, liqExpect(qp, viewOf(a), true), a.band);
     ok(`depth ${tag}: …its read bars still sit on their edges at ×${a.cap.split('×').pop()}`, m.ok, m.why);
-    await pzDrag(p, 'liq-detail', -160, { up: false }); await sleep(60);
-    const endQ = await p.$$eval('[data-pz="liq-detail"] .pz-end.r', (e) => e.map((x) => x.className + '|' + x.textContent).join());
+    await pzDrag(p, 'liq-detail', -160, { up: false });
+    const endQ = await pzEndRead(p, 'liq-detail', 'r');
     await p.mouse.up(); await sleep(400);
     ok(`depth ${tag}: …past its unread end a drag shows the hatch, marked "not read" (never "no data")`, endQ === 'pz-end r|NOT READ' || endQ === 'pz-end r|', endQ);
     await closePool(p);
