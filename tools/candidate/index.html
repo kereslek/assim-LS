@@ -893,13 +893,13 @@ html.m3d .fx3d i:nth-child(2){left:0;right:0;top:0;height:calc(100% + 340px);bac
    scrolled off screen: no frame is drawn for it then */
 html.m3d.d3-hid .fx3d i,html.m3d.d3-busy .fx3d i,html.m3d.d3-deep .fx3d i,html.m3d.d3-hid .badge.fresh .dot::after,html.m3d.d3-busy .badge.fresh .dot::after,html.m3d.d3-hid .newdot::after,html.m3d.d3-busy .newdot::after,html.m3d.d3-hid .cmp-b::after,html.m3d.d3-busy .cmp-b::after{animation-play-state:paused}
 /* depth cards: a lit top edge, a soft drop into the deep */
-html.m3d .card,html.m3d .tile{background:linear-gradient(165deg,#155357 0%,#114A4E 46%,#0F4549 100%);border-color:rgba(126,240,214,.16);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 22px 44px -26px rgba(1,16,18,.85)}
+html.m3d .card,html.m3d .tile{background:linear-gradient(165deg,#155357 0%,#114A4E 46%,#0F4549 100%);border-color:rgba(126,240,214,.16);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 4px 0 -1px #082C2F}
 html.m3d .card.dashed{background:rgba(14,65,69,.72);border-color:rgba(126,240,214,.24)}
-html.m3d .best{border-color:rgba(255,181,71,.38);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(255,181,71,.10),0 0 34px rgba(255,181,71,.10),0 26px 50px -26px rgba(1,16,18,.9)}
-html.m3d .best.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(255,181,71,.10),0 0 34px rgba(255,181,71,.10),0 26px 50px -26px rgba(1,16,18,.9)}
+html.m3d .best{border-color:rgba(255,181,71,.38);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(255,181,71,.12),0 5px 0 -1px #3A2C10}
+html.m3d .best.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(255,181,71,.12),0 5px 0 -1px #3A2C10}
 html.m3d .sub-card{background:rgba(9,48,52,.55);border-color:rgba(126,240,214,.14);border-radius:12px}
 html.m3d .top{background:#0F4246;border-bottom-color:rgba(126,240,214,.16)}
-html.m3d .top.stuck{box-shadow:0 12px 22px -12px rgba(1,16,18,.9)}
+html.m3d .top.stuck{box-shadow:0 3px 0 -1px #082C2F}
 html.m3d .sheet-card{background:linear-gradient(180deg,#0E3E42 0%,#0C3438 60%);border-color:rgba(126,240,214,.22)}
 html.m3d .sheet-head{background:#0F4246}
 html.m3d .scrim{background:rgba(2,18,20,.72)}
@@ -907,10 +907,10 @@ html.m3d .ctip,html.m3d .pop{background:rgba(10,46,50,.97);border-color:#3B7F7D;
 html.m3d .qlist{background:rgba(10,46,50,.98)}
 html.m3d .totop,html.m3d .mc-nav{background:rgba(12,52,56,.94)}
 html.m3d .pz-hint{background:rgba(8,40,44,.76)}
-html.m3d .lock-card{background:linear-gradient(165deg,#155357,#0F4549);border-color:rgba(126,240,214,.2);border-radius:16px;box-shadow:0 30px 60px -30px rgba(1,16,18,.9)}
+html.m3d .lock-card{background:linear-gradient(165deg,#155357,#0F4549);border-color:rgba(126,240,214,.2);border-radius:16px;box-shadow:0 5px 0 -1px #082C2F}
 html.m3d .mc{background:linear-gradient(170deg,#1A6064,#145558);border-color:rgba(126,240,214,.2)}
-html.m3d .mc.chs{box-shadow:inset 3px 0 0 var(--cc),0 12px 20px -14px rgba(1,16,18,.85)}
-html.m3d .mc.self.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 0 0 1px rgba(255,181,71,.45),0 12px 20px -14px rgba(1,16,18,.85)}
+html.m3d .mc.chs{box-shadow:inset 3px 0 0 var(--cc),0 3px 0 -1px #082C2F}
+html.m3d .mc.self.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 0 0 1px rgba(255,181,71,.45),0 3px 0 -1px #082C2F}
 html.m3d .mc.self{border-color:var(--accent)}
 html.m3d .mc.end{background:transparent}
 html.m3d .sim .mc{background:linear-gradient(170deg,#185B5F,#124F53)}
@@ -920,16 +920,13 @@ html.m3d .tog[aria-checked="true"] .knob,html.m3d .stt[aria-checked="true"] .tk{
 html.m3d .stt[aria-checked="true"] b{color:#5EE6C8}
 html.m3d .pairbtn .pn,html.m3d .pairbtn .pn2,html.m3d .best-h-btn,html.m3d .mc.dc .n,html.m3d a.mc-name .n,html.m3d button.mc-name .n{text-decoration-color:rgba(255,181,71,.6)}
 html.m3d tr.sel td,html.m3d .wtbl .cur,html.m3d .sim-row.self{background:rgba(255,181,71,.08)}
-html.m3d .bignum{text-shadow:0 0 36px rgba(255,181,71,.35)}
-html.m3d .ring svg{filter:drop-shadow(0 0 5px rgba(255,181,71,.45))}
 html.m3d .pill.gem{background:rgba(255,181,71,.12);border-color:rgba(255,181,71,.55)}
 html.m3d .newdot{background:#5EE6C8;box-shadow:0 0 0 3px rgba(94,230,200,.18)}
 /* small lights that breathe: the fresh dot, a new pool's dot, the competition badge (opacity and scale only) */
 html.m3d .badge.fresh .dot,html.m3d .newdot{position:relative}
 html.m3d .badge.fresh .dot::after,html.m3d .newdot::after{content:"";position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 2px currentColor;color:rgba(94,230,200,.7);animation:ping3 2.2s ease-out infinite}
 html.m3d .badge.fresh .dot::after{color:rgba(47,191,74,.75)}
-html.m3d .cmp-b{text-shadow:0 0 12px rgba(255,181,71,.45)}
-html.m3d .cmp-b::after{content:"";position:absolute;inset:11px 0;border-radius:999px;box-shadow:0 0 14px 2px rgba(255,181,71,.45);opacity:0;pointer-events:none;animation:glow3 2.4s ease-in-out infinite}
+html.m3d .cmp-b::after{content:"";position:absolute;inset:11px 0;border-radius:999px;box-shadow:0 0 0 2px rgba(255,181,71,.4);opacity:0;pointer-events:none;animation:glow3 2.4s ease-in-out infinite}
 @keyframes ping3{0%{transform:scale(1);opacity:1}70%,100%{transform:scale(2.6);opacity:0}}
 @keyframes glow3{0%,55%,100%{opacity:0}20%{opacity:1}}
 /* the charts: the 2D drawing on top in the deep's colours (this pool mint, the price amber); bars rise as the chart opens */
