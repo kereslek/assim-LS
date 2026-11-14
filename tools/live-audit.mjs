@@ -269,6 +269,7 @@ async function gestures(page, R, tag, errTotal) {
   await part5(page, run, skip, press);
   await part6(page, run, skip);
   await overlaps(page, run, tag);
+  await part7(page, run, skip);
   // back to top
   await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
   await sleep(150); await page.evaluate(REST);
@@ -583,6 +584,40 @@ async function part6(page, run, skip) {
   await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
   run('part 6: a tap on a discovery card opens that pool', await page.evaluate(() => { const c = document.querySelector('#disc .mc.dc'), t = document.querySelector('#sheet-title'); return !document.querySelector('#sheet').hidden && !!t && t.textContent === c.querySelector('.n').textContent; }));
   await page.click('#sheet-close').catch(() => {}); await sleep(300);
+}
+// ---------- 2f. v0.5.0: the look switch, 3D (the owner's pick "B · Teal Depth") or Classic 2D ----------
+// Booleans only: the switch is in the bar, the look matches it, a tap switches at once (no reload, nothing fetched, the
+// scroll and every chart's view kept), the other look has no text collisions or sideways scroll, a reload keeps the choice.
+async function part7(page, run, skip) {
+  const look = () => page.evaluate(() => {
+    const seg = document.querySelector('#top #viewseg'), b = seg ? [...seg.querySelectorAll('[data-act="view"]')] : [], vis = b.filter((x) => x.getClientRects().length), vw = document.documentElement.clientWidth;
+    const charts = [...document.querySelectorAll('.pz.liq, .pz.pz-bars')].filter((h) => h.getClientRects().length);
+    return { seg: !!seg, m3d: document.documentElement.classList.contains('m3d'), pressed: b.filter((x) => x.getAttribute('aria-pressed') === 'true').map((x) => x.dataset.v).join(),
+      vis: vis.length, tall: vis.length > 0 && vis.every((x) => x.getBoundingClientRect().height >= 43.5), inside: vis.every((x) => { const r = x.getBoundingClientRect(); return r.left >= 0 && r.right <= vw + 0.5; }),
+      charts: charts.length, canv: charts.filter((h) => h.querySelector(':scope > canvas.d3c')).length, all: document.querySelectorAll('canvas.d3c').length };
+  });
+  await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(200);
+  const a = await look();
+  run('part 7: the bar carries the 3D ⇄ 2D switch (v0.5.0), its taps 44 px, inside the screen', a.seg && a.vis >= 1 && a.tall && a.inside);
+  if (!a.seg) { for (let i = 0; i < 4; i++) skip(); return; }
+  run('part 7: the look matches its pressed pill: 3D draws a depth layer behind every bar chart, Classic 2D none', a.pressed === (a.m3d ? '3d' : '2d') && (a.m3d ? a.charts > 0 && a.canv === a.charts : a.all === 0));
+  const other = a.m3d ? '2d' : '3d', flip = (v) => page.evaluate((v) => { const s = document.querySelector('#viewseg'), b = s.querySelector(`[data-v="${v}"]`); (b.getClientRects().length ? b : s.querySelector('[aria-pressed="true"]')).click(); }, v);
+  const keep = () => page.evaluate(() => ({ y: Math.round(scrollY), res: performance.getEntriesByType('resource').length, mark: window.__laKeep, views: [...document.querySelectorAll('[data-pz]')].map((h) => h.dataset.view).join('|') }));
+  await page.evaluate(() => { window.__laKeep = 1; window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, Math.round(innerHeight * 0.8)); }); await sleep(300); await page.evaluate(REST);
+  const k0 = await keep();
+  await flip(other); await sleep(150);
+  const k1 = await keep(), b = await look();
+  run('part 7: a tap switches the look at once: nothing reloads or is fetched, the scroll and every chart\'s view stay', b.m3d === (other === '3d') && b.pressed === other && k1.mark === 1 && k1.y === k0.y && k1.res === k0.res && k1.views === k0.views);
+  await page.evaluate(() => scrollTo(0, 0)); await sleep(200); await page.evaluate(REST);
+  const ov = await page.evaluate(TEXT_OVERLAP, { safe: true }), hs = await page.evaluate(HSCROLL);
+  run('part 7: in the other look no text collides or is cut off, and nothing scrolls sideways', ov.length === 0 && hs <= 0);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#app:not([hidden])', { timeout: 60000 }).catch(() => {});
+  await page.waitForFunction(() => { const x = document.querySelector('#best'); return x && x.children.length > 0; }, null, { timeout: 30000 }).catch(() => {});
+  await sleep(600);
+  const c = await look();
+  run('part 7: the chosen look is kept on this device after a reload', c.m3d === (other === '3d') && c.pressed === other);
+  await flip(a.m3d ? '3d' : '2d'); await sleep(150); // back as it was
 }
 // ---------- 2e. text that collides or is cut off, in the views a phone and a laptop show ----------
 // The report names sections and element kinds (tag and first class) with counts: never a word of the page's text.

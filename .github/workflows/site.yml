@@ -1,6 +1,7 @@
 name: site
 # The dashboard's browser tests on made-up, sealed fixtures: WebKit as an iPhone 15 and Chromium as a
-# Pixel 7, each also at laptop widths. Logs show pass/fail, counts and timings only.
+# Pixel 7, each also at laptop widths, and each in both looks (v0.5.0: 3D and Classic 2D, one job per look).
+# Logs show pass/fail, counts and timings only.
 # A dispatch can test a candidate page before it deploys: put it under tools/candidate/ (that path never triggers
 # the pages workflow) and pass its path as `page`.
 on:
@@ -43,8 +44,16 @@ jobs:
         include:
           - browser: webkit
             device: iPhone 15
+            mode: 3d
+          - browser: webkit
+            device: iPhone 15
+            mode: 2d
           - browser: chromium
             device: Pixel 7
+            mode: 3d
+          - browser: chromium
+            device: Pixel 7
+            mode: 2d
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -82,7 +91,7 @@ jobs:
           PROBE: ${{ inputs.probe }}
         run: node "$PROBE" --browser ${{ matrix.browser }} --device "${{ matrix.device }}" ${PAGE:+--page "$PAGE"}
       - name: Live audit on made-up fixtures (the deployed page's walk, before a deploy)
-        if: inputs.audit == 'yes'
+        if: inputs.audit == 'yes' && matrix.mode == '3d'
         env:
           NODE_PATH: ${{ runner.temp }}/pw/node_modules
           PAGE: ${{ inputs.page }}
@@ -93,11 +102,11 @@ jobs:
           node tools/serve-fixtures.mjs ${PAGE:+--page "$PAGE"} --port 8731 > "$RUNNER_TEMP/serve.url" &
           for i in $(seq 1 50); do [ -s "$RUNNER_TEMP/serve.url" ] && break; sleep 0.2; done
           node tools/live-audit.mjs --profile "$PROFILE" --url "$(cat "$RUNNER_TEMP/serve.url")" --wait 5
-      - name: Browser tests (${{ matrix.browser }} as ${{ matrix.device }})
+      - name: Browser tests (${{ matrix.browser }} as ${{ matrix.device }}, ${{ matrix.mode }})
         env:
           NODE_PATH: ${{ runner.temp }}/pw/node_modules
           PAGE: ${{ inputs.page }}
           ONLY: ${{ inputs.only }}
           REPEAT: ${{ inputs.repeat }}
           ST_DEBUG: '1' # a group that throws prints its stack (file and line numbers of the test; made-up data only)
-        run: node tools/site-test.mjs --browser ${{ matrix.browser }} --device "${{ matrix.device }}" ${PAGE:+--page "$PAGE"} ${ONLY:+--only "$ONLY"} ${REPEAT:+--repeat "$REPEAT"}
+        run: node tools/site-test.mjs --browser ${{ matrix.browser }} --device "${{ matrix.device }}" --mode ${{ matrix.mode }} ${PAGE:+--page "$PAGE"} ${ONLY:+--only "$ONLY"} ${REPEAT:+--repeat "$REPEAT"}

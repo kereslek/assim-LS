@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-M7rfVRy/cdnoLiItw8BHexizKN8Ipbn3sg+xSlTFOaE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yVk+pdw6l0VYynqFpScG5RhHR99l1cFERBCsyGGH11M='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -851,9 +851,116 @@ td.fees{width:96px}
 .fc-prog b{color:var(--fg2);font-weight:600}
 .fc-pb{position:relative;flex:1 1 80px;max-width:160px;height:4px;border-radius:2px;background:var(--grid);overflow:hidden}
 .fc-pb>i{position:absolute;left:0;top:0;bottom:0;background:#16C784}
+/* ---------- v0.5.0: the look switch (3D or Classic 2D), and 3D: the owner's pick "B · Teal Depth" ----------
+   Classic 2D is the v0.4.8 look, untouched. html.m3d swaps the palette, adds depth and motion, and puts a depth canvas
+   behind every bar chart; it changes no size, padding or position, so both looks share one layout. */
+.top #viewseg{margin-left:auto;flex:none}
+.top #viewseg~#refresh{margin-left:0}
+.vsw button>span{padding:5px 7px}
+.vsw button:first-child>span{padding-left:9px}
+.vsw button:last-child>span{padding-right:9px}
+.seg.pills.vsw button[aria-pressed="true"]>span{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+@media (max-width:379px){ /* a narrow phone: one pill, the look you are in; a tap switches to the other */
+  .top .vsw button[aria-pressed="false"]{display:none}
+  .top .vsw button>span{border-radius:999px!important;padding:5px 8px!important}
+}
+.viewgrp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.viewgrp .ibtn{margin:0 0 0 -4px}
+.fx3d{display:none}
+canvas.d3c{position:absolute;left:0;top:0;width:100%;height:100%;display:block;pointer-events:none}
+
+html.m3d{
+  --bg:#0C3438;--head:#0F4246;--surface:#114A4E;--surface2:#0E4145;--raised:#175A5D;
+  --line:#1F5D5F;--line2:#2A6C6D;--line3:#3B7F7D;--grid:#17575A;
+  --fg:#E9F7F4;--fg2:#B9DDD6;--muted:#8FBDB6;--faint:#5A8F8A;
+  --accent:#FFB547;--accent2:#5EE6C8;--accent-ink:#2A1900;--band:rgba(94,230,200,.14);--band-edge:rgba(94,230,200,.5);--gold:#FFB547;
+  --pos:#7DF0D4;--neg:#FF8A65;
+  background:#0B3236;color-scheme:dark;
+}
+/* the deep: lighter near the surface, darker further down (one opaque background: nothing to blend while scrolling) */
+html.m3d body{background:linear-gradient(180deg,#13545A 0,#0F4448 900px,#0D3A3E 2400px,#0B3236 4600px) #0B3236;isolation:isolate}
+/* light from the surface: slow sheets of light and drifting motes over the top of the page, behind everything (transform-only
+   motion; it scrolls away with the page, so further down nothing moves) */
+html.m3d .fx3d{display:block;position:absolute;left:0;right:0;top:0;height:max(900px,110vh);z-index:-1;pointer-events:none;overflow:hidden;
+  background:radial-gradient(1100px 520px at 62% -12%,rgba(120,240,220,.26),transparent 62%),radial-gradient(700px 500px at 8% 70%,rgba(255,181,71,.07),transparent 60%);-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent)}
+html.m3d .fx3d i{position:absolute;display:block;will-change:transform}
+html.m3d .fx3d i:nth-child(1){inset:-20% -15% 0;transform-origin:50% 0;background:repeating-linear-gradient(100deg,transparent 0 6%,rgba(160,255,235,.035) 7.5%,rgba(160,255,235,.07) 9%,rgba(160,255,235,.035) 10.5%,transparent 12% 19%),repeating-linear-gradient(80deg,transparent 0 9%,rgba(255,220,160,.025) 10.5%,rgba(255,220,160,.045) 11.5%,rgba(255,220,160,.025) 12.5%,transparent 14% 23%);animation:rays3 16s ease-in-out infinite alternate}
+html.m3d .fx3d i:nth-child(2){left:0;right:0;top:0;height:calc(100% + 340px);background-image:radial-gradient(1.5px 1.5px at 20% 30%,rgba(200,255,240,.5),transparent),radial-gradient(1px 1px at 70% 60%,rgba(200,255,240,.4),transparent),radial-gradient(1.2px 1.2px at 40% 80%,rgba(255,220,160,.35),transparent),radial-gradient(1px 1px at 85% 20%,rgba(200,255,240,.4),transparent);background-size:340px 340px;animation:drift3 40s linear infinite}
+@keyframes rays3{from{transform:skewX(-6deg) translateX(-3%)}to{transform:skewX(7deg) translateX(3%)}}
+@keyframes drift3{to{transform:translateY(-340px)}}
+html.m3d.d3-hid .fx3d i,html.m3d.d3-hid .badge.fresh .dot::after,html.m3d.d3-hid .newdot::after,html.m3d.d3-hid .cmp-b::after{animation-play-state:paused}
+/* depth cards: a lit top edge, a soft drop into the deep */
+html.m3d .card,html.m3d .tile{background:linear-gradient(165deg,#155357 0%,#114A4E 46%,#0F4549 100%);border-color:rgba(126,240,214,.16);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 22px 44px -26px rgba(1,16,18,.85)}
+html.m3d .card.dashed{background:rgba(14,65,69,.72);border-color:rgba(126,240,214,.24)}
+html.m3d .best{border-color:rgba(255,181,71,.38);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(255,181,71,.10),0 0 34px rgba(255,181,71,.10),0 26px 50px -26px rgba(1,16,18,.9)}
+html.m3d .best.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(255,181,71,.10),0 0 34px rgba(255,181,71,.10),0 26px 50px -26px rgba(1,16,18,.9)}
+html.m3d .sub-card{background:rgba(9,48,52,.55);border-color:rgba(126,240,214,.14);border-radius:12px}
+html.m3d .top{background:#0F4246;border-bottom-color:rgba(126,240,214,.16)}
+html.m3d .top.stuck{box-shadow:0 12px 22px -12px rgba(1,16,18,.9)}
+html.m3d .sheet-card{background:linear-gradient(180deg,#0E3E42 0%,#0C3438 60%);border-color:rgba(126,240,214,.22)}
+html.m3d .sheet-head{background:#0F4246}
+html.m3d .scrim{background:rgba(2,18,20,.72)}
+html.m3d .ctip,html.m3d .pop{background:rgba(10,46,50,.97);border-color:#3B7F7D;box-shadow:0 14px 32px rgba(1,16,18,.65)}
+html.m3d .qlist{background:rgba(10,46,50,.98)}
+html.m3d .totop,html.m3d .mc-nav{background:rgba(12,52,56,.94)}
+html.m3d .pz-hint{background:rgba(8,40,44,.76)}
+html.m3d .lock-card{background:linear-gradient(165deg,#155357,#0F4549);border-color:rgba(126,240,214,.2);border-radius:16px;box-shadow:0 30px 60px -30px rgba(1,16,18,.9)}
+html.m3d .mc{background:linear-gradient(170deg,#1A6064,#145558);border-color:rgba(126,240,214,.2)}
+html.m3d .mc.chs{box-shadow:inset 3px 0 0 var(--cc),0 12px 20px -14px rgba(1,16,18,.85)}
+html.m3d .mc.self.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 0 0 1px rgba(255,181,71,.45),0 12px 20px -14px rgba(1,16,18,.85)}
+html.m3d .mc.self{border-color:var(--accent)}
+html.m3d .mc.end{background:transparent}
+html.m3d .sim .mc{background:linear-gradient(170deg,#185B5F,#124F53)}
+html.m3d .tab[aria-selected="true"] .tp{background:rgba(255,181,71,.16)}
+html.m3d .tog[aria-checked="true"]{border-color:rgba(94,230,200,.55)}
+html.m3d .tog[aria-checked="true"] .knob,html.m3d .stt[aria-checked="true"] .tk{background:#5EE6C8}
+html.m3d .stt[aria-checked="true"] b{color:#5EE6C8}
+html.m3d .pairbtn .pn,html.m3d .pairbtn .pn2,html.m3d .best-h-btn,html.m3d .mc.dc .n,html.m3d a.mc-name .n,html.m3d button.mc-name .n{text-decoration-color:rgba(255,181,71,.6)}
+html.m3d tr.sel td,html.m3d .wtbl .cur,html.m3d .sim-row.self{background:rgba(255,181,71,.08)}
+html.m3d .bignum{text-shadow:0 0 36px rgba(255,181,71,.35)}
+html.m3d .ring svg{filter:drop-shadow(0 0 5px rgba(255,181,71,.45))}
+html.m3d .pill.gem{background:rgba(255,181,71,.12);border-color:rgba(255,181,71,.55)}
+html.m3d .newdot{background:#5EE6C8;box-shadow:0 0 0 3px rgba(94,230,200,.18)}
+/* small lights that breathe: the fresh dot, a new pool's dot, the competition badge (opacity and scale only) */
+html.m3d .badge.fresh .dot,html.m3d .newdot{position:relative}
+html.m3d .badge.fresh .dot::after,html.m3d .newdot::after{content:"";position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 2px currentColor;color:rgba(94,230,200,.7);animation:ping3 2.2s ease-out infinite}
+html.m3d .badge.fresh .dot::after{color:rgba(47,191,74,.75)}
+html.m3d .cmp-b{text-shadow:0 0 12px rgba(255,181,71,.45)}
+html.m3d .cmp-b::after{content:"";position:absolute;inset:11px 0;border-radius:999px;box-shadow:0 0 14px 2px rgba(255,181,71,.45);opacity:0;pointer-events:none;animation:glow3 2.4s ease-in-out infinite}
+@keyframes ping3{0%{transform:scale(1);opacity:1}70%,100%{transform:scale(2.6);opacity:0}}
+@keyframes glow3{0%,55%,100%{opacity:0}20%{opacity:1}}
+/* the charts: the 2D drawing on top in the deep's colours (this pool mint, the price amber); bars rise as the chart opens */
+html.m3d .pz-c path[fill="#16C784"]{fill:#5EE6C8;stroke:rgba(94,230,200,.5)}
+html.m3d .pz-c path[fill="#3A4452"]{fill:#2E6E6C}
+html.m3d .pz-c rect[fill="#16C784"]{fill:#5EE6C8}
+html.m3d .pz-c rect[fill="#E8B84A"]{fill:#FFB547}
+html.m3d .pz-c rect[fill="#E6EDF3"]{fill:#FFB547}
+html.m3d .pz-c rect[fill="#2B3542"]{fill:#3B7F7D}
+html.m3d .pz-c rect[fill="rgba(22,199,132,0.16)"]{fill:rgba(94,230,200,.10)}
+html.m3d .pz-c line[stroke="#1E2731"]{stroke:#1E5C5E}
+html.m3d .pz-c path.ghost{stroke:#FF9E7A}
+html.m3d .pz-cur{background:rgba(255,214,150,.75)}
+html.m3d .liq .cpill{background:rgba(12,52,56,.92);border-color:rgba(255,181,71,.5)}
+html.m3d .sw[style*="#16C784"],html.m3d .sw.fc-x{background:#5EE6C8!important}
+html.m3d .sw[style*="#4B5563"]{background:#2E6E6C!important}
+html.m3d .sw[style*="#E6EDF3"]{background:#FFB547!important}
+html.m3d .sw.fc-e{background:rgba(94,230,200,.38)}
+html.m3d .sw.fc-u{background:repeating-linear-gradient(-45deg,#5EE6C8 0 2px,rgba(94,230,200,.18) 2px 4px);box-shadow:0 0 0 1px #5EE6C8}
+html.m3d .sw.gh{border-top-color:#FF9E7A}
+html.m3d .fc-pb>i,html.m3d .b-net{background:#5EE6C8}
+html.m3d [style*="--c:#16C784"]{--c:#5EE6C8!important}
+html.m3d .brand rect[fill="#16C784"]{fill:#FFB547}
+html.m3d .brand rect[fill="#4B5563"]{fill:#3B7F7D}
+html.m3d .liq:not(.still) .pz-c>svg path,html.m3d .pz-bars:not(.still) .pz-c>svg>rect{transform-box:fill-box;transform-origin:50% 100%;animation:grow .6s cubic-bezier(.2,.9,.3,1.12) backwards}
+@media (prefers-reduced-motion:reduce){html.m3d .badge.fresh .dot::after,html.m3d .newdot::after,html.m3d .cmp-b::after{animation:none!important;display:none}}
+/* "good" stays mint in 3D (amber is the accent and the warnings' colour) */
+html.m3d .wi.g,html.m3d .mc.dc .k.g,html.m3d .mc-rel.g0,html.m3d .fm-t .up,html.m3d .chip.p-steady{color:#5EE6C8}
+html.m3d .chip.p-steady{border-color:rgba(94,230,200,.55)}
+html.m3d .g-cheap{--gc:#5EE6C8}
 </style>
 </head>
 <body>
+<div class="fx3d" aria-hidden="true"><i></i><i></i></div>
 <div id="ribbon" class="ribbon" role="note" hidden>MOCKUP · MADE-UP NUMBERS</div>
 <header class="top" id="top">
   <div class="brand">
@@ -861,6 +968,7 @@ td.fees{width:96px}
     <h1 class="title">LP SHAPE SCANNER</h1>
   </div>
   <span class="badge" id="fresh" role="status"><span class="dot"></span><span id="fresh-t">NO DATA YET</span></span>
+  <div class="seg pills vsw" role="group" aria-label="View: 3D or Classic 2D" id="viewseg"><button type="button" data-act="view" data-v="3d" aria-pressed="false" title="3D view"><span>3D</span></button><button type="button" data-act="view" data-v="2d" aria-pressed="false" title="Classic 2D view"><span>2D</span></button></div>
   <button type="button" class="iconbtn" id="refresh" data-act="refresh" aria-label="Refresh" title="Refresh now" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.2 2.6v3.4h-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   <div class="seg pills" role="group" aria-label="Time window" id="winseg" hidden>
     <button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button>
@@ -1010,6 +1118,7 @@ td.fees{width:96px}
 <footer>
   <span id="foot-l">build — · data sealed (AES-256-GCM) · times Europe/Budapest</span>
   <span id="foot-r"></span>
+  <div class="viewgrp"><span class="lbl" id="view-l">View</span><div class="seg pills vsw" role="group" aria-labelledby="view-l"><button type="button" data-act="view" data-v="3d" aria-pressed="false"><span>3D</span></button><button type="button" data-act="view" data-v="2d" aria-pressed="false"><span>Classic 2D</span></button></div><button type="button" class="ibtn" data-act="term" data-term="view" aria-expanded="false" aria-controls="pop" aria-label="3D or Classic 2D: what is the difference?"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.3v4M8 4.7v.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
   <div class="lockgrp"><button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden aria-describedby="lock-note">Sign out on this device</button>
   <span class="lock-note" id="lock-note" hidden>Forgets the saved key here. You’ll need your passphrase next time. Your data stays encrypted either way.</span></div>
 </footer>
@@ -1020,7 +1129,7 @@ td.fees{width:96px}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.4.8';
+const BUILD = 'v0.5.0';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1046,6 +1155,7 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked: the page still works */ } },
 };
+const D3 = { on: false, mo: null, ro: null, io: null, mark: null, rise: new Map(), raf: 0, off: new WeakSet(), dirty: new WeakSet(), trail: null }; // v0.5.0: the 3D look's depth layer (below)
 
 // ---------- where the data lives ----------
 const LOCAL = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
@@ -1234,6 +1344,7 @@ const GLOSS = {
   sharedtoken: ['Shared token', 'One token in common, at another fee tier.'],
   thispool: ['This pool', 'The pool you have open, first in the strip so the others compare with it.'],
   sealed: ['Sealed', 'Every data file is encrypted (AES-256-GCM). Only a browser holding the key from your passphrase can open it.'],
+  view: ['3D or Classic 2D', '3D adds depth and slow motion: bars stand as towers, the LP shape’s floor shows where the price was each day, older fee days fade back. Classic 2D is the calm, flat look. Same numbers, axes and notes in both; kept on this device. A device set to reduce motion starts in Classic 2D.'],
   stabtop: ['Stables', 'Pairs with a stablecoin (USDC, USDT, DAI…) are hidden by default. Turn on to include them. Your favourites always show, marked ★ STABLE.'],
   stable: ['Stablecoin pairs', 'Off (the default): pairs holding a USD or EUR stablecoin (USDC, USDT, DAI, EURC and the like) are left out of the best finds, Next best, All pools, New since you last looked, the backtests, similar pools, pair views and search. On: they show too. Your favourites always show, and so does the benchmark. The choice is kept on this device only.'],
   ghost: ['Whole pair', 'The dashed outline: every pool of this pair stacked bar by bar (its other fee tiers, v3 and v4, other chains). The solid bars are this pool. Tap a chip above the chart to stack one in its own colour.'],
@@ -2783,6 +2894,7 @@ function tipHide() {
   if (el && !el.hidden) el.hidden = true;
   for (const c of $$('.pz-cur')) c.remove();
   TIP.host = TIP.mini = null; TIP.pin = false;
+  if (D3.mark) d3Mark(null);
 }
 function tipPut(html, ax, ay, touch) {
   const el = $('#ctip');
@@ -2811,7 +2923,7 @@ function tipAt(host, cx, cy, touch) {
   }
   if (!res) { tipHide(); return false; }
   let cur = host.querySelector(':scope > .pz-cur');
-  if (!P.tipXY) { if (!cur) { cur = document.createElement('i'); cur.className = 'pz-cur'; cur.setAttribute('aria-hidden', 'true'); host.appendChild(cur); } cur.style.left = (ax - r.left).toFixed(1) + 'px'; }
+  if (!P.tipXY) { if (!cur) { cur = document.createElement('i'); cur.className = 'pz-cur'; cur.setAttribute('aria-hidden', 'true'); host.appendChild(cur); } cur.style.left = (ax - r.left).toFixed(1) + 'px'; if (D3.on) d3Mark(host, ax - r.left); }
   for (const c of $$('.pz-cur')) if (c !== cur) c.remove();
   TIP.host = host; TIP.mini = null; TIP.top = r.top;
   tipPut(res.h, ax, ay, touch);
@@ -4663,6 +4775,7 @@ document.addEventListener('click', (e) => {
     case 'q-pick': qPick(Number(el.dataset.i)); break;
     case 'ext': break; // a plain link: the browser opens the explorer in a new tab
     case 'win': setWin(el.dataset.w); break;
+    case 'view': viewPress(el); break;
     case 'tab': setBestSel(el.dataset.id, false); break;
     case 'pair': openPair(el.dataset.key, el); break;
     case 'pair-back': if (S.backTo) { const id = S.backTo; S.backTo = null; try { if (history.state && history.state.lps === 'pair') { S.skipPop = true; history.back(); } } catch (e) {} openDetail(id, el); } break;
@@ -4747,6 +4860,296 @@ addEventListener('resize', () => {
     barMeasure(); liqDeclutterAll(); stickyAll(); onScroll(); mcEdgesAll(); popClose();
   }, 120);
 });
+// ---------- v0.5.0 · the look: 3D (the owner's pick "B · Teal Depth") or Classic 2D (the v0.4.8 look, unchanged) ----------
+// A switch in the bar and one in the footer, kept on this device (lps.view). With no choice kept: 3D, or Classic 2D on a
+// device set to reduce motion (and 3D chosen there stays still). Switching is instant and keeps everything (the data, an
+// open panel, the scroll, the filters): a class on <html> swaps the palette and adds the depth; both looks share one layout.
+// In 3D every bar chart gets a canvas behind its 2D drawing: each bar stands as a tower on a floor that recedes into the
+// deep. The LP shape's floor rows are where the price stood on each of the last days (history.json, never made up); on the
+// fee charts older days fade back. The drawing on top stays the 2D one, so a 3D chart keeps its one axis, bars from 0,
+// exact heights and its note on hover or tap; the bar under the note lights up and comes out of the fog.
+const VIEW_KEY = 'lps.view';
+const viewKept = () => { const v = store.get(VIEW_KEY); return v === '3d' || v === '2d' ? v : null; };
+const viewWant = () => viewKept() || (reduced() ? '2d' : '3d');
+function viewSet(m, keep) {
+  if (m !== '3d' && m !== '2d') return;
+  if (keep) store.set(VIEW_KEY, m);
+  const on = m === '3d', root = document.documentElement;
+  if (root.classList.contains('m3d') !== on) root.classList.toggle('m3d', on);
+  for (const b of $$('[data-act="view"]')) { const v = String(b.dataset.v === m); if (b.getAttribute('aria-pressed') !== v) b.setAttribute('aria-pressed', v); }
+  const tc = $('meta[name="theme-color"]');
+  if (tc) tc.setAttribute('content', on ? '#0F4246' : '#06080B');
+  if (on) d3Start(); else d3Stop();
+}
+function viewPress(el) { // a narrow phone shows one pill (the look you are in): a tap on it switches to the other
+  const grp = el.closest('[role="group"]'), sib = grp && [...grp.querySelectorAll('[data-act="view"]')].find((b) => b !== el);
+  const alone = el.getAttribute('aria-pressed') === 'true' && !!sib && !sib.getClientRects().length;
+  viewSet(alone ? sib.dataset.v : el.dataset.v, true);
+  if (alone && sib.getClientRects().length) sib.focus({ preventScroll: true });
+}
+// the depth layer: one canvas per bar chart, drawn after the chart's own drawing changes (a redraw, a drag, a new pool)
+const D3_HOSTS = '.pz.liq, .pz.pz-bars';
+const D3_COL = { '#16C784': '#5EE6C8', '#3A4452': '#2E6E6C', '#E8B84A': '#FFB547' }; // the 2D colours as 3D shows them
+const D3_RISE = 600; // ms: the towers rise with the bars (the same curve as the CSS)
+const d3Ease = (() => { // cubic-bezier(.2,.9,.3,1.12)
+  const B = (t, a, b) => 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
+  return (u) => { if (u <= 0) return 0; if (u >= 1) return 1; let lo = 0, hi = 1, t = u; for (let i = 0; i < 18; i++) { t = (lo + hi) / 2; if (B(t, 0.2, 0.3) < u) lo = t; else hi = t; } return B(t, 0.9, 1.12); };
+})();
+const D3_RGB = new Map();
+function d3Rgb(c) {
+  let v = D3_RGB.get(c);
+  if (!v) { const m = /^#([0-9a-f]{6})$/i.exec(c || ''); v = m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : [94, 230, 200]; D3_RGB.set(c, v); }
+  return v;
+}
+const d3Rgba = (c, k, mixW, a) => { const [r, g, b] = d3Rgb(c), f = (v) => Math.round(Math.min(255, v * k + (255 - v * k) * mixW)); return `rgba(${f(r)},${f(g)},${f(b)},${a.toFixed(3)})`; };
+function d3Start() {
+  if (D3.on) return;
+  D3.on = true;
+  D3.ro = new ResizeObserver((es) => d3Many(es.map((e) => e.target)));
+  D3.io = typeof IntersectionObserver === 'function' ? new IntersectionObserver((es) => {
+    const now = [];
+    for (const e of es) {
+      if (e.isIntersecting) { D3.off.delete(e.target); if (D3.dirty.has(e.target)) { D3.dirty.delete(e.target); now.push(e.target); } } else D3.off.add(e.target);
+    }
+    if (now.length) d3Many(now);
+  }) : null;
+  D3.mo = new MutationObserver(d3Muts);
+  D3.mo.observe(document.body, { childList: true, subtree: true });
+  d3Many($$(D3_HOSTS), true);
+}
+function d3Stop() {
+  if (!D3.on) return;
+  D3.on = false;
+  D3.mo.disconnect(); D3.ro.disconnect(); if (D3.io) D3.io.disconnect();
+  D3.mo = D3.ro = D3.io = null; D3.mark = null; D3.rise.clear(); D3.off = new WeakSet(); D3.dirty = new WeakSet();
+  if (D3.raf) cancelAnimationFrame(D3.raf);
+  D3.raf = 0;
+  for (const c of $$('canvas.d3c')) c.remove();
+}
+function d3Muts(recs) {
+  const hs = new Set(), own = (n) => n.nodeType === 1 && (n.classList.contains('d3c') || n.classList.contains('pz-cur'));
+  for (const r of recs) {
+    const t = r.target;
+    if (!t || t.nodeType !== 1) continue;
+    if (t.matches(D3_HOSTS)) { if (![...r.addedNodes, ...r.removedNodes].every(own)) hs.add(t); continue; }
+    const h = t.closest(D3_HOSTS);
+    if (h) { hs.add(h); continue; } // its drawing changed (a drag, a zoom, the flash)
+    for (const n of r.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.matches(D3_HOSTS)) hs.add(n); else if (n.firstElementChild) for (const x of n.querySelectorAll(D3_HOSTS)) hs.add(x);
+    }
+  }
+  if (hs.size) d3Many([...hs]);
+}
+// all reads first, then all writes: one layout for any number of charts
+function d3Many(hosts, initial = false) {
+  if (!D3.on) return;
+  const ms = [];
+  for (const h of hosts) {
+    if (!h.isConnected || !h.matches(D3_HOSTS)) continue;
+    if (D3.off.has(h) && h.querySelector(':scope > canvas.d3c')) { D3.dirty.add(h); continue; } // off screen: drawn when it shows
+    ms.push(d3Model(h));
+  }
+  for (const m of ms) d3Paint(m, initial);
+}
+// where the price stood at this hour on each of the last 14 days (history.json h, else d), as log moves from the newest row
+function d3Trail(p) {
+  const hp = p && S.hist && S.hist.pools && S.hist.pools[p.id];
+  if (!hp) return [];
+  if (D3.trail && D3.trail.p === p && D3.trail.hp === hp) return D3.trail.v;
+  const pick = (rows) => (Array.isArray(rows) ? rows.filter((r) => Array.isArray(r) && isNum(r[0]) && isNum(r[1]) && r[1] > 0) : []);
+  let rows = pick(hp.h);
+  if (rows.length < 26) rows = pick(hp.d);
+  const v = [];
+  if (rows.length >= 2) {
+    const last = rows[rows.length - 1];
+    for (let k = 1, j = rows.length - 1; k <= 14; k++) {
+      const t = last[0] - k * D;
+      while (j > 0 && Math.abs(rows[j - 1][0] - t) <= Math.abs(rows[j][0] - t)) j--;
+      if (Math.abs(rows[j][0] - t) > 6 * H) break; // before the first row: the floor's rows end there
+      const o = Math.log(rows[j][1] / last[1]);
+      v.push(Math.abs(o) < 4 ? o : null);
+    }
+  }
+  D3.trail = { p, hp, v };
+  return v;
+}
+function d3Model(h) {
+  const hr = h.getBoundingClientRect(), m = { h, w: hr.width, ht: hr.height, empty: true };
+  const svg = h.querySelector(':scope > .pz-c > svg'), vb = svg && svg.viewBox && svg.viewBox.baseVal;
+  if (!svg || !vb || !vb.width || !vb.height || hr.width < 2 || hr.height < 2) return m;
+  const sr = svg.getBoundingClientRect();
+  if (sr.width < 2 || sr.height < 2) return m;
+  const L = sr.left - hr.left, T = sr.top - hr.top, W = sr.width, Hs = sr.height, sx = W / vb.width, sy = Hs / vb.height;
+  const liq = h.classList.contains('liq'), segs = [];
+  if (liq) {
+    for (const el of svg.querySelectorAll(':scope > path')) {
+      const f = el.getAttribute('fill');
+      if (!(f === '#16C784' || f === '#3A4452' || el.classList.contains('mg'))) continue;
+      const col = D3_COL[f] || f, a = el.hasAttribute('fill-opacity') ? +el.getAttribute('fill-opacity') : 1;
+      for (const q of (el.getAttribute('d') || '').matchAll(/M(-?[\d.]+) (-?[\d.]+)v(-?[\d.]+)h([\d.]+)v/g)) {
+        const x0 = L + (+q[1] - vb.x) * sx, yb = T + (+q[2] - vb.y) * sy, hh = -q[3] * sy, ww = +q[4] * sx;
+        if (hh > 0.05 && ww > 0.05) segs.push({ x0, x1: x0 + ww, yb, yt: yb - hh, col, a });
+      }
+    }
+  } else {
+    for (const el of svg.querySelectorAll(':scope > rect')) {
+      const f = el.getAttribute('fill') || '';
+      if (el.classList.contains('unread') || f.startsWith('url(#nr')) continue; // unread: a hatch, never a tower
+      const uc = f.startsWith('url('), c0 = uc ? el.getAttribute('stroke') : f;
+      if (!c0 || c0[0] !== '#') continue;
+      const x0 = L + (+el.getAttribute('x') - vb.x) * sx, yt = T + (+el.getAttribute('y') - vb.y) * sy, ww = +el.getAttribute('width') * sx, hh = +el.getAttribute('height') * sy;
+      if (!(hh > 0.05 && ww > 0.05)) continue;
+      segs.push({ x0, x1: x0 + ww, yb: yt + hh, yt, col: D3_COL[c0] || c0, a: uc ? 0.6 : el.hasAttribute('fill-opacity') ? +el.getAttribute('fill-opacity') : 1 });
+    }
+  }
+  const byX = new Map(); // the pieces of one stack (the pair's pools, a stacked day) make one tower
+  for (const s of segs) { const k = Math.round(s.x0 * 4); let t = byX.get(k); if (!t) byX.set(k, (t = { x0: s.x0, x1: s.x1, segs: [] })); t.segs.push(s); }
+  const towers = [...byX.values()];
+  for (const t of towers) { t.segs.sort((a, b) => b.yb - a.yb); t.yb = t.segs[0].yb; t.cx = (t.x0 + t.x1) / 2; }
+  Object.assign(m, { empty: false, liq, L, T, W, Hs, towers });
+  const P = PZ[h.dataset.pz];
+  if (liq && P && P.kind === 'liq' && P.vw) {
+    const [v0, v1] = P.vw(), r = P.w && isNum(P.w.range) ? P.w.range : null;
+    m.X = (o) => L + ((o - v0) / (v1 - v0)) * W;
+    m.r = r; m.trail = d3Trail(P.p);
+  }
+  return m;
+}
+function d3Paint(m, initial) {
+  const h = m.h;
+  let c = h.querySelector(':scope > canvas.d3c'), fresh = false;
+  if (!c) {
+    c = document.createElement('canvas'); c.className = 'd3c'; c.setAttribute('aria-hidden', 'true');
+    h.prepend(c); fresh = true;
+    D3.ro.observe(h); if (D3.io) D3.io.observe(h);
+  }
+  const dpr = Math.min(2, devicePixelRatio || 1), cw = Math.max(1, Math.round(m.w * dpr)), ch = Math.max(1, Math.round(m.ht * dpr)); // never past 2× (a phone's 3×: a third of the pixels)
+  if (c.width !== cw) c.width = cw;
+  if (c.height !== ch) c.height = ch;
+  m.dpr = dpr; c.__m = m;
+  if (fresh && !initial && !h.classList.contains('still') && !reduced() && !document.hidden) { D3.rise.set(h, performance.now()); d3Loop(); } // a new chart: its towers rise with its bars
+  d3Render(c, m, d3K(h));
+}
+const d3K = (h) => { const t0 = D3.rise.get(h); return t0 == null ? 1 : d3Ease((performance.now() - t0) / D3_RISE); };
+function d3Loop() {
+  if (D3.raf) return;
+  const step = () => {
+    D3.raf = 0;
+    const now = performance.now();
+    for (const [h, t0] of [...D3.rise]) {
+      const done = now - t0 >= D3_RISE, c = h.isConnected && h.querySelector(':scope > canvas.d3c');
+      if (done || !c) D3.rise.delete(h);
+      if (c && c.__m) d3Render(c, c.__m, done ? 1 : d3Ease((now - t0) / D3_RISE));
+    }
+    if (D3.rise.size) D3.raf = requestAnimationFrame(step);
+  };
+  D3.raf = requestAnimationFrame(step);
+}
+function d3Mark(h, x) { // the bar under the chart's note: lit and out of the fog (h null: none)
+  if (!D3.on) return;
+  const old = D3.mark && D3.mark.h;
+  D3.mark = h ? { h, x } : null;
+  for (const k of new Set([old, h])) {
+    const c = k && k.isConnected && k.querySelector(':scope > canvas.d3c');
+    if (c && c.__m) d3Render(c, c.__m, d3K(k));
+  }
+}
+function d3Render(c, m, k = 1) {
+  const x = c.getContext('2d'), info = { kind: m.liq ? 'liq' : 'bars', towers: 0, rows: 0, trail: 0, hl: null, fog: null, dpr: m.dpr, k };
+  c.__d3 = info;
+  if (!x) return;
+  x.setTransform(m.dpr, 0, 0, m.dpr, 0, 0);
+  x.clearRect(0, 0, m.w, m.ht);
+  if (m.empty) return;
+  const { L, T, W, Hs, towers } = m, base = T + Hs, liq = m.liq;
+  const VP = liq ? [L + W * 0.56, T - Hs * 0.62] : [L + W * 0.62, T - Hs * 1.05], gT = liq ? 0.075 : 0.055;
+  const pr = (px, py, g) => [px + (VP[0] - px) * g, py + (VP[1] - py) * g];
+  const poly = (pts) => { x.beginPath(); x.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) x.lineTo(pts[i][0], pts[i][1]); x.closePath(); };
+  const line = (a, b) => { x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); };
+  x.save();
+  x.beginPath(); x.rect(L, 0, W, m.ht); x.clip(); // nothing outside the plot's own width (the edge buttons keep theirs)
+  // the floor
+  if (liq) {
+    const R = 14, zT = gT / (1 - gT), zM = 1.15, gk = (j) => { const z = zT + (j / R) * (zM - zT); return z / (1 + z); }, gR = gk(R);
+    x.lineWidth = 1;
+    for (let j = R; j >= 1; j--) { x.strokeStyle = `rgba(126,240,214,${(0.04 + 0.16 * (1 - j / R)).toFixed(3)})`; line(pr(L, base, gk(j)), pr(L + W, base, gk(j))); }
+    x.strokeStyle = 'rgba(126,240,214,.10)';
+    for (let i = 0; i <= 8; i++) { const px = L + (W * i) / 8; line([px, base], pr(px, base, gR)); }
+    info.rows = R;
+    if (m.X && m.r != null) { // the suggested range: a lit lane into the deep
+      const a = clamp(m.X(-m.r), L - W, L + 2 * W), b = clamp(m.X(m.r), L - W, L + 2 * W);
+      if (b > a) { poly([[a, base], [b, base], pr(b, base, gR), pr(a, base, gR)]); x.fillStyle = 'rgba(94,230,200,.075)'; x.fill(); }
+    }
+    if (m.X) {
+      const X0 = m.X(0);
+      if (X0 >= L && X0 <= L + W) { // the price: a sheet of light into the deep
+        poly([[X0, T], [X0, base], pr(X0, base, gR), pr(X0, T, gR)]); x.fillStyle = 'rgba(255,181,71,.06)'; x.fill();
+        x.strokeStyle = 'rgba(255,181,71,.30)'; line(pr(X0, base, gR), pr(X0, T, gR));
+      }
+      const tr = m.trail || [], pts = [[pr(X0, base, 0), 0, 0]];
+      for (let j = 0; j < tr.length && tr[j] != null; j++) pts.push([pr(m.X(tr[j]), base, gk(j + 1)), tr[j], j + 1]);
+      if (pts.length > 1) { // where the price stood, day by day: inside the range mint, outside it coral
+        x.lineWidth = 1.3; x.strokeStyle = 'rgba(255,181,71,.55)';
+        x.beginPath(); x.moveTo(pts[0][0][0], pts[0][0][1]); for (const q of pts) x.lineTo(q[0][0], q[0][1]); x.stroke();
+        for (const [q, o, j] of pts) {
+          const inr = m.r == null || Math.abs(o) <= m.r + 1e-9, a = 1 - 0.65 * (j / R), rad = Math.max(1, 2.6 * (1 - gk(j)));
+          x.beginPath(); x.arc(q[0], q[1], rad, 0, 2 * Math.PI); x.fillStyle = inr ? `rgba(94,230,200,${a.toFixed(3)})` : `rgba(255,138,101,${a.toFixed(3)})`; x.fill();
+        }
+        const end = pts[pts.length - 1], lab = `${end[2]} d ago`;
+        x.font = '600 9px ui-monospace,Menlo,Consolas,monospace'; x.textBaseline = 'bottom';
+        const tw = x.measureText(lab).width, lx = clamp(end[0][0] + 6, L + 2, L + W - tw - 2);
+        x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(lab, lx, end[0][1] - 2);
+        info.trail = pts.length - 1;
+      }
+    }
+  } else { // a quiet floor behind a time chart
+    x.lineWidth = 1;
+    [[0.09, 0.12], [0.18, 0.08], [0.3, 0.05]].forEach(([g, a]) => { x.strokeStyle = `rgba(126,240,214,${a})`; line(pr(L, base, g), pr(L + W, base, g)); });
+  }
+  // the towers, farthest from the eye first (outside in), each piece's side and the top
+  const mk = D3.mark && D3.mark.h === m.h ? D3.mark.x : null;
+  let hl = null;
+  if (mk != null) {
+    let best = Infinity;
+    for (const t of towers) { const d = mk >= t.x0 - 1 && mk <= t.x1 + 1 ? 0 : Math.min(Math.abs(mk - t.x0), Math.abs(mk - t.x1)); if (d < best) { best = d; hl = t; } }
+    if (best > 6) hl = null;
+  }
+  const fogAt = (t) => (liq || t === hl ? 1 : 0.28 + 0.72 * Math.pow(clamp((t.cx - L) / Math.max(1, W), 0, 1), 1.3)); // older days further into the fog
+  const dim = hl ? 0.72 : 1; // while a note is open the other towers step back
+  const order = towers.slice().sort((a, b) => Math.abs(b.cx - VP[0]) - Math.abs(a.cx - VP[0]));
+  let fmin = 1, fmax = 0;
+  for (const t of order) {
+    const f0 = fogAt(t), lit = t === hl, fa = lit ? 1 : f0 * dim, g = lit ? gT * 1.6 : gT; // the lit one stands out, a little deeper
+    fmin = Math.min(fmin, f0); fmax = Math.max(fmax, f0);
+    const right = t.cx < VP[0], top = t.segs.reduce((a, s) => (s.yt < a.yt ? s : a));
+    for (const s of t.segs) {
+      const y1 = t.yb - (t.yb - s.yt) * k, y0 = t.yb - (t.yb - s.yb) * k;
+      if (y0 - y1 < 0.05) continue;
+      const xe = right ? t.x1 : t.x0;
+      poly([[xe, y1], pr(xe, y1, g), pr(xe, y0, g), [xe, y0]]);
+      x.fillStyle = d3Rgba(s.col, lit ? 0.9 : 0.55, lit ? 0.12 : 0, lit ? Math.max(0.85, s.a) : s.a * fa); x.fill();
+    }
+    const yt = t.yb - (t.yb - top.yt) * k;
+    poly([[t.x0, yt], [t.x1, yt], pr(t.x1, yt, g), pr(t.x0, yt, g)]);
+    x.fillStyle = d3Rgba(top.col, 1, lit ? 0.55 : 0.3, lit ? 1 : top.a * fa); x.fill();
+    if (t.x1 - t.x0 >= 5 && fa > 0.5) { x.strokeStyle = `rgba(220,255,245,${(0.16 * fa).toFixed(3)})`; x.lineWidth = 0.8; line(pr(t.x0, yt, g), pr(t.x1, yt, g)); }
+    info.towers++;
+  }
+  info.fog = [+fmin.toFixed(3), +fmax.toFixed(3)];
+  if (hl) { // the bar under the note: a light column behind it and a glow round its face
+    const yt = hl.yb - (hl.yb - Math.min(...hl.segs.map((s) => s.yt))) * k, wd = hl.x1 - hl.x0;
+    const cg = x.createLinearGradient(0, T, 0, base); cg.addColorStop(0, 'rgba(255,214,150,0)'); cg.addColorStop(1, 'rgba(255,214,150,.16)');
+    x.fillStyle = cg; x.fillRect(hl.x0 - 4, T, wd + 8, base - T);
+    x.save(); x.shadowColor = 'rgba(255,214,150,.95)'; x.shadowBlur = 16; x.fillStyle = 'rgba(255,222,170,.7)';
+    x.fillRect(hl.x0 - 1.5, yt - 1.5, wd + 3, hl.yb - yt + 1.5); x.restore();
+    info.hl = { x0: +hl.x0.toFixed(1), x1: +hl.x1.toFixed(1), a: fogAt(hl) };
+  }
+  x.restore();
+}
+document.addEventListener('visibilitychange', () => document.documentElement.classList.toggle('d3-hid', document.hidden));
+try { const mq = matchMedia('(prefers-reduced-motion: reduce)'), f = () => { if (!viewKept()) viewSet(viewWant(), false); }; if (mq.addEventListener) mq.addEventListener('change', f); else mq.addListener(f); } catch (e) { /* an old browser: the look stays */ }
+viewSet(viewWant(), false);
 window.LPS = Object.freeze({ build: BUILD, refresh: () => refresh() });
 boot();
 })();

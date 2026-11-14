@@ -8,11 +8,13 @@
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
-//                                                    merge feebar stablewalk flash dates feescale perday disc
+//                                                    merge feebar stablewalk flash dates feescale perday disc view
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
-//   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit, then exit
+//   node tools/site-test.mjs --fix-csp               rewrite the page's CSP script hash after an edit (the --page copy if given), then exit
+//   node tools/site-test.mjs --mode 3d|2d            v0.5.0: every page starts in that look (3D or Classic 2D), kept as if chosen;
+//                                                    without it each page takes its own default (3D, Classic 2D under reduced motion)
 //
 // Playwright comes from the environment (NODE_PATH); never npm install in the repo.
 import fs from 'node:fs';
@@ -37,8 +39,8 @@ export function scriptHashes(html) {
   return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => `'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
 }
 if (flag('fix-csp')) {
-  const html = fs.readFileSync(PAGE, 'utf8');
-  fs.writeFileSync(PAGE, html.replace(/script-src [^;]*;/, `script-src ${scriptHashes(html).join(' ')};`));
+  const html = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8');
+  fs.writeFileSync(PAGE_OVERRIDE || PAGE, html.replace(/script-src [^;]*;/, `script-src ${scriptHashes(html).join(' ')};`));
   console.log('csp: script hash updated');
   process.exit(0);
 }
@@ -48,7 +50,8 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view').split(',');
+const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -87,11 +90,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // page's own default (off), and the stable group and the overlap walk use it.
 // The competition flash (v0.4.5) plays when a pool's detail opens; groups that read the detail's chart at once turn its
 // auto-play off (`flash: true` leaves it on: the flash group and the walk-through). A tap on its badge still plays it.
-async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false, flash = false } = {}) {
+async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false, flash = false, mode = MODE, dpr = null } = {}) {
   if (!stableDefault) storage = { 'lps.stable': '1', ...(storage || {}) };
+  if (mode) storage = { 'lps.view': mode, ...(storage || {}) }; // the look (--mode): set before the page's script reads it
   const base = phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: phone ? { width: 390, height: 844 } : { width, height } }; // phone = 390 px here, the device in Actions
   if (BROWSER !== 'chromium') delete base.defaultBrowserType;
-  const ctx = await browser.newContext({ ...base, reducedMotion });
+  const ctx = await browser.newContext({ ...base, reducedMotion, ...(dpr ? { deviceScaleFactor: dpr } : {}) });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
   if (!flash) await ctx.addInitScript(() => { window.__lpsNoFlash = true; });
   await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
@@ -2375,13 +2379,14 @@ async function testClicks(browser) {
       const real = sig.replace(/~2$/, ''); // "~2": the same control pressed a second time
       if (!(await press(p, real))) { if (!/^pan:/.test(sig)) bad.push(sig + ' not found'); continue; } // an edge button shows only while there is more that way: testPan presses them
       const act = real.split(':')[0];
-      const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '') + (e.dataset.chart ? ':' + e.dataset.chart : '') + (e.dataset.dir ? ':' + e.dataset.dir : '')) === sig && !e.disabled && !e.closest('svg') && e.offsetParent !== null), real);
+      const handle = await p.evaluateHandle((sig) => [...document.querySelectorAll('[data-act]')].find((e) => (e.dataset.act + (e.dataset.w ? ':' + e.dataset.w : '') + (e.dataset.k ? ':' + e.dataset.k : '') + (e.dataset.to ? ':' + e.dataset.to : '') + (e.dataset.chart ? ':' + e.dataset.chart : '') + (e.dataset.dir ? ':' + e.dataset.dir : '') + (e.dataset.v ? ':' + e.dataset.v : '')) === sig && !e.disabled && !e.closest('svg') && e.offsetParent !== null), real); // (data-v too, as SIG: the look switch's two pills)
       if (act === 'lens' || act === 'chain') {
         const v = await handle.evaluate((s) => s.options[Math.min(1, s.options.length - 1)].value);
         await handle.asElement().selectOption(v);
       } else if (act === 'search') await handle.asElement().fill('VEL');
       else if (act === 'scrub') await handle.evaluate((s) => { s.value = String(Math.max(1, Math.floor(+s.max / 2))); s.dispatchEvent(new Event('input', { bubbles: true })); });
-      else { try { await handle.asElement().click({ timeout: 5000 }); } catch (er) { bad.push(sig + ' not clickable'); continue; } }
+      const wasOn = act === 'view' && !!handle.asElement() && (await handle.evaluate((e) => e.getAttribute('aria-pressed') === 'true'));
+      if (!['lens', 'chain', 'search', 'scrub'].includes(act)) { try { await handle.asElement().click({ timeout: 5000 }); } catch (er) { bad.push(sig + ' not clickable'); continue; } }
       await sleep(act === 'jump' || act === 'bt-row' ? 1400 : act === 'play' ? 800 : 350);
       const mut = await p.evaluate(() => window.__mut);
       let good = mut > 0;
@@ -2399,6 +2404,8 @@ async function testClicks(browser) {
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
       if (act === 'win') good = good && (await p.getAttribute(`#winseg [data-w="${real.split(':')[1]}"]`, 'aria-pressed')) === 'true';
       if (act === 'sort') good = good && (await p.$$('#all-tbl thead th[aria-sort="ascending"], #all-tbl thead th[aria-sort="descending"]')).length === 1;
+      // the look already on stays on (a no-op, like the other pressed pills); the other pill switches
+      if (act === 'view') { const v = real.split(':')[1], on = await p.evaluate(() => (document.documentElement.classList.contains('m3d') ? '3d' : '2d')); good = (good || wasOn) && on === v; }
       if (!good) bad.push(sig);
       // put filters back so later controls see the full table
       if (act === 'lens' || act === 'chain') { await handle.asElement().selectOption('all'); await sleep(150); }
@@ -3342,7 +3349,186 @@ async function testDisc(browser) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc };
+// ---------- v0.5.0: the look switch, 3D (the owner's pick "B · Teal Depth") or Classic 2D (the v0.4.8 look) ----------
+// A switch in the bar (and one in the footer), kept on this device; no choice kept: 3D, or Classic 2D under reduced motion.
+// Switching is instant: nothing reloads or re-renders, and the open panel, the scroll, the window and the search stay.
+// 3D puts a depth canvas behind every bar chart (the drawing on top unchanged: one axis, bars from 0, exact heights); a
+// hover or a tap shows the same note as 2D and lights that bar, out of the fog. Canvases at most 2× the CSS pixels.
+const LOOK = () => {
+  const r = document.documentElement, seg = document.querySelector('#top #viewseg'), vw = document.documentElement.clientWidth;
+  const btns = seg ? [...seg.querySelectorAll('[data-act="view"]')] : [];
+  const shown = btns.filter((b) => b.getClientRects().length);
+  return { m3d: r.classList.contains('m3d'), seg: !!seg, n: btns.length, shown: shown.map((b) => b.dataset.v), pressed: btns.filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.v),
+    tall: shown.every((b) => b.getBoundingClientRect().height >= 43.5), inside: shown.every((b) => { const q = b.getBoundingClientRect(); return q.left >= 0 && q.right <= vw + 0.5; }),
+    foot: [...document.querySelectorAll('footer [data-act="view"]')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.v),
+    canv: document.querySelectorAll('canvas.d3c').length, hosts: [...document.querySelectorAll('.pz.liq, .pz.pz-bars')].filter((h) => h.getClientRects().length).length,
+    hs: document.documentElement.scrollWidth - vw };
+};
+// every bar chart on screen: its canvas sits behind the drawing, takes no tap, drew its towers, at most 2× the CSS pixels
+const DEPTH = () => [...document.querySelectorAll('.pz.liq, .pz.pz-bars')].filter((h) => h.getClientRects().length && h.getBoundingClientRect().width > 20).map((h) => {
+  const c = h.querySelector(':scope > canvas.d3c'), r = h.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  const on = r.bottom > 0 && r.top < innerHeight;
+  return { id: h.dataset.pz, c: !!c, first: !!c && h.firstElementChild === c, pe: c ? getComputedStyle(c).pointerEvents : null, hit: on ? (hit ? (hit === c ? 'canvas' : 'ok') : 'none') : 'off',
+    px: c ? Math.max(c.width / Math.max(1, r.width), c.height / Math.max(1, r.height)) : 0, d3: c && c.__d3 ? { ...c.__d3 } : null };
+});
+// the chart's own drawing, attribute by attribute (the same in both looks: exact heights, bars from 0)
+const DRAWN = (id) => { const h = document.querySelector(`[data-pz="${id}"]`); if (!h) return null; const s = h.querySelector('.pz-c svg'), y = document.querySelector(`[data-yax="${id}"]`); return { svg: s ? s.outerHTML.length + ':' + [...s.querySelectorAll('rect, path')].map((e) => ['x', 'y', 'width', 'height', 'd', 'fill', 'fill-opacity'].map((a) => e.getAttribute(a)).join(',')).join('|') : null, yax: y ? y.innerText : null, view: h.dataset.view }; };
+async function viewCtx(browser, o = {}) { // a page with no look chosen by the test run (the page's own default), unlocked on the 30-day view
+  const t = await newPage(browser, { mode: null, ...o, storage: { 'lps.hint': '1', ...(o.storage || {}) } });
+  if (o.blockStorage) await t.ctx.addInitScript(() => { const thrower = () => { throw new DOMException('blocked', 'SecurityError'); }; try { Object.defineProperty(window, 'localStorage', { get: thrower, configurable: true }); } catch (e) { /* ignore */ } });
+  await t.page.goto(url('default'));
+  await unlockWith(t.page, FIXTURE_PASSPHRASE);
+  await waitApp(t.page);
+  if ((await t.page.getAttribute('#winseg [data-w="30d"]', 'aria-pressed')) !== 'true') await setWin(t.page, '30d');
+  return t;
+}
+async function testView(browser) {
+  // 1. the switch: in the bar, one slim row with it, 44 px taps, inside the screen, no sideways scroll; a narrow phone one pill
+  for (const [tag, o] of [['w360', { width: 360, height: 760 }], ['w390', { width: 390 }], ['w430', { width: 430 }], ['phone', { phone: true }], ['laptop', { width: 1440 }]]) {
+    if (tag === 'phone' && !DEVICE) continue;
+    const t = await viewCtx(browser, o), p = t.page;
+    const a = await p.evaluate(LOOK), b = await p.evaluate(BAR);
+    const w = await p.evaluate(() => document.documentElement.clientWidth);
+    ok(`view ${tag}: a 3D ⇄ 2D switch sits in the bar (${a.shown.join('+')}), the bar still one slim row (${b.h} px), taps 44 px, inside the screen`,
+      a.seg && a.n === 2 && a.shown.length === (w < 380 ? 1 : 2) && a.tall && a.inside && b.oneRow && b.h >= 44 && b.h <= 52, JSON.stringify([a, b.h, b.oneRow]));
+    ok(`view ${tag}: with no look chosen the page starts in 3D (the pressed pill says so, the footer's too)`, a.m3d && a.pressed.join() === '3d' && a.foot.join() === '3d', JSON.stringify(a));
+    ok(`view ${tag}: no sideways page scroll in 3D`, a.hs <= 0, String(a.hs));
+    // a narrow phone's single pill switches to the other look; a wider screen's other pill does
+    await p.click(a.shown.length === 1 ? '#viewseg [data-act="view"][data-v="3d"]' : '#viewseg [data-act="view"][data-v="2d"]', { timeout: 5000 }).catch(() => {});
+    const c = await p.evaluate(LOOK);
+    ok(`view ${tag}: a tap switches to Classic 2D at once (${c.shown.join('+')} shown, pressed ${c.pressed.join()})`, !c.m3d && c.pressed.join() === '2d' && c.foot.join() === '2d' && c.canv === 0 && c.hs <= 0 && (c.shown.length === (w < 380 ? 1 : 2)), JSON.stringify(c));
+    // text overlap and clipped text in 3D at the phone widths (the page, then a pool's panel)
+    if (tag !== 'laptop') {
+      await p.click(c.shown.length === 1 ? '#viewseg [data-act="view"][data-v="2d"]' : '#viewseg [data-act="view"][data-v="3d"]', { timeout: 5000 }).catch(() => {});
+      const ov = await p.evaluate(TEXT_OVERLAP);
+      await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
+      const ov2 = await p.evaluate(TEXT_OVERLAP, { root: '#sheet' });
+      ok(`view ${tag}: in 3D no text collides or is cut off (page ${ov.length}, panel ${ov2.length}), nothing past the edge`, (await p.evaluate(LOOK)).m3d && !ov.length && !ov2.length && (await p.evaluate(LOOK)).hs <= 0, JSON.stringify(ov[0] || ov2[0] || {}));
+      await p.click('#sheet-close'); await calm(p, SHEET_MOVES);
+    }
+    ok(`view ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 2. reduced motion starts in Classic 2D; 3D chosen there is still (no animation at all), its towers already standing
+  {
+    const t = await viewCtx(browser, { phone: true, reducedMotion: 'reduce' }), p = t.page;
+    const a = await p.evaluate(LOOK);
+    ok('view reduced: a device set to reduce motion starts in Classic 2D, no depth canvas', !a.m3d && a.pressed.join() === '2d' && a.canv === 0, JSON.stringify(a));
+    await p.evaluate(() => { const b = document.querySelector('#viewseg [data-v="3d"]'); if (b) b.click(); }); await frames(p, 2);
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    const d = await p.evaluate(DEPTH), n = await p.evaluate(() => document.getAnimations().length);
+    ok(`view reduced: 3D chosen there draws its depth (${d.filter((x) => x.c).length} charts) with nothing moving (${n} animations), every tower standing`, (await p.evaluate(LOOK)).m3d && n === 0 && d.length >= 4 && d.every((x) => x.c && x.d3 && x.d3.k === 1), JSON.stringify([n, d.find((x) => !x.c || !x.d3 || x.d3.k !== 1)]));
+    await t.ctx.close();
+    const r = await viewCtx(browser, { phone: true, reducedMotion: 'reduce', storage: { 'lps.view': '3d' } });
+    ok('view reduced: 3D kept on the device wins over the default', (await r.page.evaluate(LOOK)).m3d && (await r.page.evaluate(() => document.getAnimations().length)) === 0);
+    await r.ctx.close();
+  }
+  // 3. switching keeps everything: no reload, no fetch, the open panel and its scroll, the page's scroll, the window, the search
+  {
+    const t = await viewCtx(browser, { phone: true }), p = t.page;
+    await setWin(p, '7d'); await fillQ(p, 'VEL');
+    await p.evaluate(() => { window.__lpsKeep = 1; scrollTo(0, 700); });
+    await calm(p, BAR_MOVES);
+    const was3d = (await p.evaluate(LOOK)).m3d;
+    const keep0 = await p.evaluate(() => ({ y: Math.round(scrollY), rows: document.querySelectorAll('#all tbody tr.row').length, q: document.querySelector('#f-q').value, w: document.querySelector('#winseg [aria-pressed="true"]').dataset.w, res: performance.getEntriesByType('resource').length }));
+    await p.evaluate(() => { const b = document.querySelector('#viewseg [data-v="2d"]'); if (b) b.click(); }); await frames(p, 2);
+    const keep1 = await p.evaluate(() => ({ y: Math.round(scrollY), rows: document.querySelectorAll('#all tbody tr.row').length, q: document.querySelector('#f-q').value, w: document.querySelector('#winseg [aria-pressed="true"]').dataset.w, res: performance.getEntriesByType('resource').length, mark: window.__lpsKeep }));
+    ok('view switch: to Classic 2D in place: the same scroll, window and search rows, no reload and nothing fetched', was3d && keep1.mark === 1 && keep1.y === keep0.y && keep1.rows === keep0.rows && keep1.q === keep0.q && keep1.w === keep0.w && keep1.res === keep0.res && !(await p.evaluate(LOOK)).m3d, JSON.stringify([keep0, keep1]));
+    await fillQ(p, '');
+    await p.evaluate(() => scrollTo(0, 0)); await calm(p, BAR_MOVES);
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
+    await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 420; }); await frames(p, 3);
+    const s0 = await p.evaluate(() => ({ top: Math.round(document.querySelector('#sheet-body').scrollTop), ttl: document.querySelector('#sheet-title').textContent, n: document.querySelectorAll('#sheet [data-pz]').length }));
+    const before = await p.evaluate(DRAWN, 'd-day');
+    await p.evaluate(() => { const b = document.querySelector('footer [data-act="view"][data-v="3d"]'); if (b) b.click(); }); await frames(p, 2);
+    const s1 = await p.evaluate(() => ({ top: Math.round(document.querySelector('#sheet-body').scrollTop), ttl: document.querySelector('#sheet-title').textContent, n: document.querySelectorAll('#sheet [data-pz]').length, open: !document.querySelector('#sheet').hidden }));
+    const after = await p.evaluate(DRAWN, 'd-day'), l = await p.evaluate(LOOK);
+    ok('view switch: the footer\'s switch turns 3D on with the panel open: the same pool, the same scroll in it, both switches agree', l.m3d && l.pressed.join() === '3d' && l.foot.join() === '3d' && s1.open && s1.ttl === s0.ttl && s1.top === s0.top && s1.n === s0.n, JSON.stringify([s0, s1, l.pressed, l.foot]));
+    ok('view switch: the fee chart is drawn the same in both looks: the same bars (x, y, width, height), the same $ axis, from $0', l.m3d && l.canv > 0 && !!before && before.svg && before.svg === after.svg && before.yax === after.yax && /\$0/.test(after.yax), JSON.stringify([before && before.yax, after && after.yax]));
+    ok('view switch: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 4. kept on this device: a reload opens the look chosen last; with storage blocked the page still works (3D, switchable)
+  {
+    const t = await viewCtx(browser, { width: 1440 }), p = t.page;
+    await p.click('#viewseg [data-v="2d"]', { timeout: 5000 }).catch(() => {});
+    await p.reload(); await p.waitForSelector('#app:not([hidden])', { timeout: 30000 }); await waitApp(p);
+    const a = await p.evaluate(LOOK);
+    await p.click('#viewseg [data-v="3d"]', { timeout: 5000 }).catch(() => {});
+    await p.reload(); await p.waitForSelector('#app:not([hidden])', { timeout: 30000 }); await waitApp(p);
+    const b = await p.evaluate(LOOK);
+    ok('view kept: a reload opens the look chosen last (Classic 2D, then 3D)', !a.m3d && a.pressed.join() === '2d' && b.m3d && b.pressed.join() === '3d', JSON.stringify([a.pressed, b.pressed]));
+    ok('view kept: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+    const x = await viewCtx(browser, { width: 1440, blockStorage: true }), q = x.page;
+    const c = await q.evaluate(LOOK);
+    await q.click('#viewseg [data-v="2d"]', { timeout: 5000 }).catch(() => {});
+    const d = await q.evaluate(LOOK);
+    ok('view kept: with the browser\'s storage blocked the page opens in 3D and still switches', c.m3d && !d.m3d && x.errors.length === 0, JSON.stringify([c.m3d, d.m3d, x.errors[0]]));
+    await x.ctx.close();
+  }
+  // 5. 3D's depth: a canvas behind every bar chart, never in the way, at most 2× even on a 3× phone; Classic 2D has none
+  {
+    const t = await viewCtx(browser, { phone: true, dpr: 3 }), p = t.page;
+    await p.evaluate(() => document.querySelector('[data-pz="liq-best"]').scrollIntoView({ block: 'center' })); await sleep(700);
+    let d = await p.evaluate(DEPTH);
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES); await sleep(700);
+    d = d.concat(await p.evaluate(DEPTH));
+    const bad = d.filter((x) => !x.c || !x.first || x.pe !== 'none' || x.hit === 'canvas' || x.px > 2.01 || !x.d3 || (x.d3.towers < 1 && x.id !== 'health'));
+    ok(`view depth: every bar chart in 3D has its canvas behind the drawing (${d.length}: ${[...new Set(d.map((x) => x.id))].join(' ')}), never under a finger, ≤ 2× pixels on a 3× screen`, d.length >= 6 && !bad.length, JSON.stringify(bad[0] || d[0]));
+    const lq = d.find((x) => x.id === 'liq-detail');
+    ok(`view depth: the LP shape's floor shows where the price was, day by day (${lq && lq.d3 && lq.d3.trail} days back), on ${lq && lq.d3 && lq.d3.rows} rows`, !!lq && !!lq.d3 && lq.d3.kind === 'liq' && lq.d3.rows >= 7 && lq.d3.trail >= 7, JSON.stringify(lq && lq.d3));
+    const fd = d.find((x) => x.id === 'd-day');
+    ok('view depth: the fee history\'s older days fade back (the oldest in fog, the newest clear)', !!fd && !!fd.d3 && fd.d3.fog[0] < 0.5 && fd.d3.fog[1] > 0.9, JSON.stringify(fd && fd.d3));
+    ok('view depth: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 6. a hover or a tap in 3D shows the exact value and date (the same note as 2D) and that bar comes out of the fog
+  for (const phone of [true, false]) {
+    const t = await viewCtx(browser, { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop';
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES); await sleep(700);
+    const res = {};
+    for (const [id, fx] of [['d-day', 0.5], ['liq-detail', 0.62]]) { // (the middle: clear of the edge buttons)
+      const n3 = await pointAt(p, id, phone, { fx, root: '#sheet' });
+      const c3 = await p.evaluate((id) => { const c = document.querySelector(`[data-pz="${id}"] > canvas.d3c`), cur = document.querySelector(`[data-pz="${id}"] > .pz-cur`); return { d3: c && c.__d3 ? { ...c.__d3 } : null, cur: cur ? parseFloat(cur.style.left) : null, m3d: document.documentElement.classList.contains('m3d') }; }, id);
+      await p.evaluate(() => { document.querySelector('#ctip').hidden = true; });
+      await p.evaluate(() => { const b = document.querySelector('footer [data-act="view"][data-v="2d"]'); if (b) b.click(); }); await frames(p, 2);
+      await sleep(450); // a second tap on the same spot sooner is a double tap (it resets the chart)
+      const n2 = await pointAt(p, id, phone, { fx, root: '#sheet' });
+      await p.evaluate(() => { const b = document.querySelector('footer [data-act="view"][data-v="3d"]'); if (b) b.click(); }); await frames(p, 2); await sleep(450);
+      res[id] = { m3d: c3.m3d, n3: n3 && n3.txt, n2: n2 && n2.txt, hl: c3.d3 && c3.d3.hl, cur: c3.cur, fog: c3.d3 && c3.d3.fog, dbg: n3 && n3.dbg };
+      if (!(await p.isVisible('#sheet'))) { await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES); }
+    }
+    const fee = res['d-day'], liq = res['liq-detail'];
+    ok(`view note ${tag}: on the fee history a ${phone ? 'tap' : 'hover'} in 3D shows the day and its exact $ (the same note as 2D: "${(fee.n3 || '').slice(0, 44)}")`, fee.m3d && !!fee.n3 && fee.n3 === fee.n2 && DATE_RE.test(fee.n3) && /\$[\d,.]+/.test(fee.n3), JSON.stringify(fee));
+    ok(`view note ${tag}: …and that bar comes to the front, out of the fog, right under the note's line`, !!fee.hl && fee.hl.a === 1 && fee.fog[0] < 0.5 && fee.cur >= fee.hl.x0 - 1.5 && fee.cur <= fee.hl.x1 + 1.5, JSON.stringify(fee));
+    ok(`view note ${tag}: on the LP shape the same: the exact liquidity at that price, as in 2D, and its tower lit`, !!liq.n3 && liq.n3 === liq.n2 && /liquidity (\$[\d.]+[KM]?|—)/.test(liq.n3) && !!liq.hl && liq.cur >= liq.hl.x0 - 1.5 && liq.cur <= liq.hl.x1 + 1.5, JSON.stringify(liq));
+    ok(`view note ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 7. motion in 3D: a pool's towers rise as it opens and settle; the ambient light stops while the tab is hidden
+  {
+    const t = await viewCtx(browser, { width: 1440 }), p = t.page;
+    await p.click('#best [data-act="detail"]');
+    const k0 = await p.evaluate(async () => { await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); return c && c.__d3 ? c.__d3.k : null; });
+    await sleep(900);
+    const k1 = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); return c && c.__d3 ? c.__d3.k : null; });
+    ok(`view motion: a pool's towers rise as its panel opens (k ${k0} → ${k1})`, k0 != null && k0 < 1 && k1 === 1, `${k0} ${k1}`);
+    const amb = await p.evaluate(async () => {
+      const st = () => { const i = document.querySelector('.fx3d i'); return i ? getComputedStyle(i).animationPlayState : null; };
+      const a = st();
+      Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange'));
+      const b = st();
+      Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange'));
+      return [a, b, st(), document.getAnimations().filter((x) => x.effect && x.effect.getComputedTiming().endTime === Infinity).length];
+    });
+    ok(`view motion: the deep's slow light runs (${amb[3]} loops), pauses while the tab is hidden and comes back`, amb[0] === 'running' && amb[1] === 'paused' && amb[2] === 'running' && amb[3] >= 2, JSON.stringify(amb));
+    ok('view motion: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView };
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
@@ -3359,5 +3545,5 @@ try {
 const fails = results.filter((r) => !r.pass);
 if (flag('verbose')) for (const r of results.filter((x) => x.pass)) console.log(`pass ${r.name}`);
 for (const f of fails) console.log(`FAIL ${f.name}${f.why ? ' · ' + f.why : ''}`);
-console.log(`site-test ${BROWSER}${DEVICE ? ' as ' + DEVICE : ''}: ${results.length} checks · ${fails.length} fail · widths ${[...WIDTHS, ...LAPTOP].join('/') || '-'} · ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+console.log(`site-test ${BROWSER}${DEVICE ? ' as ' + DEVICE : ''}${MODE ? ' · ' + MODE.toUpperCase() : ''}: ${results.length} checks · ${fails.length} fail · widths ${[...WIDTHS, ...LAPTOP].join('/') || '-'} · ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 process.exit(fails.length ? 1 : 0);
