@@ -6,6 +6,13 @@ Owner's words:
 
 Builds on v0.5.1, which makes the chart ⧉ button full-screen with Close, Esc and native fullscreen.
 
+## 0 · Standing rule (owner, 14 Nov 2026)
+"Whenever you look at an LP, History must always be prominently available by a click, and be useful and obvious."
+- **Every place a pool appears has a visible History button or chip, one tap away:** best find, the top-10 tabs, All pools rows, Discovery lane cards, Favourites, Similar pools, Pair view, Compare, search results, the pool panel and the workspace.
+- **Shape:** the same icon and word everywhere (bars icon + "History"), a tap target of at least 44 px, never hidden behind a menu or hover.
+- **It opens History in the workspace, already on that pool,** in the last range used, or 90D by default.
+- **Tests check it:** for every pool surface, the History control is present, visible and a real button, and it opens that pool's History.
+
 ## 1 · Ways in
 - **Pool panel header**, next to 24H/7D/30D: a big **History ▸** button, a **⤢ Full screen** button (opens the workspace), and **Pair view ▸** kept.
 - **Every chart's ⧉** opens the workspace on that chart's tab, already focused.
