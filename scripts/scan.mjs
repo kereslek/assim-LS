@@ -990,13 +990,15 @@ async function writeOutputs() {
   // Then every pool's year of fee rows (lib/feehist.mjs feeYear: swaps over counters over estimates) and the public
   // line: counts, one ratio and seconds only.
   const mById = new Map(mapped.map((p) => [p.id, p]));
+  // a part that breaks is "broke" in the line and changes nothing else in the pass
   const exRuns = snapsOk ? await Promise.all(ctxs.map((X) => timed(X.CH.prefix + 'exact fees', async () => {
-    const budget = makeBudget({ ...(X.CH.caps?.exact || {}), ...(CAP_OVERRIDE[X.CH.id]?.exact || {}) });
-    const pools = out.filter((x) => x.chain === X.CH.id).map((x) => mById.get(x.id)).map((p) => ({ id: p.id, v: p.v, dex: p.dex, fee: p.fee, createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
-    // a chain whose own 24 h swap read came back unread this pass waits: its log nodes are struggling
-    const r = await exactFeesChain({ chain: X.CH.id, pools, cache: sxCache, now: X.passT, io: chainIo(X.CH, { budget, head: X.block }), budget, hold: X.unreadIds.size ? 'swaps unread' : null })
-      .catch((e) => ({ chain: X.CH.id, broke: errWord(e), changed: false }));
-    return { ...r, ms: budget.elapsed(), calls: budget.used() };
+    try {
+      const budget = makeBudget({ ...(X.CH.caps?.exact || {}), ...(CAP_OVERRIDE[X.CH.id]?.exact || {}) });
+      const pools = out.filter((x) => x.chain === X.CH.id).map((x) => mById.get(x.id)).map((p) => ({ id: p.id, v: p.v, dex: p.dex, fee: p.fee, createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
+      // a chain whose own 24 h swap read came back unread this pass waits: its log nodes are struggling
+      const r = await exactFeesChain({ chain: X.CH.id, pools, cache: sxCache, now: X.passT, io: chainIo(X.CH, { budget, head: X.block }), budget, hold: X.unreadIds.size ? 'swaps unread' : null });
+      return { ...r, ms: budget.elapsed(), calls: budget.used() };
+    } catch (e) { console.error(e); return { chain: X.CH.id, broke: errWord(e), changed: false }; }
   }))) : [];
   const exChanged = exRuns.some((r) => r.changed);
   const fyOf = new Map();
