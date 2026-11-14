@@ -786,13 +786,14 @@ function makeHistory(r, pools, now) {
       if (j < 90 && fromD.has(t)) v = fromD.get(t);
       if (ry() < (j < 90 ? 0.015 : 0.04) || v == null) { v = null; src = null; }
       if (j === ny - 1 && src) src = 'e'; // the creation day is partial and usually estimated
+      if (j < 5 && src === 'x') src = 's'; // the newest exact days from the day's own swaps (history.json y src 's', 14 Nov 2026)
       y.push(v == null ? [t, null, null] : [t, v, src]);
     }
     const out1 = k % 4 === 0 && ny > 60 ? y[y.length - 41] : null; // a 30× day 40 days back, unconfirmed
     if (out1 && out1[1] != null) { const sv = y.map((x) => x[1]).filter((x) => x != null).sort((a, b) => a - b); out1[1] = sig(30 * sv[Math.floor(sv.length / 2)], 4); out1[2] = 'x'; out.pools[p.id].u = { y: [out1[0]] }; }
-    const ex = y.filter((x) => x[2] === 'x').length, es = y.filter((x) => x[2] === 'e').length;
+    const ex = y.filter((x) => x[2] === 'x' || x[2] === 's').length, es = y.filter((x) => x[2] === 'e').length, sw = y.filter((x) => x[2] === 's').length;
     out.pools[p.id].y = y;
-    out.pools[p.id].yp = { exact: ex, est: es, age: k % 17 === 6 ? null : ny, dyn: !!p.dynamicFee };
+    out.pools[p.id].yp = { exact: ex, est: es, age: k % 17 === 6 ? null : ny, dyn: !!p.dynamicFee, sw };
   });
   for (let i = 47; i >= 0; i--) {
     const passes = 9 + (r() < 0.3 ? 1 : 0) - (i === 30 ? 6 : 0);

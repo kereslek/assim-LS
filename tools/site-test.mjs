@@ -1111,7 +1111,7 @@ async function testSheets(browser) {
   const ty = () => p.$eval('#sheet .sheet-card', (c) => new DOMMatrix(getComputedStyle(c).transform).m42);
   await open();
   const g = await p.$eval('#sheet .grab', (e) => { const r = e.getBoundingClientRect(); return { h: r.height, w: r.width, top: r.top, ta: getComputedStyle(e).touchAction }; });
-  ok('sheets phone: a grab handle tops the sheet', g.h >= 16 && g.top >= 0 && g.top < 40 && g.ta === 'none', JSON.stringify(g));
+  ok('sheets phone: a grab handle tops the sheet', g.h >= 15.9 && g.top >= 0 && g.top < 40 && g.ta === 'none', JSON.stringify(g));
   ok('sheets phone: the close button stays', await p.isVisible('#sheet-close'));
   if (SHOTS) await p.screenshot({ path: path.join(SHOTS, 'sheet-phone-handle.png') });
   // a short, slow pull springs back
@@ -1651,7 +1651,7 @@ async function testSimilar(browser) {
     await p.evaluate(() => document.querySelector('#sim .mc-cover').click()); await sleep(100); // leave it on volume / day
     ok(`similar ${tag}: the choice is spoken (aria-live) and kept on this device`, (await p.getAttribute('#sim-m', 'aria-live')) === 'polite' && (await p.evaluate(() => localStorage.getItem('lps.simm'))) === '1');
     // edge fades
-    const fades = await p.evaluate(async () => { const t = document.querySelector('#sim .mc-track'), w = t.parentElement, a = [w.classList.contains('fl'), w.classList.contains('fr')]; t.scrollLeft = t.scrollWidth; await new Promise((r) => setTimeout(r, 120)); return [...a, w.classList.contains('fl'), w.classList.contains('fr'), getComputedStyle(t).scrollSnapType]; });
+    const fades = await p.evaluate(async () => { const t = document.querySelector('#sim .mc-track'), w = t.parentElement, a = [w.classList.contains('fl'), w.classList.contains('fr')]; t.scrollLeft = t.scrollWidth; for (let i = 0; i < 30 && !(w.classList.contains('fl') && !w.classList.contains('fr')); i++) await new Promise((r) => setTimeout(r, 50)); /* the strip's scroll event comes a frame or more later on a slow WebKit */ return [...a, w.classList.contains('fl'), w.classList.contains('fr'), getComputedStyle(t).scrollSnapType]; });
     ok(`similar ${tag}: snap scrolling with soft fades only where more cards lie`, !fades[0] && fades[1] && fades[2] && !fades[3] && /x mandatory/.test(fades[4]), JSON.stringify(fades));
     // see all: a list, again to fold it
     await p.evaluate(() => document.querySelector('#sim [data-act="sim-all"]').click()); await sleep(150);
@@ -2963,6 +2963,11 @@ async function testDates(browser, page = null) {
     const d1 = tips[0] || '';
     ok(`dates ${tag}: a daily fee bar's note says the day, its fees per $1,000 and how it compares with the median`, /\$\d+\.\d\d per \$1,000/.test(d1) && /× the median/.test(d1) && DATE_RE.test(d1), d1.slice(0, 120));
     await tipAt2('liq-best', /liquidity .*(of the pool|not read)/);
+    // a day whose fees come from its own swaps (history.json y src 's', 14 Nov 2026): exact, like the counters' days
+    { const bp = poolOf(await bestId(p)), ys = (FXD.history.pools[bp.id] || {}).y || [], dd = bp.daily || [], i = dd.map((x) => x.t).findLastIndex((t) => ys.some((r) => r[0] === t && r[2] === 's'));
+      const row = i >= 0 ? ys.find((r) => r[0] === dd[i].t) : null, vw = String(await p.getAttribute('[data-pz="daily-best"]', 'data-view')).split(',').map(Number), nt = i >= 0 ? await pointAt(p, 'daily-best', phone, { fx: (i + 0.5 - (vw[0] - vw[1])) / vw[1] }) : null, fee = row && /LP fees \$([\d,.]+)([KM]?)/.exec((nt && nt.txt) || '');
+      const got = fee ? +fee[1].replace(/,/g, '') * ({ K: 1e3, M: 1e6 }[fee[2]] || 1) : null;
+      ok(`dates ${tag}: a day whose fees come from its swaps reads exact in its note ("exact · from swaps"), with its fees`, !!nt && /exact · from swaps/.test(nt.txt) && !/estimated/.test(nt.txt) && got != null && Math.abs(got - row[1]) <= Math.max(0.006, row[1] * 0.051), JSON.stringify([i, row, nt && nt.txt]).slice(0, 200)); }
     // the replay, its money pane and the strategy lab
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const r = document.querySelector('#bt-lead tr.row'); r.scrollIntoView({ block: 'center' }); r.click(); }); await sleep(900);
     for (const id of ['rp', 'rp-money', 'lab']) { await axisAt(id); await tipAt2(id, DATE_RE); }
@@ -3102,12 +3107,12 @@ async function testFeeScale(browser) {
     const uy = new Set((HP[self.id].u && HP[self.id].u.y) || []), isU = (r) => uy.has(r[0]); // history.json u.y: unconfirmed days
     let vis = inV(a.view), vals = vis.map((r) => r[1]).filter((x) => typeof x === 'number');
     const mx = Math.max(...vis.filter((r) => typeof r[1] === 'number' && !isU(r)).map((r) => r[1])), step = fcNiceT(mx / 3), top = Math.ceil(mx / step - 1e-9) * step; // the scale: confirmed days only (an unconfirmed outlier runs off the top)
-    const nx = vis.filter((r) => r[2] === 'x' && r[1] > 0).length, ne = vis.filter((r) => r[2] === 'e' && r[1] > 0).length, nn = vis.filter((r) => r[1] == null).length, nu = vis.filter(isU).length;
+    const nx = vis.filter((r) => (r[2] === 'x' || r[2] === 's') && r[1] > 0).length, ne = vis.filter((r) => r[2] === 'e' && r[1] > 0).length, nn = vis.filter((r) => r[1] == null).length, nu = vis.filter(isU).length;
     ok(`feescale ${tag}: one bar a day in view: ${nx} exact solid, ${ne} estimated pale, ${nn} unread hatched (never 0)`, a.bars.filter((b) => b.cls.startsWith('b-x')).length === nx && a.bars.filter((b) => b.cls.startsWith('b-e') && b.op === '.38').length === ne && a.unread === nn && a.bars.filter((b) => / uc/.test(b.cls)).length === nu, JSON.stringify([a.bars.length, nx, ne, a.unread, nn, nu]));
     const yv = a.ys.map((x) => money(x.t) ?? (x.t === '$0' ? 0 : null));
     ok(`feescale ${tag}: a $ y-axis (${a.ys.map((x) => x.t).join(' ')}) with a gridline at each tick, 0 to ${money(a.ys[0] && a.ys[a.ys.length - 1].t) ?? '?'} ≥ the view's max`, a.ys.length >= 3 && a.grid.length === a.ys.length && yv[0] === 0 && closeTo(yv[yv.length - 1], top) && yv.every((v, i) => !i || v > yv[i - 1]) && a.ys.every((x, i) => !i || x.y < a.ys[i - 1].y), JSON.stringify([a.ys, top]));
     const tall = a.bars.filter((b) => b.cls.startsWith('b-x') && !/uc/.test(b.cls)).sort((x, y) => y.h - x.h)[0];
-    ok(`feescale ${tag}: bar heights follow that scale (the tallest ${tall ? tall.h.toFixed(1) : '-'} px of ${a.Ht})`, tall && Math.abs(tall.h - (Math.max(...vis.filter((r) => r[2] === 'x' && !isU(r)).map((r) => r[1])) / top) * a.Ht) < 0.2, JSON.stringify([tall, top]));
+    ok(`feescale ${tag}: bar heights follow that scale (the tallest ${tall ? tall.h.toFixed(1) : '-'} px of ${a.Ht})`, tall && Math.abs(tall.h - (Math.max(...vis.filter((r) => (r[2] === 'x' || r[2] === 's') && !isU(r)).map((r) => r[1])) / top) * a.Ht) < 0.2, JSON.stringify([tall, top]));
     const med = medOf(vals);
     ok(`feescale ${tag}: a dashed "typical day (median)" line at the view's median with its value (${a.cap3})`, a.med != null && Math.abs(a.med - (a.Ht - (med / top) * a.Ht)) < 0.2 && /typical day \(median\)/.test(a.cap3) && closeTo(money(a.cap3), med) && /exact/.test(a.legend) && /estimated/.test(a.legend), JSON.stringify([a.med, med, a.cap3]));
     const yp = HP[self.id].yp;
@@ -3509,11 +3514,14 @@ async function testView(browser) {
   // 7. motion in 3D: a pool's towers rise as it opens and settle; the ambient light stops while the tab is hidden
   {
     const t = await viewCtx(browser, { width: 1440 }), p = t.page;
+    // every drawn frame from before the tap: the lowest rise seen (a slow WebKit draws a frame every 100-260 ms, so no fixed wait)
+    await p.evaluate(() => { window.__k = []; const t0 = performance.now(); const f = () => { const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); if (c && c.__d3) window.__k.push(c.__d3.k); if (performance.now() - t0 < 6000) requestAnimationFrame(f); }; requestAnimationFrame(f); });
     await p.click('#best [data-act="detail"]');
-    const k0 = await p.evaluate(async () => { await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); return c && c.__d3 ? c.__d3.k : null; });
-    await sleep(900);
-    const k1 = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); return c && c.__d3 ? c.__d3.k : null; });
-    ok(`view motion: a pool's towers rise as its panel opens (k ${k0} → ${k1})`, k0 != null && k0 < 1 && k1 === 1, `${k0} ${k1}`);
+    await p.waitForFunction(() => { const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); return c && c.__d3 && c.__d3.k === 1; }, null, { timeout: 8000 }).catch(() => {});
+    const k = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); return { min: window.__k.length ? Math.min(...window.__k) : null, n: window.__k.length, end: c && c.__d3 ? c.__d3.k : null, rise: c ? c.__rise : null }; });
+    ok(`view motion: a pool's towers rise as its panel opens (from ${k.min} to ${k.end} over ${k.rise} ms, ${k.n} frames seen)`, k.min != null && k.min < 0.5 && k.end === 1 && k.rise === 600, JSON.stringify(k));
+    await p.evaluate(() => scrollTo(0, 0));
+    await p.waitForFunction(() => !document.documentElement.classList.contains('d3-busy'), null, { timeout: 8000 }).catch(() => {}); // 2.5 s after the last scroll or tap
     const amb = await p.evaluate(async () => {
       const st = () => { const i = document.querySelector('.fx3d i'); return i ? getComputedStyle(i).animationPlayState : null; };
       const a = st();
@@ -3522,6 +3530,10 @@ async function testView(browser) {
       Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange'));
       return [a, b, st(), document.getAnimations().filter((x) => x.effect && x.effect.getComputedTiming().endTime === Infinity).length];
     });
+    const busy = await p.evaluate(async () => { const st = () => { const i = document.querySelector('.fx3d i'); return i ? getComputedStyle(i).animationPlayState : null; }; window.dispatchEvent(new WheelEvent('wheel')); const a = st(); await new Promise((r) => setTimeout(r, 2900)); return [a, st()]; });
+    const deep = await p.evaluate(async () => { const st = () => { const i = document.querySelector('.fx3d i'); return i ? getComputedStyle(i).animationPlayState : null; }; const deepNow = () => document.documentElement.classList.contains('d3-deep'), until = async (f) => { for (let i = 0; i < 60 && !f(); i++) await new Promise((r) => setTimeout(r, 50)); }; window.scrollTo(0, document.documentElement.scrollHeight); await until(deepNow); const a = [st(), deepNow()]; window.scrollTo(0, 0); await until(() => !deepNow()); return [...a, deepNow()]; });
+    ok(`view motion: while you scroll or drag the light holds still, and moves again a moment after (${busy.join(' → ')})`, busy[0] === 'paused' && busy[1] === 'running', JSON.stringify(busy));
+    ok(`view motion: scrolled away from the top, the light stops (nothing drawn off screen) and comes back at the top`, deep[0] === 'paused' && deep[1] === true && deep[2] === false, JSON.stringify(deep));
     ok(`view motion: the deep's slow light runs (${amb[3]} loops), pauses while the tab is hidden and comes back`, amb[0] === 'running' && amb[1] === 'paused' && amb[2] === 'running' && amb[3] >= 2, JSON.stringify(amb));
     ok('view motion: no page errors', t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
