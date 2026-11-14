@@ -757,7 +757,8 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     let junkAfter = 0, hscrollAfter = 0, stuck = 0, hung = null, pressing = 'walk';
     // a page that stops answering (it never has, but a whole job once stalled here without a word) ends the walk with the
     // kind of control it was pressing, instead of holding the job until it is cancelled
-    const ev = (fn, arg) => { const pe = page.evaluate(fn, arg); pe.catch(() => {}); let tm; return Promise.race([pe, new Promise((res, rej) => { tm = setTimeout(() => rej(Object.assign(new Error('stuck'), { name: 'PageStuck' })), 90000); })]).finally(() => clearTimeout(tm)); };
+    let calling = '';
+    const ev = (fn, arg) => { calling = fn.name || 'evaluate'; const pe = page.evaluate(fn, arg); pe.catch(() => {}); let tm; return Promise.race([pe, new Promise((res, rej) => { tm = setTimeout(() => rej(Object.assign(new Error('stuck'), { name: 'PageStuck' })), 90000); })]).finally(() => clearTimeout(tm)); };
     try { while (counts.clicked < MAX && Date.now() - t < BUDGET) {
       pressing = 'walk';
       await ev(REST);
@@ -803,7 +804,13 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       else if (after === before && !next.noop) failAs(next.kind, 'no change');
       if (await ev(JUNK)) junkAfter++;
       if ((await ev(HSCROLL)) > 0) hscrollAfter++;
-    } } catch (e) { if (e.name !== 'PageStuck') throw e; hung = pressing; failAs(pressing, 'page stopped answering for 90 s'); }
+    } } catch (e) {
+      if (e.name !== 'PageStuck') throw e;
+      hung = pressing;
+      const pe = page.evaluate(() => 1); pe.catch(() => {});
+      const alive = await Promise.race([pe, sleep(5000).then(() => 0)]); // the script still answering: no frames drawn (the wait needs them)
+      failAs(pressing, `${calling || 'a call'} unanswered for 90 s, ${alive === 1 ? 'the script answers' : 'the script is stuck'}`);
+    }
     T.clicks = secs(t);
     console.log(`[${tag}] controls: ${counts.found} found, ${counts.clicked} clicked${counts.gone ? `, ${counts.gone} went away before the press` : ''}`);
     console.log(`[${tag}] clicked by kind: ${Object.entries(counts.kinds).map(([k, n]) => `${k} ×${n}`).join(', ') || 'none'}`);
