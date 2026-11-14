@@ -9,7 +9,7 @@
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
 //                                                    merge feebar stablewalk flash dates feescale perday disc view
-//                                                    balance wraps floorlab (v0.5.1)
+//                                                    balance wraps floorlab iphone back pull (v0.5.1)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -51,7 +51,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -3698,7 +3698,7 @@ const SC_HITS = () => {
   return { labels: labels.length, hits };
 };
 async function testWraps(browser) {
-  for (const [tag, o] of [['w360', { width: 360, height: 760 }], ['phone', { phone: true }], ['w1440', { width: 1440 }]]) {
+  for (const [tag, o] of [['w360', { width: 360, height: 760 }], ['phone', { phone: true }], ['w1440', { width: 1440 }]].slice(BROWSER === 'webkit' ? 1 : 0)) {
     const t = await openUnlocked(browser, 'default', o), p = t.page;
     const a = await p.evaluate(SPLITS);
     ok(`wraps ${tag}: no short phrase splits over two lines (${a.seen.fees} fee labels, ${a.seen.since} "since", ${a.seen.old} "h old", ${a.seen.ck} checks)`, a.out.length === 0 && a.seen.fees >= 1 && a.seen.since >= 1 && a.seen.old >= 1 && a.seen.ck >= 5, a.out.slice(0, 3).join(', '));
@@ -3752,7 +3752,7 @@ async function floorAt(p, pz) {
 }
 async function testFloorLab(browser) {
   if (MODE === '2d') return; // a 3D drawing (the Classic 2D job has no floor)
-  for (const [tag, o] of [['phone', { phone: true }], ['w1440', { width: 1440 }]]) {
+  for (const [tag, o] of [['phone', { phone: true }], ['w1440', { width: 1440 }]].slice(0, BROWSER === 'webkit' ? 1 : 2)) { // WebKit: the phone (its job runs within 45 minutes)
     const t = await openUnlocked(browser, 'default', { ...o, mode: '3d' }), p = t.page;
     const n = await p.$$eval('#best [data-act="tab"]', (e) => e.length), res = [];
     for (let i = 0; i < n; i++) {
@@ -3772,7 +3772,156 @@ async function testFloorLab(browser) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab };
+// ---------- v0.5.1: the owner's iPhone (each check failed on v0.5.0) ----------
+// iphone: the page opens fitting the screen and stays so: every field is 16 px on a touch screen (iOS Safari zooms into a
+// smaller one when tapped and keeps that zoom, even on the next visit), every control takes a quick second tap as a tap
+// (touch-action manipulation, never a double-tap zoom), pinch zoom stays allowed, nothing is wider than the screen; a laptop
+// keeps its 13 px fields
+const FIT = () => {
+  const vis = (e) => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+  const fields = [...document.querySelectorAll('input:not([type="range"]):not([type="checkbox"]), select, textarea')].filter(vis);
+  const ctrls = [...document.querySelectorAll('button, a[href], select, input, textarea, [data-act], [role="button"], [role="tab"]')].filter(vis);
+  const vp = (document.querySelector('meta[name="viewport"]') || {}).content || '';
+  const ms = /maximum-scale\s*=\s*([\d.]+)/.exec(vp);
+  return {
+    small: fields.filter((e) => parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => (e.id || e.tagName.toLowerCase()) + ' ' + getComputedStyle(e).fontSize),
+    nFields: fields.length, nCtrl: ctrls.length,
+    zoomy: ctrls.filter((e) => getComputedStyle(e).touchAction === 'auto').map((e) => e.id || (e.dataset.act ? 'data-act=' + e.dataset.act : e.tagName.toLowerCase())).slice(0, 6),
+    pinch: !/user-scalable\s*=\s*(no|0)/.test(vp) && (!ms || +ms[1] >= 2),
+    scale: window.visualViewport ? Math.round(visualViewport.scale * 1000) / 1000 : 1, sw: document.documentElement.scrollWidth, iw: innerWidth,
+  };
+};
+async function testIphone(browser) {
+  const t = await openUnlocked(browser, 'default', { phone: true }), p = t.page, touch = !!(DEVICE || false);
+  const a = await p.evaluate(FIT);
+  ok(`iphone: every field is 16 px or more on a phone (${a.nFields} fields${a.small.length ? '; ' + a.small.join(', ') : ''})`, a.nFields >= 3 && a.small.length === 0, a.small.join(', '));
+  ok(`iphone: every control takes a quick second tap as a tap, never a double-tap zoom (${a.nCtrl} controls)`, a.nCtrl > 40 && a.zoomy.length === 0, a.zoomy.join(', '));
+  ok('iphone: pinch zoom stays allowed (the viewport neither fixes the scale nor turns zoom off)', a.pinch);
+  // tap into the search, then double-tap the bar's switches, the map's zoom, its arrows and the best find's tabs, as a quick finger does
+  const dbl = async (sel) => { const l = p.locator(sel).first(); if (!(await l.isVisible().catch(() => false))) return 0; await l.scrollIntoViewIfNeeded().catch(() => {}); if (touch) { await l.tap({ timeout: 5000 }).catch(() => {}); await l.tap({ timeout: 5000 }).catch(() => {}); } else await l.dblclick({ timeout: 5000 }).catch(() => {}); return 1; };
+  if (touch) await p.tap('#f-q').catch(() => {}); else await p.click('#f-q');
+  await p.$eval('#f-q', (e) => e.blur());
+  let n = 0;
+  for (const sel of ['#winseg [data-w="7d"]', '#winseg [data-w="30d"]', '#viewseg [aria-pressed="false"]', '[data-act="zoom"][data-chart="liq-best"][data-dir="1"]', '[data-act="zoom"][data-chart="liq-best"][data-dir="-1"]', '[data-pz="liq-best"] > .pz-edge.l', '[data-pz="liq-best"] > .pz-edge.r', '#best [data-act="tab"]:not([aria-selected="true"])', '[data-act="stable"]', '[data-act="zoom"][data-chart="daily-best"][data-dir="1"]']) n += await dbl(sel);
+  await frames(p, 3);
+  const b = await p.evaluate(FIT);
+  ok(`iphone: after a tap in the search and double taps on ${n} controls the page is still at scale ${b.scale} and fits the screen (${b.sw} ≤ ${b.iw} px)`, n >= 6 && b.scale === 1 && b.sw <= b.iw, JSON.stringify(b));
+  // the pool panel too
+  await p.evaluate(() => scrollTo(0, 0));
+  await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
+  let m = 0;
+  for (const sel of ['#sheet-win [data-w="7d"]', '#sheet-win [data-w="24h"]', '#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="1"]', '#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="-1"]']) m += await dbl(sel);
+  await frames(p, 3);
+  const c = await p.evaluate(() => { const sb = document.querySelector('#sheet-body'); return { scale: window.visualViewport ? Math.round(visualViewport.scale * 1000) / 1000 : 1, sw: document.documentElement.scrollWidth, iw: innerWidth, hs: sb.scrollWidth - sb.clientWidth }; });
+  ok(`iphone: in a pool's panel double taps on ${m} controls keep the scale at ${c.scale} and nothing sideways (page ${c.sw} ≤ ${c.iw}, panel ${c.hs} px)`, m >= 3 && c.scale === 1 && c.sw <= c.iw && c.hs <= 0, JSON.stringify(c));
+  ok('iphone: no page errors', t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+  const l = await openUnlocked(browser, 'default', { width: 1440 });
+  const f = await l.page.evaluate(() => [...document.querySelectorAll('.filters select, .filters input')].map((e) => getComputedStyle(e).fontSize));
+  ok(`iphone: a laptop keeps its 13 px fields (${f.join(', ')})`, f.length >= 3 && f.every((x) => x === '13px'), f.join());
+  await l.ctx.close();
+}
+
+// back: coming back to the page reads the sealed files again without asking (a hidden tab shown again, a page restored from
+// the back-forward cache); after 5 minutes away, or with the next pass overdue, it is the refresh button's own refresh
+// with its "Updated hh:mm" chip; every read bypasses the cache, the first one too
+const COUNT_FETCH = () => { window.__lf = []; const of = window.fetch; window.fetch = (u, o) => { if (/live\.json/.test(String(u))) window.__lf.push((o && o.cache) || 'default'); return of(u, o); }; };
+async function backCtx(browser, c) {
+  const t = await newPage(browser, { phone: true });
+  await t.ctx.addInitScript(COUNT_FETCH);
+  await t.page.goto(url(c)); await unlockWith(t.page, FIXTURE_PASSPHRASE); await waitApp(t.page);
+  return t;
+}
+const HIDE = () => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); };
+const SHOW = () => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); };
+async function backStep(p, fn, arg) {
+  const n0 = await p.evaluate(() => window.__lf.length);
+  await p.evaluate(() => { const m = document.querySelector('#refresh-msg'); m.hidden = true; m.textContent = ''; });
+  await p.evaluate(fn, arg);
+  await p.waitForFunction((n0) => window.__lf.length > n0, n0, { timeout: 8000 }).catch(() => {});
+  await p.waitForFunction(() => !document.querySelector('#refresh').disabled, null, { timeout: 15000 }).catch(() => {}); // its refresh done
+  await frames(p, 2);
+  return p.evaluate((n0) => ({ n: window.__lf.length - n0, chip: document.querySelector('#refresh-msg').hidden ? '' : document.querySelector('#refresh-msg').textContent }), n0);
+}
+async function testBack(browser) {
+  {
+    const t = await backCtx(browser, 'default'), p = t.page;
+    const modes = await p.evaluate(() => window.__lf.slice());
+    ok(`back: the first read on opening bypasses the cache (${modes.join(', ')})`, modes.length >= 1 && modes.every((m) => m === 'no-store'), modes.join());
+    const a = await backStep(p, ({ H, S }) => { new Function('return (' + H + ')')()(); new Function('return (' + S + ')')()(); }, { H: HIDE.toString(), S: SHOW.toString() });
+    ok(`back: a tab shown again after a moment reads the data again, quietly (${a.n} read)`, a.n >= 1 && a.chip === '', JSON.stringify(a));
+    const b = await backStep(p, ({ H, S }) => { new Function('return (' + H + ')')()(); const r = Date.now; Date.now = () => r() + 6 * 60e3; new Function('return (' + S + ')')()(); }, { H: HIDE.toString(), S: SHOW.toString() });
+    ok(`back: after 6 minutes away it refreshes as the button does, with its chip ("${b.chip}")`, b.n >= 1 && /^Updated \d\d:\d\d/.test(b.chip), JSON.stringify(b));
+    const c = await backStep(p, () => { const e = new Event('pageshow'); Object.defineProperty(e, 'persisted', { value: true }); dispatchEvent(e); });
+    ok(`back: a page restored from the back-forward cache reads the data again (${c.n} read)`, c.n >= 1, JSON.stringify(c));
+    const all = await p.evaluate(() => window.__lf.slice());
+    ok(`back: every read bypasses the cache (${all.length} reads)`, all.every((m) => m === 'no-store'), [...new Set(all)].join());
+    ok('back: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  {
+    const t = await backCtx(browser, 'stale'), p = t.page; // the next pass is long overdue there
+    const d = await backStep(p, () => { const r = Date.now; Date.now = () => r() + 2 * 60e3; dispatchEvent(new Event('focus')); });
+    ok(`back: with the next pass overdue, coming back to the window refreshes with the chip ("${d.chip}")`, d.n >= 1 && /^Updated \d\d:\d\d/.test(d.chip), JSON.stringify(d));
+    ok('back stale: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// pull: on a phone, a finger pulling the page down from the very top shows a pill under the bar ("Pull to refresh",
+// "Release to refresh", "Refreshing…", "Updated hh:mm") and runs one refresh; lower on the page, or with the panel open,
+// a pull does nothing; under reduced motion nothing spins
+const PULL = async ({ x, y0, y1, steps }) => {
+  const el = document.elementFromPoint(x, y0);
+  const mk = (type, y, down = true) => { const ev = new Event(type, { bubbles: true, cancelable: true }), t = { identifier: 5, clientX: x, clientY: y, target: el }; Object.defineProperty(ev, 'touches', { value: down ? [t] : [] }); Object.defineProperty(ev, 'changedTouches', { value: [t] }); return ev; };
+  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))), seen = [], q = document.querySelector('#ptr');
+  el.dispatchEvent(mk('touchstart', y0));
+  for (let i = 1; i <= steps; i++) { await frame(); el.dispatchEvent(mk('touchmove', y0 + ((y1 - y0) * i) / steps)); if (q) seen.push(q.hidden ? '-' : q.dataset.s + ':' + q.querySelector('.pt').textContent); }
+  el.dispatchEvent(mk('touchend', y1, false));
+  await frame();
+  if (q) seen.push(q.hidden ? '-' : q.dataset.s + ':' + q.querySelector('.pt').textContent + ':' + getComputedStyle(q.querySelector('.sp')).display + ':' + getComputedStyle(q.querySelector('.sp')).animationName);
+  return [...new Set(seen)];
+};
+async function testPull(browser) {
+  for (const [tag, red] of [['phone', 'no-preference'], ['phone reduced', 'reduce']]) {
+    const t = await newPage(browser, { phone: true, reducedMotion: red });
+    await t.ctx.addInitScript(COUNT_FETCH);
+    const p = t.page;
+    await p.goto(url('default')); await unlockWith(p, FIXTURE_PASSPHRASE); await waitApp(p);
+    await p.route('**/live.json*', async (r) => { await sleep(1200); await r.continue(); }); // a slow network: "Refreshing…" shows
+    await p.evaluate(() => scrollTo(0, 0)); await calm(p, BAR_MOVES);
+    const n0 = await p.evaluate(() => window.__lf.length);
+    const seen = await p.evaluate(PULL, { x: 200, y0: 190, y1: 330, steps: 8 });
+    await p.waitForFunction(() => document.querySelector('#ptr') && document.querySelector('#ptr').dataset.s === 'done', null, { timeout: 15000 }).catch(() => {});
+    const end = await p.evaluate(() => { const q = document.querySelector('#ptr'); return q ? { s: q.dataset.s, t: q.querySelector('.pt').textContent, hid: q.hidden, top: Math.round(q.getBoundingClientRect().top), bar: Math.round(document.querySelector('#top').getBoundingClientRect().bottom) } : null; });
+    await sleep(400);
+    const n1 = await p.evaluate(() => window.__lf.length);
+    const busy = seen[seen.length - 1] || '';
+    ok(`pull ${tag}: pulled down from the very top, a pill under the bar says "Pull to refresh", then "Release to refresh" (${seen.slice(0, 3).join(' → ')})`, seen.some((x) => /^pull:Pull to refresh$/.test(x)) && seen.some((x) => /^release:Release to refresh$/.test(x)), JSON.stringify(seen));
+    ok(`pull ${tag}: let go, it says "Refreshing…" (${red === 'reduce' ? 'nothing spinning' : 'spinning'}), runs one refresh (${n1 - n0} read) and says "${end && end.t}"`,
+      /^busy:Refreshing…:/.test(busy) && (red === 'reduce' ? /:none:/.test(busy + ':') || /:none$/.test(busy) : /:block:spin$/.test(busy)) && n1 - n0 === 1 && !!end && end.s === 'done' && /^Updated \d\d:\d\d$/.test(end.t) && !end.hid && end.top >= end.bar, JSON.stringify([busy, n1 - n0, end]));
+    await p.unroute('**/live.json*');
+    await p.waitForFunction(() => document.querySelector('#ptr').hidden, null, { timeout: 8000 }).catch(() => {});
+    // lower on the page: an ordinary scroll, nothing shown, nothing read
+    await p.evaluate(() => scrollTo(0, 900)); await calm(p, BAR_MOVES);
+    const m0 = await p.evaluate(() => window.__lf.length);
+    const low = await p.evaluate(PULL, { x: 200, y0: 300, y1: 440, steps: 8 });
+    await sleep(500);
+    ok(`pull ${tag}: lower on the page a pull is a plain scroll: no pill, no refresh`, low.every((x) => x === '-') && (await p.evaluate(() => window.__lf.length)) === m0, JSON.stringify(low));
+    if (red !== 'reduce') { // the open panel keeps its own drag
+      await p.evaluate(() => scrollTo(0, 0)); await calm(p, BAR_MOVES);
+      await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
+      const k0 = await p.evaluate(() => window.__lf.length);
+      const sh = await p.evaluate(PULL, { x: 200, y0: 300, y1: 440, steps: 8 });
+      await sleep(500);
+      ok(`pull ${tag}: with a pool's panel open a pull is the panel's: no pill, no refresh`, sh.every((x) => x === '-') && (await p.evaluate(() => window.__lf.length)) === k0, JSON.stringify(sh));
+    }
+    ok(`pull ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull };
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

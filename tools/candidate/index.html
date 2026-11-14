@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZzViSGjT3WH4Fj+iv/NNM+Mb2QXHQUm6qhShzLC7BO0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-LoGO76hFbApaLVN2gxApxfeJL3Exr2IrZH2mi88fh24='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -27,10 +27,12 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html{-webkit-text-size-adjust:100%;background:var(--bg)}
+html{-webkit-text-size-adjust:100%;background:var(--bg);overscroll-behavior-y:contain} /* v0.5.1: the page's own pull to refresh, not the browser's reload (the bounce stays) */
 html.modal-open{overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--fg);font:400 13px/1.45 var(--sans);min-height:100vh}
 button,input,select{font:inherit;color:inherit}
+/* v0.5.1 · the owner's iPhone: a quick second tap never zooms the page (pinch zoom stays: the viewport allows it) */
+html,body,button,a,input,select,textarea,label,summary,[role="button"],[role="tab"],[data-act]{touch-action:manipulation}
 svg,svg *{pointer-events:none}
 svg .hit{pointer-events:auto}
 h1,h2,h3{margin:0}
@@ -78,6 +80,19 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 @keyframes spin{to{transform:rotate(360deg)}}
 .rmsg{position:absolute;right:max(16px,env(safe-area-inset-right));top:calc(100% + 6px);padding:6px 9px;border-radius:6px;border:1px solid var(--line2);background:var(--raised);box-shadow:0 8px 18px rgba(0,0,0,.5);white-space:nowrap}
 .rmsg.err{color:var(--neg)}
+/* v0.5.1 · pull to refresh (a finger, from the very top): a pill under the bar, "Pull to refresh" → "Release to refresh"
+   → "Refreshing…" (spinning) → "Updated 17:05"; under reduced motion it never moves or spins, the words change */
+.ptr{position:fixed;left:50%;top:calc(var(--hdrh,48px) + 6px);z-index:44;display:flex;align-items:center;gap:7px;padding:7px 12px 7px 10px;border-radius:999px;border:1px solid var(--line3);background:rgba(17,23,30,.96);color:var(--fg2);font:600 11px/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;pointer-events:none;transform:translate(-50%,var(--ptr-y,-40px));opacity:var(--ptr-o,0);transition:transform .18s ease,opacity .18s ease}
+.ptr.pulling{transition:none}
+.ptr svg{width:16px;height:16px;flex:none;display:block}
+.ptr .ar{transition:transform .18s ease}
+.ptr[data-s="release"] .ar{transform:rotate(180deg)}
+.ptr .sp,.ptr[data-s="busy"] .ar,.ptr[data-s="done"] .ar,.ptr[data-s="fail"] .ar{display:none}
+.ptr[data-s="busy"] .sp{display:block;animation:spin .8s linear infinite}
+.ptr[data-s="done"]{color:var(--accent)}.ptr[data-s="fail"]{color:var(--neg)}
+html.m3d .ptr{background:rgba(12,52,56,.96);border-color:rgba(126,240,214,.42);color:#5EE6C8}
+html.m3d .ptr[data-s="done"]{color:#FFB547}
+@media (prefers-reduced-motion:reduce){.ptr,.ptr .ar{transition:none}.ptr[data-s="busy"] .sp{display:none}}
 .tabs{display:flex;gap:4px;overflow-x:auto;margin:6px 0 2px;padding-bottom:2px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
 .tab{flex:none;min-height:44px;padding:0 1px;border:0;background:transparent;cursor:pointer;display:flex;align-items:center}
 .tab .tp{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line2);background:var(--raised);font:600 12px/1.2 var(--mono);color:var(--fg2);white-space:nowrap}
@@ -757,6 +772,9 @@ div.mc-name{cursor:inherit;pointer-events:none}
 .qin::before{content:"";position:absolute;inset:0;border-radius:8px;background:var(--raised)}
 .qhint{position:absolute;left:11px;right:11px;top:0;bottom:0;z-index:0;display:flex;align-items:center;font-size:13px;white-space:pre;overflow:hidden;pointer-events:none;color:var(--muted)}
 .qhint .t{visibility:hidden}
+/* v0.5.1 · on a touch screen every field is 16 px: iOS Safari zooms into a smaller one when it is tapped and keeps that
+   zoom, even when the page is opened again (the owner had to zoom out); a laptop keeps its 13 px */
+@media (hover:none) and (pointer:coarse),(max-width:520px){.filters select,.filters input,.qhint,input,select,textarea{font-size:16px}}
 .qlist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;margin:0;padding:4px 0;list-style:none;border:1px solid var(--line3);border-radius:10px;background:rgba(12,16,21,.98);box-shadow:0 14px 30px rgba(0,0,0,.55);max-height:min(60vh,380px);overflow-y:auto}
 .qopt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;min-height:44px;padding:4px 12px;cursor:pointer;font-size:13px;color:var(--fg2)}
 .qopt .qk{font:600 10px/1 var(--mono);letter-spacing:.06em;color:var(--muted);min-width:36px}
@@ -1007,6 +1025,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
   </div>
   <span class="lbl rmsg" id="refresh-msg" role="status" aria-live="polite" hidden></span>
 </header>
+<div class="ptr" id="ptr" role="status" aria-live="polite" hidden><svg class="ar" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M3.5 9 8 13.5 12.5 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="sp" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="pt">Pull to refresh</span></div>
 <div class="subhead" id="subhead">
   <div class="sub-l"><span class="lbl" id="phase">PHASE —</span>
     <button type="button" class="termb" data-act="term" data-term="sealed" aria-expanded="false" aria-label="Sealed: what does it mean?"><span class="badge sealed"><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="6.5" rx="1.5" fill="#AAB4C0"/><path d="M3 5V3.6a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="#AAB4C0" stroke-width="1.4"/></svg><span class="sl-t">SEALED</span></span></button>
@@ -1501,8 +1520,9 @@ const idbPut = (k, v) => idbDo('readwrite', (s) => s.put(v, k)).then((x) => x !=
 const idbDel = (k) => idbDo('readwrite', (s) => s.delete(k));
 
 // ---------- fetching ----------
-async function getJson(url) {
+async function getJson(url, sig = null) {
   const c = new AbortController(), tm = setTimeout(() => c.abort(), 15000);
+  if (sig) { if (sig.aborted) c.abort(); else sig.addEventListener('abort', () => c.abort(), { once: true }); }
   try {
     const r = await fetch(url, { cache: 'no-store', signal: c.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
     if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
@@ -1513,8 +1533,8 @@ async function getJson(url) {
   } finally { clearTimeout(tm); }
 }
 // every base is read; the newest sealed copy wins (raw and Pages can lag each other)
-async function fetchEnv(file) {
-  const res = await Promise.allSettled(BASES.map((b) => getJson(b + file + '?t=' + Date.now())));
+async function fetchEnv(file, sig = null) {
+  const res = await Promise.allSettled(BASES.map((b) => getJson(b + file + '?t=' + Date.now(), sig)));
   let best = null, err = null, all404 = res.length > 0;
   for (const r of res) {
     if (r.status === 'fulfilled' && r.value && r.value.lock === 1 && isNum(r.value.t)) { if (!best || r.value.t > best.t) best = r.value; all404 = false; }
@@ -1541,9 +1561,10 @@ async function getLock() {
 async function refresh() {
   if (!S.key || S.busy) return;
   S.busy = true;
-  const tried = Date.now();
+  const tried = Date.now(), ac = (S.ac = new AbortController());
+  S.tried = tried;
   try {
-    const got = await Promise.allSettled(FILES.map((f) => fetchEnv(f + '.json')));
+    const got = await Promise.allSettled(FILES.map((f) => fetchEnv(f + '.json', ac.signal)));
     if (got[0].status === 'rejected') { const e = got[0].reason; e.kind = 'fetch'; throw e; }
     let changed = false;
     const env = got[0].value;
@@ -1570,11 +1591,15 @@ async function refresh() {
     S.failing = null;
     if (changed || !S.rendered) renderAll();
   } catch (e) {
-    S.failing = { at: tried, msg: e.message, kind: e.kind };
-    if (!S.live) showLoadError(e);
+    if (!(ac.signal.aborted && S.again)) { // called off to start again (a fetch frozen while the phone slept): not a failure
+      S.failing = { at: tried, msg: e.message, kind: e.kind };
+      if (!S.live) showLoadError(e);
+    }
   } finally {
     S.busy = false;
     renderFresh(); renderBanner();
+    const again = S.again; S.again = null; // a return to the page asked for a refresh while this one ran
+    if (again) setTimeout(() => (again === 'shown' ? manualRefresh(true) : refresh()), 0);
   }
 }
 let timer = 0;
@@ -1583,12 +1608,12 @@ const stopTimer = () => { clearInterval(timer); timer = 0; };
 const TZ_NAME = (() => { try { return new Intl.DateTimeFormat('en-GB', { timeZone: TZ, timeZoneName: 'short' }).formatToParts(new Date()).find((x) => x.type === 'timeZoneName').value; } catch (e) { return 'CET'; } })();
 // the header's refresh button: all three files at once, a spinner while loading, double taps ignored
 let lastManual = 0;
-async function manualRefresh() {
+async function manualRefresh(auto = false, pill = false) { // auto: back on the page or pulled (the double-tap guard is for the button); pill: the pull's own pill tells it
   const b = $('#refresh'), m = $('#refresh-msg'), now = Date.now();
-  if (!S.key || S.busy || now - lastManual < 1500) return;
+  if (!S.key || S.busy || (!auto && now - lastManual < 1500)) return;
   lastManual = now;
   b.classList.add('spin'); b.setAttribute('aria-busy', 'true'); b.disabled = true;
-  clearTimeout(rmsgT); m.hidden = false; m.className = 'lbl rmsg'; m.textContent = 'REFRESHING…';
+  clearTimeout(rmsgT); m.hidden = pill; m.className = 'lbl rmsg'; m.textContent = 'REFRESHING…';
   try { await refresh(); } finally {
     b.classList.remove('spin'); b.removeAttribute('aria-busy'); b.disabled = false;
     if (S.failing) { m.className = 'lbl rmsg err'; m.textContent = `Refresh failed — showing data from ${S.live ? hm(S.live.t) : DASH}`; }
@@ -4899,7 +4924,98 @@ document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target
 document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); if (TIP.host || TIP.mini) tipScroll(); }, { capture: true, passive: true });
 for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) addEventListener(ev, () => { S.touched = true; cancelSettle(); }, { passive: true, capture: true });
 for (const ev of ['pointerdown', 'wheel', 'touchstart', 'keydown']) addEventListener(ev, (e) => { if (S.fl && !(e.target && e.target.closest && e.target.closest('[data-act="flash"]'))) flEnd(); }, { passive: true, capture: true });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.key) refresh(); });
+// ---------- v0.5.1 · back on the page: fresh data, without asking ----------
+// Coming back (the tab shown again, the page restored from the back-forward cache, the window focused, or the phone woken
+// with the page on screen) reads the sealed files again, as the minute's check does. After 5 minutes away, or when the next
+// pass should already have landed, it is the refresh button's own refresh, with its "Updated 17:05" chip. A fetch frozen
+// while the phone slept is called off and started again. Never a reload, never the passphrase again.
+const AWAY_MS = 5 * 60e3;
+let hiddenAt = document.hidden ? Date.now() : 0, beat = Date.now(), backT = 0;
+const passDue = () => { const n = S.live && S.live.next; return isNum(n) && Date.now() > n + 60e3; };
+function onBack(src) {
+  if (!S.key || document.hidden || SOLO) return;
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = 0;
+  const since = Date.now() - (S.tried || 0);
+  if (src === 'focus' && away < AWAY_MS && since < 60e3) return; // a click back into the window: the minute's check has it
+  clearTimeout(backT);
+  backT = setTimeout(() => { // the browser fires visibilitychange, pageshow and focus together: one refresh
+    const shown = away >= AWAY_MS || (passDue() && since >= 60e3);
+    if (S.busy) {
+      S.again = shown ? 'shown' : S.again || 'quiet';
+      if (Date.now() - (S.tried || 0) > 20e3 && S.ac) S.ac.abort(); // frozen mid-fetch while away: start again
+    } else if (shown) manualRefresh(true); else refresh();
+  }, 60);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) { if (!hiddenAt) hiddenAt = Date.now(); } else onBack('visible'); });
+addEventListener('pagehide', () => { if (!hiddenAt) hiddenAt = Date.now(); });
+addEventListener('pageshow', (e) => { if (e.persisted) onBack('pageshow'); });
+addEventListener('focus', () => onBack('focus'));
+setInterval(() => { const now = Date.now(); if (!document.hidden && now - beat > AWAY_MS) { if (!hiddenAt) hiddenAt = beat; onBack('wake'); } beat = now; }, 15e3); // timers stopped: the phone slept
+
+// ---------- v0.5.1 · pull to refresh: a finger at the very top of the page pulls it down ----------
+// From the top only (the page not scrolled), on touch only, never from a chart, a field or the open panel (it keeps its own
+// drag to close) and never while a chart is dragged; a sideways or upward move, a second finger or the page scrolling lets
+// it go. Passive touch events: the page scrolls and bounces as ever. Past 80 px "Release to refresh"; letting go runs the
+// refresh button's own refresh (its spinner and "Updated" chip), and the pill says "Refreshing…", then "Updated 17:05".
+const PTR = { on: false, live: false, id: null, x0: 0, y0: 0, dy: 0, hideT: 0 }, PTR_GO = 80, ptrEl = $('#ptr');
+function ptrSet(st, txt, dy) {
+  clearTimeout(PTR.hideT);
+  ptrEl.style.top = Math.max(0, Math.round($('#top').getBoundingClientRect().bottom) + 8) + 'px'; // just under the bar, wherever it is
+  ptrEl.hidden = false;
+  if (ptrEl.dataset.s !== st) ptrEl.dataset.s = st;
+  const t = ptrEl.querySelector('.pt'); if (t.textContent !== txt) t.textContent = txt;
+  const k = Math.min(1, dy / PTR_GO);
+  ptrEl.classList.toggle('pulling', st === 'pull' || st === 'release');
+  ptrEl.style.setProperty('--ptr-y', (reduced() ? 0 : Math.round(-40 + 40 * k)) + 'px');
+  ptrEl.style.setProperty('--ptr-o', '1'); // opaque: it slides out from under the bar
+}
+function ptrHide() {
+  clearTimeout(PTR.hideT);
+  ptrEl.classList.remove('pulling'); ptrEl.style.setProperty('--ptr-y', reduced() ? '0px' : '-40px'); ptrEl.style.setProperty('--ptr-o', '0');
+  PTR.hideT = setTimeout(() => { ptrEl.hidden = true; ptrEl.dataset.s = ''; }, reduced() ? 0 : 200);
+}
+function ptrDrop() { if (PTR.live) ptrHide(); PTR.on = PTR.live = false; }
+const ptrTouch = (e, id) => [...(e.touches || [])].find((t) => t.identifier === id);
+addEventListener('touchstart', (e) => {
+  const t = e.touches && e.touches[0], tg = e.target;
+  if (PTR.busy) return;
+  if (!t || e.touches.length !== 1) { if (PTR.on) ptrDrop(); return; }
+  if (!S.key || SOLO || $('#app').hidden || document.documentElement.classList.contains('modal-open') || G || PIN || scrollY > 0) return;
+  if (tg && tg.closest && tg.closest('.pz, #sheet, #lockscreen, input, select, textarea')) return;
+  Object.assign(PTR, { on: true, live: false, id: t.identifier, x0: t.clientX, y0: t.clientY, dy: 0 });
+}, { passive: true, capture: true });
+addEventListener('touchmove', (e) => {
+  if (!PTR.on) return;
+  const t = ptrTouch(e, PTR.id);
+  if (!t || e.touches.length !== 1 || G || PIN) { ptrDrop(); return; }
+  const dy = t.clientY - PTR.y0, dx = t.clientX - PTR.x0;
+  if (!PTR.live) {
+    if ((Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) || dy < -6 || scrollY > 0) { ptrDrop(); return; } // a sideways swipe, a scroll up: theirs
+    if (dy < 12) return;
+    PTR.live = true;
+  }
+  if (scrollY > 2) { ptrDrop(); return; } // the page scrolled after all
+  PTR.dy = dy;
+  if (dy >= PTR_GO) ptrSet('release', 'Release to refresh', dy); else ptrSet('pull', 'Pull to refresh', Math.max(0, dy));
+}, { passive: true, capture: true });
+addEventListener('touchend', (e) => {
+  if (!PTR.on || ![...(e.changedTouches || [])].some((t) => t.identifier === PTR.id)) return;
+  const go = PTR.live && PTR.dy >= PTR_GO;
+  PTR.on = PTR.live = false;
+  if (go) ptrRun(); else ptrHide();
+}, { passive: true, capture: true });
+addEventListener('touchcancel', () => { if (PTR.on) ptrDrop(); }, { passive: true, capture: true });
+async function ptrRun() {
+  PTR.busy = true;
+  ptrSet('busy', 'Refreshing…', PTR_GO);
+  try {
+    if (S.busy) { const t0 = Date.now(); await new Promise((r) => { const w = () => (!S.busy || Date.now() - t0 > 20e3 ? r() : setTimeout(w, 100)); w(); }); } // one already running
+    else await manualRefresh(true, true);
+  } finally { PTR.busy = false; }
+  if (S.failing) ptrSet('fail', 'Refresh failed', PTR_GO); else ptrSet('done', `Updated ${hm(Date.now())}`, PTR_GO);
+  PTR.hideT = setTimeout(ptrHide, 1800);
+}
 setInterval(() => { renderFresh(); renderStripTime(false); }, 15e3);
 let lastW = innerWidth, rt = 0;
 addEventListener('resize', () => {

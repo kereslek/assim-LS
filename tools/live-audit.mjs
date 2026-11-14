@@ -754,10 +754,14 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     // click audit
     t = Date.now();
     const visited = new Set(), seen = new Set(), perKind = {}, CAP = 10, MAX = 160, BUDGET = 6 * 60 * 1000;
-    let junkAfter = 0, hscrollAfter = 0, stuck = 0;
-    while (counts.clicked < MAX && Date.now() - t < BUDGET) {
-      await page.evaluate(REST);
-      const L = await page.evaluate(ENUM);
+    let junkAfter = 0, hscrollAfter = 0, stuck = 0, hung = null, pressing = 'walk';
+    // a page that stops answering (it never has, but a whole job once stalled here without a word) ends the walk with the
+    // kind of control it was pressing, instead of holding the job until it is cancelled
+    const ev = (fn, arg) => { const pe = page.evaluate(fn, arg); pe.catch(() => {}); let tm; return Promise.race([pe, new Promise((res, rej) => { tm = setTimeout(() => rej(Object.assign(new Error('stuck'), { name: 'PageStuck' })), 90000); })]).finally(() => clearTimeout(tm)); };
+    try { while (counts.clicked < MAX && Date.now() - t < BUDGET) {
+      pressing = 'walk';
+      await ev(REST);
+      const L = await ev(ENUM);
       const fresh = L.controls.filter((c) => !visited.has(c.sig));
       for (const c of L.controls) if (!seen.has(c.sig)) { seen.add(c.sig); counts.found++; }
       // kinds not pressed yet go first, so a capped run still covers every kind of control
@@ -766,20 +770,21 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
         if (!L.overlay) break;
         // an overlay with nothing left to press: close it (Escape, then its close control)
         await page.keyboard.press('Escape'); await sleep(350);
-        let L2 = await page.evaluate(ENUM);
+        let L2 = await ev(ENUM);
         if (L2.overlay && L2.layer === L.layer) {
-          await page.evaluate(() => { const b = [...document.querySelectorAll('[data-la-i]')].find((el) => /close|×|✕|done|back/i.test((el.getAttribute('aria-label') || '') + el.textContent)); if (b) b.click(); });
-          await sleep(350); L2 = await page.evaluate(ENUM);
+          await ev(() => { const b = [...document.querySelectorAll('[data-la-i]')].find((el) => /close|×|✕|done|back/i.test((el.getAttribute('aria-label') || '') + el.textContent)); if (b) b.click(); });
+          await sleep(350); L2 = await ev(ENUM);
         }
         if (L2.overlay && L2.layer === L.layer) { failAs('overlay', 'cannot close'); stuck++; break; }
         continue;
       }
       visited.add(next.sig);
+      pressing = next.kind;
       perKind[next.kind] = (perKind[next.kind] || 0) + 1;
       counts.kinds[next.kind] = (counts.kinds[next.kind] || 0) + 1;
       const target = page.locator(`[data-la-i="${next.i}"]`);
-      try { await target.scrollIntoViewIfNeeded({ timeout: 3000 }); await sleep(150); await page.evaluate(REST); } catch (e) { /* the click below reports it */ }
-      const before = await page.evaluate(SNAP), e0 = errTotal(), np0 = newPages, open0 = await page.evaluate(() => window.__laOpen);
+      try { await target.scrollIntoViewIfNeeded({ timeout: 3000 }); await sleep(150); await ev(REST); } catch (e) { if (e.name === 'PageStuck') throw e; /* the click below reports it */ }
+      const before = await ev(SNAP), e0 = errTotal(), np0 = newPages, open0 = await ev(() => window.__laOpen);
       try {
         await target.click({ timeout: 5000 });
         counts.clicked++;
@@ -791,14 +796,14 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
         continue;
       }
       await sleep(next.kind === 'refresh' ? 2500 : 450);
-      const after = await page.evaluate(SNAP);
+      const after = await ev(SNAP);
       if (await page.isVisible('#pop')) { await page.keyboard.press('Escape'); await sleep(150); } // a note that opened goes before the next press
       if (errTotal() > e0) failAs(next.kind, 'page error');
-      if ((next.kind === 'open-window' || next.kind === 'explorer-link') && (await page.evaluate(() => window.__laOpen)) === open0 && newPages === np0) failAs(next.kind, next.kind === 'explorer-link' ? 'link not followed' : 'window.open not called');
+      if ((next.kind === 'open-window' || next.kind === 'explorer-link') && (await ev(() => window.__laOpen)) === open0 && newPages === np0) failAs(next.kind, next.kind === 'explorer-link' ? 'link not followed' : 'window.open not called');
       else if (after === before && !next.noop) failAs(next.kind, 'no change');
-      if (await page.evaluate(JUNK)) junkAfter++;
-      if ((await page.evaluate(HSCROLL)) > 0) hscrollAfter++;
-    }
+      if (await ev(JUNK)) junkAfter++;
+      if ((await ev(HSCROLL)) > 0) hscrollAfter++;
+    } } catch (e) { if (e.name !== 'PageStuck') throw e; hung = pressing; failAs(pressing, 'page stopped answering for 90 s'); }
     T.clicks = secs(t);
     console.log(`[${tag}] controls: ${counts.found} found, ${counts.clicked} clicked${counts.gone ? `, ${counts.gone} went away before the press` : ''}`);
     console.log(`[${tag}] clicked by kind: ${Object.entries(counts.kinds).map(([k, n]) => `${k} ×${n}`).join(', ') || 'none'}`);
@@ -810,6 +815,8 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     R.ok('clicks: no NaN / undefined / Infinity after any click', junkAfter === 0);
     R.ok('clicks: no horizontal scroll after any click', hscrollAfter === 0);
     R.ok('clicks: no overlay left stuck open', stuck === 0);
+    R.ok('clicks: the page answered after every press', !hung);
+    if (hung) { console.log(`[${tag}] the page stopped answering after a press (${hung}): the rest of this profile is skipped`); return finish(); }
 
     // gestures, from a fresh view of the page (the stored key opens it again without the passphrase)
     t = Date.now();
