@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-frQwVb/7pxTxPPIVtTybAocf6obNBEYJVKjwx6IDgtI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-M7rfVRy/cdnoLiItw8BHexizKN8Ipbn3sg+xSlTFOaE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -757,7 +757,29 @@ a.ext svg{width:10px;height:10px;flex:none}
 .facts .links{display:flex;flex-wrap:wrap;gap:2px 12px}
 .lockgrp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:560px}
 .lock-note{flex:1 1 220px;font:400 12px/1.45 var(--sans);color:var(--muted)}
-@media (min-width:1000px){main{grid-template-areas:"glance glance" "best fav" "best side" "next side" "all all" "bt bt"}#fav{grid-area:fav}}
+@media (min-width:1000px){main{grid-template-areas:"glance glance" "best fav" "best side" "disc side" "next side" "all all" "bt bt"}#fav{grid-area:fav}#disc{grid-area:disc}}
+/* discovery (v0.4.8, the owner's pick "A · Lanes per tool"): one swipe strip per tool, cards like the similar-pools strip */
+.disc .lane{margin-top:10px}
+.disc .lane+.lane{padding-top:8px;border-top:1px solid var(--grid)}
+.disc .lh{display:flex;align-items:center;justify-content:space-between;gap:4px 10px;min-height:20px;margin-bottom:6px}
+.disc .lh .lbl{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.disc .lh svg{width:14px;height:14px;flex:none;color:var(--accent)}
+.disc .lh .cnt{font:600 11px/1.2 var(--mono);color:var(--fg2);white-space:nowrap}
+.disc .lh .cnt.none{font-weight:500;color:var(--muted)}
+.disc .lane.empty-l .lh{margin-bottom:0}
+.mc.dc{width:172px;padding:8px 10px 9px;gap:2px;text-align:left;font:inherit;color:var(--fg);cursor:pointer}
+.mc.dc>span{display:block;min-width:0;overflow-wrap:anywhere}
+.mc.dc .n{font:600 13px/1.25 var(--sans);text-decoration:underline dotted rgba(22,199,132,.6);text-underline-offset:3px}
+.mc.dc .m{font:500 10px/1.35 var(--mono);color:var(--muted);letter-spacing:.02em}
+.mc.dc .m .cg{margin-right:4px}
+.mc.dc .k{font:600 11px/1.35 var(--mono);color:var(--fg2)}
+.mc.dc .k.g{color:var(--accent)}.mc.dc .k.r{color:var(--bad)}
+.mc.dc .y{font:400 11px/1.35 var(--mono);color:var(--muted);margin-top:2px}
+.mc.dc .nt{margin-top:auto;padding-top:4px;font:600 11px/1.3 var(--mono);color:var(--fg2)}
+.mc.dc .nt.neg{color:var(--bad)}
+.mc.dc .nt .pd{color:var(--muted);font-weight:500}
+.disc .mc.end{width:96px;min-height:44px}
+.disc .hidn{color:var(--muted)}
 /* motion: the panel slides up, bars grow from the baseline, switched numbers cross-fade (no layout change) */
 @keyframes sheetIn{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -766,7 +788,7 @@ a.ext svg{width:10px;height:10px;flex:none}
 .sheet:not([hidden]) .scrim{animation:fadeIn .22s ease-out}
 .liq:not(.still) .pz-c>svg path,.daily .pz:not(.still) .pz-c>svg rect{transform-box:fill-box;transform-origin:50% 100%;animation:grow .25s ease-out}
 .xfade{animation:fadeIn .2s ease-out}
-@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+@media (prefers-reduced-motion:reduce){*,.mc-wrap::before,.mc-wrap::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}} /* the strips' edge fades too (a pseudo-element: * misses it) */
 /* v0.4.2: the pair's other pools stacked in the liquidity chart, and the 30-day fee-history mini bar */
 .mgchips{display:flex;flex-wrap:wrap;gap:2px 6px;margin:0 0 2px}
 .mgc{display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:0 10px;border:0;background:transparent;color:var(--muted);font:600 11px/1.2 var(--mono);cursor:pointer;position:relative}
@@ -899,6 +921,7 @@ td.fees{width:96px}
   </section>
 
   <section id="best" class="card best" aria-labelledby="best-h"></section>
+  <section id="disc" class="card disc" aria-labelledby="disc-h" hidden></section>
   <section id="next" class="card list" aria-labelledby="next-h"></section>
 
   <section id="all" class="card" aria-labelledby="all-h">
@@ -997,7 +1020,7 @@ td.fees{width:96px}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.4.7';
+const BUILD = 'v0.4.8';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1008,7 +1031,7 @@ const PHASES = ['READ-ONLY', 'PAPER TRADING', 'SMALL LIVE', 'AUTO-MANAGE'];
 const FILES = ['live', 'history', 'backtest'];
 const REFRESH_MS = 60e3, D = 864e5, H = 36e5, PAGE = 50;
 const DASH = '—', MINUS = '−';
-const LENS_NAME = { stranded: 'Stranded', 'one-sided': 'One-sided', fresh: 'Fresh pool', bigmove: 'After a big move', calm: 'Calm pair', toxic: 'Toxic flow' };
+const LENS_NAME = { stranded: 'Stranded', 'one-sided': 'One-sided', fresh: 'Fresh pool', bigmove: 'After a big move', calm: 'Calm pair', toxic: 'Toxic flow', cexled: 'Exchange-led', retail: 'Retail flow' };
 const SHAPE_KICK = { stranded: 'STRANDED LIQUIDITY', 'one-sided': 'ONE-SIDED BOOK', mixed: 'MIXED BOOK', served: 'SERVED BOOK' };
 const TRIG = { exit: 'On exit', 'exit+12h': 'Exit +12h', 'exit+24h': 'Exit +24h', drift50: 'Drift 50%', drift75: 'Drift 75%' };
 const SCOL = { ours: 'var(--accent)', tight: 'var(--s2)', wide: 'var(--s3)', gamma: 'var(--s4)', arrakis: 'var(--s5)', full: 'var(--s6)' };
@@ -1142,7 +1165,11 @@ function tagsHtml(p, wk = S.win, slim = false, explain = false) {
   if (!w) t.push(x('nodata', `<span class="tag info">NO ${WIN_LABEL[wk]} DATA</span>`));
   return t.join('');
 }
-const metaTxt = (p) => `${feeTxt(p.feeTier)} · ${chainShort(p.chain)} · v${esc(p.v)}`;
+// the venue (v0.4.8): live.json pool.dex, "uniswap" | "pancakeswap"; an older pass without it shows the version alone
+const DEX = { uniswap: ['Uni', 'Uniswap'], pancakeswap: ['Pancake', 'PancakeSwap'] };
+const dexOf = (p) => { const k = String((p && p.dex) || '').toLowerCase(); return DEX[k] || (k ? [esc(k.charAt(0).toUpperCase() + k.slice(1)), esc(k)] : null); };
+const dexV = (p, long = false) => { const d = dexOf(p); return d ? `${long ? d[1] : d[0]} v${esc(p.v)}` : `v${esc(p.v)}`; };
+const metaTxt = (p) => `${feeTxt(p.feeTier)} · ${chainShort(p.chain)} · ${dexV(p, true)}`;
 function gemPill(p, wk = S.win) {
   const g = gemOf(p, wk);
   if (p.verified === false) return `<span class="pill void" title="Unverified: never a gem">${g == null ? DASH : g}</span>`;
@@ -1561,7 +1588,7 @@ function ensureWin() {
   if (!ok.includes(S.win)) S.win = ok.includes(S.live.defaultWindow) ? S.live.defaultWindow : ok.includes('30d') ? '30d' : ok[0] || '30d';
   for (const b of $$('#winseg button, #sheet-win button')) { b.setAttribute('aria-pressed', String(b.dataset.w === S.win)); b.disabled = !ok.includes(b.dataset.w); }
 }
-const PANELS = [['strip', renderStrip], ['glance', renderGlance], ['fav', renderFav], ['best', renderBest], ['next', renderNext], ['all', renderTable], ['bt', renderBt], ['health', renderHealth]];
+const PANELS = [['strip', renderStrip], ['glance', renderGlance], ['fav', renderFav], ['best', renderBest], ['disc', renderDisc], ['next', renderNext], ['all', renderTable], ['bt', renderBt], ['health', renderHealth]];
 function renderAll() {
   if (!S.live) return;
   if (S.prevVisit === undefined) { // "since you last looked" is fixed for this page's life
@@ -2973,6 +3000,67 @@ function renderNext() {
     + `<div class="foot"><button type="button" class="btn wide" data-act="jump" data-to="#all">All ${int(pools.length)} scored pools ▸</button></div>`;
 }
 
+// ---------- discovery (v0.4.8, the owner's pick "A · Lanes per tool"): one swipe strip per discovery tool ----------
+// live.json discovery = pool ids, best first (docs/DATA.md). A pass without it (an older scanner): the card stays hidden.
+// The lane's evidence reads the default window (what the scanner found them with); the net line follows the page's window.
+const DL_ICON = {
+  newPools: '<path d="M7 1.6 8.3 5.7 12.4 7 8.3 8.3 7 12.4 5.7 8.3 1.6 7 5.7 5.7z"/>',
+  crossChain: '<path d="M1.4 10.2C3 5.6 11 5.6 12.6 10.2"/><path d="M1.4 10.2h11.2M4.2 8.3v1.9M7 7.4v2.8M9.8 8.3v1.9"/>',
+};
+const DL = [['newPools', 'New pools · last 72 h', null], ['cexLed', 'Exchange-led · thin DEX', 'cexled'], ['crossChain', 'Cross-chain gaps', null], ['retailUp', 'Flow turning retail', 'retail']];
+const DL_N = 8; // cards a lane shows before its "see all" card (a lens lane: All pools, filtered)
+const dlSvg = (k) => `<svg viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${DL_ICON[k] || WI[k === 'cexLed' ? 'cexled' : 'retail'][3]}</svg>`; // the two lens lanes share the Why icons
+const dlX = (x) => (isNum(x) ? (x >= 9.95 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1)) + '×' : DASH);
+function dlLines(k, p, L) {
+  const dk = L.defaultWindow && p.w && L.defaultWindow in p.w ? L.defaultWindow : '24h', w = W(p, dk), f = (w && w.flow) || {}, cx = p.cex || {};
+  if (k === 'newPools') {
+    const age = isNum(p.createdAt) ? Math.max(0, (L.t - p.createdAt) / H) : null, w1 = W(p, '24h') || w, f1 = (w1 && w1.flow) || {};
+    const why = isGem(p, dk) ? 'already a gem' : p.verified === false ? 'unverified: never a gem' : p.verified === null ? 'fee check not run yet' : isNum(f1.senders) && f1.senders >= 50 ? 'fresh, with real flow' : 'young: watching';
+    return [`${isNum(age) ? Math.round(age) + ' h old' : 'age ' + DASH}`, `<span class="k g">${int(w1 && w1.swaps)} swaps · ${int(f1.senders)} traders</span>`, `<span class="y">${why}</span>`];
+  }
+  if (k === 'cexLed') {
+    const tv = cx.tierVsSigma;
+    return ['', `<span class="k">CEX ÷ DEX ${dlX(cx.cexRatio)}</span>`, `<span class="k${isNum(tv) ? (tv >= 1 ? ' g' : ' r') : ''}">tier ${dlX(tv)} σ/block</span>`, `<span class="y">retail ${pct(f.retailShare, { dp: 0 })} of fees</span>`];
+  }
+  if (k === 'retailUp') {
+    const i = WINS.indexOf(dk), nx = i >= 0 && WINS[i + 1] ? W(p, WINS[i + 1]) : null, was = nx && nx.flow ? nx.flow.retailShare : null, now = f.retailShare;
+    const up = isNum(was) && isNum(now) && now - was >= 0.05, dc = f.driftCorr;
+    const drift = !isNum(dc) ? `drift ${DASH}` : Math.abs(dc) < 0.3 ? 'fees not tied to drift' : dc > 0 ? 'fees follow price moves' : 'fees come in calm hours';
+    return ['', `<span class="k g">retail ${up ? Math.round(was * 100) + '→' : ''}${pct(now, { dp: 0 })}</span>`, `<span class="k">routing ${pct(f.routing, { dp: 0 })}</span>`, `<span class="y">${drift}</span>`];
+  }
+  return [''];
+}
+function dlCard(k, p, L, i) {
+  const [extra, ...rest] = dlLines(k, p, L), w = W(p), net = w ? w.net : null;
+  const meta = `${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}${extra ? ' · ' + extra : ''}${keptStable(p) ? ` · <b class="stkm" title="${KEPT_T}">★ STABLE</b>` : ''}`;
+  return `<button type="button" class="mc dc chs${p.verified === false ? ' uv' : ''}" data-act="detail" data-id="${esc(p.id)}" style="--i:${i};${chainCol(p.chain)}" aria-label="Open ${esc(p.pair)}">`
+    + `<span class="n">${esc(p.pair)}</span><span class="m">${meta}</span>${rest.join('')}`
+    + `<span class="nt${isNum(net) && net < 0 ? ' neg' : ''}">${WIN_LABEL[S.win] || ''} net ${aprPd(net)}</span></button>`;
+}
+function renderDisc() {
+  const el = $('#disc'), L = S.live, d = L && L.discovery;
+  if (!d || typeof d !== 'object' || Array.isArray(d)) { el.hidden = true; el.innerHTML = ''; return; }
+  const keep = {};
+  for (const t of el.querySelectorAll('.mc-track')) keep[t.id] = t.scrollLeft;
+  const fresh = !el.innerHTML;
+  let hidAll = 0;
+  const lanes = DL.map(([k, label, lens]) => {
+    const raw = Array.isArray(d[k]) ? d[k] : null, ps = raw ? raw.map((id) => poolById(String(id))).filter(Boolean) : [];
+    const vis = ps.filter((p) => !hideStable(p)), hid = ps.length - vis.length;
+    hidAll += hid;
+    const head = (cnt, none) => `<div class="lh"><span class="lbl">${dlSvg(k)}${esc(label)}</span><span class="cnt${none ? ' none' : ''}">${cnt}</span></div>`;
+    if (k === 'crossChain' && !ps.length) return `<div class="lane empty-l" data-lane="${k}">${head('not built yet', true)}</div>`;
+    if (!raw) return `<div class="lane empty-l" data-lane="${k}">${head(`${DASH} not in this pass`, true)}</div>`;
+    if (!vis.length) return `<div class="lane empty-l" data-lane="${k}">${head(`none this pass${hid ? ' · ' + hidTxt(hid) : ''}`, true)}</div>`;
+    const cap = lens ? DL_N : vis.length, cards = vis.slice(0, cap).map((p, i) => dlCard(k, p, L, i));
+    if (vis.length > cap) cards.push(`<button type="button" class="mc end" data-act="dl-all" data-lens="${lens}" style="--i:${cards.length}"><span class="big">${vis.length}</span>see all</button>`);
+    return `<div class="lane" data-lane="${k}">${head(`${vis.length} ▸`)}${mcStrip('dl-' + k, cards.join(''), fresh && !reduced())}</div>`;
+  });
+  el.hidden = false;
+  el.innerHTML = `<div class="sec-head"><h2 id="disc-h">Discovery</h2><span class="lbl">tap a card for the pool${hidAll ? `<span class="hidn"> · ${hidTxt(hidAll)}</span>` : ''}</span></div>` + lanes.join('');
+  for (const t of el.querySelectorAll('.mc-track')) { if (keep[t.id]) t.scrollLeft = keep[t.id]; mcEdges(t); }
+}
+
 // ---------- all pools ----------
 // fewer, better columns: on a phone the pool, its gem, its net APR and why it stands out show without a sideways scroll
 const COLS = [
@@ -3032,7 +3120,7 @@ function renderTable() {
   }).join('') + '</tr>';
   const fresh = vis.filter(isNew).length;
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · v${esc(p.v)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
+    + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
     + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; if (c.k === 'fees') return `<td class="fees">${feeMini(p)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
@@ -4183,6 +4271,8 @@ const WI = {
   stranded: ['g', 'Stranded', 'Most of the money sits far from the price, so the few LPs right at it share the fees.', '<path d="M2 12.5V7.5M4.2 12.5V5M9.8 12.5V5M12 12.5V7.5" stroke-width="1.7"/><path d="M7 2.5v10" stroke-dasharray="1.4 1.6"/>'],
   'one-sided': ['g', 'One-sided', 'The parked money sits on one side of the price only.', '<path d="M8.6 12.5V6M10.8 12.5V3.5M13 12.5V7" stroke-width="1.7"/><path d="M5.5 2.5v10" stroke-dasharray="1.4 1.6"/>'],
   fresh: ['g', 'Fresh pool', 'A new pool (under 30 days) for an older pair: often thin and well paid.', '<path d="M7 1.6 8.3 5.7 12.4 7 8.3 8.3 7 12.4 5.7 8.3 1.6 7 5.7 5.7z"/>'],
+  retail: ['g', 'Retail flow', 'Most of the fees come from swaps that don’t look like arbitrage (60% or more, or 10 points above the longer window): the flow LPs keep.', '<path d="M2.6 2.2h2.6v5a1.8 1.8 0 0 0 3.6 0v-5h2.6v5a4.4 4.4 0 0 1-8.8 0z"/><path d="M2.6 4.4h2.6M8.8 4.4h2.6"/>'],
+  cexled: ['a', 'Exchange-led', 'The token trades 10× or more on exchanges than the value near this pool’s price, and the fee tier is at least twice the per-block move: the price is set elsewhere, the pool follows.', '<path d="M1.6 5.2 7 2.1l5.4 3.1z"/><path d="M3.2 6.8v4M5.7 6.8v4M8.3 6.8v4M10.8 6.8v4M1.6 12.4h10.8"/>'],
   emerging: ['g', 'Rising fees', 'Fees have grown day after day.', '<path d="M1.5 11 5.3 7.2l2.4 2.4 4.8-5.1"/><path d="M9.2 4.5h3.3v3.3"/>'],
   bigmove: ['a', 'After a big move', 'The price just moved a lot; LPs may not have followed it yet.', '<path d="M8.2 1.5 3.2 8h3.6l-1 4.5L11 6H7.3z"/>'],
   calm: ['g', 'Calm pair', 'The price barely moves, so little is lost to arbitrage.', '<path d="M1.5 7.5c1.4-1.3 2.6-1.3 4 0s2.6 1.3 4 0 2.1-1.3 3 0"/>'],
@@ -4200,6 +4290,8 @@ function whyKeys(p, w) {
   if (lz.includes('stranded') || tag === 'stranded') k.add('stranded');
   if (lz.includes('one-sided') || tag === 'one-sided') k.add('one-sided');
   if (lz.includes('fresh')) k.add('fresh');
+  if (lz.includes('retail')) k.add('retail');
+  if (lz.includes('cexled')) k.add('cexled');
   if (p.pattern === 'emerging') k.add('emerging');
   if (lz.includes('bigmove')) k.add('bigmove');
   if (lz.includes('calm')) k.add('calm');
@@ -4301,7 +4393,7 @@ function mcVal(p, mi) {
   const cls = mi === 0 && isNum(v) && v < 0 ? ' neg' : mi === 2 && isGem(p) ? ' gold' : '';
   return `<span class="v${cls}">${fmt(v)}</span><span class="k">${k}</span>`;
 }
-const mcMeta = (p) => `${chainMark(p.chain)}${feeTxt(p.feeTier)} · v${esc(p.v)}${keptStable(p) ? ` · <b class="stkm" title="${KEPT_T}">★ STABLE</b>` : ''}`;
+const mcMeta = (p) => `${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}${keptStable(p) ? ` · <b class="stkm" title="${KEPT_T}">★ STABLE</b>` : ''}`;
 function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } = {}) {
   const uv = p.verified === false, meta = mcMeta(p);
   const name = self ? `<div class="mc-name"><span class="n">${esc(p.pair)}</span><span class="m">${meta}</span></div>`
@@ -4564,6 +4656,7 @@ document.addEventListener('click', (e) => {
     case 'legend': { const lg = $('#why-legend'), on = lg.hidden; if (!lg.innerHTML) lg.innerHTML = whyLegend(); lg.hidden = !on; el.setAttribute('aria-expanded', String(on)); store.set('lps.legend', on ? '1' : '0'); break; }
     case 'sim-cycle': simCycle(); break;
     case 'sim-all': simToggleList(); break;
+    case 'dl-all': S.filt.lens = el.dataset.lens; S.showAll = false; renderTable(); jumpTo('#all'); break;
     case 'mc-scroll': mcScroll(el); break;
     case 'hl': hlToggle(el); break;
     case 'cell': cellToggle(el); break;

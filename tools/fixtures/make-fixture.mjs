@@ -18,6 +18,10 @@
 //            last restart unread (null, never 0): the page must show dashes
 //   olddepth the default data as older scanners published it: a third of the pools without depthEdges and the full-range
 //            layer (depthStep and depthSpan only), a third with ±45% fine bars and nothing else (the first contract)
+//   nodisc   the default data as scanners before the discovery lanes published it: no discovery, dex, cex or flow, and
+//            no cexled or retail lens (the page must hide the Discovery card and show no error)
+//   oddlanes the default data with odd discovery lanes: new pools [], exchange-led holding only an id that is no pool,
+//            cross-chain [], retailUp missing (the page reads "none this pass", skips the id, dashes the missing lane)
 //   long     the default data at its widest: long tickers, billion-dollar pools, five-digit APRs, four-digit gas,
 //            six-figure prices (real names and numbers run longer than the fixtures: the overlap audit reads this case)
 import fs from 'node:fs';
@@ -26,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { newLockFile, unlock, seal, ITERATIONS } from '../../lib/lock.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -175,6 +179,71 @@ const STABLE_EXTRAS = [
     sigma: 0.03, volDay: 140e3, ageDays: 160, pairAgeDays: 160, persistence: 0.5, markout: 0.4, traders7d: 70, usd: 0.64,
     vmul: { '24h': 1.1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 } },
 ];
+
+// Pools under 72 hours old (the discovery lanes' "new pools"): three with 20 or more distinct senders in the day, one with
+// too few (never listed), and a stablecoin pair (hidden while the switch is off). Their own random stream.
+const NEW_EXTRAS = [
+  { base: 'NOVU', quote: 'WETH', chain: 'ethereum', v: 3, fee: 0.01, shape: 'served', tvl: 380e3, inside9: 260e3, lps: 7,
+    sigma: 0.07, volDay: 410e3, ageDays: 31 / 24, pairAgeDays: 31 / 24, persistence: 0.2, markout: 0.45, traders7d: 64, usd: 0.012,
+    vmul: { '24h': 1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 }, senders: 64, retail: 0.71 },
+  { base: 'DEFRA', quote: 'USDC', chain: 'base', v: 3, fee: 0.003, shape: 'mixed', tvl: 120e3, inside9: 50e3, lps: 4,
+    sigma: 0.06, volDay: 95e3, ageDays: 9 / 24 + 0.05, pairAgeDays: 9 / 24 + 0.05, persistence: 0.2, markout: 0.5, traders7d: 26, usd: 0.4,
+    vmul: { '24h': 1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 }, senders: 26, verified: null },
+  { base: 'PIKOLA', quote: 'WETH', chain: 'base', v: 3, fee: 0.0025, shape: 'served', tvl: 210e3, inside9: 150e3, lps: 5, dex: 'pancakeswap',
+    sigma: 0.08, volDay: 160e3, ageDays: 2.6, pairAgeDays: 2.6, persistence: 0.2, markout: 0.55, traders7d: 41, usd: 0.0031,
+    vmul: { '24h': 1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 }, senders: 41 },
+  { base: 'QUILO', quote: 'WETH', chain: 'ethereum', v: 4, fee: 0.003, shape: 'mixed', tvl: 60e3, inside9: 30e3, lps: 2,
+    sigma: 0.09, volDay: 20e3, ageDays: 0.8, pairAgeDays: 0.8, persistence: 0.2, markout: 0.6, traders7d: 8, usd: 0.05,
+    vmul: { '24h': 1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 }, senders: 8 },
+];
+const NEW_POOL_MS = 72 * H, NEW_POOL_SENDERS = 20, BLOCKS_DAY = { ethereum: 7200, base: 43200 };
+
+// docs/DATA.md: pool.dex, pool.cex (the exchange screen), Window.flow (lib/flowq.mjs) and the cexled / retail lenses
+function addLanes(r, pools, now) {
+  const order = [...pools].filter((p) => p.tvlUsd != null).sort((a, b) => b.tvlUsd - a.tvlUsd);
+  const coins = new Set(order.map((p) => p.t0.sym).slice(0, 40));
+  for (const p of pools) {
+    const s = p._spec, u = [r(), r(), r(), r(), r()]; // drawn for every pool: the stream never shifts
+    p.dex = s.dex || (p.chain === 'base' && p.v === 3 && u[0] < 0.3 ? 'pancakeswap' : 'uniswap');
+    const sd = p.w['24h'] && p.w['24h'].sigma, bpd = BLOCKS_DAY[p.chain] || 7200;
+    const tvs = isNum(sd) && sd > 0 ? sig(p.feeTier / (sd / Math.sqrt(bpd)), 3) : null;
+    const hasCoin = coins.has(p.t0.sym) && u[1] < 0.55;
+    const ratio = hasCoin ? sig(Math.exp(Math.log(0.4) + u[2] * Math.log(120 / 0.4)), 3) : null;
+    p.cex = { cexVol24: hasCoin ? Math.round(ratio * Math.max(1e4, p.shape.band9 ? p.tvlUsd * p.shape.band9 : p.tvlUsd * 0.2)) : null,
+      cexRatio: ratio, tierVsSigma: tvs, t: hasCoin ? Math.round(now - (1 + 40 * u[3]) * H) : null, coin: hasCoin ? p.t0.sym.toLowerCase() : null };
+    p.flowDaily = [];
+    for (const wk of WINDOWS) {
+      const w = p.w[wk];
+      if (!w) continue;
+      const v = [r(), r(), r(), r(), r()];
+      const base = s.retail != null ? s.retail : 0.05 + 0.75 * Math.pow(u[4], 1.6);
+      w.flow = {
+        retailShare: v[1] < 0.08 ? null : sig(Math.min(0.98, base + (wk === '24h' ? 0.16 * (v[2] - 0.3) : 0.03 * (v[2] - 0.5))), 3),
+        driftCorr: v[3] < 0.12 ? null : sig(-0.5 + 1.3 * v[2], 3),
+        routing: v[4] < 0.12 ? null : sig(0.15 + 0.8 * v[4], 3),
+        senders: wk !== '24h' ? null : s.senders != null ? s.senders : v[1] < 0.15 ? null : Math.max(1, Math.round((w.traders || 10) * (0.6 + 0.5 * v[0]))),
+      };
+    }
+    const cexled = isNum(p.cex.cexRatio) && p.cex.cexRatio >= 10 && isNum(p.cex.tierVsSigma) && p.cex.tierVsSigma >= 2;
+    for (const [i, wk] of WINDOWS.entries()) {
+      const w = p.w[wk];
+      if (!w) continue;
+      if (cexled) w.lenses.push('cexled');
+      const rs = w.flow.retailShare, nx = WINDOWS[i + 1] && p.w[WINDOWS[i + 1]], rn = nx && nx.flow ? nx.flow.retailShare : null;
+      if (isNum(rs) && (rs >= 0.6 || (isNum(rn) && rs >= rn + 0.1))) w.lenses.push('retail');
+    }
+  }
+}
+function discoveryOf(pools, now) {
+  const w24 = (p) => p.w['24h'];
+  return {
+    newPools: pools.filter((p) => p.createdAt > now - NEW_POOL_MS && (w24(p)?.flow?.senders ?? 0) >= NEW_POOL_SENDERS)
+      .sort((a, b) => (w24(b)?.volUsd ?? 0) - (w24(a)?.volUsd ?? 0)).map((p) => p.id),
+    cexLed: pools.filter((p) => w24(p)?.lenses.includes('cexled')).sort((a, b) => b.cex.cexRatio - a.cex.cexRatio).map((p) => p.id),
+    crossChain: [],
+    retailUp: pools.filter((p) => w24(p)?.lenses.includes('retail')).sort((a, b) => (w24(b).flow.retailShare ?? 0) - (w24(a).flow.retailShare ?? 0)).map((p) => p.id),
+  };
+}
 
 const SYL = ['AR', 'BO', 'CU', 'DA', 'EL', 'FI', 'GO', 'HU', 'IX', 'JA', 'KE', 'LU', 'MO', 'NI', 'OR', 'PA', 'QI', 'RU',
   'SA', 'TE', 'UL', 'VO', 'WI', 'XA', 'YO', 'ZE'];
@@ -329,7 +398,7 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
   const taken = new Set(HEROES.map((h) => h.base + '/' + h.quote));
   const addrs = {}, tokAddr = (sym, fresh) => (addrs[sym] ||= fresh); // the random draw happens either way, so later pools don't shift
   const specs = [...HEROES, ...makeRandomSpecs(r, 120 - HEROES.length, taken), ...PAIR_EXTRAS, ...STABLE_EXTRAS];
-  const pools = specs.map((spec) => {
+  const buildPool = (spec, r) => {
     const q = quotes[spec.quote];
     const young = spec.ageDays < 30;
     const createdAt = Math.round(now - spec.ageDays * D);
@@ -355,7 +424,12 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     pool.checks = makeChecks(r, spec, pool);
     pool._spec = spec;
     return pool;
-  });
+  };
+  const pools = specs.map((spec) => buildPool(spec, r));
+  // pools under 72 hours old for the discovery lanes: their own stream, so no earlier draw moves
+  const rNew = rng(seed + 2203);
+  pools.push(...NEW_EXTRAS.map((spec) => buildPool(spec, rNew)));
+  addLanes(rng(seed + 2207), pools, now); // dex, the exchange screen, flow quality, the cexled and retail lenses
 
   // gemFirstAt: the first pass where the default window's gem reached the bar
   for (const p of pools) {
@@ -421,14 +495,18 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
       checks: checkDefs.map(([id, label, value, detail]) => ({ id, label, ok: value == null ? null : value >= 0.9, value, detail })),
       sealedLog: { lines: 1840, errors: 2, categories: { timeout: 1, HTTP: 1 } },
     },
+    discovery: discoveryOf(pools, now),
     bench: bench.id,
     pools: pools.map(({ _spec, ...p }) => p),
     pairs,
     market: makeMarket(rng(seed + 777), now),
   };
 
-  const history = makeHistory(rng(seed + 1401), pools, now); // its own stream: 14 and 90 days of rows
-  const backtest = mode === 'nogems' ? { v: 1, t: now, ticket: TICKET, provisional: true, pools: {} } : makeBacktest(r, pools, now);
+  // the pools under 72 hours old take their history from a stream of their own, so every other pool's rows stay as they were
+  const isNewP = (p) => NEW_EXTRAS.includes(p._spec), olds = pools.filter((p) => !isNewP(p));
+  const history = makeHistory(rng(seed + 1401), olds, now); // its own stream: 14 and 90 days of rows
+  Object.assign(history.pools, makeHistory(rng(seed + 2211), pools.filter(isNewP), now).pools);
+  const backtest = mode === 'nogems' ? { v: 1, t: now, ticket: TICKET, provisional: true, pools: {} } : makeBacktest(r, olds, now);
   return { live, history, backtest };
 }
 
@@ -533,6 +611,15 @@ export function oldDepth(data) {
       sh.depthSpan = [-0.6375, 0.6375];
     }
   });
+  return { ...data, live };
+}
+export function noDiscovery(data) {
+  const live = structuredClone(data.live);
+  delete live.discovery;
+  for (const p of live.pools) {
+    delete p.dex; delete p.cex; delete p.flowDaily;
+    for (const w of Object.values(p.w)) if (w) { delete w.flow; w.lenses = w.lenses.filter((l) => l !== 'cexled' && l !== 'retail'); }
+  }
   return { ...data, live };
 }
 function unreadMarket(data) {
@@ -865,6 +952,8 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'nomarket'), keys, unreadMarket(data), now);
   sealCase(path.join(outDir, 'long'), keys, longCase(data), now);
   sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
+  sealCase(path.join(outDir, 'nodisc'), keys, noDiscovery(data), now);
+  sealCase(path.join(outDir, 'oddlanes'), keys, { ...data, live: { ...data.live, discovery: { newPools: [], cexLed: ['0x' + 'f'.repeat(40)], crossChain: [] } } }, now);
   return { outDir, cases: CASES, passphrase: FIXTURE_PASSPHRASE };
 }
 

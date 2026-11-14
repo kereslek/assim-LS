@@ -8,7 +8,7 @@
 //   node tools/site-test.mjs --only unlock,layout    run some groups: unlock layout windows states tabs daily pairs charts pan depth sheets
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
-//                                                    merge feebar stablewalk flash dates feescale perday
+//                                                    merge feebar stablewalk flash dates feescale perday disc
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -48,7 +48,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc').split(',');
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
 
@@ -199,7 +199,7 @@ async function testUnlock(browser) {
 const AUDIT = () => {
   const vw = document.documentElement.clientWidth, out = { hscroll: document.documentElement.scrollWidth - vw, offRight: [], small: [], short: [], clipped: [], covered: [] };
   const vis = (el) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
-  const inScroll = (el) => !!el.closest('.tbl-box, .heat-box, .sheet-body, .tabs');
+  const inScroll = (el) => !!el.closest('.tbl-box, .heat-box, .sheet-body, .tabs, .mc-track'); // a swipe strip's cards (v0.4.8: the discovery lanes)
   const name = (el) => (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '')) + ' "' + (el.textContent || '').trim().slice(0, 24) + '"';
   for (const el of document.querySelectorAll('#app *, header *, #subhead *, footer *, #banner')) {
     if (!vis(el) || (el.closest('svg') && el.tagName.toLowerCase() !== 'svg')) continue; // an svg's own box counts, its insides don't
@@ -1586,7 +1586,7 @@ async function testTable2(browser) {
     ok(`table ${tag}: the legend starts folded`, !(await p.isVisible('#why-legend')) && (await p.getAttribute('#why-tog', 'aria-expanded')) === 'false');
     await p.evaluate(() => document.querySelector('#why-tog').click()); await sleep(120);
     const lg = await p.evaluate(() => ({ n: document.querySelectorAll('#why-legend > div').length, t: document.querySelector('#why-legend').innerText }));
-    ok(`table ${tag}: "What the Why icons mean" unfolds a plain-words legend (${lg.n})`, (await p.getAttribute('#why-tog', 'aria-expanded')) === 'true' && lg.n === 13 && /Toxic flow: Traders here tend to know/.test(lg.t) && /Stranded: Most of the money sits far from the price/.test(lg.t), lg.t.slice(0, 60));
+    ok(`table ${tag}: "What the Why icons mean" unfolds a plain-words legend (${lg.n})`, (await p.getAttribute('#why-tog', 'aria-expanded')) === 'true' && lg.n === 15 && /Toxic flow: Traders here tend to know/.test(lg.t) && /Stranded: Most of the money sits far from the price/.test(lg.t), lg.t.slice(0, 60));
     if (SHOTS) await snap(p, `p2-legend-${tag}`, '#all');
     await p.evaluate(() => document.querySelector('#why-tog').click()); await sleep(100);
     ok(`table ${tag}: …and folds again`, !(await p.isVisible('#why-legend')));
@@ -3220,7 +3220,129 @@ async function testPerDay(browser, html = null) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay };
+// ---------- discovery lanes (v0.4.8): one swipe strip per tool, the owner's pick "A · Lanes per tool" ----------
+// live.json discovery = pool ids, best first. Lens lanes show 8 cards and a "see all" card (All pools, that lens); new pools
+// all of them; cross-chain gaps "not built yet". A tap opens the pool. Stablecoin pairs follow the switch; an older pass
+// without discovery hides the card. Also: the cexled / retail lens icons in the Why column, and the venue in each row.
+const DL_KEYS = ['newPools', 'cexLed', 'crossChain', 'retailUp'];
+const isStableFxP = (q) => ['USDC', 'USDT', 'DAI', 'MUNT'].includes(q.t1.sym) || ['USDC', 'USDT', 'DAI'].includes(q.t0.sym);
+const DL_READ = () => {
+  const el = document.querySelector('#disc');
+  if (!el) return { exists: false };
+  return { exists: true, hidden: el.hidden, h2: (el.querySelector('h2') || {}).textContent,
+    lanes: [...el.querySelectorAll('.lane')].map((l) => ({ k: l.dataset.lane, cnt: l.querySelector('.lh .cnt').textContent, ids: [...l.querySelectorAll('.mc.dc')].map((c) => c.dataset.id),
+      end: (l.querySelector('[data-act="dl-all"]') || {}).innerText || null, txt: l.innerText })) };
+};
+async function testDisc(browser) {
+  const L = FXD.live, d = L.discovery;
+  ok('disc: the fixture fills three lanes, crossChain empty, and has stablecoin pairs and an unverified pool in them', d && d.newPools.length >= 2 && d.cexLed.length > 8 && d.retailUp.length > 8 && d.crossChain.length === 0
+    && DL_KEYS.some((k) => d[k].some((id) => isStableFxP(poolOf(id)))), JSON.stringify(d && Object.values(d).map((x) => x.length)));
+  for (const [tag, o, w] of [['phone', { phone: true }, null], ['laptop', { width: 1440 }, 1440]]) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page;
+    let a = await p.evaluate(DL_READ);
+    const want = (k) => d[k].map(poolOf).filter(Boolean);
+    const lane = (k) => a.lanes && a.lanes.find((x) => x.k === k);
+    ok(`disc ${tag}: a Discovery card with four lanes in order`, a.exists && !a.hidden && a.h2 === 'Discovery' && JSON.stringify(a.lanes.map((x) => x.k)) === JSON.stringify(DL_KEYS), String(JSON.stringify(a)).slice(0, 160));
+    if (!a.exists || a.hidden) { await t.ctx.close(); continue; }
+    for (const k of ['newPools', 'cexLed', 'retailUp']) {
+      const ws = want(k), x = lane(k), cap = k === 'newPools' ? ws.length : Math.min(8, ws.length);
+      ok(`disc ${tag}: lane ${k} counts ${ws.length} and shows ${cap} cards best first${ws.length > cap ? ', then "see all"' : ''}`, x && x.cnt.startsWith(String(ws.length)) && JSON.stringify(x.ids) === JSON.stringify(ws.slice(0, cap).map((q) => q.id))
+        && (ws.length > cap ? new RegExp('^' + ws.length + '\\s+see all$').test((x.end || '').trim()) : x.end === null), JSON.stringify(x && [x.cnt, x.ids.length, x.end]));
+    }
+    ok(`disc ${tag}: cross-chain gaps say "not built yet", no cards`, lane('crossChain') && /not built yet/.test(lane('crossChain').cnt) && lane('crossChain').ids.length === 0);
+    // each card: pair, chain mark and edge, fee and venue, the lane's evidence, net with its $/day at the ticket; missing reads —
+    const cards = await p.evaluate(() => [...document.querySelectorAll('#disc .mc.dc')].map((c) => ({ id: c.dataset.id, lane: c.closest('.lane').dataset.lane, n: c.querySelector('.n').textContent, m: c.querySelector('.m').textContent,
+      mark: !!c.querySelector('.m .cg[aria-label]'), cc: getComputedStyle(c).getPropertyValue('--cc').trim(), stripe: /inset 3px/.test(getComputedStyle(c).boxShadow) || /3px 0px 0px/.test(getComputedStyle(c).boxShadow), txt: c.innerText, h: c.getBoundingClientRect().height })));
+    const bad = cards.filter((c) => { const q = poolOf(c.id); return !q || c.n !== q.pair || !c.mark || !c.cc || !c.stripe || !/v[34]/.test(c.m) || !/net (—|−?[\d.,]+%.*\/day)/.test(c.txt) || /NaN|undefined|null/.test(c.txt) || c.h < 44; });
+    ok(`disc ${tag}: ${cards.length} cards carry pair, chain mark + edge, fee · venue, net with $/day, nothing junk, ≥ 44 px`, cards.length >= 15 && !bad.length, String(JSON.stringify(bad[0])).slice(0, 160));
+    const c1 = cards.find((c) => c.lane === 'newPools'), q1 = c1 && poolOf(c1.id), age = q1 && Math.round((L.t - q1.createdAt) / 3600e3);
+    ok(`disc ${tag}: a new pool's card reads its age in hours and its swaps · distinct traders (senders)`, c1 && new RegExp(age + ' h old').test(c1.m.replace(/\s+/g, ' ')) && new RegExp(`${q1.w['24h'].swaps.toLocaleString('en-US')} swaps · ${q1.w['24h'].flow.senders} traders`).test(c1.txt), c1 && c1.txt.replace(/\n/g, ' | '));
+    const cx = cards.filter((c) => c.lane === 'cexLed');
+    ok(`disc ${tag}: exchange-led cards read CEX ÷ DEX, tier vs σ/block (green ≥ 1) and the retail share`, cx.length && cx.every((c) => /CEX ÷ DEX [\d,.]+×/.test(c.txt) && /tier [\d,.]+× σ\/block/.test(c.txt) && /retail (—|\d+%) of fees/.test(c.txt))
+      && (await p.evaluate(() => [...document.querySelectorAll('#disc [data-lane="cexLed"] .k')].filter((k) => /tier/.test(k.textContent)).every((k) => k.classList.contains('g') === (parseFloat(k.textContent.replace(/[^\d.]/g, '')) >= 1)))), cx[0] && cx[0].txt.replace(/\n/g, ' | '));
+    const rt = cards.filter((c) => c.lane === 'retailUp');
+    ok(`disc ${tag}: retail cards read the retail share, routing and a drift note`, rt.length && rt.every((c) => /retail (\d+→)?\d+%/.test(c.txt) && /routing (—|\d+%)/.test(c.txt) && /drift|price moves|calm hours/.test(c.txt)), rt[0] && rt[0].txt.replace(/\n/g, ' | '));
+    // the strip scrolls sideways inside itself; the page does not
+    const sc = await p.evaluate(() => { const t = document.querySelector('#dl-retailUp'); const s = getComputedStyle(t); return { sx: t.scrollWidth > t.clientWidth, snap: s.scrollSnapType, hs: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+    ok(`disc ${tag}: each lane is a snap strip that swipes on its own, the page never scrolls sideways`, sc.sx && /x mandatory/.test(sc.snap) && sc.hs <= 0, JSON.stringify(sc));
+    // a tap on a card opens that pool's detail
+    const pick = cx[1] || cx[0];
+    await p.evaluate((id) => { const b = document.querySelector(`#disc .mc.dc[data-id="${id}"]`); b.scrollIntoView({ block: 'center', inline: 'nearest' }); }, pick.id); await sleep(200);
+    await p.click(`#disc .mc.dc[data-id="${pick.id}"]`); await p.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(350);
+    ok(`disc ${tag}: a tap on a card opens that pool (${poolOf(pick.id).pair})`, (await p.isVisible('#sheet')) && (await p.textContent('#sheet-title')) === poolOf(pick.id).pair);
+    if (SHOTS) await snap(p, `disc-${tag}-opened`);
+    await p.click('#sheet-close').catch(() => {}); await sleep(200);
+    ok(`disc ${tag}: closing returns the focus to the card`, (await p.evaluate(() => { const a = document.activeElement; return a && a.closest && !!a.closest('#disc'); })));
+    // "see all" on a lens lane: All pools, filtered to that lens
+    await p.evaluate(() => document.querySelector('#disc [data-lane="retailUp"] [data-act="dl-all"]').click()); await sleep(900);
+    const all = await p.evaluate(() => ({ lens: document.querySelector('#f-lens').value, top: document.querySelector('#all').getBoundingClientRect().top, ids: [...document.querySelectorAll('#all tbody tr.row')].map((r) => r.dataset.id) }));
+    const wk = await p.evaluate(() => document.querySelector('#winseg [aria-pressed="true"]').dataset.w);
+    ok(`disc ${tag}: "see all" filters All pools to that lens (${all.ids.length} rows) and goes there`, all.lens === 'retail' && all.ids.length > 0 && all.ids.every((id) => poolOf(id).w[wk].lenses.includes('retail')) && all.top < 300, JSON.stringify([all.lens, all.ids.length, all.top]));
+    await p.selectOption('#f-lens', 'all'); await sleep(150);
+    // the Why column shows the cexled / retail icons where those lenses fire, and every row names its venue
+    await p.click('[data-act="more"]').catch(() => {}); await sleep(250);
+    const rows = await p.evaluate(() => [...document.querySelectorAll('#all tbody tr.row')].map((r) => ({ id: r.dataset.id, why: (r.querySelector('.whyb') || { getAttribute: () => '' }).getAttribute('aria-label') || '', pm: r.querySelector('.pm').textContent })));
+    const lensBad = rows.filter((r) => { const lz = poolOf(r.id).w[wk] ? poolOf(r.id).w[wk].lenses : []; return /Exchange-led/.test(r.why) !== lz.includes('cexled') || /Retail flow/.test(r.why) !== lz.includes('retail'); });
+    ok(`disc ${tag}: the Why column carries the exchange-led and retail icons exactly where those lenses fire (${rows.filter((r) => /Exchange-led|Retail flow/.test(r.why)).length} rows)`, rows.length > 100 && !lensBad.length && rows.some((r) => /Exchange-led/.test(r.why)) && rows.some((r) => /Retail flow/.test(r.why)), JSON.stringify(lensBad[0]));
+    const dexBad = rows.filter((r) => !new RegExp((poolOf(r.id).dex === 'pancakeswap' ? 'Pancake' : 'Uni') + ' v' + poolOf(r.id).v + '$').test(r.pm.trim()));
+    ok(`disc ${tag}: every row names its venue (Uni / Pancake) with the version`, !dexBad.length && rows.some((r) => /Pancake/.test(r.pm)), JSON.stringify(dexBad[0]));
+    ok(`disc ${tag}: the lens filter offers Exchange-led and Retail flow`, await p.evaluate(() => ['cexled', 'retail'].every((v) => !!document.querySelector(`#f-lens option[value="${v}"]`))));
+    if (SHOTS) await snap(p, `disc-${tag}`, '#disc');
+    ok(`disc ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // stablecoin pairs off (the page's default): those cards go, favourites stay, the card says how many are hidden
+  {
+    const fav = DL_KEYS.flatMap((k) => d[k]).map(poolOf).find(isStableFxP);
+    const t = await openUnlocked(browser, 'default', { phone: true, stableDefault: true, storage: { 'lps.fav': JSON.stringify([fav.id]) } }), p = t.page;
+    const a = await p.evaluate(DL_READ), shown = a.lanes ? a.lanes.flatMap((x) => x.ids) : [];
+    const leak = shown.filter((id) => isStableFxP(poolOf(id)) && id !== fav.id);
+    const hid = DL_KEYS.flatMap((k) => d[k]).filter((id) => isStableFxP(poolOf(id)) && id !== fav.id);
+    ok('disc stable off: no stablecoin pair in the lanes but the favourite one, counts drop, the card says how many are hidden', a.exists && !leak.length && shown.includes(fav.id) && new RegExp(hid.length + ' hidden').test(await p.textContent('#disc .sec-head'))
+      && a.lanes.filter((x) => x.k !== 'crossChain').every((x) => x.cnt.startsWith(String(d[x.k].filter((id) => !isStableFxP(poolOf(id)) || id === fav.id).length)) || /none/.test(x.cnt)), JSON.stringify([leak.length, hid.length, a.lanes && a.lanes.map((x) => x.cnt)]));
+    ok('disc stable off: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // empty and odd lanes (fixture case oddlanes): [] reads "none this pass", an id that is no pool is skipped, a missing lane —
+  {
+    const t = await openUnlocked(browser, 'oddlanes', { phone: true }), p = t.page;
+    const e = await p.evaluate(DL_READ);
+    ok('disc oddlanes: empty lanes read "none this pass", a missing lane "— not in this pass", an unknown id is skipped', e.exists && !e.hidden && /none this pass/.test(e.lanes[0].cnt) && /none this pass/.test(e.lanes[1].cnt) && e.lanes[1].ids.length === 0 && /not built yet/.test(e.lanes[2].cnt) && /— not in this pass/.test(e.lanes[3].cnt), JSON.stringify(e.lanes && e.lanes.map((x) => x.cnt)));
+    ok('disc oddlanes: no page errors', t.errors.length === 0, t.errors[0]);
+    if (SHOTS) await snap(p, 'disc-oddlanes', '#disc');
+    await t.ctx.close();
+  }
+  // an older pass without discovery, dex, cex or flow: no card, no error, rows read the version alone
+  {
+    const t = await openUnlocked(browser, 'nodisc', { phone: true }), p = t.page;
+    const a = await p.evaluate(DL_READ);
+    const pm = await p.evaluate(() => [...document.querySelectorAll('#all tbody .pm')].map((x) => x.textContent.trim()));
+    ok('disc nodisc: an older pass without discovery hides the card, rows show the version alone, no Why lens icons', a.exists && a.hidden && pm.length > 20 && pm.every((x) => / · v[34]$/.test(x)) && !(await p.evaluate(() => /Exchange-led|Retail flow/.test([...document.querySelectorAll('#all .whyb')].map((b) => b.getAttribute('aria-label')).join()))), JSON.stringify([a.hidden, pm[0]]));
+    ok('disc nodisc: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // narrow phones: no sideways page scroll and no text overlap in the card, the default and the longest names
+  for (const c of ['default', 'long']) {
+    const t = await openUnlocked(browser, c, { width: 390 }), p = t.page;
+    for (const w of DEVICE ? [0] : [360, 390, 430]) {
+      if (w) await p.setViewportSize({ width: w, height: 860 });
+      await sleep(250);
+      for (const k of ['newPools', 'cexLed', 'retailUp']) await p.evaluate((k) => { const x = document.querySelector('#dl-' + k); if (x) x.scrollLeft = x.scrollWidth; }, k);
+      await sleep(200);
+      // the page's own sideways scroll (default case; the long case's bench tile runs 6 px over at 360, as in v0.4.7), and
+      // anything of the card past the screen's edge outside its strips (both cases)
+      const hs = await p.evaluate(() => { const vw = document.documentElement.clientWidth, el = document.querySelector('#disc');
+        return { page: document.documentElement.scrollWidth - vw, out: [el, ...el.querySelectorAll('*')].filter((x) => !x.closest('.mc-track') && x.getBoundingClientRect().right > vw + 0.5).length }; });
+      const ov = await OVL(p, '#disc');
+      ok(`disc ${c} ${w || DEVICE}: no sideways page scroll, nothing of the card past the edge, no text overlap or clipped text`, (await p.isVisible('#disc')) && (c === 'long' || hs.page <= 0) && !hs.out && !ov.length, JSON.stringify([hs, ov[0]]));
+      for (const k of ['newPools', 'cexLed', 'retailUp']) await p.evaluate((k) => { const x = document.querySelector('#dl-' + k); if (x) x.scrollLeft = 0; }, k);
+    }
+    if (SHOTS) await snap(p, `disc-${c}-narrow`, '#disc');
+    await t.ctx.close();
+  }
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc };
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

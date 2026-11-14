@@ -267,6 +267,7 @@ async function gestures(page, R, tag, errTotal) {
   await part3(page, run, skip);
   await part4(page, run, skip, press);
   await part5(page, run, skip, press);
+  await part6(page, run, skip);
   await overlaps(page, run, tag);
   // back to top
   await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 1.6); });
@@ -558,6 +559,29 @@ async function part5(page, run, skip, press) {
   }
   const h = await page.evaluate(() => { const b = document.querySelector('[data-chartbox="d-hr"]'); return b ? b.querySelectorAll('.yax > span').length >= 2 && !!b.querySelector('line.median') : null; });
   if (h == null) skip(); else run('part 5: the hourly fee chart has its $ axis and typical-hour line', h);
+  await page.click('#sheet-close').catch(() => {}); await sleep(300);
+}
+// ---------- 2d4. v0.4.8: the discovery lanes (one swipe strip per tool). Booleans and counts only. ----------
+// A pass without live.json discovery (an older scanner) hides the card: nothing more to check then.
+async function part6(page, run, skip) {
+  await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(200);
+  const a = await page.evaluate(() => {
+    const el = document.querySelector('#disc');
+    if (!el) return { exists: false };
+    const vw = document.documentElement.clientWidth, lanes = [...el.querySelectorAll('.lane')];
+    return { exists: true, hidden: el.hidden, lanes: lanes.length, cards: el.querySelectorAll('.mc.dc').length, junk: /NaN|undefined|Infinity/.test(el.innerText),
+      out: [el, ...el.querySelectorAll('*')].filter((x) => !x.closest('.mc-track') && x.getBoundingClientRect().right > vw + 0.5).length,
+      counted: lanes.every((l) => /^(\d+ ▸|none this pass.*|not built yet|— not in this pass)$/.test(l.querySelector('.lh .cnt').textContent.trim())),
+      short: [...el.querySelectorAll('button')].filter((b) => b.getClientRects().length && b.getBoundingClientRect().height < 43.5 && !b.classList.contains('mc-nav')).length };
+  });
+  run('part 6: the page has the Discovery card (v0.4.8)', a.exists);
+  if (!a.exists || a.hidden) { skip(); skip(); return; }
+  run(`part 6: Discovery shows 4 lanes with their counts (${a.cards} cards), nothing junk, nothing past the edge, taps ≥ 44 px`, a.lanes === 4 && a.counted && !a.junk && a.out === 0 && a.short === 0);
+  if (!a.cards) { skip(); return; }
+  await page.evaluate(() => { const c = document.querySelector('#disc .mc.dc'); c.scrollIntoView({ block: 'center', inline: 'nearest' }); }); await sleep(250);
+  await page.click('#disc .mc.dc').catch(() => {});
+  await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(500);
+  run('part 6: a tap on a discovery card opens that pool', await page.evaluate(() => { const c = document.querySelector('#disc .mc.dc'), t = document.querySelector('#sheet-title'); return !document.querySelector('#sheet').hidden && !!t && t.textContent === c.querySelector('.n').textContent; }));
   await page.click('#sheet-close').catch(() => {}); await sleep(300);
 }
 // ---------- 2e. text that collides or is cut off, in the views a phone and a laptop show ----------
