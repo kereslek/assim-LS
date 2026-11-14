@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bZVoNHZvbKIMwJhrl1f1wKG9zsJkZPq25um+54z7is8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aRQtz7UjcUJlsdaFyJx1T+L1Dw1P5WYlef329tKvQf4='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -867,7 +867,8 @@ td.fees{width:96px}
 .viewgrp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .viewgrp .ibtn{margin:0 0 0 -4px}
 .fx3d{display:none}
-canvas.d3c{position:absolute;left:0;top:0;width:100%;height:100%;display:block;pointer-events:none}
+canvas.d3c{position:absolute;left:0;top:0;width:100%;height:100%;display:block;pointer-events:none;transition:opacity .18s ease-out}
+canvas.d3c.mv{opacity:0;transition:none} /* while its chart moves: the flat drawing alone; the depth fades back at rest */
 
 html.m3d{
   --bg:#0C3438;--head:#0F4246;--surface:#114A4E;--surface2:#0E4145;--raised:#175A5D;
@@ -1157,7 +1158,7 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ } },
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked: the page still works */ } },
 };
-const D3 = { on: false, mo: null, ro: null, io: null, mark: null, rise: new Map(), raf: 0, off: new WeakSet(), dirty: new WeakSet(), trail: null }; // v0.5.0: the 3D look's depth layer (below)
+const D3 = { on: false, mo: null, ro: null, io: null, mark: null, rise: new Map(), raf: 0, off: new WeakSet(), dirty: new WeakSet(), wait: new Set(), trail: null }; // v0.5.0: the 3D look's depth layer (below)
 
 // ---------- where the data lives ----------
 const LOCAL = /^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname);
@@ -4926,7 +4927,7 @@ function d3Stop() {
   D3.on = false;
   D3.mo.disconnect(); D3.ro.disconnect(); if (D3.io) D3.io.disconnect(); if (D3.fio) D3.fio.disconnect();
   D3.fio = null; document.documentElement.classList.remove('d3-deep', 'd3-busy');
-  D3.mo = D3.ro = D3.io = null; D3.mark = null; D3.rise.clear(); D3.off = new WeakSet(); D3.dirty = new WeakSet();
+  D3.mo = D3.ro = D3.io = null; D3.mark = null; D3.rise.clear(); D3.wait.clear(); D3.off = new WeakSet(); D3.dirty = new WeakSet();
   if (D3.raf) cancelAnimationFrame(D3.raf);
   D3.raf = 0;
   for (const c of $$('canvas.d3c')) { c.width = 0; c.height = 0; c.remove(); }
@@ -4960,15 +4961,30 @@ function d3Drop(h) {
   if (D3.mark && D3.mark.h === h) D3.mark = null;
 }
 // all reads first, then all writes: one layout for any number of charts
+// a chart that is being dragged, pinched, coasting or stepping shows its flat drawing alone (each frame costs what 2D's
+// does); its depth comes back the moment it rests
+const d3Moving = (h) => h.classList.contains('dragging') || !!PZA[h.dataset.pz] || (!!PIN && PIN.host === h);
 function d3Many(hosts, initial = false) {
   if (!D3.on) return;
   const ms = [];
   for (const h of hosts) {
     if (!h.isConnected || !h.matches(D3_HOSTS)) continue;
-    if (D3.off.has(h) && h.querySelector(':scope > canvas.d3c')) { D3.dirty.add(h); continue; } // off screen: drawn when it shows
+    const c = h.querySelector(':scope > canvas.d3c');
+    if (c && d3Moving(h)) { if (!c.classList.contains('mv')) c.classList.add('mv'); d3Rest(h); continue; }
+    if (D3.off.has(h) && c) { D3.dirty.add(h); continue; } // off screen: drawn when it shows
     ms.push(d3Model(h));
   }
   for (const m of ms) d3Paint(m, initial);
+}
+function d3Rest(h) { // once it stops moving: drawn again
+  if (D3.wait.has(h)) return;
+  D3.wait.add(h);
+  const tick = () => {
+    if (!D3.on || !h.isConnected) { D3.wait.delete(h); return; }
+    if (d3Moving(h)) { requestAnimationFrame(tick); return; }
+    D3.wait.delete(h); d3Many([h]);
+  };
+  requestAnimationFrame(tick);
 }
 // where the price stood at this hour on each of the last 14 days (history.json h, else d), as log moves from the newest row
 function d3Trail(p) {
@@ -4993,7 +5009,7 @@ function d3Trail(p) {
   return v;
 }
 function d3Model(h) {
-  const hr = h.getBoundingClientRect(), m = { h, w: hr.width, ht: hr.height, empty: true };
+  const hr = h.getBoundingClientRect(), m = { h, w: hr.width, ht: hr.height, empty: true, vis: hr.bottom > 0 && hr.top < innerHeight && hr.right > 0 && hr.left < innerWidth };
   const svg = h.querySelector(':scope > .pz-c > svg'), vb = svg && svg.viewBox && svg.viewBox.baseVal;
   if (!svg || !vb || !vb.width || !vb.height || hr.width < 2 || hr.height < 2) return m;
   const sr = svg.getBoundingClientRect();
@@ -5031,6 +5047,8 @@ function d3Model(h) {
     const [v0, v1] = P.vw(), r = P.w && isNum(P.w.range) ? P.w.range : null;
     m.X = (o) => L + ((o - v0) / (v1 - v0)) * W;
     m.r = r; m.trail = d3Trail(P.p);
+    // the chart's own labels (on top of the canvas): the floor's label keeps clear of them
+    m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
   }
   return m;
 }
@@ -5042,11 +5060,13 @@ function d3Paint(m, initial) {
     h.prepend(c); fresh = true;
     D3.ro.observe(h); if (D3.io) D3.io.observe(h);
   }
+  if (!m.vis && !m.empty) { D3.off.add(h); D3.dirty.add(h); return; } // a new chart below the fold: drawn when it scrolls into view
   const dpr = Math.min(2, devicePixelRatio || 1), cw = Math.max(1, Math.round(m.w * dpr)), ch = Math.max(1, Math.round(m.ht * dpr)); // never past 2× (a phone's 3×: a third of the pixels)
   if (c.width !== cw) c.width = cw;
   if (c.height !== ch) c.height = ch;
   m.dpr = dpr; c.__m = m;
-  if (fresh && !initial && !h.classList.contains('still') && !reduced() && !document.hidden) { D3.rise.set(h, performance.now()); c.__rise = D3_RISE; d3Loop(); } // a new chart: its towers rise with its bars
+  if (c.classList.contains('mv')) c.classList.remove('mv');
+  if (fresh && !initial && m.vis && !h.classList.contains('still') && !reduced() && !document.hidden) { D3.rise.set(h, performance.now()); c.__rise = D3_RISE; d3Loop(); } // a new chart on screen: its towers rise with its bars
   d3Render(c, m, d3K(h));
 }
 const d3K = (h) => { const t0 = D3.rise.get(h); return t0 == null ? 1 : d3Ease((performance.now() - t0) / D3_RISE); };
@@ -5116,8 +5136,10 @@ function d3Render(c, m, k = 1) {
         }
         const end = pts[pts.length - 1], lab = `${end[2]} d ago`;
         x.font = '600 9px ui-monospace,Menlo,Consolas,monospace'; x.textBaseline = 'bottom';
-        const tw = x.measureText(lab).width, lx = clamp(end[0][0] + 6, L + 2, L + W - tw - 2);
-        x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(lab, lx, end[0][1] - 2);
+        const tw = x.measureText(lab).width, ly = end[0][1] - 2, free = (lx) => lx >= L + 2 && lx + tw <= L + W - 2 && !(m.avoid || []).some((q) => lx < q[2] && lx + tw > q[0] && ly - 10 < q[3] && ly > q[1]);
+        const lx = [end[0][0] + 6, end[0][0] - 6 - tw].find(free); // beside the oldest day, wherever no label of the chart's own sits
+        if (lx != null) { x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(lab, lx, ly); }
+        info.lab = lx != null;
         info.trail = pts.length - 1;
       }
     }

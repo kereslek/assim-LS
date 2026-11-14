@@ -3370,7 +3370,7 @@ const LOOK = () => {
     hs: document.documentElement.scrollWidth - vw };
 };
 // every bar chart on screen: its canvas sits behind the drawing, takes no tap, drew its towers, at most 2× the CSS pixels
-const DEPTH = () => [...document.querySelectorAll('.pz.liq, .pz.pz-bars')].filter((h) => h.getClientRects().length && h.getBoundingClientRect().width > 20).map((h) => {
+const DEPTH = (sel = '.pz.liq, .pz.pz-bars') => [...document.querySelectorAll(sel)].filter((h) => h.getClientRects().length && h.getBoundingClientRect().width > 20).map((h) => {
   const c = h.querySelector(':scope > canvas.d3c'), r = h.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   const on = r.bottom > 0 && r.top < innerHeight;
   return { id: h.dataset.pz, c: !!c, first: !!c && h.firstElementChild === c, pe: c ? getComputedStyle(c).pointerEvents : null, hit: on ? (hit ? (hit === c ? 'canvas' : 'ok') : 'none') : 'off',
@@ -3422,7 +3422,7 @@ async function testView(browser) {
     await p.evaluate(() => { const b = document.querySelector('#viewseg [data-v="3d"]'); if (b) b.click(); }); await frames(p, 2);
     await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
     const d = await p.evaluate(DEPTH), n = await p.evaluate(() => document.getAnimations().length);
-    ok(`view reduced: 3D chosen there draws its depth (${d.filter((x) => x.c).length} charts) with nothing moving (${n} animations), every tower standing`, (await p.evaluate(LOOK)).m3d && n === 0 && d.length >= 4 && d.every((x) => x.c && x.d3 && x.d3.k === 1), JSON.stringify([n, d.find((x) => !x.c || !x.d3 || x.d3.k !== 1)]));
+    ok(`view reduced: 3D chosen there draws its depth (${d.filter((x) => x.c).length} charts) with nothing moving (${n} animations), every tower standing`, (await p.evaluate(LOOK)).m3d && n === 0 && d.length >= 4 && d.filter((x) => x.hit !== 'off').length >= 1 && d.every((x) => x.c && (x.hit === 'off' || (x.d3 && x.d3.k === 1))), JSON.stringify([n, d.find((x) => !x.c || (x.hit !== 'off' && (!x.d3 || x.d3.k !== 1)))]));
     await t.ctx.close();
     const r = await viewCtx(browser, { phone: true, reducedMotion: 'reduce', storage: { 'lps.view': '3d' } });
     ok('view reduced: 3D kept on the device wins over the default', (await r.page.evaluate(LOOK)).m3d && (await r.page.evaluate(() => document.getAnimations().length)) === 0);
@@ -3475,10 +3475,21 @@ async function testView(browser) {
   // 5. 3D's depth: a canvas behind every bar chart, never in the way, at most 2× even on a 3× phone; Classic 2D has none
   {
     const t = await viewCtx(browser, { phone: true, dpr: 3 }), p = t.page;
-    await p.evaluate(() => document.querySelector('[data-pz="liq-best"]').scrollIntoView({ block: 'center' })); await sleep(700);
-    let d = await p.evaluate(DEPTH);
-    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES); await sleep(700);
-    d = d.concat(await p.evaluate(DEPTH));
+    // each chart in turn, scrolled to the middle (a chart below the fold is drawn once it scrolls into view)
+    const each = async (root) => {
+      const out = [];
+      for (const id of await p.evaluate((root) => [...document.querySelectorAll(`${root} .pz.liq, ${root} .pz.pz-bars`)].filter((h) => h.getClientRects().length).map((h) => h.dataset.pz), root)) {
+        const sel = `${root} [data-pz="${id}"]`;
+        await p.evaluate(STILL_BOX, { sel });
+        await p.waitForFunction((sel) => { const c = document.querySelector(`${sel} > canvas.d3c`); return !!c && !!c.__d3; }, sel, { timeout: 4000 }).catch(() => {});
+        out.push(...(await p.evaluate(DEPTH, sel)));
+      }
+      return out;
+    };
+    let d = await each('main');
+    await p.evaluate(() => scrollTo(0, 0));
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await calm(p, SHEET_MOVES);
+    d = d.concat(await each('#sheet'));
     const bad = d.filter((x) => !x.c || !x.first || x.pe !== 'none' || x.hit === 'canvas' || x.px > 2.01 || !x.d3 || (x.d3.towers < 1 && x.id !== 'health'));
     ok(`view depth: every bar chart in 3D has its canvas behind the drawing (${d.length}: ${[...new Set(d.map((x) => x.id))].join(' ')}), never under a finger, ≤ 2× pixels on a 3× screen`, d.length >= 6 && !bad.length, JSON.stringify(bad[0] || d[0]));
     const lq = d.find((x) => x.id === 'liq-detail');
@@ -3514,6 +3525,17 @@ async function testView(browser) {
   // 7. motion in 3D: a pool's towers rise as it opens and settle; the ambient light stops while the tab is hidden
   {
     const t = await viewCtx(browser, { width: 1440 }), p = t.page;
+    {
+      const h = await p.evaluate(STILL_BOX, { sel: '[data-pz="liq-best"]' }), x0 = h.x + h.w / 2, y0 = h.y + h.h / 2;
+      await p.mouse.move(x0, y0); await p.mouse.down();
+      for (let i = 1; i <= 8; i++) { await p.mouse.move(x0 - i * 12, y0); await sleep(16); }
+      const mid = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-best"] > canvas.d3c'); return c ? getComputedStyle(c).opacity : null; });
+      await p.mouse.up(); await pzSettled(p, 'liq-best');
+      await p.waitForFunction(() => { const c = document.querySelector('[data-pz="liq-best"] > canvas.d3c'); return c && !c.classList.contains('mv') && getComputedStyle(c).opacity === '1'; }, null, { timeout: 4000 }).catch(() => {});
+      const rest = await p.evaluate(() => { const c = document.querySelector('[data-pz="liq-best"] > canvas.d3c'), h = c && c.parentElement; return c ? { op: getComputedStyle(c).opacity, view: h.dataset.view, drawn: c.__m && c.__m.X ? true : false, towers: c.__d3 && c.__d3.towers } : null; });
+      ok(`view motion: while the LP shape is dragged its depth steps aside (each frame costs what 2D's does) and comes back where it rests`, mid === '0' && !!rest && rest.op === '1' && rest.drawn && rest.towers > 0, JSON.stringify([mid, rest]));
+      await p.evaluate(() => scrollTo(0, 0));
+    }
     // every drawn frame from before the tap: the lowest rise seen (a slow WebKit draws a frame every 100-260 ms, so no fixed wait)
     await p.evaluate(() => { window.__k = []; const t0 = performance.now(); const f = () => { const c = document.querySelector('[data-pz="liq-detail"] > canvas.d3c'); if (c && c.__d3) window.__k.push(c.__d3.k); if (performance.now() - t0 < 6000) requestAnimationFrame(f); }; requestAnimationFrame(f); });
     await p.click('#best [data-act="detail"]');
