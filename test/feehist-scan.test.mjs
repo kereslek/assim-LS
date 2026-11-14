@@ -21,8 +21,11 @@ function world() {
   initLock({ dir: path.join(dir, 'lock'), passphrase: DUMMY, iterations: 1000 });
   const run = (env = {}) => {
     const t = Date.now();
+    // the world's clock: 12:00 UTC with FAKE_NOON, or FAKE_CLOCK's time of day (a sweep across the hours sets it for
+    // every world: FAKE_CLOCK=03:04:50 node --test test/feehist-scan.test.mjs)
+    const clock = { ...(process.env.FAKE_CLOCK ? { FAKE_CLOCK: process.env.FAKE_CLOCK } : {}), ...env };
     const r = spawnSync(process.execPath, [path.join(ROOT, 'test', 'fakes', 'fake-chains.mjs')], { cwd: dir, encoding: 'utf8', timeout: 240e3,
-      env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY, MODE: 'live', ...(env.FAKE_NOON ? { NODE_OPTIONS: `--import ${path.join(ROOT, 'test', 'fakes', 'noon.mjs')}` } : {}), ...env } });
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY, MODE: 'live', ...(clock.FAKE_NOON || clock.FAKE_CLOCK ? { NODE_OPTIONS: `--import ${path.join(ROOT, 'test', 'fakes', 'noon.mjs')}` } : {}), ...clock } });
     assert.ok(r.stdout.includes('PASS sealed outputs'), r.stdout.slice(-3000) + r.stderr.slice(-3000));
     return { ...r, t, gt: Number(/GeckoTerminal requests: (\d+)/.exec(r.stderr)?.[1]), pub: r.stdout.split('\n').filter((l) => l.trim()) };
   };
@@ -75,8 +78,10 @@ test('history.json carries a year of daily fees per pool, the candle cache is re
 
 test('absurd estimates (volumes × 1,000,000) leave every window and gem as they were', () => {
   const a = world(), b = world();
-  a.run({ FAKE_GT: '1', READ_CAPS: fast() });
-  b.run({ FAKE_GT: '1000000', READ_CAPS: fast() });
+  // both worlds start at 12:00 UTC: two runs a minute apart at the wrong moment (one before HH:05, one after) see a
+  // different set of hourly moments, and their 24 h windows span 24 and 25 hours (CI, 14 Nov 2026, 09:05 UTC)
+  a.run({ FAKE_GT: '1', READ_CAPS: fast(), FAKE_NOON: '1' });
+  b.run({ FAKE_GT: '1000000', READ_CAPS: fast(), FAKE_NOON: '1' });
   const la = a.store.get('live.json'), lb = b.store.get('live.json'), hb = b.store.get('history.json');
   assert.ok(Object.values(hb.pools).some((h) => h.y.some((r) => r[2] === 'e' && r[1] > 1e6)), 'the absurd estimates are there, in y');
   // two runs of the fake world differ by a few parts in 10,000 (their clocks); a leak of the estimates would be × 1,000,000
