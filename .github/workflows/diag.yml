@@ -40,6 +40,13 @@ jobs:
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
         run: node scripts/diag.mjs probe
+      - name: Market-data caches (the universe, the API counts, each token's history; before the pool list)
+        if: contains(inputs.parts, 'events') || contains(inputs.parts, 'scan')
+        uses: actions/cache/restore@v4
+        with:
+          path: out/cache
+          key: history-${{ github.run_id }}
+          restore-keys: history-
       - name: Pool list, fast (slow parts skipped)
         if: contains(inputs.parts, 'events') || contains(inputs.parts, 'scan')
         env:
@@ -49,21 +56,14 @@ jobs:
       - name: Creation events per provider
         if: contains(inputs.parts, 'events')
         run: node scripts/diag.mjs events
-      - name: Price-history cache (public market prices; each token fetched at most once a day)
-        if: contains(inputs.parts, 'scan')
-        uses: actions/cache/restore@v4
-        with:
-          path: out/cache
-          key: history-${{ github.run_id }}
-          restore-keys: history-
       - name: Scan
         if: contains(inputs.parts, 'scan') && hashFiles('out/pools-ethereum.json') != ''
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
           ETHERSCAN_KEY: ${{ secrets.ETHERSCAN_KEY }}
         run: node scripts/scan.mjs
-      - name: Save the price-history cache
-        if: always() && hashFiles('out/cache/history.json') != ''
+      - name: Save the market-data caches
+        if: always() && hashFiles('out/cache/**') != ''
         uses: actions/cache/save@v4
         with:
           path: out/cache

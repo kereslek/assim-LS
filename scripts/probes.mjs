@@ -12,7 +12,7 @@ import { CHAINS, ageOfBlocksBack, blocksBack as backFor, timeOfBlock } from '../
 import { ROUTERS, routerName } from '../lib/routers.mjs';
 import { PANCAKE_V3, BASE as BASE_C, ETHEREUM as ETH_C, TOPICS as POOL_TOPICS, v3LpKeeps, decodeInitialize } from '../lib/pools.mjs';
 import { SWAP_TOPICS, decodeSwap, swapFees } from '../lib/swaps.mjs';
-import { parseTickers } from '../lib/cex.mjs';
+import { parseTickers, VENUES, parseCoinbaseStats, parseCoinbaseProducts, parseKraken, parseOkx, parseGate, parseKucoin, venueVolumes, exchangeVolumes } from '../lib/cex.mjs';
 import { dailyHistory, geckoTerminalHistory } from '../lib/history.mjs';
 import { parseDexScreenerPairs } from '../lib/aggregators.mjs';
 import { pastBlockAnswer } from '../lib/snapshots.mjs';
@@ -301,6 +301,35 @@ async function probeTickers() {
   say(r ? r.cex > 0 && r.dex > 0 : null, 'tickers coingecko', r ? `UNI: ${r.cex} centralised markets ($${Math.round(r.vol / 1e3)}k in 24 h), ${r.dex} DEX markets left out, ${r.skipped} anomalous or stale` : 'unread');
 }
 
+// The exchange screen's fallback while CoinGecko is out (lib/cex.mjs exchangeVolumes): which venue answers from a
+// runner, how many markets each lists, and the 24 h USD volume of a few public benchmark coins. Market data only.
+async function probeExchanges() {
+  const err = (e) => String(e?.message || e).replace(/[^A-Za-z0-9 ]/g, '').slice(0, 30);
+  const tryJson = async (url) => { try { return { j: await getJson(url, { headers: { accept: 'application/json' } }, 20000) }; } catch (e) { return { e: err(e) }; } };
+  const cbAll = await tryJson(VENUES.coinbase.stats), cbProds = await tryJson(VENUES.coinbase.products);
+  const krP = await tryJson(VENUES.kraken.pairs), krT = await tryJson(VENUES.kraken.ticker);
+  const prods = parseCoinbaseProducts(cbProds.j);
+  const venues = {
+    coinbase: [parseCoinbaseStats(cbAll.j), cbAll.e, `bulk stats ${cbAll.j ? 'answer' : `unread (${cbAll.e ?? 'shape'})`}, product list ${prods ? `${prods.size} bases quoted in a stablecoin` : `unread (${cbProds.e ?? 'shape'})`}`],
+    kraken: [parseKraken(krP.j, krT.j), krP.e || krT.e, ''],
+  };
+  for (const k of ['okx', 'gate', 'kucoin']) {
+    const r = await tryJson(VENUES[k].tickers);
+    venues[k] = [{ okx: parseOkx, gate: parseGate, kucoin: parseKucoin }[k](r.j), r.e, ''];
+  }
+  const fmtUsd = (x) => (x == null ? '—' : x >= 1e6 ? `$${(x / 1e6).toFixed(1)}M` : `$${Math.round(x / 1e3)}k`);
+  for (const [k, [rows, e, extra]] of Object.entries(venues)) {
+    const v = rows ? venueVolumes(rows) : null;
+    say(rows ? true : null, `exchange ${k}`, rows ? `${rows.length} markets, ${v.size} coins priced; 24 h: ETH ${fmtUsd(v.get('ETH')?.usd)}, UNI ${fmtUsd(v.get('UNI')?.usd)}, LINK ${fmtUsd(v.get('LINK')?.usd)}${extra ? `; ${extra}` : ''}` : `unread (${e ?? 'unexpected shape'})${extra ? `; ${extra}` : ''}`);
+  }
+  // the whole fallback for public benchmark coins, checked against DefiLlama's prices
+  const ids = ['ethereum', 'uniswap', 'chainlink', 'aave'], syms = { ethereum: 'WETH', uniswap: 'UNI', chainlink: 'LINK', aave: 'AAVE' };
+  const ll = await tryJson(`https://coins.llama.fi/prices/current/${ids.map((i) => `coingecko:${i}`).join(',')}`);
+  const meta = new Map(ids.map((i) => [i, { symbol: syms[i], usd: ll.j?.coins?.[`coingecko:${i}`]?.price ?? null }]));
+  const r = await exchangeVolumes(getJson, ids, { meta });
+  say(r.got ? true : null, 'exchange fallback', `${r.got} of ${r.asked} benchmark coins read (${r.unlisted} listed nowhere, ${r.mismatched} price mismatch, ${r.unpriced} unpriced): ${ids.map((i) => `${syms[i]} ${fmtUsd(r.vol.get(i)?.vol)} over ${r.vol.get(i)?.venues ?? 0} venues`).join(', ')}; venues ${Object.entries(r.venues).map(([k, v]) => `${k} ${v ?? 'unread'}`).join(', ')}; ${r.note}`);
+}
+
 async function probeDexScreenerBase() {
   const rows = parseDexScreenerPairs(await getJson(`https://api.dexscreener.com/token-pairs/v1/base/${BASE_C.quotes[3].address}`, { headers: { accept: 'application/json' } }, 20000), 'base');
   const by = new Map();
@@ -379,6 +408,7 @@ await guard('pancakeswap base', () => probePancake('base', base));
 await guard('uniswap base', () => probeUniBase(base));
 await guard('routers', () => probeRouters(eth, base));
 await guard('tickers', () => probeTickers());
+await guard('exchanges', () => probeExchanges());
 await guard('dexscreener base', () => probeDexScreenerBase());
 await guard('blockscout base', () => probeBlockscoutBase());
 await guard('base clock', () => probeBaseClock());

@@ -798,11 +798,14 @@ async function writeOutputs() {
     const pickT = !a?.quote ? a : !b?.quote ? b : [a, b].find((t) => t && !/^(usd-coin|tether|dai)$/.test(t.cg || '')) ?? null;
     return pickT?.cg ?? null;
   };
-  const seed = (prev?.pools || []).filter((x) => x.cex && isNum(x.cex.cexVol24) && isNum(x.cex.t) && x.cex.coin).map((x) => ({ coin: x.cex.coin, t: x.cex.t, vol: x.cex.cexVol24 }));
+  const seed = (prev?.pools || []).filter((x) => x.cex && isNum(x.cex.cexVol24) && isNum(x.cex.t) && x.cex.coin).map((x) => ({ coin: x.cex.coin, t: x.cex.t, vol: x.cex.cexVol24, src: x.cex.src ?? null, venues: x.cex.venues ?? null }));
   const cexCache = makeCexCache('out/cache/cex.json', { now: passT, seed, budget: prev?.health?.cex ?? null });
   // the candidates, biggest pools first: only the top CEX_BUDGET.topN coins are screened
   const cexCoins = [...new Set([...mapped].sort((a, b) => (b.tvl ?? b.mapUsd ?? 0) - (a.tvl ?? a.mapUsd ?? 0)).map(coinOfPool).filter(Boolean))];
-  const cx = await timed('exchanges', () => cexVolumes(getJson, cexCoins, { key: process.env.COINGECKO_KEY || null, cache: cexCache, now: passT, apis }));
+  // while CoinGecko can't answer, the exchanges' own APIs (lib/cex.mjs exchangeVolumes): each coin's ticker and price
+  const cexMeta = new Map();
+  for (const X of ctxs) for (const t of X.tok.values()) if (t?.cg && !cexMeta.has(t.cg)) cexMeta.set(t.cg, { symbol: t.symbol ?? null, usd: isNum(t.usd) ? t.usd : null });
+  const cx = await timed('exchanges', () => cexVolumes(getJson, cexCoins, { key: process.env.COINGECKO_KEY || null, cache: cexCache, now: passT, apis, meta: cexMeta }));
   try { cexCache.save(); } catch { /* the live.json copy carries it */ }
 
   // every window per pool
@@ -880,7 +883,7 @@ async function writeOutputs() {
     }
     // the exchange-led screen
     const coin = coinOfPool(p), cv = coin ? cx.vol.get(coin) : null;
-    const cex = { ...cexScreen({ cexVol24: cv?.usd ?? null, in9Usd: p.in9Usd ?? null, feeTier, sigmaDay: p.sigma ?? null, blocksPerDay: X.DAY_BLOCKS, t: cv?.t ?? null }), coin: cv ? coin : null };
+    const cex = { ...cexScreen({ cexVol24: cv?.usd ?? null, in9Usd: p.in9Usd ?? null, feeTier, sigmaDay: p.sigma ?? null, blocksPerDay: X.DAY_BLOCKS, t: cv?.t ?? null }), coin: cv ? coin : null, src: cv?.src ?? null, venues: cv?.venues ?? null };
     const cur = { ...p.row, aboveShare: p.aboveShare ?? null, segments: seg || undefined };
     const winsWith = (cks) => allWindows({
       series, cur, chain: p.chain, config,
@@ -926,7 +929,7 @@ async function writeOutputs() {
         ...depthFields(prof, p.per1),
         walls: { below: isNum(p.walls?.below) ? p.walls.below : null, above: isNum(p.walls?.above) ? p.walls.above : null },
       },
-      cex: { cexVol24: rnd(cex.cexVol24, 5), cexRatio: rnd(cex.cexRatio, 4), tierVsSigma: rnd(cex.tierVsSigma, 4), t: cex.t, coin: cex.coin },
+      cex: { cexVol24: rnd(cex.cexVol24, 5), cexRatio: rnd(cex.cexRatio, 4), tierVsSigma: rnd(cex.tierVsSigma, 4), t: cex.t, coin: cex.coin, src: cex.src, venues: cex.venues },
       w: Object.fromEntries(Object.entries(w).map(([k, x]) => [k, x && (({ daily: _d, ...rest }) => ({ ...rest, flow: Object.fromEntries(Object.entries(rest.flow).map(([fk, fv]) => [fk, fk === 'senders' ? fv : rnd(fv, 4)])) }))(x)])),
       daily: w[defaultWindow]?.daily ?? [], pattern: w[defaultWindow]?.pattern ?? null, burst: w[defaultWindow]?.burst ?? null,
       flowDaily: dailyRows,
@@ -974,6 +977,11 @@ async function writeOutputs() {
   const capsHit = ctxs.flatMap((X) => [...X.caps].filter(([, b]) => b.why()).map(([k]) => X.CH.prefix + k));
   say(capsHit.length ? null : true, 'read caps', `${capLine}${capsHit.length ? `; stopped by a cap (the rest unread this pass): ${capsHit.join(', ')}` : ''}`);
   pub(`caps: ${capLine}${capsHit.length ? ` · stopped by a cap: ${capsHit.join(', ')}` : ''}`);
+  { // the exchange screen's sources, counts only (public market data)
+    const f = cx.fallback, srcN = (k) => out.filter((x) => x.cex.cexVol24 != null && x.cex.src === k).length;
+    pub(`exchange screen: CoinGecko tickers ${cx.calls} calls this pass${cx.lastError ? ` (${cx.lastError})` : ''}; exchange fallback ${!f ? 'not needed' : !f.asked ? 'all values fresh' :
+      `${f.got} of ${f.asked} coins read (${f.unlisted} listed nowhere, ${f.mismatched} price mismatch, ${f.ambiguous} ambiguous ticker, ${f.unpriced} unpriced); venues ${Object.entries(f.venues).map(([k, v]) => `${k} ${v == null ? 'unread' : `${v} markets`}`).join(', ')}; ${f.note}${f.lastError ? `, last error ${f.lastError}` : ''}`}; pools with exchange volume: CoinGecko ${srcN('coingecko')}, exchanges ${srcN('exchanges')}`);
+  }
   pub(`flow quality (${defaultWindow}): retail share ${fq('retailShare')}, drift ${fq('driftCorr')}, routing ${fq('routing')} of ${out.length} pools; exchange ratio ${out.filter((x) => x.cex.cexRatio != null).length}; lanes: new ${discovery.newPools.length}, exchange-led ${discovery.cexLed.length}, retail ${discovery.retailUp.length}`);
   if (!store) { say(null, 'sealed outputs', 'no lock in this run: live.json, history.json and snapshots.json not written'); return; }
 
@@ -1006,6 +1014,7 @@ async function writeOutputs() {
   }
   for (const x of out) x.pairKey = keyOfAll.get(x.id);
   apis.save();
+  if (apis.outLine()) pub(apis.outLine());
   pub(`apis: ${apis.line()}`);
   const live = {
     v: 1, t: passT, phase: 0, build: `scan-${(process.env.GITHUB_SHA || 'local').slice(0, 7)}`, next: null,

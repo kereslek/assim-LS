@@ -50,6 +50,7 @@ function finish(code) {
   const summary = `pools: ${count(true)} pass, ${count(false)} fail, ${count(null)} unread · steps ${Object.entries(timing).map(([k, v]) => `${k} ${v}s`).join(', ')}`;
   apis.save();
   console.log('\n' + summary);
+  if (apis.outLine()) console.log(apis.outLine());
   console.log(`apis: ${apis.line()}`);
   console.log(`::notice title=pool list::${lines.map((l) => `${l.ok === true ? '✓' : l.ok === false ? '✗' : '·'} ${l.area}: ${l.msg}`).join(' | ')}`);
   if (process.env.GITHUB_STEP_SUMMARY) {
@@ -69,11 +70,16 @@ const block = parseInt(tag, 16);
 
 // 1. Universe.
 const cg = await timed('universe', () => cachedUniverse(getJson, { file: 'out/cache/universe.json', key: process.env.COINGECKO_KEY || undefined, apis }));
-if (!cg.list || cg.markets.length === 0) { say(null, 'universe', `unread (markets ${cg.markets.length} rows, list ${cg.list ? 'ok' : 'unread'})`); finish(1); }
+const ageTxt = (ms) => (ms < 48 * 3600e3 ? `${Math.round(ms / 3600e3)} h` : `${(ms / 86400e3).toFixed(1)} days`);
+if (!cg.list || cg.markets.length === 0) {
+  say(null, 'universe', `unread (markets ${cg.markets.length} rows, list ${cg.list ? 'ok' : 'unread'})` +
+    (cg.why === 'coingecko out' ? `; CoinGecko's monthly quota is out and ${cg.ageMs == null ? 'there is no cached universe' : `the cached universe is ${ageTxt(cg.ageMs)} old (kept up to 45 days)`}` : ''));
+  finish(1);
+}
 const quoteSet = new Set(C.quotes.map((q) => q.address));
 const uni = buildUniverse(cg.markets, cg.list, { include: ['uniswap'], exclude: [...quoteSet] });
 say(cg.unreadPages.length ? null : true, 'universe', `${uni.counts.ranked} coins (ranks 100–2000 and the UNI benchmark); ${uni.counts.onChain} have an Ethereum token; ${uni.counts.kept} kept` +
-  (cg.unreadPages.length ? `; market pages unread: ${cg.unreadPages.join(', ')}` : '') + `; ranks ${cg.from === 'cache' ? `from the cache, ${Math.round(cg.ageMs / 3600e3)} h old` : 'fresh from CoinGecko'}`);
+  (cg.unreadPages.length ? `; market pages unread: ${cg.unreadPages.join(', ')}` : '') + `; ranks ${cg.from === 'cache' ? `from the cache, ${ageTxt(cg.ageMs)} old${cg.why === 'coingecko out' ? ' (CoinGecko monthly quota out: the cache serves up to 45 days)' : cg.why === 'coingecko unread' ? ' (CoinGecko unread this run)' : cg.why === 'no budget' ? ' (no CoinGecko budget left today)' : ''}` : 'fresh from CoinGecko'}`);
 
 // 2. Decimals (quotes too, as a sanity check on the constants).
 const realQuotes = C.quotes.filter((q) => q.address !== ZERO);

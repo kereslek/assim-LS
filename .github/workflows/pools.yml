@@ -25,6 +25,21 @@ jobs:
           path: out/cache
           key: history-${{ github.run_id }}
           restore-keys: history-
+      - name: The loop's market-data caches too (for its universe, if newer than this workflow's own)
+        uses: actions/cache/restore@v4
+        with:
+          path: pinned/out/cache
+          key: loop-cache-${{ github.run_id }}
+          restore-keys: loop-cache-
+      - name: Keep the newer cached universe of the two (CoinGecko's monthly quota out leaves the cache to serve)
+        run: |
+          node -e '
+            const fs = require("fs"), t = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")).t || 0; } catch { return 0; } };
+            const own = t("out/cache/universe.json"), loop = t("pinned/out/cache/universe.json");
+            if (loop > own) { fs.mkdirSync("out/cache", { recursive: true }); fs.copyFileSync("pinned/out/cache/universe.json", "out/cache/universe.json"); }
+            const age = (ms) => (ms ? `${((Date.now() - ms) / 86400e3).toFixed(1)} days old` : "none");
+            console.log(`cached universe: this workflow ${age(own)}, the loop ${age(loop)}; using ${loop > own ? "the loop" : own ? "this workflow" : "none"}`);'
+          rm -rf pinned
       - name: Pool list (public market data only)
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
@@ -46,8 +61,8 @@ jobs:
         env:
           LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
         run: node scripts/publish-data.mjs
-      - name: Save the price-history cache
-        if: always() && hashFiles('out/cache/history.json') != ''
+      - name: Save the market-data caches (the universe, the API counts with CoinGecko's monthly mark, each token's history)
+        if: always() && hashFiles('out/cache/**') != ''
         uses: actions/cache/save@v4
         with:
           path: out/cache

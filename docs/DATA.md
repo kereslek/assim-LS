@@ -41,8 +41,12 @@ This file describes shapes only: it holds no data. Every value below lives seale
     sealedLog: { lines: <n>, errors: <n>, categories: { "<word>": <n> } },
     cex: { day: "YYYY-MM-DD", calls: <CoinGecko tickers calls this UTC day>, perDay: <budget> },  // carried pass to pass
     apis: { day: "YYYY-MM-DD",                                  // market-data calls this UTC day, by source (lib/apicount.mjs)
-            coingecko: { used: <n>, cap: 150 },                 // the hard daily CoinGecko budget: past it, no CoinGecko call
-            defillama: <n>, coinbase: <n>, geckoterminal: <n> }  // is made (the fallbacks serve, else null); carried pass to pass
+            coingecko: { used: <n>, cap: 150,                   // the hard daily CoinGecko budget: past it, no CoinGecko call
+                         out: "YYYY-MM"|null },                 // is made (the fallbacks serve, else null); carried pass to pass.
+                                                                // out: the UTC month CoinGecko's monthly quota ran out (see below):
+                                                                // no CoinGecko call until the 1st, when it clears itself
+            defillama: <n>, coinbase: <n>, geckoterminal: <n>,
+            kraken: <n>, okx: <n>, gate: <n>, kucoin: <n> }      // the exchange screen's fallback venues
   },
   stored: ["ethereum", "base"?],  // the chains whose rows the snapshot store keeps: Base's only once the live loop
                                   // runs multi-chain code (a loop of older code reads every stored row's block number
@@ -87,6 +91,11 @@ Pair = {
 ```
 
 `market` feeds the dashboard's top strip, so the page never calls a third party (no CSP holes, no viewer IP sent out). Hosts: gas from the scanner's Ethereum RPCs (`eth_feeHistory` over the last 1024 blocks, or 100 where a node caps the span, with the 50th-percentile reward; `eth_gasPrice` as the fallback); prices from `coins.llama.fi/prices/current` and `coins.llama.fi/percentage?period=24h` (ids `coingecko:ethereum`, `coingecko:bitcoin`, `coingecko:solana`), then for a coin DefiLlama lacks `api.coinbase.com/v2/prices/{ETH|BTC|SOL}-USD/spot` with the 24 h change from `api.exchange.coinbase.com/products/{…}-USD/stats` (open vs last; no key), and `api.coingecko.com/api/v3/simple/price` (the Demo key, in a header) only for a coin both lack and once a UTC day for the agreement check (`xcheck`). Gas and prices each have a 15-second limit and fail separately to `null`; a pass that reads nothing still carries `gas.hist` forward. The countdown uses `next` and "updated" uses `t`.
+
+**CoinGecko's monthly quota out** (lib/apicount.mjs). The free Demo key allows 10,000 calls a month. When CoinGecko refuses for the month (an HTTP 4xx whose answer names the calls limit, as its 429 "You've reached 10,000 calls limit" does, or 6 HTTP 429s in a row over at least 2 minutes, longer than a busy minute lasts; a 500, a timeout or a per-minute "Rate Limit" 429 never counts), `health.apis.coingecko.out` is set to that UTC month, travels with the counts (the cache file from the pool list to the scan, `live.json` from one loop job to the next), and no CoinGecko call is made until the 1st of the next month, when it clears itself. The public log says `coingecko: monthly quota out until 1 Dec; fallbacks serving` (no key, no URL). Meanwhile:
+- **the universe** (ranks and platform addresses, `out/cache/universe.json`) is served from its cache up to 45 days old, and the pool list's public line gives its age; with no cache, or one over 45 days, the universe is unread and the pool list stops, never guessing. Both `loop.yml` and `pools.yml` keep the cache (`pools.yml` also takes the loop's when it is newer);
+- **prices and price history** come from DefiLlama, Coinbase and GeckoTerminal as before (CoinGecko was already the last resort), and the daily DefiLlama vs CoinGecko agreement check keeps its last day;
+- **the exchange screen** (`pool.cex`) falls back to the exchanges' own free, keyless public APIs that answer from GitHub's US runners (Binance and Bybit refuse US addresses): Coinbase Exchange `/products/stats` (else `/products` and `/products/{id}/stats` for the coins wanted), Kraken `/0/public/AssetPairs` and `/0/public/Ticker`, OKX `/api/v5/market/tickers?instType=SPOT`, Gate `/api/v4/spot/tickers` and KuCoin `/api/v1/market/allTickers`: about 6 bulk calls, at most 40 calls and 45 s a pass, read again after 6 hours. A coin's 24 h USD volume is summed over every market of every venue that lists its ticker (a stablecoin quote at $1, another quote at that venue's own price of it), counted only where the ticker is unambiguous (no other coin of the pool lists has it) and the venue's price agrees with the token's market price within 10%. `pool.cex.src` is `"exchanges"` and `venues` the number of venues summed. Same ratio as before (that volume ÷ the value within ±9%), but CoinGecko's tickers cover far more exchanges (Binance, Bybit, Bitget, MEXC and others), so the fallback understates centralised volume and its `cexRatio` is a **lower bound**: a pool it shows as exchange-led is, one it doesn't may still be. A coin no venue lists, or every venue disagrees on, is null, never 0.
 
 Check ids in `health.checks` (each across every chain scanned: false if any chain failed it, true if all passed, else null; `detail` names the chain): `fee-identity`, `price-vs-market`, `volume-vs-aggregator`, `maps-complete`, `lp-book`, `creation-events`, `volatility-xcheck`, `fees-vs-aggregator`.
 
@@ -141,12 +150,15 @@ Check ids in `health.checks` (each across every chain scanned: false if any chai
     walls: { below: <log offset|null>, above: <log offset|null> }   // found on the ±0.45 fine bars only, as before
   },
   w: { "24h": Window|null, "7d": Window|null, "30d": Window|null },
-  cex: { cexVol24: <USD|null>, cexRatio: <n|null>, tierVsSigma: <n|null>, t: <ms the volume was read|null>, coin: "<CoinGecko id>"|null },
+  cex: { cexVol24: <USD|null>, cexRatio: <n|null>, tierVsSigma: <n|null>, t: <ms the volume was read|null>, coin: "<CoinGecko id>"|null,
+         src: "coingecko"|"exchanges"|null, venues: <n|null> },   // src: whose volume; venues: the fallback's venue count
                                 // the exchange-led screen (lib/cex.mjs): the base token's 24 h volume on centralised
                                 // exchanges (CoinGecko tickers, DEX and flagged tickers left out; only the 15 coins of the
                                 // biggest pools, each at most once in 24 h, within the daily budget, so t can be up to
                                 // 48 h old; a coin past the 15 is null), ÷ the value within ±9%, and the fee
-                                // tier ÷ the per-block σ (daily σ ÷ √blocks a day: Base's 0.2 s blocks make this larger)
+                                // tier ÷ the per-block σ (daily σ ÷ √blocks a day: Base's 0.2 s blocks make this larger).
+                                // src "exchanges": CoinGecko could not answer (its monthly quota out, or the day's budget
+                                // spent), so the volume is the fallback's (below): a lower bound, and cexRatio with it
   flowDaily: [[<UTC day ms>, <retailShare|null>, <lpFeesUsd|null>, <routing|null>]],   // up to 30 days, carried pass to
                                 // pass; the 7d and 30d windows' retailShare and routing read it
   checks: [{ id: "<id>", label: "<short>", ok: true|false|null }],   // the per-pool checklist, e.g. "12/12 checks pass"

@@ -63,7 +63,8 @@ test('sources by host; the daily CoinGecko budget holds across passes, processes
   fs.writeFileSync(file, '{oops');
   assert.equal(makeApiCounter({ file, now: NOW }).used(), 0);
   const h = a.health();
-  assert.deepEqual(Object.keys(h), ['day', 'coingecko', 'defillama', 'coinbase', 'geckoterminal']);
+  assert.deepEqual(Object.keys(h), ['day', 'coingecko', 'defillama', 'coinbase', 'geckoterminal', 'kraken', 'okx', 'gate', 'kucoin']);
+  assert.deepEqual(Object.keys(h.coingecko), ['used', 'cap', 'out']);
 });
 
 // a routed fake: each host can be down
