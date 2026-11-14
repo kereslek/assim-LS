@@ -106,7 +106,7 @@ const sqrtX96 = (p, tag) => { const k = tag ? ageDays(p.chain, tag) : 0; return 
 function answer(chain, target, data, tag) {
   const t = target.toLowerCase(), sel = data.slice(0, 10), v4 = [S.s4, S.l4, S.bm4, S.t4, S.fg4].includes(sel), b = parseInt(tag, 16);
   // FAULT=deep-today: the nodes answer blocks over 90 days old with today's state (and timestamp)
-  if (t === '0xca11bde05977b3631167028862be2a173976ca11' && sel === S.ts) return W(process.env.FAULT === 'deep-today' && ageDays(chain, tag) > 90 ? NOW : NET[chain].ts(b));
+  if (t === '0xca11bde05977b3631167028862be2a173976ca11' && sel === S.ts) return W(process.env.FAULT === 'deep-today' && NOW - NET[chain].ts(b) > 90 * 86400 ? NOW : NET[chain].ts(b));
   const p = v4 ? pools.find((x) => x.chain === chain && x.id === '0x' + data.slice(10, 74)) : pools.find((x) => x.chain === chain && x.id === t);
   if (!p) return null;
   if (isFinite(created(p)) && NET[chain].ts(b) < created(p)) return sel === S.s0 ? '' : null; // not deployed yet: no code

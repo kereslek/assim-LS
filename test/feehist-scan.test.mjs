@@ -22,7 +22,7 @@ function world() {
   const run = (env = {}) => {
     const t = Date.now();
     const r = spawnSync(process.execPath, [path.join(ROOT, 'test', 'fakes', 'fake-chains.mjs')], { cwd: dir, encoding: 'utf8', timeout: 240e3,
-      env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY, MODE: 'live', ...env } });
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY, MODE: 'live', ...(env.FAKE_NOON ? { NODE_OPTIONS: `--import ${path.join(ROOT, 'test', 'fakes', 'noon.mjs')}` } : {}), ...env } });
     assert.ok(r.stdout.includes('PASS sealed outputs'), r.stdout.slice(-3000) + r.stderr.slice(-3000));
     return { ...r, t, gt: Number(/GeckoTerminal requests: (\d+)/.exec(r.stderr)?.[1]), pub: r.stdout.split('\n').filter((l) => l.trim()) };
   };
@@ -90,7 +90,7 @@ test('absurd estimates (volumes × 1,000,000) leave every window and gem as they
 
 test('planted fault: nodes answering old blocks with today\'s state — the deep backfill drops those batches, no exact day from them', () => {
   const w = world();
-  const r = w.run({ FAKE_GT: '1', READ_CAPS: fast(), FAULT: 'deep-today' });
+  const r = w.run({ FAKE_GT: '1', READ_CAPS: fast(), FAULT: 'deep-today', FAKE_NOON: '1' }); // noon: no honest 00:05 moment of today in the plan
   const fh = r.pub.find((l) => l.startsWith('fee history: '));
   assert.match(fh, /deep backfill 0 rows from [1-9]\d* batches planned/);
   const live = w.store.get('live.json'), hist = w.store.get('history.json'), today = Math.floor(live.t / DAY) * DAY;
