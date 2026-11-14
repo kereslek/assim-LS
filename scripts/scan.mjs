@@ -37,10 +37,11 @@ import { openLock } from '../lib/lock.mjs';
 import { DEFAULTS as CONFIG_DEFAULTS, loadConfig } from '../lib/config.mjs';
 import { openStore } from '../lib/store.mjs';
 import { marketBlock, carryMarket } from '../lib/market.mjs';
-import { parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
+import { DAY, parseStore, serializeStore, mergeStore, pastBlockAnswer } from '../lib/snapshots.mjs';
 import { BACKFILL, blockClock, storePoints, planBackfill, runBudgeted, retryJobs, readBackfill, probeMoments, oldestMissing } from '../lib/backfill.mjs';
 import { FEEHIST, DEEP_RANK, deepMoments, foldDeep, feeYear, fetchVolumes, packGt, unpackGt, windowSeries, median as midOf } from '../lib/feehist.mjs';
 import { exactFeesChain, chainIo, emptyCache, packSx, unpackSx, exactLine } from '../lib/exactfees.mjs';
+import { TVLHIST, endOfDay, reachDay, balanceCalls, readBalances, holdings, mapHoldings, emptyTv, tvHeld, touchTv, recordTv, packTv, unpackTv, tvlMoments, unionMoments, volTvlYear, tvlLines } from '../lib/tvlhist.mjs';
 import { allWindows, gemWarnings, isHooked } from '../lib/windows.mjs';
 import { buildPairs } from '../lib/pairs.mjs';
 import { historyRows } from '../lib/charts.mjs';
@@ -240,6 +241,7 @@ async function scanChain(CH, list) {
     const h = hollowness(m.segments, sp, d1, p.s.tick, m.checks.walkedLiquidity, { near: NEAR_MIN });
     const per1 = u1 > 0 ? u1 : u0 > 0 && price > 0 ? u0 / price : null; // USD per token1
     p.mapUsd = per1 != null ? h.total * per1 : null;
+    p.mapTotal = h.total; // token1, human units: a v4 pool's TVL history reads it (lib/tvlhist.mjs 'm')
     p.hollow = h.hollow; p.aboveShare = h.aboveShare; p.tag = shapeTag(h);
     p.sqrt = sp; p.d1 = d1; p.per1 = per1; p.walls = nearestWalls(depthHistogram(m.segments, sp, d1, p.s.tick));
     const t9 = ticksForLog(0.09), b9 = bandStats(m.segments, sp, d1, p.s.tick - t9, p.s.tick + t9, p.s.tick);
@@ -481,6 +483,8 @@ async function scanChain(CH, list) {
         pastRead++;
         const h = hollowness(m.segments, sqrtX96ToSqrt(s0.sqrtPriceX96), p.d1, s0.tick, m.checks.walkedLiquidity, { near: nearOf(p) });
         p.past.push({ hollow: h.hollow, segments: m.segments });
+        // a v4 pool's TVL at that block: its map's value (lib/tvlhist.mjs 'm'; kept when read in a day's first hour)
+        if (p.v === 4) { const reading = mapHoldings(h.total, p.d1, s0.sqrtPriceX96); if (reading) (p.pastTvl ||= []).push({ t, reading }); }
         // the snapshot row at that block, with its parked share (merged with the backfill in the outputs)
         const r = readBackfill(p.v, a);
         if (r.kind === 'row') (p.pastRows ||= []).push({ t, block: pb, ...r.row, parked: Number.isFinite(h.hollow) ? h.hollow : null });
@@ -534,8 +538,8 @@ async function writeOutputs() {
   // the stored snapshots (restored from the data branch); one that won't open or parse is never overwritten
   let snaps = new Map(), snapsOk = true;
   let rebuilt = false;
-  let gtCache = new Map(), sxCache = emptyCache();
-  if (store) { try { const o = store.get('snapshots.json'); if (o && (o.fix ?? 0) >= SNAP_FIX) snaps = parseStore(o); else if (o) rebuilt = true; gtCache = unpackGt(o?.gt); sxCache = unpackSx(o?.sx); } catch { snapsOk = false; } }
+  let gtCache = new Map(), sxCache = emptyCache(), tvCache = emptyTv();
+  if (store) { try { const o = store.get('snapshots.json'); if (o && (o.fix ?? 0) >= SNAP_FIX) snaps = parseStore(o); else if (o) rebuilt = true; gtCache = unpackGt(o?.gt); sxCache = unpackSx(o?.sx); tvCache = unpackTv(o?.tv); } catch { snapsOk = false; } }
   // Which chains' new rows are kept. A loop pinned to code from before Base reads every stored row's block
   // number into ONE block clock for its Ethereum backfill, so Base rows must not reach the shared store while
   // such a loop may still run: Ethereum's rows always are; another chain's only when this pass runs as the
@@ -555,10 +559,19 @@ async function writeOutputs() {
     ? timed('fee history volumes', () => fetchVolumes(getJson, gtPools, { cache: gtCache, now: passT, budget: makeBudget({ ms: gtCap.ms, calls: gtCap.calls }), spacingMs: gtCap.spacingMs }))
       .catch((e) => ({ pools: gtPools.length, wanted: 0, full: 0, fresh: 0, missed: 0, failed: 0, calls: 0, stopped: 'broke', lastError: errWord(e) }))
     : Promise.resolve(null);
-  // fee growth now for every mapped pool (the 24 h check read it only for busy pools)
+  // fee growth now for every mapped pool (the 24 h check read it only for busy pools); in the first hour of a UTC day
+  // also yesterday's end for the TVL history (lib/tvlhist.mjs), where not held yet: a v3-style pool's two token balances
+  // in the same multicall ('r'), a v4 pool's map value from this pass's map ('m'), and a v4 past map read in a day's
+  // first hour ('m')
   const rows = new Map();
+  const tvPass = { r: 0, m: 0, b: 0, unread: 0 };
+  let tvChanged = false;
+  touchTv(tvCache, mapped, passT);
+  const tvKeep = (p, day, reading, src, now) => { if (day != null && reading && recordTv(tvCache, p.id, { day, reading, src, now, chain: p.chain })) { tvPass[src]++; tvChanged = true; } };
   for (const X of ctxs) {
-    const fgNow = await X.mc(X.mapped.flatMap(X.fgCalls), X.tag);
+    const endDay = endOfDay(X.passT);
+    const balPools = endDay == null ? [] : X.mapped.filter((p) => p.v === 3 && !tvHeld(tvCache, p.id, endDay));
+    const fgNow = await X.mc([...X.mapped.flatMap(X.fgCalls), ...balPools.flatMap(balanceCalls)], X.tag);
     let k = 0;
     for (const p of X.mapped) {
       const n = X.fgCalls(p).length, fg = readFeeGrowth(p, fgNow.slice(k, k + n));
@@ -567,6 +580,15 @@ async function writeOutputs() {
       rows.set(p.id, [p.row]);
     }
     for (const p of X.mapped) if (p.pastRows) rows.get(p.id).push(...p.pastRows);
+    for (const p of balPools) {
+      const reading = holdings(readBalances(fgNow.slice(k, k + 2)), p.s.sqrtPriceX96);
+      k += 2;
+      if (reading) tvKeep(p, endDay, reading, 'r', X.passT); else tvPass.unread++;
+    }
+    for (const p of X.mapped.filter((x) => x.v === 4)) {
+      if (endDay != null) tvKeep(p, endDay, mapHoldings(p.mapTotal, p.d1, p.s.sqrtPriceX96), 'm', X.passT);
+      for (const { t, reading } of p.pastTvl || []) tvKeep(p, endOfDay(t), reading, 'm', X.passT);
+    }
   }
   // backfill (lib/backfill.mjs), per chain: every hour of the last 14 days and every day of the last 90 that a
   // pool's series is missing, read at that moment's block through archive nodes, the windows' moments first,
@@ -587,8 +609,17 @@ async function writeOutputs() {
     for (const X of ctxs) {
       const eth = X.CH.id === 'ethereum';
       const bfCalls = (p) => [...X.stCalls(p), ...X.fgCalls(p)]; // slot0, liquidity, fee growth
+      // the TVL history (lib/tvlhist.mjs 'b'): a read at a day's end (00:05) also asks a v3-style pool's two token
+      // balances while that day has no reading, in the same batch. Which pool-days do is fixed before the plan (the
+      // readings held when this chain's backfill starts), so a batch's calls are the same when planned, read and parsed.
+      // Base: no day past its archive nodes' reach (lib/chains.mjs archiveDays), whichever backfill reads it
+      const tvAt = new Map(X.mapped.map((p) => [p.id, new Set(tvCache.get(p.id)?.d.keys() || [])]));
+      const reachMs = isNum(X.CH.archiveDays) ? X.CH.archiveDays * DAY : null;
+      const tvFirst = Math.max((Math.floor(X.passT / DAY) - TVLHIST.days) * DAY, reachDay(X.passT, reachMs) ?? -Infinity);
+      const balAt = (p, T) => { const d = p.v === 3 ? endOfDay(T) : null; return d != null && d >= tvFirst && !tvAt.get(p.id).has(d); };
+      const callsAt = (p, T) => (balAt(p, T) ? [...bfCalls(p), ...balanceCalls(p)] : bfCalls(p));
       const byId = new Map(X.mapped.map((p) => [p.id, p]));
-      const entries = X.mapped.map((p) => ({ id: p.id, calls: bfCalls(p).length, series: snaps.get(p.id), notBefore: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
+      const entries = X.mapped.map((p) => ({ id: p.id, v: p.v, calls: (T) => callsAt(p, T).length, series: snaps.get(p.id), notBefore: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
       // Ethereum's anchors are the store's Ethereum rows: a stored Base row's block number is always above
       // Ethereum's head (Base counts blocks 10-60 times faster), so the head filters them out exactly
       const anchors = [{ t: X.passT, block: X.block }, ...(eth ? storePoints(snaps).filter((q) => q.block <= X.block) : [])];
@@ -596,7 +627,10 @@ async function writeOutputs() {
       const budget = eth ? {} : { maxBatches: bfc?.batches ?? 60 };
       const deadline = eth ? BACKFILL.deadlineMs : bfc?.ms ?? 40e3;
       const deepMax = keepChains.has(X.CH.id) ? (eth ? FEEHIST.deep.batches : bfc?.deep ?? 0) : 0;
-      const deepOf = (s, o) => deepMoments(s, { ...o, perPool: FEEHIST.deep.perPool });
+      // the deep moments: the fee history's, and the days a v3-style pool's TVL is missing (back to the chain's archive
+      // reach), newest first, at most FEEHIST.deep.perPool a pool
+      const deepOf = (s, o, p) => unionMoments(deepMoments(s, { ...o, perPool: FEEHIST.deep.perPool }),
+        p?.v === 3 ? tvlMoments(s, { ...o, have: tvAt.get(p.id), reachMs, perPool: FEEHIST.deep.perPool }) : null, FEEHIST.deep.perPool);
       let plan = { jobs: [], wanted: 0, planned: 0 }, deep = { jobs: [], wanted: 0, planned: 0 }, jobs = [], run = { results: [], started: 0, skipped: 0, retried: 0 };
       await timed(X.CH.prefix + 'backfill', async () => {
         let clock, known = anchors;
@@ -627,7 +661,7 @@ async function writeOutputs() {
         let deepFails = 0;
         const read = async (job) => {
           if (job.rank === DEEP_RANK && deepFails >= FEEHIST.deep.stopAfter) { bf.deepBroke++; return null; }
-          const ans = await X.amc([tsCall, ...job.ids.flatMap((id) => bfCalls(byId.get(id)))], '0x' + job.block.toString(16));
+          const ans = await X.amc([tsCall, ...job.ids.flatMap((id) => callsAt(byId.get(id), job.T))], '0x' + job.block.toString(16));
           if (job.rank === DEEP_RANK) deepFails = readUint(ans?.[0]) == null ? deepFails + 1 : 0;
           return ans;
         };
@@ -651,9 +685,15 @@ async function writeOutputs() {
         if (!X.ageOk(ts, X.block - job.block)) { bf.stale++; return; } // not that block's state
         let o = 1;
         for (const id of job.ids) {
-          const p = byId.get(id), n = bfCalls(p).length, r = readBackfill(p.v, ans.slice(o, o + n));
+          const p = byId.get(id), nb = bfCalls(p).length, n = callsAt(p, job.T).length, r = readBackfill(p.v, ans.slice(o, o + nb));
+          const bal = n > nb ? ans.slice(o + nb, o + n) : null;
           o += n;
-          if (r.kind === 'row') { rows.get(id).push({ t: Number(ts) * 1000, block: job.block, ...r.row, parked: null }); bf.rows++; if (isDeep) bf.deepRows++; }
+          if (r.kind === 'row') {
+            rows.get(id).push({ t: Number(ts) * 1000, block: job.block, ...r.row, parked: null }); bf.rows++; if (isDeep) bf.deepRows++;
+            // the balances count only with the pool there at that block (its row), and only at a day's end (a batch that
+            // landed outside the hour is read again at a corrected block)
+            if (bal) { const reading = holdings(readBalances(bal), r.row.sqrtPriceX96); if (!reading) tvPass.unread++; else tvKeep(p, endOfDay(Number(ts) * 1000), reading, 'b', X.passT); }
+          }
           else if (r.kind === 'unborn') {
             const m = isDeep ? deepUnborn : unborn;
             m.set(id, Math.max(m.get(id) ?? 0, Number(ts) * 1000)); bf.unbornMoments++; if (isDeep) bf.deepUnborn++;
@@ -1068,7 +1108,8 @@ async function writeOutputs() {
   store.put('live.json', live);
   let histWritten = false;
   const fh = { pools: 0, exact: 0, est: 0, rows: 0, xc: [], xcPools: 0, aged: 0, full: 0, left: 0, spikes: 0, backed: 0, bySwaps: 0, uPools: 0 };
-  if (snapsOk && (changed || exChanged || !fs.existsSync(`${store.outDir}/history.json`))) {
+  const tvTot = { pools: 0, days: 0, b: 0, r: 0, m: 0, gone: 0, goneV4: 0, goneReach: 0, open: 0, vs: 0, vg: 0, vNull: 0, vx: [], tl: [] };
+  if (snapsOk && (changed || exChanged || tvChanged || !fs.existsSync(`${store.outDir}/history.json`))) {
     // history.json's charts (lib/charts.mjs): 14 days hourly, 90 days daily, nothing before a pool existed
     // plus y, up to a year of daily LP fees (lib/feehist.mjs): exact from the fee counters, estimated from the day
     // volumes before that, exact overriding; and yp, the pool's progress (exact days of its age within the year)
@@ -1083,7 +1124,15 @@ async function writeOutputs() {
       // in u (unconfirmed), which the page marks (lib/spikes.mjs)
       const sp = feeSpikes({ d: hr.d, y: fy.y, gt: gtCache.get(p.id) ?? null, rate, su: fy.su });
       fh.spikes += sp.spikes; fh.backed += sp.backedN; fh.bySwaps += sp.bySwaps; if (sp.u) fh.uPools++;
-      hp[p.id] = { ...hr, y: fy.y, yp: fy.yp, ...(sp.u ? { u: sp.u } : {}) };
+      // yv and yt (lib/tvlhist.mjs): the day's volume and TVL, aligned to the y rows, valued as the fee days are
+      const reachMs = isNum(p.X.CH.archiveDays) ? p.X.CH.archiveDays * DAY : null;
+      const vt = volTvlYear({ y: fy.y, gt: gtCache.get(p.id) ?? null, sx: sxCache.p.get(p.id) ?? null, tv: tvCache.get(p.id) ?? null, now: passT, reachMs,
+        pool: { v: p.v, d0: t0.decimals, d1: t1.decimals, usd0: t0.usd ?? null, usd1: t1.usd ?? null, pxNow: x.price ?? null } });
+      hp[p.id] = { ...hr, y: fy.y, yp: fy.yp, yv: vt.yv, yt: vt.yt, yvp: vt.yvp, ytp: vt.ytp, ...(sp.u ? { u: sp.u } : {}) };
+      tvTot.pools++; tvTot.days += fy.y.length; tvTot.b += vt.ytp.b; tvTot.r += vt.ytp.r; tvTot.m += vt.ytp.m; tvTot.gone += vt.gone; tvTot.open += vt.open;
+      if (p.v === 4) tvTot.goneV4 += vt.gone; else tvTot.goneReach += vt.gone;
+      tvTot.vs += vt.yvp.s; tvTot.vg += vt.yvp.g; tvTot.vNull += fy.y.length - vt.yvp.s - vt.yvp.g; tvTot.vx.push(...vt.vx);
+      if (p.v === 3 && vt.last != null && p.tvl > 0) tvTot.tl.push(vt.last / p.tvl);
       fh.pools++; fh.exact += fy.yp.exact; fh.est += fy.yp.est; fh.rows += fy.y.length; fh.xc.push(...fy.xc); if (fy.xc.length) fh.xcPools++;
       if (fy.yp.age != null) { fh.aged++; fh.left += fy.yp.age - fy.yp.exact; if (fy.yp.exact === fy.yp.age) fh.full++; }
     }
@@ -1095,7 +1144,7 @@ async function writeOutputs() {
     store.put('history.json', { v: 1, t: passT, pools: hp, health });
     histWritten = true;
   }
-  if (snapsOk && (changed || exChanged || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snapsKeep), t: passT, fix: SNAP_FIX, gt: packGt(gtCache, { now: passT }), sx: packSx(sxCache, { now: passT }) });
+  if (snapsOk && (changed || exChanged || tvChanged || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snapsKeep), t: passT, fix: SNAP_FIX, gt: packGt(gtCache, { now: passT }), sx: packSx(sxCache, { now: passT }), tv: packTv(tvCache, { now: passT }) });
   // the fee history in the public log: counts, one ratio and seconds only (never a pool, an amount or an address)
   if (histWritten) {
     const xm = midOf(fh.xc), g = gt || {};
@@ -1108,6 +1157,12 @@ async function writeOutputs() {
     const spl = `${fh.spikes} days at 20× their 30-day median or more (daily chart and exact fee history), ${fh.backed} backed by the day's swaps or volume (${fh.bySwaps} by its swaps), ${fh.spikes - fh.backed} marked unconfirmed in ${fh.uPools} pools`;
     say(true, 'fee spikes', spl);
     pub(`fee spikes: ${spl}`);
+    // the volume and TVL history (lib/tvlhist.mjs) in the public log: counts and two ratios only
+    const tl = tvlLines(tvTot, tvPass);
+    say(tl.tvlOk, 'tvl history', tl.tvl);
+    pub(`tvl history: ${tl.tvl}`);
+    say(tl.volOk, 'volume history', tl.vol);
+    pub(`volume history: ${tl.vol}`);
   }
   say(snapsOk ? true : false, 'sealed outputs', `live.json written with ${out.length} pools; history.json ${histWritten ? 'written' : 'kept (no new hourly row)'}; snapshots ${snapsOk ? (changed ? 'updated' : 'unchanged') : 'stored copy did not open: left as it was'}`);
 }

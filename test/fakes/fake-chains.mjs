@@ -12,6 +12,9 @@
 // fake USD prices); the young Base pool gets two planted candles from before it existed. Requests are counted.
 // FAULT=deep-today: every node answers a block over 90 days old with today's timestamp (the fee history's deep
 // backfill must drop those batches).
+// balanceOf(pool) on a pool's tokens answers its made-up balances (× FAKE_BAL, default 1: the TVL history's taint test
+// scales them), and 0 for a pool not deployed yet at that block, as a token contract answers for any empty address.
+// FAULT=bal-revert: every balanceOf reverts (the TVL history must stay null, never 0). Requests are counted.
 import fs from 'node:fs';
 import { selector } from '../../lib/keccak.mjs';
 import { amountsInRange, sqrtAtTick, amount0Delta } from '../../lib/v3math.mjs';
@@ -99,7 +102,7 @@ const listOf = (chain) => {
 fs.writeFileSync('out/pools-ethereum.json', JSON.stringify(listOf('ethereum')));
 fs.writeFileSync('out/pools-base.json', JSON.stringify(listOf('base')));
 
-const S = { ts: selector('getCurrentBlockTimestamp()'), fg0: selector('feeGrowthGlobal0X128()'), fg1: selector('feeGrowthGlobal1X128()'), fg4: selector('getFeeGrowthGlobals(bytes32)'), s0: selector('slot0()'), liq: selector('liquidity()'), bm3: selector('tickBitmap(int16)'), t3: selector('ticks(int24)'), s4: selector('getSlot0(bytes32)'), l4: selector('getLiquidity(bytes32)'), bm4: selector('getTickBitmap(bytes32,int16)'), t4: selector('getTickLiquidity(bytes32,int24)') };
+const S = { bal: selector('balanceOf(address)'), ts: selector('getCurrentBlockTimestamp()'), fg0: selector('feeGrowthGlobal0X128()'), fg1: selector('feeGrowthGlobal1X128()'), fg4: selector('getFeeGrowthGlobals(bytes32)'), s0: selector('slot0()'), liq: selector('liquidity()'), bm3: selector('tickBitmap(int16)'), t3: selector('ticks(int24)'), s4: selector('getSlot0(bytes32)'), l4: selector('getLiquidity(bytes32)'), bm4: selector('getTickBitmap(bytes32,int16)'), t4: selector('getTickLiquidity(bytes32,int24)') };
 const BASE_FG = 10n ** 40n;
 const ageDays = (chain, tag) => Math.round((NOW - NET[chain].ts(parseInt(tag, 16))) / 86400);
 const sqrtX96 = (p, tag) => { const k = tag ? ageDays(p.chain, tag) : 0; return k === 0 ? p.sim.end : wobble(p, k); };
@@ -107,6 +110,14 @@ function answer(chain, target, data, tag) {
   const t = target.toLowerCase(), sel = data.slice(0, 10), v4 = [S.s4, S.l4, S.bm4, S.t4, S.fg4].includes(sel), b = parseInt(tag, 16);
   // FAULT=deep-today: the nodes answer blocks over 90 days old with today's state (and timestamp)
   if (t === '0xca11bde05977b3631167028862be2a173976ca11' && sel === S.ts) return W(process.env.FAULT === 'deep-today' && NOW - NET[chain].ts(b) > 90 * 86400 ? NOW : NET[chain].ts(b));
+  if (sel === S.bal) {
+    balCalls[chain]++;
+    if (process.env.FAULT === 'bal-revert') return null;
+    const who = '0x' + data.slice(34, 74), q = pools.find((x) => x.chain === chain && x.id === who && x.v === 3);
+    if (!q || (isFinite(created(q)) && NET[chain].ts(b) < created(q))) return W(0);
+    const k = BigInt(process.env.FAKE_BAL || 1);
+    return t === q.t0 ? W(q.bal0 * k) : t === q.t1 ? W(q.bal1 * k) : W(0);
+  }
   const p = v4 ? pools.find((x) => x.chain === chain && x.id === '0x' + data.slice(10, 74)) : pools.find((x) => x.chain === chain && x.id === t);
   if (!p) return null;
   if (isFinite(created(p)) && NET[chain].ts(b) < created(p)) return sel === S.s0 ? '' : null; // not deployed yet: no code
@@ -156,7 +167,7 @@ const txOf = (chain, h) => {
   for (const p of pools.filter((x) => x.chain === chain)) for (let k = 0; k < p.n; k++) if (txHash(p, k) === h) return { hash: h, to: k % 2 ? ROUTER[chain] : '0x' + 'ee'.repeat(20), from: '0x' + (k + 1).toString(16).padStart(40, '0') };
   return null;
 };
-let calls = { ethereum: 0, base: 0 };
+let calls = { ethereum: 0, base: 0 }, balCalls = { ethereum: 0, base: 0 };
 function rpc(chain, q) {
   calls[chain]++;
   if (chain === 'base' && process.env.FAULT === 'base-logs-refuse' && q.method === 'eth_getLogs') return { jsonrpc: '2.0', id: q.id, error: { code: -32005, message: 'logs not served' } };
@@ -218,5 +229,5 @@ globalThis.fetch = async (url, init = {}) => {
   const b = JSON.parse(init.body);
   return json(Array.isArray(b) ? b.map((q) => rpc(chain, q)) : rpc(chain, b));
 };
-process.on('exit', () => process.stderr.write(`[fake-chains] RPC requests: ethereum ${calls.ethereum}, base ${calls.base}; GeckoTerminal requests: ${gtCalls}\n`)); // past the sealed log's console
+process.on('exit', () => process.stderr.write(`[fake-chains] RPC requests: ethereum ${calls.ethereum}, base ${calls.base}; GeckoTerminal requests: ${gtCalls}; balanceOf calls: ethereum ${balCalls.ethereum}, base ${balCalls.base}\n`)); // past the sealed log's console
 await import('../../scripts/scan.mjs');
