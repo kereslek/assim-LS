@@ -28,13 +28,17 @@
 //            8-letter quotes, long venue names, about 1,500 pools (v0.5.2: what the live iPhone audit met)
 //   tiny     the default data with what the live audit of 15 Nov 2026 met on real data (v0.6.2): sub-cent prices in the
 //            backtest replay (0.00000xyz: the widest y-axis labels) and hourly fees that are $0 three hours in four (a $0 median)
+//   keyed, keyedgone, keyedchange, mismatch: v0.7.0 key slots (guests, the recovery key, a passphrase change, the alarm): see below
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { newLockFile, unlock, seal, ITERATIONS } from '../../lib/lock.mjs';
+import crypto from 'node:crypto';
+import { newLockFile, unlock, seal, deriveKeys, ITERATIONS } from '../../lib/lock.mjs';
+import { inboxKeys } from '../../lib/inbox.mjs';
+import { buildKeysFile, guestKek, splitPrivate, wrapSlot } from '../../lib/keyring.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'keyed', 'keyedgone', 'keyedchange', 'mismatch'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -1017,6 +1021,49 @@ function sealCase(dir, { lock, aes }, data, t, files = ['live', 'history', 'back
   }
 }
 
+// ---------- v0.7.0 · key slots (docs/briefs/guest-access.md): the default data after the loop's migration ----------
+// Market files under a made-up market key, the owner's files under a made-up private key, a master key behind both,
+// keys.json with an owner slot (the fixture passphrase), a recovery slot and guest slots; inbox.json is the lock's inbox key.
+//   keyed        Anna (GUEST_PASS, 30 days left) and Cara (EXPIRED_PASS, ended 2 hours ago: the loop hasn't run yet) hold
+//                slots; Bob was removed earlier. The owner's ticket is OWNER_TICKET (a guest never sees it)
+//   keyedgone    the next pass: Anna removed, the market key rotated (the master slot keeps the old one), no guest slots
+//   keyedchange  a passphrase change half way: the loop added NEW_PASS's owner slot ("new passphrase ready")
+//   mismatch     keyed, plus the readable status.json flag: the loop's passphrase opens no slot
+export const GUEST_PASS = 'made-up guest passphrase for anna', EXPIRED_PASS = 'made-up guest passphrase for cara', GUEST_NAME = 'Anna';
+export const NEW_PASS = 'a made-up new owner passphrase', RECOVERY_KEY = 'MADE-7FAK-E2RE-C0VE-RYKE-YF0R-TEST-S234';
+export const GUEST_DAYS = 30, OWNER_TICKET = 2500;
+const normRk = (s) => s.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, ''); // as the page reads it
+function sealKeyedCase(dir, lk, data, now, { v, owner, recovery, rsalt, gsalt, iterations, guests, list, vault = {}, status = null }) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'lock.json'), JSON.stringify(lk.lock));
+  fs.writeFileSync(path.join(dir, 'inbox.json'), JSON.stringify({ v: 1, x25519: inboxKeys(lk.token).publicB64 }));
+  const live = splitPrivate('live.json', { ...data.live, ticket: OWNER_TICKET }), bt = splitPrivate('backtest.json', data.backtest);
+  const slots = guests.map((g) => ({ s: g.slot, n: g.name, e: g.exp, kek: guestKek(g.pass, gsalt, iterations) }));
+  fs.writeFileSync(path.join(dir, 'keys.json'), JSON.stringify(buildKeysFile({ v, owner, recovery, rsalt, gsalt, iter: iterations, guests: slots, t: now })));
+  for (const [f, obj] of [['live', live.market], ['history', data.history], ['backtest', bt.market]]) fs.writeFileSync(path.join(dir, f + '.json'), JSON.stringify(seal(obj, v.mdek, { t: obj.t })));
+  fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify(seal(live.owner, v.aes, { t: data.live.t })));
+  const gl = { v: 1, t: now, gen: v.gen, done: [], vault: { change: null, changedAt: null, recoveryAt: now - 3 * D, ...vault }, guests: list.map((g) => ({ s: g.slot, n: g.name, e: g.exp, at: g.at, st: g.st, end: g.end ?? null, ...(g.st === 'active' && g.pass ? { kek: guestKek(g.pass, gsalt, iterations).toString('base64') } : {}) })) };
+  fs.writeFileSync(path.join(dir, 'guests.json'), JSON.stringify(seal(gl, v.aes, { t: now })));
+  if (status) fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
+}
+function keyedCases(outDir, lk, data, now, iterations) {
+  const rand = (n) => crypto.randomBytes(n);
+  const v = { mk: rand(32), mdek: rand(32), prev: [], aes: rand(32), pprev: [lk.aes], token: lk.token, gen: 1 };
+  const gsalt = rand(16).toString('base64'), rsalt = rand(16).toString('base64');
+  const owner = [wrapSlot({ m: v.mk.toString('base64') }, lk.aes, 'owner')];
+  const recovery = wrapSlot({ m: v.mk.toString('base64') }, deriveKeys(normRk(RECOVERY_KEY), rsalt, iterations).aes, 'recovery');
+  const anna = { pass: GUEST_PASS, name: GUEST_NAME, exp: now + GUEST_DAYS * D, slot: '0a0a0a0a0a0a0a0a', at: now - 2 * D, st: 'active' };
+  const cara = { pass: EXPIRED_PASS, name: 'Cara', exp: now - 2 * H, slot: '0c0c0c0c0c0c0c0c', at: now - 9 * D, st: 'active' };
+  const bob = { name: 'Bob', exp: null, slot: '0b0b0b0b0b0b0b0b', at: now - 20 * D, st: 'removed', end: now - 5 * D };
+  const base = { v, owner, recovery, rsalt, gsalt, iterations, guests: [anna, cara], list: [anna, bob, cara] };
+  sealKeyedCase(path.join(outDir, 'keyed'), lk, data, now, base);
+  sealKeyedCase(path.join(outDir, 'mismatch'), lk, data, now, { ...base, status: { lock: 'mismatch', since: now - 40 * 60e3 } });
+  const nslot = wrapSlot({ m: v.mk.toString('base64') }, deriveKeys(NEW_PASS, lk.lock.salt, lk.lock.iter).aes, 'owner');
+  sealKeyedCase(path.join(outDir, 'keyedchange'), lk, data, now, { ...base, owner: [...owner, nslot], vault: { change: { at: now - 20 * 60e3, ct: nslot.ct } } });
+  sealKeyedCase(path.join(outDir, 'keyedgone'), lk, data, now, { ...base, v: { ...v, mdek: rand(32), prev: [v.mdek], gen: 2 }, guests: [],
+    list: [{ ...anna, st: 'removed', end: now }, bob, { ...cara, st: 'expired', end: now }] });
+}
+
 function aged(data, ageMs) {
   const shift = (x) => (isNum(x) ? x - ageMs : x);
   const live = structuredClone(data.live);
@@ -1029,7 +1076,7 @@ function aged(data, ageMs) {
 
 export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATIONS } = {}) {
   const lock = newLockFile(FIXTURE_PASSPHRASE, iterations);
-  const { aes } = unlock(lock, FIXTURE_PASSPHRASE);
+  const { aes, token } = unlock(lock, FIXTURE_PASSPHRASE);
   const keys = { lock, aes };
   const data = makeData({ now });
   const nogems = makeData({ now, mode: 'nogems' });
@@ -1049,6 +1096,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
   sealCase(path.join(outDir, 'nodisc'), keys, noDiscovery(data), now);
   sealCase(path.join(outDir, 'oddlanes'), keys, { ...data, live: { ...data.live, discovery: { newPools: [], cexLed: ['0x' + 'f'.repeat(40)], crossChain: [] } } }, now);
+  keyedCases(outDir, { lock, aes, token }, data, now, iterations);
   return { outDir, cases: CASES, passphrase: FIXTURE_PASSPHRASE };
 }
 

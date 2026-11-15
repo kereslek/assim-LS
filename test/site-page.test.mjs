@@ -34,11 +34,12 @@ test('self-contained: no external scripts, styles or fonts', () => {
   assert.ok(!/<link[^>]+stylesheet/.test(html));
   const hosts = [...html.matchAll(/https?:\/\/([^/"'\s);]+)/g)].map((m) => m[1]);
   // explorer links open in a new tab (navigation, not a fetch): the only other hosts, never in the CSP's fetch lists
-  const LINKS = ['etherscan.io', 'basescan.org', 'app.uniswap.org'];
+  // v0.7.0: github.com, for the owner's two links (a sealed request as a new inbox/ file; the LOCK_PASSPHRASE secret's page)
+  const LINKS = ['etherscan.io', 'basescan.org', 'app.uniswap.org', ...(/const INBOX_NEW = /.test(html) ? ['github.com'] : [])];
   assert.deepEqual([...new Set(hosts)].filter((h) => h !== 'www.w3.org' && !LINKS.includes(h)).sort(), ['raw.githubusercontent.com']); // w3.org: the svg namespace, never fetched
   for (const h of LINKS) assert.ok(!csp.includes(h), `${h} is a link target, not a source`);
   const linkLines = html.split('\n').filter((l) => LINKS.some((h) => l.includes('https://' + h)));
-  assert.ok(linkLines.length >= 1 && linkLines.every((l) => /^const (EXPLORER|UNI_CHAIN) = |^  const id = String\(p\.id/.test(l)), 'explorer hosts only in the link builders');
+  assert.ok(linkLines.length >= 1 && linkLines.every((l) => /^const (EXPLORER|UNI_CHAIN|INBOX_NEW|SECRET_URL) = |^  const id = String\(p\.id/.test(l)), 'link hosts only in the link builders');
   assert.match(html, /target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"/);
   assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
   assert.match(html, /<link rel="apple-touch-icon" href="data:image\/png;base64,/);
@@ -57,7 +58,16 @@ test('the inline script compiles and carries the build and lock constants', () =
 });
 
 test('no model names in the page', () => {
-  assert.ok(!/\b(claude|opus|sonnet|haiku|gpt-?\d)\b/i.test(html));
+  // v0.7.0: the code branch's name (where the sealed inbox lives, in the owner's two GitHub links) is the one allowed match
+  assert.ok(!/\b(claude|opus|sonnet|haiku|gpt-?\d)\b/i.test(html.replaceAll('/claude/ecstatic-dirac-wkrqja', '/BRANCH')));
+});
+
+test('v0.7.0: the inbox key in the page is the repo\'s (lock/inbox.json), a public X25519 key and nothing else', (t) => {
+  const meta = (/<meta name="lps-inbox-key" content="([^"]*)">/.exec(html) || [])[1];
+  if (meta === undefined) { t.skip('a page from before v0.7.0 seals nothing'); return; }
+  const repo = JSON.parse(fs.readFileSync(new URL('../lock/inbox.json', import.meta.url), 'utf8'));
+  assert.equal(meta, repo.x25519);
+  assert.equal(Buffer.from(meta, 'base64').length, 32);
 });
 
 test('WebCrypto opens a lib/lock.mjs seal the way the page does (PBKDF2 → AES-GCM → gunzip)', async () => {

@@ -12,6 +12,7 @@
 //                                                    balance wraps floorlab iphone back pull full way qsearch (v0.5.1) stress (v0.5.2)
 //                                                    workspace compare deeplink tiers (v0.6.0; history, way and flash follow the workspace and the tiers' build-up)
 //                                                    tools (v0.6.2: the chart toolbar everywhere, the replay's labels, quiet hours)
+//                                                    guest guestend recovery passchange mismatch (v0.7.0: key slots, guests, the alarm)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -27,7 +28,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures, makeData, oldDepth, tinyCase, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR } from './fixtures/make-fixture.mjs';
+import { writeFixtures, makeData, oldDepth, tinyCase, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR, GUEST_PASS, EXPIRED_PASS, GUEST_NAME, NEW_PASS, RECOVERY_KEY, OWNER_TICKET } from './fixtures/make-fixture.mjs';
 import { TEXT_OVERLAP } from './overlap.mjs';
 import { FINGERS, HOST_BOX, STILL_BOX, pinchPts } from './gestures.mjs';
 
@@ -53,7 +54,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,guestend,recovery,passchange,mismatch').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -5236,9 +5237,236 @@ async function testTools(browser) {
   }
 }
 
+// ---------- v0.7.0 · key slots: guests (A, B, D, E, the end), the owner after the migration, the recovery key, a passphrase
+// change, the mismatch alarm (docs/briefs/guest-access.md). Made-up fixtures: keyed, keyedgone, keyedchange, mismatch ----------
+const KS = { fx: () => path.join(FX, 'keyed') };
+// what the loop would do with a request the page sealed: open it with the fixture lock's inbox key, apply it to a copy of keyed
+async function loopApplies(env, caseDir = 'keyed') {
+  const { unlock: un, readLock: rl } = await import('../lib/lock.mjs');
+  const { openVault } = await import('../lib/keyring.mjs');
+  const { guestStep, parseRequest } = await import('../lib/guests.mjs');
+  const { inboxKeys: ik } = await import('../lib/inbox.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lps-gq-'));
+  for (const n of fs.readdirSync(path.join(FX, caseDir))) fs.copyFileSync(path.join(FX, caseDir, n), path.join(dir, n));
+  const lock = JSON.parse(fs.readFileSync(path.join(dir, 'lock.json'), 'utf8'));
+  const req = parseRequest(env, ik(un(lock, FIXTURE_PASSPHRASE).token).privateKey);
+  const keys = openVault(lock, FIXTURE_PASSPHRASE, JSON.parse(fs.readFileSync(path.join(dir, 'keys.json'), 'utf8')));
+  const r = req ? guestStep({ keys, outDir: dir, requests: [env], now: Date.now() }) : null;
+  return { req, r, dir, lock, kf: JSON.parse(fs.readFileSync(path.join(dir, 'keys.json'), 'utf8')) };
+}
+const sealedOf = (href) => { try { return JSON.parse(new URL(href).searchParams.get('value')); } catch (e) { return null; } };
+async function unlockAs(browser, c, pass, o = {}) {
+  const t = await newPage(browser, o);
+  t.reqs = [];
+  t.page.on('request', (r) => t.reqs.push(new URL(r.url()).pathname));
+  await t.page.goto(url(c));
+  await unlockWith(t.page, pass);
+  return t;
+}
+const GLOOK = () => {
+  const vis = (el) => !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+  const line = document.querySelector('#gline'), ls = line && getComputedStyle(line), pill = document.querySelector('#gpill'), ver = document.querySelector('#ver');
+  const pr = pill && pill.getBoundingClientRect(), vr = ver && ver.getBoundingClientRect();
+  return {
+    line: !!ls && ls.display === 'block' && ls.position === 'fixed' && line.getBoundingClientRect().top === 0 && Math.round(line.getBoundingClientRect().height) >= 3 && line.getBoundingClientRect().width >= innerWidth - 1 && +ls.zIndex >= 95,
+    pill: vis(pill) ? pill.textContent.trim() : '', pillNear: !!pr && !!vr && pill.parentElement === ver.parentElement && pill.previousElementSibling === ver && pr.top - vr.bottom < 40, // beside the version, or just under it on a narrow phone
+    pillTall: !!pr && pr.height >= 30, violet: !!pill && /179, 157, 255/.test(getComputedStyle(pill).color),
+    stars: document.querySelectorAll('.star').length, locked: document.querySelectorAll('.star.glk .glock').length, fav: document.querySelectorAll('.star[data-act="fav"]').length,
+    favMsg: (document.querySelector('#fav-body') || {}).textContent || '', needs: vis(document.querySelector('#needs')), positions: vis(document.querySelector('#positions')), settings: vis(document.querySelector('#settings')),
+    lensFav: !!document.querySelector('#f-lens option[value="fav"]'), welcome: vis(document.querySelector('#gwel')) ? document.querySelector('#gw-h').textContent : '',
+    text: document.body.innerText,
+  };
+};
+async function testGuest(browser) {
+  for (const [tag, o] of BROWSER === 'webkit' ? [['phone', { phone: true }]] : [['phone', { phone: true }], ['w1440', { width: 1440 }]]) {
+    const t = await unlockAs(browser, 'keyed', GUEST_PASS, o), p = t.page;
+    await waitApp(p);
+    let g = await p.evaluate(GLOOK);
+    ok(`guest ${tag}: E · the welcome card after the first unlock, by name`, g.welcome === `Welcome, ${GUEST_NAME}` && /Saving is off: no favourites, notes or settings\./.test(g.text) && /Your access ends on \d+ \w{3}\. The owner can end it sooner\./.test(g.text), g.welcome);
+    await snap(p, `guest-${tag}-welcome`);
+    await p.click('#gw-ok'); await sleep(200);
+    g = await p.evaluate(GLOOK);
+    ok(`guest ${tag}: A · the violet "GUEST · ANNA" pill sits by the version badge, 30 px tall at least`, /^GUEST · ANNA/.test(g.pill) && g.pillNear && g.pillTall && g.violet, `${g.pill} near ${g.pillNear} tall ${g.pillTall} violet ${g.violet}`);
+    ok(`guest ${tag}: B · a violet line of 3 px or more along the very top, over everything`, g.line);
+    ok(`guest ${tag}: D · every ★ is there with a violet lock, none saves; Favourites says why`, g.stars > 0 && g.locked === g.stars && g.fav === 0 && /Saving isn’t on for guests\. Ask the admin for your own login\./.test(g.favMsg), `${g.locked}/${g.stars}`);
+    ok(`guest ${tag}: the owner's parts are gone: no Settings, no "Needs you", no Positions, no favourites lens`, !g.settings && !g.needs && !g.positions && !g.lensFav);
+    ok(`guest ${tag}: no owner ticket, stop-loss or threshold anywhere: the example is $1,000`, !g.text.includes(`$${OWNER_TICKET.toLocaleString('en-US')}`) && /\$1,000/.test(g.text) && !/STOP [−-]/.test(g.text));
+    ok(`guest ${tag}: the owner's files are never fetched`, !t.reqs.some((r) => /\/(owner|guests)\.json$/.test(r)) && t.reqs.some((r) => /\/keys\.json$/.test(r)), t.reqs.filter((r) => /json$/.test(r)).map((r) => r.split('/').pop()).join(','));
+    await snap(p, `guest-${tag}-home`);
+    // D: a tap on the locked star explains; A: a tap on the pill opens the sheet, Done closes it
+    await p.click('#best .star.glk'); await sleep(200);
+    ok(`guest ${tag}: D · a tap on the locked ★ says "Saving isn’t on for guests"`, /Saving isn’t on for guests[\s\S]*Ask the admin for your own login\./.test(await p.textContent('#pop').catch(() => '')));
+    await snap(p, `guest-${tag}-star`);
+    await p.keyboard.press('Escape'); await sleep(150);
+    await p.click('#gpill'); await sleep(250);
+    const sh = await p.evaluate(() => ({ open: !document.querySelector('#gsheet').hidden, h: document.querySelector('#gs-h').textContent, meta: document.querySelector('#gs-meta').textContent, txt: document.querySelector('#gsheet').innerText }));
+    ok(`guest ${tag}: A · the sheet: whose access, when it ends, what guests can and can't do, Done`, sh.open && sh.h === `${GUEST_NAME}’s guest access` && /^ENDS \d+ [A-Z]{3} · 30 DAYS LEFT$/.test(sh.meta) && /Search every pool/.test(sh.txt) && /Positions/.test(sh.txt) && /Ask the admin for your own login/.test(sh.txt), sh.meta);
+    await snap(p, `guest-${tag}-sheet`);
+    await p.click('#gs-done'); await sleep(200);
+    ok(`guest ${tag}: A · Done closes the sheet`, await p.evaluate(() => document.querySelector('#gsheet').hidden));
+    // every market view works: search, History, Compare
+    await fillQ(p, 'NUMA');
+    const rows = await p.evaluate(() => document.querySelectorAll('#all tbody tr[data-id]').length);
+    ok(`guest ${tag}: search finds pools`, rows > 0, String(rows));
+    await fillQ(p, '');
+    await p.evaluate(() => { const b = document.querySelector('#best [data-act="ws-hist"]'); window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); }); await sleep(200);
+    await p.click('#best [data-act="ws-hist"]'); await wsWait(p);
+    const views = {};
+    for (const v of ['history', 'compare']) {
+      await p.click(`#ws-tabs [data-v="${v}"]`); await sleep(400);
+      views[v] = await p.evaluate((v) => (v === 'compare' ? document.querySelectorAll('#ws .ws-cc').length === 1 && !!document.querySelector('#ws-body .hs-stack') : document.querySelectorAll('#ws .hs-stack svg[data-k]').length === 3), v);
+    }
+    const ws = await p.evaluate(GLOOK);
+    ok(`guest ${tag}: the workspace opens with History and Compare drawn, the violet line still on top and its ★ locked`, views.history && views.compare && ws.line && (await p.evaluate(() => !!document.querySelector('#ws-star .star.glk'))), JSON.stringify(views));
+    await snap(p, `guest-${tag}-workspace`);
+    // E once: a reload never shows it again on this device
+    await p.reload(); await waitApp(p);
+    ok(`guest ${tag}: the key stays on this device and E never comes back`, (await p.evaluate(GLOOK)).welcome === '' && /^GUEST · ANNA/.test((await p.evaluate(GLOOK)).pill));
+    ok(`guest ${tag}: no page errors`, t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
+    await t.ctx.close();
+  }
+}
+async function testGuestEnd(browser) {
+  // a passphrase past its end date: the calm end at once, nothing kept
+  let t = await unlockAs(browser, 'keyed', EXPIRED_PASS, { phone: true });
+  await t.page.waitForSelector('#gend:not([hidden])', { timeout: 30000 });
+  const e1 = await t.page.evaluate(() => ({ h: document.querySelector('#ge-h').textContent, m: document.querySelector('#ge-msg').textContent, app: !document.querySelector('#app').hidden, lock: !document.querySelector('#lockscreen').hidden }));
+  ok('guestend: a guest past the end date sees "Your guest access has ended", when, and no data', e1.h === 'Your guest access has ended' && /^It reached its end date on \d+ \w{3}\. Ask the owner if you need it again\.$/.test(e1.m) && !e1.app && !e1.lock, e1.m);
+  await snap(t.page, 'guestend-expired');
+  await t.page.click('#ge-new');
+  await t.page.waitForSelector('#lockscreen:not([hidden])', { timeout: 10000 });
+  ok('guestend: "Use a different passphrase" goes back to the unlock form', await t.page.isVisible('#pass'));
+  await t.ctx.close();
+  // a removed guest: unlocked, then the next pass has no slot for them (the key rotated): the end, never an error
+  for (const [tag, o] of [['phone', { phone: true }], ['w1440', { width: 1440 }]]) {
+    t = await unlockAs(browser, 'keyed', GUEST_PASS, o);
+    await waitApp(t.page);
+    await t.page.goto(url('keyedgone'));
+    await t.page.waitForSelector('#gend:not([hidden])', { timeout: 30000 });
+    const e2 = await t.page.evaluate(() => ({ m: document.querySelector('#ge-msg').textContent, txt: document.body.textContent, line: getComputedStyle(document.querySelector('#gline')).display }));
+    ok(`guestend ${tag}: removed: "The owner ended it", no pool left in the page, no violet line`, e2.m === 'The owner ended it. Ask them if you need it again.' && !e2.txt.includes('NUMA') && e2.line === 'none', e2.m);
+    await snap(t.page, `guestend-${tag}-removed`);
+    await t.page.reload(); await t.page.waitForSelector('#gend:not([hidden])', { timeout: 30000 });
+    ok(`guestend ${tag}: the end stays the end after a reload (calm, one way forward)`, await t.page.isVisible('#ge-new'));
+    ok(`guestend ${tag}: no page errors`, t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
+    await t.ctx.close();
+  }
+  // the owner: unlocked before the migration, still unlocked after it (no re-unlock), with the settings back
+  t = await newPage(browser, { phone: true });
+  await t.page.goto(url('default')); await unlockWith(t.page, FIXTURE_PASSPHRASE); await waitApp(t.page);
+  await t.page.goto(url('keyed'));
+  await waitApp(t.page);
+  const o = await t.page.evaluate(GLOOK);
+  ok('guestend: the owner keeps working after the migration with no re-unlock: data, the own ticket, Settings, no guest signal', !(await t.page.isVisible('#lockscreen')) && o.text.includes(`$${OWNER_TICKET.toLocaleString('en-US')}`) && o.settings && !o.pill && !o.line && o.fav > 0 && o.locked === 0);
+  const gl = await t.page.evaluate(() => [...document.querySelectorAll('#g-list .g-row')].map((r) => [...r.children].map((c) => c.textContent.trim()).join(' ')));
+  ok('guestend: the owner\'s Settings list Anna (active), Bob (removed) and Cara (still in, past her date until the loop runs)', gl.length === 3 && /^Anna ends/.test(gl[0]) && gl.some((x) => /^Bob removed/.test(x)), gl.join(' | '));
+  await snap(t.page, 'owner-settings', '#settings');
+  // the owner adds a guest: the page's passphrase and sealed request work with the loop's own code
+  await t.page.click('#settings [data-act="g-add"]');
+  await t.page.fill('#g-name', 'Made-up Dora');
+  await t.page.click('#g-days [data-d="7"]');
+  await t.page.click('#settings [data-act="g-create"]');
+  await t.page.waitForSelector('#g-pass', { timeout: 30000 });
+  const made = await t.page.evaluate(() => ({ pass: document.querySelector('#g-pass').textContent, href: document.querySelector('#g-out a.g-send').href, rel: document.querySelector('#g-out a.g-send').rel }));
+  const env = sealedOf(made.href), lp = await loopApplies(env);
+  const { openGuestSlot: og, guestKek: gk } = await import('../lib/keyring.mjs');
+  const slot = lp.r && og(lp.kf, gk(made.pass, lp.kf.gsalt, lp.kf.iter));
+  ok('guestend: Add guest makes 5 words and 2 digits, shown once, and a "Send to the loop" link to a new inbox/ file', /^([a-z]{3,6}-){5}\d\d$/.test(made.pass) && /^https:\/\/github\.com\/kereslek\/assim-LS\/new\/claude\/ecstatic-dirac-wkrqja\?filename=inbox%2F[0-9a-f]{32}\.json&value=/.test(made.href) && /noopener/.test(made.rel), made.href.slice(0, 90));
+  ok('guestend: the loop\'s own code opens that request and adds the slot; the shown passphrase opens it, for 7 days', !!lp.req && lp.req.lps === 'guest-add' && lp.r.added === 1 && !!slot && slot.name === 'Made-up Dora' && Math.abs(slot.exp - Date.now() - 7 * 86400e3) < 600e3);
+  ok('guestend: the sealed request carries no plaintext name or passphrase', !made.href.includes('Dora') && !made.href.includes(made.pass.split('-')[0] + '-' + made.pass.split('-')[1]));
+  ok('guestend: owner pages have no errors', t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
+  await t.ctx.close();
+}
+async function testRecovery(browser) {
+  const t = await newPage(browser, { phone: true }), p = t.page;
+  await p.goto(url('keyed'));
+  await p.waitForSelector('#lockscreen:not([hidden])');
+  await p.click('#lockscreen [data-act="rk-use"]');
+  await p.fill('#rk-in', 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH');
+  await p.click('#rk-form [data-act="rk-open"]');
+  await p.waitForFunction(() => /opens nothing/.test(document.querySelector('#rk-umsg').textContent), null, { timeout: 30000 });
+  ok('recovery: a wrong recovery key opens nothing and says so', !(await p.isVisible('#app')));
+  await p.fill('#rk-in', RECOVERY_KEY.toLowerCase().replace(/-/g, ' ').replace(/0/g, 'o')); // any case, spaces, an o for a 0
+  await p.click('#rk-form [data-act="rk-open"]');
+  await waitApp(p);
+  await p.waitForSelector('#pw-new', { timeout: 15000 });
+  ok('recovery: the recovery key (any case, any spacing) opens everything and goes straight to a new passphrase', await p.isVisible('#settings') && /Opened with your recovery key/.test(await p.textContent('#pw-out')));
+  await snap(p, 'recovery-newpass');
+  await p.fill('#pw-new', 'too short'); await p.fill('#pw-new2', 'too short'); await p.click('#pw-out [data-act="pw-save"]');
+  ok('recovery: a short new passphrase is refused', /At least 12 characters/.test(await p.textContent('#pw-msg')));
+  await p.fill('#pw-new', NEW_PASS); await p.fill('#pw-new2', NEW_PASS); await p.click('#pw-out [data-act="pw-save"]');
+  await p.waitForSelector('#pw-out a.g-send', { timeout: 30000 });
+  const lp = await loopApplies(sealedOf(await p.getAttribute('#pw-out a.g-send', 'href')));
+  const { openVault: ov } = await import('../lib/keyring.mjs');
+  let opens = false;
+  try { opens = !!ov(lp.lock, NEW_PASS, lp.kf).mdek; } catch (e) { opens = false; }
+  ok('recovery: the new passphrase goes to the loop as an owner slot; with it, the new passphrase opens the data', !!lp.req && lp.req.lps === 'owner-add' && lp.r.ownerAdded === 1 && opens);
+  await p.reload(); await waitApp(p);
+  ok('recovery: this device stays unlocked (it keeps the master key)', !(await p.isVisible('#lockscreen')) && await p.isVisible('#settings'));
+  ok('recovery: no page errors', t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
+  await t.ctx.close();
+}
+async function testPassChange(browser) {
+  // the recovery key: made, shown once, two groups typed back, sealed; the loop's code opens it
+  let t = await openUnlocked(browser, 'keyed', { phone: true, win: null });
+  let p = t.page;
+  await p.evaluate(() => document.querySelector('#settings').scrollIntoView());
+  ok('passchange: Settings shows the recovery key and the passphrase', /SET/.test(await p.textContent('#rk-state')) && /1 IN USE/.test(await p.textContent('#pw-state')));
+  await p.click('#rk-create');
+  await p.waitForSelector('#rk-key', { timeout: 15000 });
+  const rk = await p.textContent('#rk-key'), asks = await p.evaluate(() => [...document.querySelectorAll('#rk-out label')].map((l) => Number(l.textContent.replace(/\D/g, '')) - 1));
+  ok('passchange: the recovery key is 8 groups of 4 (160 bits), with "Write this down and keep it at home"', /^([0-9A-HJKMNP-TV-Z]{4}-){7}[0-9A-HJKMNP-TV-Z]{4}$/.test(rk) && /Write this down and keep it at home/.test(await p.textContent('#rk-out')));
+  await snap(p, 'recovery-create', '#settings');
+  const g = rk.split('-');
+  await p.fill('#rk-a', g[asks[0]] === 'AAAA' ? 'BBBB' : 'AAAA'); await p.fill('#rk-b', g[asks[1]]); await p.click('#rk-out [data-act="rk-check"]');
+  ok('passchange: a wrong group is refused before anything is sealed', /don’t match/.test(await p.textContent('#rk-msg')) && !(await p.$('#rk-out a.g-send')));
+  await p.fill('#rk-a', g[asks[0]].toLowerCase()); await p.click('#rk-out [data-act="rk-check"]');
+  await p.waitForSelector('#rk-out a.g-send', { timeout: 30000 });
+  const lp = await loopApplies(sealedOf(await p.getAttribute('#rk-out a.g-send', 'href')));
+  const { masterFrom: mf, openMaster: om } = await import('../lib/keyring.mjs');
+  const { deriveKeys: dk } = await import('../lib/lock.mjs');
+  let both = false;
+  try { const m = mf(lp.kf, dk(rk.replace(/-/g, ''), lp.kf.rsalt, lp.kf.iter).aes, 'recovery'); const v = om(lp.kf, m.mk); both = !!v.mdek && !!v.aes; } catch (e) { both = false; }
+  ok('passchange: the loop sets the recovery key, and it opens both data keys', !!lp.req && lp.req.lps === 'recovery-set' && lp.r.recoverySet === 1 && both);
+  await t.ctx.close();
+  // half way through a change: "new passphrase ready" and the GitHub steps; both passphrases unlock
+  t = await openUnlocked(browser, 'keyedchange', { phone: true, win: null });
+  p = t.page;
+  await p.evaluate(() => document.querySelector('#settings').scrollIntoView());
+  const ready = await p.evaluate(() => ({ st: document.querySelector('#pw-state').textContent, txt: document.querySelector('#pw-body').innerText, href: (document.querySelector('#pw-body a.g-send') || {}).href || '' }));
+  ok('passchange: once the loop has the new slot: "New passphrase ready", both work, and the exact GitHub steps', ready.st === 'NEW PASSPHRASE READY' && /Both the old and the new one open everything now/.test(ready.txt) && /Update secret/.test(ready.txt) && ready.href === 'https://github.com/kereslek/assim-LS/settings/secrets/actions/LOCK_PASSPHRASE', ready.st);
+  await snap(p, 'passchange-ready', '#settings');
+  await t.ctx.close();
+  t = await newPage(browser, { width: 1440 });
+  await t.page.goto(url('keyedchange')); await unlockWith(t.page, NEW_PASS); await waitApp(t.page);
+  ok('passchange: the new passphrase unlocks as the owner while the change is under way', await t.page.isVisible('#settings') && !(await t.page.isVisible('#gpill')));
+  ok('passchange: no page errors', t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
+  await t.ctx.close();
+}
+async function testMismatch(browser) {
+  for (const [tag, o] of [['phone', { phone: true }], ['w1440', { width: 1440 }]]) {
+    const t = await newPage(browser, o), p = t.page;
+    await p.goto(url('mismatch'));
+    await p.waitForSelector('#alarm:not([hidden])', { timeout: 20000 });
+    const a = await p.evaluate(() => { const el = document.querySelector('#alarm'), r = el.getBoundingClientRect(); return { txt: el.innerText, red: /226, 102, 76/.test(getComputedStyle(el).borderTopColor), w: r.width, vw: innerWidth, lock: !document.querySelector('#lockscreen').hidden }; });
+    ok(`mismatch ${tag}: locked, every device shows the red banner: paused, nothing lost, the fix`, a.lock && a.red && /The scanner is paused:.*the passphrase in GitHub doesn’t match your data\. Nothing is lost\./s.test(a.txt) && /use your recovery key/.test(a.txt) && a.w <= a.vw, a.txt.slice(0, 80));
+    await p.click('#alarm [data-act="al-more"]');
+    ok(`mismatch ${tag}: its steps open on a tap`, /LOCK_PASSPHRASE/.test(await p.textContent('#al-steps')) && await p.isVisible('#al-steps'));
+    await snap(p, `mismatch-${tag}-locked`);
+    await unlockWith(p, FIXTURE_PASSPHRASE); await waitApp(p);
+    ok(`mismatch ${tag}: unlocked, the banner stays`, await p.isVisible('#alarm'));
+    await snap(p, `mismatch-${tag}-unlocked`);
+    await p.goto(url('keyed')); await waitApp(p);
+    ok(`mismatch ${tag}: without the flag there is no banner`, !(await p.isVisible('#alarm')));
+    ok(`mismatch ${tag}: no page errors`, t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
+    await t.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
-  workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools }; // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers']); // look-independent (the fit, the full view, the ways out)
+  workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
+  guest: testGuest, guestend: testGuestEnd, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'guestend', 'recovery', 'passchange', 'mismatch']); // look-independent (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

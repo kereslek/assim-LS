@@ -127,7 +127,7 @@ const ENUM = () => {
   const layers = [...document.querySelectorAll('dialog[open], [role="dialog"], [aria-modal="true"], .sheet')].filter((el) => !el.hidden && !el.closest('#lockscreen') && vis(el));
   const layer = layers.length ? layers[layers.length - 1] : document.body;
   const layerId = layer === document.body ? 'page' : (layer.id || layer.className || 'layer');
-  const SKIP_ACT = /^(unlock|lock|lock-retry|retry|pass|search|scrub|lens|chain)$/;
+  const SKIP_ACT = /^(unlock|lock|lock-retry|retry|pass|search|scrub|lens|chain|g-.+|rk-.+|pw-.+)$/; // v0.7.0: guests, the recovery key, the passphrase
   const sel = 'button, [role="button"], [role="tab"], [role="switch"], [role="menuitem"], [role="checkbox"], [data-act], a[href]';
   const out = [];
   document.querySelectorAll('[data-la-i]').forEach((el) => el.removeAttribute('data-la-i'));
