@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H3snBomEGXEbUKsnAHMoKyrtEZUi9NvqBHRzIAQ+35U='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-g7G/zocrEq8p4yN2kvILDWoWjcjVsSE2fvwfdxqIEBM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -27,10 +27,12 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html{-webkit-text-size-adjust:100%;background:var(--bg)}
+html{-webkit-text-size-adjust:100%;background:var(--bg);overscroll-behavior-y:contain} /* v0.5.1: the page's own pull to refresh, not the browser's reload (the bounce stays) */
 html.modal-open{overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--fg);font:400 13px/1.45 var(--sans);min-height:100vh}
 button,input,select{font:inherit;color:inherit}
+/* v0.5.1 · the owner's iPhone: a quick second tap never zooms the page (pinch zoom stays: the viewport allows it) */
+html,body,button,a,input,select,textarea,label,summary,[role="button"],[role="tab"],[data-act]{touch-action:manipulation}
 svg,svg *{pointer-events:none}
 svg .hit{pointer-events:auto}
 h1,h2,h3{margin:0}
@@ -78,6 +80,19 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 @keyframes spin{to{transform:rotate(360deg)}}
 .rmsg{position:absolute;right:max(16px,env(safe-area-inset-right));top:calc(100% + 6px);padding:6px 9px;border-radius:6px;border:1px solid var(--line2);background:var(--raised);box-shadow:0 8px 18px rgba(0,0,0,.5);white-space:nowrap}
 .rmsg.err{color:var(--neg)}
+/* v0.5.1 · pull to refresh (a finger, from the very top): a pill under the bar, "Pull to refresh" → "Release to refresh"
+   → "Refreshing…" (spinning) → "Updated 17:05"; under reduced motion it never moves or spins, the words change */
+.ptr{position:fixed;left:50%;top:calc(var(--hdrh,48px) + 6px);z-index:44;display:flex;align-items:center;gap:7px;padding:7px 12px 7px 10px;border-radius:999px;border:1px solid var(--line3);background:rgba(17,23,30,.96);color:var(--fg2);font:600 11px/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;pointer-events:none;transform:translate(-50%,var(--ptr-y,-40px));opacity:var(--ptr-o,0);transition:transform .18s ease,opacity .18s ease}
+.ptr.pulling{transition:none}
+.ptr svg{width:16px;height:16px;flex:none;display:block}
+.ptr .ar{transition:transform .18s ease}
+.ptr[data-s="release"] .ar{transform:rotate(180deg)}
+.ptr .sp,.ptr[data-s="busy"] .ar,.ptr[data-s="done"] .ar,.ptr[data-s="fail"] .ar{display:none}
+.ptr[data-s="busy"] .sp{display:block;animation:spin .8s linear infinite}
+.ptr[data-s="done"]{color:var(--accent)}.ptr[data-s="fail"]{color:var(--neg)}
+html.m3d .ptr{background:rgba(12,52,56,.96);border-color:rgba(126,240,214,.42);color:#5EE6C8}
+html.m3d .ptr[data-s="done"]{color:#FFB547}
+@media (prefers-reduced-motion:reduce){.ptr,.ptr .ar{transition:none}.ptr[data-s="busy"] .sp{display:none}}
 .tabs{display:flex;gap:4px;overflow-x:auto;margin:6px 0 2px;padding-bottom:2px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
 .tab{flex:none;min-height:44px;padding:0 1px;border:0;background:transparent;cursor:pointer;display:flex;align-items:center}
 .tab .tp{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;border:1px solid var(--line2);background:var(--raised);font:600 12px/1.2 var(--mono);color:var(--fg2);white-space:nowrap}
@@ -108,7 +123,8 @@ button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-v
 .chip.p-fading,.chip.p-mixed{color:var(--muted);border-color:var(--line3)}
 .oneoff{font-size:12px;color:var(--warn);border-left:3px solid var(--warn);padding:4px 8px;background:rgba(250,178,25,.08)}
 .gemnow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-.gemnow>div{display:grid;gap:3px;min-width:0}
+.gemnow>div{display:grid;gap:3px;min-width:0;grid-template-rows:1fr auto auto} /* v0.5.1: a label on two lines ("STAYING | POWER") keeps every bar and value on one line with the others */
+.gemnow>div>.lbl{align-self:end}
 .gemnow .track{height:6px;border-radius:3px;background:var(--grid);overflow:hidden}
 .gemnow .track i{display:block;height:100%;background:var(--gold)}
 .gemnow .v{font:600 12px/1.2 var(--mono);color:var(--fg)}
@@ -131,7 +147,16 @@ body.solo main{max-width:none}
 .solo-box .liq .pz-c>svg{height:calc(100% - 40px)}
 .solo-box .liq .tick{top:auto;bottom:4px}
 .solo-box svg[preserveAspectRatio="none"]{height:min(48vh,420px)!important}
-.solo-cap{margin-bottom:8px}
+/* v0.5.1: the LP shape's drawing fills its window (the rule above held it to 420 px in a 560 px box: its floor stood
+   120 px above its axis), and the window is one column (the hidden side column kept 400 px of it empty) */
+.solo-box .liq .pz-c>svg[preserveAspectRatio="none"]{height:calc(100% - 40px)!important}
+body.solo main{display:block}
+.solo-cap{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.solo-cap>.lbl{min-width:0}
+.solo-x{flex:none}
+.solo-dead{margin:0 0 14px;padding:14px 16px;border-radius:12px;border:1px solid var(--line3);background:var(--raised);display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.solo-dead p{margin:0;flex:1 1 240px;color:var(--fg2);font:400 13px/1.45 var(--sans)}
+.solo-dead b{color:var(--fg)}
 /* date axes and chart notes (v0.4.6): ticks under every chart over time, one note for the data under the pointer or finger */
 .tax{position:relative;height:14px;margin-top:5px;pointer-events:none}
 .tax>span{position:absolute;top:0;transform:translateX(-50%);font:500 10px/1.3 var(--mono);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -190,6 +215,29 @@ body.solo main{max-width:none}
 .totop.on{visibility:visible;opacity:1;transform:none;transition:opacity .18s ease,transform .18s ease,visibility 0s}
 .totop svg{width:18px;height:18px;display:block}
 body.solo .totop{display:none}
+body.solo #best .best-r{margin:0}
+body.solo .sheet-card{width:100%;border-left:0} /* a pool's chart in a window of its own: the whole width, not the panel's side sheet */
+body.solo .calib,body.solo .lab{display:block} /* the scatter and the strategy lab alone: their grid's other column is hidden, so the chart takes the width */
+/* v0.5.1 · a chart's full view: the whole window, above everything (the bar, the pool panel); real fullscreen where the
+   browser allows it. A slim row with the chart's name and Close, then the chart's own page at the window's size. */
+html.full-open{overflow:hidden}
+.fullv{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;background:var(--bg);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.fullv-h{flex:none;display:flex;align-items:center;gap:10px;min-height:52px;padding:4px 8px 4px 14px;border-bottom:1px solid var(--line);background:var(--head)}
+.fullv-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 11px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--fg2)}
+.fullv-x{flex:none;min-height:44px;min-width:44px;padding:0 18px;border-radius:8px;border:1px solid var(--line3);background:var(--raised);color:var(--fg);font:600 14px/1 var(--sans);cursor:pointer}
+.fullv-b{position:relative;flex:1;min-height:0}
+.fullv-f{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:var(--bg)}
+.fullv-f.wait{visibility:hidden}
+.fullv-w{position:absolute;left:0;right:0;top:40%;margin:0;text-align:center;color:var(--muted);font:600 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+/* the chart's own page inside it (full=1): no bar, no card around it, the chart as tall as the window allows */
+body.full header.top,body.full .solo-cap,body.full .openwin{display:none!important}
+body.full main{padding:8px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
+body.full main .card,body.full .sheet-card,body.full .sub-card,body.full .pane.chartbox{border:0;border-radius:0;background:transparent;box-shadow:none;padding:0}
+body.full .sheet-body{padding:8px max(10px,env(safe-area-inset-right)) 10px max(10px,env(safe-area-inset-left))}
+body.full .sheet-card{top:0;border-radius:0}
+body.full .solo-box{padding:0}
+body.full .solo-box .liq{height:max(280px,calc(100vh - 170px));height:max(280px,calc(100dvh - 170px))}
+body.full .solo-box svg[preserveAspectRatio="none"]{height:max(220px,calc(100dvh - 210px))!important}
 
 /* layout */
 main{max-width:1400px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
@@ -264,9 +312,26 @@ button.tile:hover{border-color:var(--line3)}
 .ring svg{position:absolute;inset:0;width:64px;height:64px}
 .ring .rv{position:absolute;left:0;right:0;top:17px;text-align:center;font:700 18px/1 var(--mono);color:var(--gold)}
 .ring .rl{position:absolute;left:0;right:0;top:38px;text-align:center;font:600 10px/1 var(--mono);letter-spacing:.08em;color:var(--fg2)}
-.best-body{display:flex;flex-wrap:wrap;gap:16px 24px;margin-top:14px}
-.best-l{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:12px}
-.best-r{flex:1.6 1 400px;min-width:0}
+.best-body{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.best-l{min-width:0;display:flex;flex-direction:column;gap:12px}
+.best-x,.best-g{min-width:0}
+.best-r{min-width:0;margin-top:4px}
+/* v0.5.1: once the card is wide enough for two columns (724 px inside it, as before: a window of 782-999 px, or 1132 px
+   and up beside the side column), the charts stand together on the right (the liquidity map, the fees per $1,000 under
+   it) and the words on the left with the gem's parts under them: no hole under the map (v0.4.8 left one of about 330 px
+   on a laptop). The columns keep their widths. One column: as before. (A media query, not a size container: WebKit on a
+   phone missed taps on the map inside one.) A chart opened in a window of its own stands alone: one column. */
+@media (min-width:782px) and (max-width:999.98px),(min-width:1132px){
+  body:not(.solo) .best-body{display:grid;grid-template-columns:calc(300px + (100% - 724px) / 2.6) minmax(0,1fr);grid-template-areas:"l r" "l x" "g x";gap:12px 24px;align-items:start}
+  body:not(.solo) .best-l{grid-area:l}body:not(.solo) .best-r{grid-area:r;margin-top:0}body:not(.solo) .best-x{grid-area:x;margin-top:6px}body:not(.solo) .best-g{grid-area:g}
+  /* when the words run longer, the fee bars grow taller (from 44 px) and both columns end together; the drawing sits
+     inside its box (absolutely), so the bars count as 44 px when the columns are measured: they only fill room */
+  body:not(.solo) .best-x{align-self:stretch;display:flex;flex-direction:column}
+  body:not(.solo) .best-x>.daily{flex:1 1 auto;grid-template-rows:auto minmax(44px,auto) auto}
+  body:not(.solo) .best-x>.daily>.pz{min-height:44px}
+  body:not(.solo) .best-x>.daily>.pz>.pz-c{position:absolute;inset:0}
+  body:not(.solo) .best-x>.daily>.pz>.pz-c>svg{height:100%}
+}
 .bigline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .bignum{font:700 48px/1 var(--mono);letter-spacing:-.03em;color:var(--gold);font-variant-numeric:tabular-nums}
 .bigsub{font-size:13px;line-height:1.35;color:var(--fg2)}
@@ -299,6 +364,11 @@ button.tile:hover{border-color:var(--line3)}
 .checks{display:flex;gap:8px;align-items:flex-start;margin-top:14px;padding-top:12px;border-top:1px solid var(--grid);font-size:12px;line-height:1.5;color:var(--fg2)}
 .checks b{color:var(--fg);font-weight:600}
 .ck-ok{color:var(--fg2)}.ck-bad{color:var(--neg);font-weight:600}.ck-null{color:var(--warn)}
+.ck-ok,.ck-bad,.ck-null,.nw{white-space:nowrap} /* v0.5.1: a short phrase never splits over two lines ("gas | OK", "30 | d", "since | 15:44") */
+/* v0.5.2: a check's label is data and can run long (the live iPhone page scrolled 101 px sideways on one): a long one
+   wraps (its mark stays with its first word), and the line around the checks may shrink to the card */
+.checks .ck-long{white-space:normal}
+.checks p{min-width:0;overflow-wrap:anywhere}
 .best .btns{margin-top:12px}
 
 /* next best */
@@ -383,6 +453,13 @@ tr.sel td{background:rgba(22,199,132,.08)}
 .strat .rr{font:500 11px/1.2 var(--mono);color:var(--muted);text-align:right;min-width:9ch}
 .strat.ours .nm{color:var(--accent);font-weight:600}
 .strat-h{border-bottom:1px solid var(--line);padding-bottom:4px}
+/* v0.5.1: every row of the strategy list shares one set of columns (each row was its own grid: "0 · $0" made the
+   baseline's Net APR stand 10-20 px right of the others) */
+@supports (grid-template-columns:subgrid){
+  .lab-legend{grid-template-columns:14px minmax(0,1fr) auto auto;column-gap:8px}
+  .lab-legend>*{grid-column:1/-1}
+  .lab-legend>.strat,.lab-legend>.strat-h{grid-template-columns:subgrid}
+}
 .heat-box{overflow-x:auto}
 .heat{display:grid;grid-template-columns:48px repeat(5,minmax(48px,1fr));gap:2px;min-width:300px}
 .heat .hh{text-align:center;align-self:end;padding:2px 1px 4px}
@@ -463,7 +540,7 @@ footer .btn{font-family:var(--sans)}
   .top .title{display:none}
   .subhead{padding:9px max(12px,env(safe-area-inset-right)) 0 max(12px,env(safe-area-inset-left));gap:6px 12px}
   .nb-row svg{width:52px}
-  .best-r{order:-1}
+  .best-r{order:-1;margin:0 0 4px}
   .strip>div:first-child{grid-column:span 2}
 }
 .swipe{margin-top:6px;font-size:12px;color:var(--muted)}
@@ -535,11 +612,28 @@ footer .btn{font-family:var(--sans)}
 }
 @media (max-width:400px){.top .fw{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}} /* the dot's colour and the label say it */
 @media (max-width:340px){.top .brand{display:none}}
+/* a phone's bar holds the 🔍 too (v0.5.1): no brand mark, the short "updated" chip, slimmer edges and window pills; the
+   buttons keep their size and the chip gives way (an ellipsis) before anything spills past the screen */
+@media (max-width:480px){
+  body:not(.solo) .top .brand{display:none}
+  .top{gap:6px;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  .top .fw{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .top #fresh{flex:0 1 auto;min-width:0;overflow:hidden}
+  .top #fresh-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .top #qfind{width:40px}
+  .top #qfind,.top #refresh,.top #winseg{flex:none}
+  .top #winseg button>span{padding-left:6px;padding-right:6px}
+}
+@media (max-width:340px){.top{gap:4px}.top #winseg button>span{padding-left:4px;padding-right:4px}.top #refresh{display:none}} /* pull to refresh */
 
 /* pop-up notes: why a pool stands out, the gas range */
 .pop{position:fixed;z-index:70;max-width:min(320px,calc(100vw - 24px));padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:rgba(17,23,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2)}
 .pop b{color:var(--fg);font-weight:600}
 .pop .lbl{display:block;margin-bottom:6px}
+/* v0.5.1 · every note has its own way out (the owner's standing rule): a ✕ in its top right corner, a 44 px target */
+.pop-x{float:right;width:44px;height:44px;margin:-10px -12px 0 2px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--fg2);font:400 14px/44px var(--sans);text-align:center;cursor:pointer}
+.pop-x::before{content:'\2715'}
+.pop-x:hover,.pop-x:focus-visible{color:var(--fg);background:rgba(255,255,255,.06)}
 .pop .why-row{display:grid;grid-template-columns:16px minmax(0,1fr);gap:8px;align-items:start;padding:3px 0}
 .pop .why-row svg{margin-top:2px}
 .pop p+p{margin-top:5px}
@@ -724,16 +818,34 @@ div.mc-name{cursor:inherit;pointer-events:none}
 .qin{position:relative}
 .qin input{position:relative;z-index:1;background:transparent!important;-webkit-appearance:none;appearance:none}
 .qin::before{content:"";position:absolute;inset:0;border-radius:8px;background:var(--raised)}
-.qhint{position:absolute;left:11px;right:11px;top:0;bottom:0;z-index:0;display:flex;align-items:center;font-size:13px;white-space:pre;overflow:hidden;pointer-events:none;color:var(--muted)}
-.qhint .t{visibility:hidden}
-.qlist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;margin:0;padding:4px 0;list-style:none;border:1px solid var(--line3);border-radius:10px;background:rgba(12,16,21,.98);box-shadow:0 14px 30px rgba(0,0,0,.55);max-height:min(60vh,380px);overflow-y:auto}
-.qopt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;min-height:44px;padding:4px 12px;cursor:pointer;font-size:13px;color:var(--fg2)}
-.qopt .qk{font:600 10px/1 var(--mono);letter-spacing:.06em;color:var(--muted);min-width:36px}
-.qopt .qt{min-width:0;overflow-wrap:anywhere;color:var(--fg)}
+/* v0.5.1 · search like iOS (the owner: "it feels odd … half the search field"): what you type is what the field holds (no
+   greyed completion), the rows filter as you type, a live line says how many match, suggestions are small chips under it
+   that never cover the rows, ✕ clears, the Search key just hides the keyboard */
+.qin input{padding-right:44px}
+#f-q::-webkit-search-cancel-button,#f-q::-webkit-search-decoration{-webkit-appearance:none;appearance:none;display:none}
+.qx{position:absolute;right:0;top:50%;z-index:2;width:44px;height:44px;margin-top:-22px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--fg2);font:400 15px/44px var(--sans);text-align:center;cursor:pointer}
+.qx::before{content:'\2715'}
+.qx:hover,.qx:focus-visible{color:var(--fg)}
+.qbar{margin:8px 0 2px;min-width:0}
+.qstat{margin:0;font:500 12px/1.5 var(--sans);color:var(--fg2)}
+.qstat b{color:var(--fg);font-weight:600}
+.qstat .qnote{color:var(--muted)}
+.qstat .linkbtn{margin-left:2px}
+.pn2>b.qhit{color:var(--accent);font-weight:700}
+/* v0.5.1 · on a touch screen every field is 16 px: iOS Safari zooms into a smaller one when it is tapped and keeps that
+   zoom, even when the page is opened again (the owner had to zoom out); a laptop keeps its 13 px */
+@media (hover:none) and (pointer:coarse),(max-width:520px){.filters select,.filters input,.qhint,input,select,textarea{font-size:16px}}
+.qlist-old{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;margin:0;padding:4px 0;list-style:none;border:1px solid var(--line3);border-radius:10px;background:rgba(12,16,21,.98);box-shadow:0 14px 30px rgba(0,0,0,.55);max-height:min(60vh,380px);overflow-y:auto}
+.qlist{display:flex;gap:6px;margin:6px 0 0;padding:0 0 2px;list-style:none;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.qlist::-webkit-scrollbar{display:none}
+.qopt{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border:1px solid var(--line3);border-radius:20px;background:var(--raised);cursor:pointer;font-size:13px;color:var(--fg2);white-space:nowrap}
+.qopt .qk{order:2;font:600 9px/1 var(--mono);letter-spacing:.06em;color:var(--muted)}
+.qopt .qt{color:var(--fg)}
+.qopt .qm{display:none}
 .qopt .qt b{color:var(--accent);font-weight:700}
 .qopt .qm{font:500 10px/1.2 var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
 .qopt[aria-selected="true"],.qopt:hover{background:var(--raised)}
-.qopt[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--accent)}
+.qopt[aria-selected="true"]{border-color:var(--accent);box-shadow:none}
 
 /* backtest highlights: the chosen line stays, the rest step back */
 button.strat{width:100%;min-height:44px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:opacity .15s ease,background .15s ease}
@@ -829,6 +941,7 @@ td.fees{width:96px}
 @container (min-width:500px){.nb-row .fmini{display:inline-flex}}
 .mc .fmini{align-items:flex-start;position:relative;z-index:0;pointer-events:none;margin:0 0 4px}
 .fmrow{display:flex;align-items:center;gap:8px;margin-top:6px}
+.fmrow>.lbl{white-space:nowrap}
 .fmrow .fmini{flex-direction:row;align-items:center;gap:8px}
 .feeh{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0;border:0;background:transparent;color:var(--fg2);cursor:pointer;font:inherit;max-width:100%}
 .feeh .fmini{flex-direction:row;align-items:center;gap:8px}
@@ -855,6 +968,8 @@ td.fees{width:96px}
    Classic 2D is the v0.4.8 look, untouched. html.m3d swaps the palette, adds depth and motion, and puts a depth canvas
    behind every bar chart; it changes no size, padding or position, so both looks share one layout. */
 .top #viewseg{margin-left:auto;flex:none}
+.top #qfind{margin-left:auto;flex:none}
+.top #qfind:not([hidden])+#viewseg{margin-left:0} /* the 🔍 leads the controls on the right */
 .top #viewseg~#refresh{margin-left:0}
 .vsw button>span{padding:5px 7px}
 .vsw button:first-child>span{padding-left:9px}
@@ -904,7 +1019,7 @@ html.m3d .sheet-card{background:linear-gradient(180deg,#0E3E42 0%,#0C3438 60%);b
 html.m3d .sheet-head{background:#0F4246}
 html.m3d .scrim{background:rgba(2,18,20,.72)}
 html.m3d .ctip,html.m3d .pop{background:rgba(10,46,50,.97);border-color:#3B7F7D;box-shadow:0 14px 32px rgba(1,16,18,.65)}
-html.m3d .qlist{background:rgba(10,46,50,.98)}
+html.m3d .qopt{background:rgba(10,46,50,.98)}
 html.m3d .totop,html.m3d .mc-nav{background:rgba(12,52,56,.94)}
 html.m3d .pz-hint{background:rgba(8,40,44,.76)}
 html.m3d .lock-card{background:linear-gradient(165deg,#155357,#0F4549);border-color:rgba(126,240,214,.2);border-radius:16px;box-shadow:0 5px 0 -1px #082C2F}
@@ -968,6 +1083,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
     <h1 class="title">LP SHAPE SCANNER</h1>
   </div>
   <span class="badge" id="fresh" role="status"><span class="dot"></span><span id="fresh-t">NO DATA YET</span></span>
+  <button type="button" class="iconbtn" id="qfind" data-act="qfind" aria-label="Search pools" title="Search pools (/)" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.6" cy="8.6" r="5.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.8 12.8 17 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   <div class="seg pills vsw" role="group" aria-label="View: 3D or Classic 2D" id="viewseg"><button type="button" data-act="view" data-v="3d" aria-pressed="false" title="3D view"><span>3D</span></button><button type="button" data-act="view" data-v="2d" aria-pressed="false" title="Classic 2D view"><span>2D</span></button></div>
   <button type="button" class="iconbtn" id="refresh" data-act="refresh" aria-label="Refresh" title="Refresh now" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.2 2.6v3.4h-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   <div class="seg pills" role="group" aria-label="Time window" id="winseg" hidden>
@@ -975,6 +1091,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
   </div>
   <span class="lbl rmsg" id="refresh-msg" role="status" aria-live="polite" hidden></span>
 </header>
+<div class="ptr" id="ptr" role="status" aria-live="polite" hidden><svg class="ar" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M3.5 9 8 13.5 12.5 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="sp" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="pt">Pull to refresh</span></div>
 <div class="subhead" id="subhead">
   <div class="sub-l"><span class="lbl" id="phase">PHASE —</span>
     <button type="button" class="termb" data-act="term" data-term="sealed" aria-expanded="false" aria-label="Sealed: what does it mean?"><span class="badge sealed"><svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="6.5" rx="1.5" fill="#AAB4C0"/><path d="M3 5V3.6a2.5 2.5 0 0 1 5 0V5" fill="none" stroke="#AAB4C0" stroke-width="1.4"/></svg><span class="sl-t">SEALED</span></span></button>
@@ -1041,10 +1158,10 @@ html.m3d .g-cheap{--gc:#5EE6C8}
         <div class="stab-row"><button type="button" class="tog" id="f-stab" role="switch" aria-checked="false" aria-labelledby="f-stab-l" aria-describedby="f-stab-n" data-act="stable"><span class="knob" aria-hidden="true"></span><span class="st">Off</span></button><span class="lbl stab-n" id="f-stab-n"></span></div>
       </div>
       <div class="fld q"><span class="lbl" id="f-q-l">Search</span>
-        <div class="qin"><span class="qhint" id="q-hint" aria-hidden="true"></span><input id="f-q" type="search" data-act="search" role="combobox" aria-autocomplete="both" aria-expanded="false" aria-controls="q-list" aria-labelledby="f-q-l" placeholder="Pair, token or pool id" autocomplete="off" spellcheck="false" enterkeyhint="search">
-          <ul class="qlist" id="q-list" role="listbox" aria-label="Suggestions" hidden></ul></div>
+        <div class="qin"><input id="f-q" type="search" data-act="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="q-list" aria-labelledby="f-q-l" placeholder="Pair, token or pool id" autocomplete="off" spellcheck="false" enterkeyhint="search"><button type="button" class="qx" id="q-x" data-act="q-clear" aria-label="Clear the search" title="Clear" hidden></button></div>
       </div>
     </div>
+    <div class="qbar" id="q-bar" hidden><p class="qstat" id="q-stat" role="status" aria-live="polite"></p><ul class="qlist" id="q-list" role="listbox" aria-label="Suggestions" hidden></ul></div>
     <div class="why-key"><button type="button" class="linkbtn" id="why-tog" data-act="legend" aria-expanded="false" aria-controls="why-legend">What the “Why” icons mean</button><span class="ch-key" id="ch-key" role="note" aria-label="Chain marks"></span></div>
     <div class="why-legend" id="why-legend" hidden></div>
     <div class="tbl-box" id="all-box"><table class="tbl" id="all-tbl"><thead></thead><tbody></tbody></table></div>
@@ -1107,7 +1224,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
     <div class="sheet-head">
       <div class="ttl"><h2 id="sheet-title">—</h2></div>
       <div class="seg pills winsel" role="group" aria-label="Time window" id="sheet-win"><button type="button" data-act="win" data-w="24h" aria-pressed="false"><span>24H</span></button><button type="button" data-act="win" data-w="7d" aria-pressed="false"><span>7D</span></button><button type="button" data-act="win" data-w="30d" aria-pressed="true"><span>30D</span></button></div>
-      <button type="button" class="btn" id="sheet-close" data-act="close-detail">Close</button>
+      <button type="button" class="btn" id="sheet-close" data-act="close-detail" aria-label="Close the pool panel" title="Close (Esc)">Close</button>
     </div>
     <div class="sheet-body" id="sheet-body"><div class="sheet-info" id="sheet-info"><div class="si-top"><div class="lbl" id="sheet-kicker">POOL DETAIL</div><span id="sheet-star"></span></div><div class="lbl" id="sheet-meta"></div>
         <div class="sheet-ctl"><button type="button" class="linkbtn" id="sheet-pair" data-act="pair" hidden>Pair view ▸</button><span id="sheet-fee"></span></div>
@@ -1122,14 +1239,14 @@ html.m3d .g-cheap{--gc:#5EE6C8}
   <div class="lockgrp"><button type="button" class="btn" id="lockbtn" data-act="lock" data-danger hidden aria-describedby="lock-note">Sign out on this device</button>
   <span class="lock-note" id="lock-note" hidden>Forgets the saved key here. You’ll need your passphrase next time. Your data stays encrypted either way.</span></div>
 </footer>
-<div class="pop" id="pop" role="tooltip" hidden></div>
+<div class="pop" id="pop" role="dialog" aria-label="Note" hidden></div>
 <div class="ctip" id="ctip" role="tooltip" hidden></div>
 <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.5.0';
+const BUILD = 'v0.5.2';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -1469,8 +1586,9 @@ const idbPut = (k, v) => idbDo('readwrite', (s) => s.put(v, k)).then((x) => x !=
 const idbDel = (k) => idbDo('readwrite', (s) => s.delete(k));
 
 // ---------- fetching ----------
-async function getJson(url) {
+async function getJson(url, sig = null) {
   const c = new AbortController(), tm = setTimeout(() => c.abort(), 15000);
+  if (sig) { if (sig.aborted) c.abort(); else sig.addEventListener('abort', () => c.abort(), { once: true }); }
   try {
     const r = await fetch(url, { cache: 'no-store', signal: c.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
     if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
@@ -1481,8 +1599,8 @@ async function getJson(url) {
   } finally { clearTimeout(tm); }
 }
 // every base is read; the newest sealed copy wins (raw and Pages can lag each other)
-async function fetchEnv(file) {
-  const res = await Promise.allSettled(BASES.map((b) => getJson(b + file + '?t=' + Date.now())));
+async function fetchEnv(file, sig = null) {
+  const res = await Promise.allSettled(BASES.map((b) => getJson(b + file + '?t=' + Date.now(), sig)));
   let best = null, err = null, all404 = res.length > 0;
   for (const r of res) {
     if (r.status === 'fulfilled' && r.value && r.value.lock === 1 && isNum(r.value.t)) { if (!best || r.value.t > best.t) best = r.value; all404 = false; }
@@ -1509,9 +1627,10 @@ async function getLock() {
 async function refresh() {
   if (!S.key || S.busy) return;
   S.busy = true;
-  const tried = Date.now();
+  const tried = Date.now(), ac = (S.ac = new AbortController());
+  S.tried = tried;
   try {
-    const got = await Promise.allSettled(FILES.map((f) => fetchEnv(f + '.json')));
+    const got = await Promise.allSettled(FILES.map((f) => fetchEnv(f + '.json', ac.signal)));
     if (got[0].status === 'rejected') { const e = got[0].reason; e.kind = 'fetch'; throw e; }
     let changed = false;
     const env = got[0].value;
@@ -1538,11 +1657,15 @@ async function refresh() {
     S.failing = null;
     if (changed || !S.rendered) renderAll();
   } catch (e) {
-    S.failing = { at: tried, msg: e.message, kind: e.kind };
-    if (!S.live) showLoadError(e);
+    if (!(ac.signal.aborted && S.again)) { // called off to start again (a fetch frozen while the phone slept): not a failure
+      S.failing = { at: tried, msg: e.message, kind: e.kind };
+      if (!S.live) showLoadError(e);
+    }
   } finally {
     S.busy = false;
     renderFresh(); renderBanner();
+    const again = S.again; S.again = null; // a return to the page asked for a refresh while this one ran
+    if (again) setTimeout(() => (again === 'shown' ? manualRefresh(true) : refresh()), 0);
   }
 }
 let timer = 0;
@@ -1551,12 +1674,12 @@ const stopTimer = () => { clearInterval(timer); timer = 0; };
 const TZ_NAME = (() => { try { return new Intl.DateTimeFormat('en-GB', { timeZone: TZ, timeZoneName: 'short' }).formatToParts(new Date()).find((x) => x.type === 'timeZoneName').value; } catch (e) { return 'CET'; } })();
 // the header's refresh button: all three files at once, a spinner while loading, double taps ignored
 let lastManual = 0;
-async function manualRefresh() {
+async function manualRefresh(auto = false, pill = false) { // auto: back on the page or pulled (the double-tap guard is for the button); pill: the pull's own pill tells it
   const b = $('#refresh'), m = $('#refresh-msg'), now = Date.now();
-  if (!S.key || S.busy || now - lastManual < 1500) return;
+  if (!S.key || S.busy || (!auto && now - lastManual < 1500)) return;
   lastManual = now;
   b.classList.add('spin'); b.setAttribute('aria-busy', 'true'); b.disabled = true;
-  clearTimeout(rmsgT); m.hidden = false; m.className = 'lbl rmsg'; m.textContent = 'REFRESHING…';
+  clearTimeout(rmsgT); m.hidden = pill; m.className = 'lbl rmsg'; m.textContent = 'REFRESHING…';
   try { await refresh(); } finally {
     b.classList.remove('spin'); b.removeAttribute('aria-busy'); b.disabled = false;
     if (S.failing) { m.className = 'lbl rmsg err'; m.textContent = `Refresh failed — showing data from ${S.live ? hm(S.live.t) : DASH}`; }
@@ -1568,7 +1691,7 @@ let rmsgT = 0;
 
 // ---------- unlock / lock ----------
 function lockMsg(t, err) { const m = $('#lock-msg'); m.textContent = t || ''; m.className = 'lock-msg' + (err ? ' err' : ''); }
-function showLock() { popClose(); $('#mstrip').hidden = true; $('#lock-note').hidden = true; $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
+function showLock() { popClose(); $('#mstrip').hidden = true; $('#lock-note').hidden = true; $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#qfind').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
 async function onUnlock(ev) {
   ev.preventDefault();
   const input = $('#pass'), btn = $('#unlock-btn'), pass = input.value;
@@ -1710,7 +1833,7 @@ function renderAll() {
   seenSetup();
   if (SOLO && !S.soloReady) { soloSetup(); S.soloReady = true; }
   ensureWin();
-  $('#winseg').hidden = false; $('#refresh').hidden = false;
+  $('#winseg').hidden = false; $('#refresh').hidden = false; $('#qfind').hidden = !!SOLO;
   $('#app').hidden = false; $('#loaderr').hidden = true; $('#lockscreen').hidden = true;
   $('#ribbon').hidden = S.live.fixture !== true;
   const ph = S.live.phase;
@@ -1748,7 +1871,7 @@ function renderGlance() {
   $('#ns-body').innerHTML = !fresh.length ? '<span class="big" style="font-size:16px">Nothing new</span><span class="line">No pool reached the gem bar since then.</span>'
     : fresh.slice(0, 3).map((p) => {
       const w = W(p);
-      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)}${keptStable(p) ? ' · ★ STABLE' : ''} · since ${dmhm(p.gemFirstAt)}</span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprPd(w && w.net, { block: true })}</span></button>`;
+      return `<button type="button" class="ns-row" data-act="detail" data-id="${esc(p.id)}"><span class="ns-main"><span class="pn">${esc(p.pair)}</span><span class="lbl">${metaTxt(p)}${keptStable(p) ? ' · ★ STABLE' : ''} · <span class="nw">since ${dmhm(p.gemFirstAt)}</span></span></span>${gemPill(p)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprPd(w && w.net, { block: true })}</span></button>`;
     }).join('') + (fresh.length > 3 ? `<span class="line">and ${fresh.length - 3} more in the table</span>` : '');
   if (nsHid) $('#ns-body').insertAdjacentHTML('beforeend', `<span class="line hidn">${hidTxt(nsHid)}</span>`);
   // scanner
@@ -2163,12 +2286,15 @@ function liqInner(id) {
   }
   const lps = p.shape && p.shape.lpsAtPrice, room = w && w.inRangeUsd, px0 = X(0) / VW;
   // near an edge the pill hangs off the price line towards the middle, so it never leaves the chart
-  if (px0 >= 0.04 && px0 <= 0.96) s += `<span class="cpill" style="left:${pctX(0)};top:${Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24)))}px${px0 < 0.3 ? ';transform:translateX(-6px)' : px0 > 0.7 ? ';transform:translateX(calc(6px - 100%))' : ''}">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
+  // v0.5.1: in a window of its own the map is taller (its plot is the box less 40 px, not 116 px): the pill and the
+  // full-range label follow the bars there (they floated far above them)
+  const yAt = (f, c) => `calc(20px + (100% - 40px) * ${f.toFixed(4)} - ${c}px)`;
+  if (px0 >= 0.04 && px0 <= 0.96) s += `<span class="cpill" style="left:${pctX(0)};top:${SOLO ? `clamp(22px, ${yAt(1 - hin / VH, 24)}, calc(100% - 60px))` : Math.min(96, Math.max(22, Math.round(20 + (1 - hin / VH) * 116 - 24))) + 'px'}${px0 < 0.3 ? ';transform:translateX(-6px)' : px0 > 0.7 ? ';transform:translateX(calc(6px - 100%))' : ''}">${isNum(lps) ? int(lps) + ' LP' + (lps === 1 ? '' : 's') + ' · ' : ''}${usd(room)}</span>`;
   const off = px0 < 0.04 ? -1 : px0 > 0.96 ? 1 : 0;
   for (const t of liqTicks(v0, v1, off)) s += `<span class="tick${t === 0 ? ' now' : ''}" style="left:${pctX(Math.log(1 + t))}">${moveTxt(t)}</span>`;
   if (off) s += `<span class="tick now off ${off < 0 ? 'l">◂ PRICE' : 'r">PRICE ▸'}</span>`;
   // the full-range layer's label sits just above it (liqDeclutter moves or hides it)
-  if (frTop != null) s += `<span class="frlab" style="top:${Math.max(24, Math.round(20 + (frTop / VH) * 116 - 15))}px">full range ${usd(fr.v)}</span>`;
+  if (frTop != null) s += `<span class="frlab" style="top:${SOLO ? `max(24px, ${yAt(frTop / VH, 15)})` : Math.max(24, Math.round(20 + (frTop / VH) * 116 - 15)) + 'px'}"${SOLO ? ` data-y="max(24px, ${yAt(frTop / VH, 15)})"` : ''}>full range ${usd(fr.v)}</span>`;
   // the beyond buckets: what sits past the last bars, a label at the map's edge (never a bar); a real 0 draws nothing
   const by = (p.shape && p.shape.beyond) || {};
   for (const [k, e, dir] of [['below', ext.lo, -1], ['above', ext.hi, 1]]) {
@@ -2189,6 +2315,18 @@ function liqDeclutter(id) {
   const h = pzHost(id), P = PZ[id];
   if (!h || !P || P.kind !== 'liq') return;
   const hit = (a, b) => a.left < b.right + 3 && b.left < a.right + 3 && a.top < b.bottom + 1 && b.top < a.bottom + 1;
+  // v0.5.1: the price pill keeps clear of a pan arrow at the chart's edge (panned so the price sits by it, the pill
+  // covered the arrow): it slides along, towards the middle, as far as the arrow's strip
+  const cp = h.querySelector(':scope .cpill');
+  if (cp) {
+    cp.style.marginLeft = '';
+    const a = cp.getBoundingClientRect();
+    for (const e of h.querySelectorAll(':scope > .pz-edge')) {
+      if (e.hidden || !e.getClientRects().length) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width > 0 && a.left < r.right + 3 && a.right > r.left - 3 && a.top < r.bottom && a.bottom > r.top) cp.style.marginLeft = Math.round(e.classList.contains('l') ? r.right + 3 - a.left : r.left - 3 - a.right) + 'px';
+    }
+  }
   const fixed = [...h.querySelectorAll('.cpill, .mlab, .tick')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0);
   for (const e of h.querySelectorAll('.pz-end span')) { const r = e.getBoundingClientRect(); if (fixed.some((f) => hit(r, f))) e.style.visibility = 'hidden'; else fixed.push(r); }
   for (const b of h.querySelectorAll('.bylab')) {
@@ -2202,7 +2340,8 @@ function liqDeclutter(id) {
   }
   const fl = h.querySelector('.frlab');
   if (fl) { // above the layer, at the view's left end, else its right end, else a row higher; hidden if nowhere is free
-    const t0 = parseFloat(fl.style.top) || 104, hr = h.getBoundingClientRect(), edgeL = h.querySelector(':scope > .pz-edge.l:not([hidden])'), edgeR = h.querySelector(':scope > .pz-edge.r:not([hidden])');
+    if (fl.dataset.y) { fl.style.top = fl.dataset.y; fl.style.visibility = ''; } // in a window of its own: from the map's height now
+    const t0 = fl.dataset.y ? fl.offsetTop : parseFloat(fl.style.top) || 104, hr = h.getBoundingClientRect(), edgeL = h.querySelector(':scope > .pz-edge.l:not([hidden])'), edgeR = h.querySelector(':scope > .pz-edge.r:not([hidden])');
     let ok = false;
     for (const top of [t0, t0 - 16, t0 - 32]) {
       for (const sideL of [true, false]) {
@@ -2228,7 +2367,7 @@ function checksLine(p) {
   const dOk = data.filter((x) => x.ok === true).length; // a check that didn't run is never a pass
   const mark = bad ? '<svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M3 3 9 9M9 3 3 9" stroke="#E2664C" stroke-width="1.9"/></svg>'
     : '<svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true" style="flex:none;margin-top:2px"><path d="M2.2 6.3 4.9 9 9.8 3.4" fill="none" stroke="#2FBF4A" stroke-width="1.9"/></svg>';
-  const items = c.map((x) => `<span class="${x.ok === true ? 'ck-ok' : x.ok === false ? 'ck-bad' : 'ck-null'}">${x.ok === false ? '✗ ' : x.ok == null ? '? ' : ''}${esc(x.label)}</span>`).join(' · ');
+  const items = c.map((x) => `<span class="${x.ok === true ? 'ck-ok' : x.ok === false ? 'ck-bad' : 'ck-null'}${String(x.label).length > 24 ? ' ck-long' : ''}">${x.ok === false ? '✗\u00a0' : x.ok == null ? '?\u00a0' : ''}${esc(x.label)}</span>`).join(' · ');
   return `<div class="checks">${mark}<p><b>Safe ${sMark} ${sOk}/${safe.length} · Data ${dOk}/${data.length}</b>${bad ? ` · ${bad} fail${bad === 1 ? 's' : ''}` : ''}${nul ? ` · ${nul} not run` : ''} · ${items}</p></div>`;
 }
 // one plain sentence; a missing figure drops its clause instead of printing "— of the —"
@@ -2309,8 +2448,7 @@ function renderBest() {
     + `<div class="chips">${termB('edge', `<span class="chip">EDGE ${times(w.edge)}</span>`)}${termB('sigma', `<span class="chip">σ ${pct(w.sigma, { dp: 1 })}/DAY</span>`)}`
     + `${termB('rerange', `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span>`)}${termB('room', `<span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`)}`
     + `${termB('stop', `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>`)}${patternChip(p)}</div>`
-    + dailyStrip(p, w) + gemNow(p, w)
-    + `</div><div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">${term('logscale', 'LOG SCALE')} · <span class="pz-cap1">${liqCap('liq-best')}</span></span>${ztools('liq-best', p.id)}</div>${lq}</div></div>`
+    + `</div><div class="best-x">${dailyStrip(p, w)}</div>${gemBox(p, w)}<div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">${term('logscale', 'LOG SCALE')} · <span class="pz-cap1">${liqCap('liq-best')}</span></span>${ztools('liq-best', p.id)}</div>${lq}</div></div>`
     + checksLine(p)
     + `<div class="btns"><button type="button" class="btn" disabled>Paper-trade · Phase 1</button><button type="button" class="btn" disabled>Propose live · Phase 2</button>`
     + `<button type="button" class="btn" data-act="detail" data-id="${esc(p.id)}">Full breakdown</button></div>`;
@@ -2331,6 +2469,7 @@ function gemNow(p, w) {
   return `<div class="dsec"><span class="lbl">${term('gem', 'Gem now ' + (isNum(g.total) ? g.total : DASH))} · how it adds up</span><div class="gemnow">`
     + parts.map(([n, v, mx]) => `<div><span class="lbl">${esc(n)}</span><span class="track"><i style="width:${isNum(v) ? Math.max(0, Math.min(100, (v / mx) * 100)).toFixed(0) : 0}%"></i></span><span class="v">${isNum(v) ? v : DASH}/${mx}</span></div>`).join('') + '</div></div>';
 }
+const gemBox = (p, w) => { const g = gemNow(p, w); return g ? `<div class="best-g">${g}</div>` : ''; }; // the best find's gem parts (a column of their own on a laptop)
 const PATTERN_TXT = { steady: 'STEADY', bursty: 'BURSTY', emerging: 'EMERGING', fading: 'FADING', mixed: 'MIXED' };
 const patternChip = (p) => (PATTERN_TXT[p.pattern] ? termB(p.pattern, `<span class="chip p-${p.pattern}" title="How the fees arrived over 30 days">${PATTERN_TXT[p.pattern]}</span>`) : '');
 // fee tier · chain · version, each explaining itself
@@ -2410,7 +2549,7 @@ function ztools(id, pool) {
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="-1" aria-label="Zoom out" title="Zoom out (or pinch)"${lv <= z0 + 1e-6 ? ' disabled' : ''}>−</button>`
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="1" aria-label="Zoom in" title="Zoom in (or pinch)"${lv >= z1 - 1e-6 ? ' disabled' : ''}>+</button></div>`
     + (!near1(lv, zdef(id)) || panned(id, pool || '') ? `<button type="button" class="zreset" data-act="zreset" data-chart="${id}" aria-label="Reset zoom" title="Reset zoom (or double-tap the chart)">reset</button>` : '')
-    + `<button type="button" class="openwin" data-act="openchart" data-chart="${id}" data-pool="${esc(pool || '')}" aria-label="Open this chart in a new window" title="Open in a new window">`
+    + `<button type="button" class="openwin" data-act="openchart" data-chart="${id}" data-pool="${esc(pool || '')}" aria-label="Open this chart full screen" title="Full screen">`
     + `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 2h5v5M14 2 7.5 8.5M12 9.5V14H2V4h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
 }
 function rerender(id) {
@@ -2445,7 +2584,7 @@ function zoomed(id) {
   }
   rerender(id);
 }
-function openChart(id, pool) {
+function openChart(id, pool, btn) {
   const u = new URL(location.href);
   u.hash = '';
   u.searchParams.set('view', id);
@@ -2454,8 +2593,54 @@ function openChart(id, pool) {
   u.searchParams.set('z', String(+zget(id).toFixed(3)));
   const pn = panned(id, pool || '') ? S.pan[id].v : null; // the window opens on the same stretch
   if (pn != null) u.searchParams.set('pan', Array.isArray(pn) ? pn.map((x) => +x.toFixed(4)).join(',') : String(+pn.toFixed(4))); else u.searchParams.delete('pan');
-  window.open(u.toString(), '_blank', 'noopener');
+  u.searchParams.set('full', '1');
+  fullOpen(u.toString(), id, pool, btn);
 }
+// ---------- v0.5.1 · a chart's full view ----------
+// The ⧉ button opens the chart in a view of its own that fills the whole window, above the bar and the pool panel (and
+// real fullscreen where the browser allows it, from the tap; a phone's Safari has none for a page: the view fills its
+// window): the chart's own page (?view=…&full=1, the same sealed data, the stored key) in a frame at the window's size,
+// with every control, drag, pinch and note, in the same look. Close, Esc, or leaving fullscreen bring you back where you
+// were: the same scroll, the pool panel still open.
+let fullAt = null;
+function fullOpen(src, id, pool, btn) {
+  fullClose(true);
+  const box = document.querySelector(`[data-chartbox="${id}"]`), h = box && (box.querySelector('h3') || box.querySelector('.pane-title .lbl, .lbl'));
+  const pp = pool && poolById(pool), name = ((h && h.textContent) || 'Chart').replace(/\s+/g, ' ').trim().split(' · ')[0];
+  const title = (pp ? pp.pair + ' · ' : '') + name;
+  const ov = document.createElement('div');
+  ov.className = 'fullv'; ov.id = 'fullv'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', title + ', full view');
+  ov.innerHTML = `<div class="fullv-h"><span class="fullv-t">${esc(title)} · full view</span><button type="button" class="fullv-x" data-act="fullclose" aria-label="Close the full view" title="Close (Esc)">Close</button></div>`
+    + `<div class="fullv-b"><p class="fullv-w">Opening…</p><iframe class="fullv-f wait" title="${esc(title)}, full view" src="${esc(src)}"></iframe></div>`;
+  fullAt = { btn: btn || document.activeElement, y: scrollY, sb: $('#sheet-body').scrollTop }; // focus returns to the ⧉ pressed (Safari doesn't focus a tapped button)
+  document.body.append(ov);
+  hlOpen('full');
+  document.documentElement.classList.add('full-open');
+  const f = ov.querySelector('iframe');
+  f.addEventListener('load', () => setTimeout(() => f.classList.remove('wait'), 2500), { once: true }); // shown when ready, at the latest 2.5 s after it loads
+  try { const r = ov.requestFullscreen ? ov.requestFullscreen({ navigationUI: 'hide' }) : null; if (r && r.catch) r.catch(() => {}); } catch (e) { /* refused: the view fills the window */ }
+  ov.querySelector('.fullv-x').focus({ preventScroll: true });
+}
+function fullClose(quiet = false) {
+  const ov = $('#fullv');
+  if (!ov) return;
+  ov.remove();
+  hlClosed('full');
+  document.documentElement.classList.remove('full-open');
+  if (document.fullscreenElement) { try { const r = document.exitFullscreen(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* already out */ } }
+  const a = fullAt; fullAt = null;
+  if (a) {
+    if (Math.abs(scrollY - a.y) > 1) scrollTo(0, a.y);
+    if (Math.abs($('#sheet-body').scrollTop - a.sb) > 1) $('#sheet-body').scrollTop = a.sb;
+    if (!quiet && a.btn && a.btn.isConnected) a.btn.focus({ preventScroll: true });
+  }
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && $('#fullv')) fullClose(); }); // the browser's own way out
+addEventListener('message', (e) => {
+  if (e.origin !== location.origin || typeof e.data !== 'string') return;
+  if (e.data === 'lps-full-close') fullClose();
+  else if (e.data === 'lps-full-ready') { const f = $('#fullv .fullv-f'); if (f) f.classList.remove('wait'); }
+});
 
 // ---------- pan: a drag or swipe moves the view, a flick coasts, a double-tap resets ----------
 // Every chart that pans registers here when it is drawn: PZ[id] = { x, setX, lim, span, unit, vw, ext, inner, ... }.
@@ -2830,16 +3015,24 @@ function timeTicks(ta, tb, W, mid = false, minPx = 66) {
     if (out.length && !out.some((x) => x.d)) out[0].dh = true; // no midnight in view: the first tick carries the date
     return out;
   }
-  const ds = [1, 2, 5, 10, 15].find((x) => T / (x * D) <= n) || 31, off = mid ? D / 2 : 0;
-  for (let w = Math.ceil((wallT(ta) - off) / D) * D, k = 0; k < 800; w += D, k++) {
-    const t = fromWall(w + off);
-    if (t > tb) break;
-    if (t < ta) continue;
-    const dt = new Date(w), dom = dt.getUTCDate(), dim = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
-    if (ds > 15 ? dom === 1 : (dom - 1) % ds === 0 && (dom === 1 || dim - dom + 1 >= ds * 0.6)) out.push({ t, d: true });
+  const DS = [1, 2, 5, 10, 15, 31], off = mid ? D / 2 : 0;
+  // v0.5.1: a step that leaves a single date in view (30 days on a phone, from just after the 16th to the 15th: only
+  // "1 Nov") takes the next smaller step once, so the axis always reads as a span
+  for (let i = DS.findIndex((x) => x === 31 || T / (x * D) <= n), tries = 0; tries < 2 && i >= 0; i--, tries++) {
+    const ds = DS[i];
+    out.length = 0;
+    for (let w = Math.ceil((wallT(ta) - off) / D) * D, k = 0; k < 800; w += D, k++) {
+      const t = fromWall(w + off);
+      if (t > tb) break;
+      if (t < ta) continue;
+      const dt = new Date(w), dom = dt.getUTCDate(), dim = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+      if (ds > 15 ? dom === 1 : (dom - 1) % ds === 0 && (dom === 1 || dim - dom + 1 >= ds * 0.6)) out.push({ t, d: true });
+    }
+    if (out.length >= 2 || T < 2 * D) break;
   }
   return out;
 }
+if (window.__lpsHooks) window.__lpsHooks.timeTicks = timeTicks; // the browser tests only (they set it before the page loads)
 // the HTML axis under a pan chart, for its view
 function taxOf(id) {
   const P = PZ[id], [a, b] = P.vw(), [e0, e1] = P.ext(), lo = Math.max(a, e0), hi = Math.min(b, e1);
@@ -3058,6 +3251,8 @@ function labTip(row, strats, u) {
 // a window opened from a chart shows just that chart, from the same sealed data (the stored key opens it)
 const SOLO = /^[a-z-]{2,20}$/.test(QP.get('view') || '') ? QP.get('view') : null;
 const SOLO_POOL = SOLO ? QP.get('pool') : null;
+const FULL = !!SOLO && QP.get('full') === '1'; // v0.5.1: inside a full view (no bar, the chart at the window's size)
+if (FULL) document.body.classList.add('full');
 const TALL = SOLO ? 2.2 : 1;
 function soloSetup() {
   const wq = QP.get('w');
@@ -3072,14 +3267,35 @@ function soloSetup() {
 function isolate() {
   if (SOLO_POOL && (SOLO.endsWith('-detail') || SOLO.startsWith('d-')) && S.detail !== SOLO_POOL) openDetail(SOLO_POOL);
   const box = $(`[data-chartbox="${SOLO}"]`);
-  if (!box) return;
+  if (!box) { soloDead(); return; }
   document.body.classList.add('solo');
   for (let el = box; el && el !== document.body; el = el.parentElement)
     for (const sib of el.parentElement.children) if (sib !== el && !sib.matches('header.top, .scrim, #ctip')) sib.style.display = 'none';
   box.classList.add('solo-box');
+  // the backtest's charts were drawn at the card's width: once, again at the window's (the scatter filled a third of it)
+  if (!S.isoOnce) { S.isoOnce = true; if (S.bt && box.closest('#bt')) { try { renderBt(); } catch (e) { console.error('panel bt failed: ' + e.message); } isolate(); return; } }
+  if (PZ[SOLO] && PZ[SOLO].kind === 'liq') liqDeclutter(SOLO); // its labels, for the taller map
+  if (FULL && parent !== window) parent.postMessage('lps-full-ready', location.origin); // the full view shows it now
   const pool = SOLO_POOL && poolById(SOLO_POOL);
-  if (!box.querySelector('.solo-cap')) box.insertAdjacentHTML('afterbegin', `<div class="lbl solo-cap">${pool ? esc(pool.pair) + ' · ' : ''}${WIN_LABEL[S.win]} · opened from the dashboard</div>`);
+  if (!box.querySelector('.solo-cap')) box.insertAdjacentHTML('afterbegin', `<div class="solo-cap"><span class="lbl">${pool ? esc(pool.pair) + ' · ' : ''}${WIN_LABEL[S.win]} · opened from the dashboard</span><button type="button" class="btn solo-x" data-act="soloclose" aria-label="Close this chart and go to the dashboard" title="Close">Close</button></div>`);
   document.title = (pool ? pool.pair + ' · ' : '') + 'chart · LP Shape Scanner';
+}
+
+// a link to a chart that is no longer in the data (the pool left the scan): it says so, with a way to the dashboard
+function soloDead() {
+  if (!S.rendered && !S.live) return;
+  if (FULL && parent !== window) parent.postMessage('lps-full-ready', location.origin);
+  if ($('#solo-dead')) return;
+  const m = $('main');
+  if (m) m.insertAdjacentHTML('afterbegin', `<div class="solo-dead" id="solo-dead" role="status"><p><b>This chart isn’t in the latest data.</b> The pool or the view the link points to is no longer in the scan, so the dashboard opens on its main view.</p><button type="button" class="btn" data-act="soloclose" aria-label="Go to the dashboard's main view">Go to the dashboard</button></div>`);
+}
+// Close on the chart's own page: a window the dashboard opened closes; a link opened on its own lands on the main view
+function soloClose() {
+  if (FULL && parent !== window) { parent.postMessage('lps-full-close', location.origin); return; }
+  const u = new URL(location.href); u.hash = '';
+  for (const k of ['view', 'pool', 'full', 'z', 'pan']) u.searchParams.delete(k);
+  let mine = false; try { mine = !!(window.opener && !window.opener.closed); } catch (e) { /* another origin */ }
+  if (mine) { window.close(); setTimeout(() => location.assign(u.toString()), 400); } else location.assign(u.toString());
 }
 
 // ---------- next best ----------
@@ -3128,7 +3344,7 @@ function dlLines(k, p, L) {
   if (k === 'newPools') {
     const age = isNum(p.createdAt) ? Math.max(0, (L.t - p.createdAt) / H) : null, w1 = W(p, '24h') || w, f1 = (w1 && w1.flow) || {};
     const why = isGem(p, dk) ? 'already a gem' : p.verified === false ? 'unverified: never a gem' : p.verified === null ? 'fee check not run yet' : isNum(f1.senders) && f1.senders >= 50 ? 'fresh, with real flow' : 'young: watching';
-    return [`${isNum(age) ? Math.round(age) + ' h old' : 'age ' + DASH}`, `<span class="k g">${int(w1 && w1.swaps)} swaps · ${int(f1.senders)} traders</span>`, `<span class="y">${why}</span>`];
+    return [`<span class="nw">${isNum(age) ? Math.round(age) + ' h old' : 'age ' + DASH}</span>`, `<span class="k g">${int(w1 && w1.swaps)} swaps · ${int(f1.senders)} traders</span>`, `<span class="y">${why}</span>`];
   }
   if (k === 'cexLed') {
     const tv = cx.tierVsSigma;
@@ -3232,15 +3448,36 @@ function renderTable() {
   }).join('') + '</tr>';
   const fresh = vis.filter(isNew).length;
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
-    + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${esc(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
+    + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${qHi(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}</span><span class="tags">${tagsHtml(p, wk, true)}</span></div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
     + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; if (c.k === 'fees') return `<td class="fees">${feeMini(p)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
   $('#ch-key').innerHTML = chainKey(L.pools);
   $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== vis.length ? ' (' + vis.length + ' IN ALL)' : ''}${fresh ? ` · ${fresh} NEW` : ''}${hid ? ' · ' + hidTxt(hid, true) : ''}`;
   $('#all-more').innerHTML = rows.length > shown.length ? `<button type="button" class="btn more" data-act="more">Show all ${int(rows.length)}</button>` : '';
+  qStat(rows.length);
   stickyHead($('#all-box'));
 }
+// the matching part of a pool's name, lit while a search is on
+function qHi(name) {
+  const q = S.filt.q.trim().toLowerCase(), i = q ? String(name).toLowerCase().indexOf(q) : -1;
+  return i < 0 ? esc(name) : esc(name.slice(0, i)) + '<b class="qhit">' + esc(name.slice(i, i + q.length)) + '</b>' + esc(name.slice(i + q.length));
+}
+// the live line under the search: how many pools match, at once, and a way back when none do
+function qStat(n) {
+  const q = S.filt.q.trim(), on = !!q || S.filt.lens !== 'all' || S.filt.chain !== 'all', st = $('#q-stat');
+  if (!st) return;
+  if (!on) { st.innerHTML = ''; qBar(); return; }
+  const parts = [];
+  if (q) parts.push(`“${esc(q)}”`);
+  if (S.filt.lens !== 'all') parts.push(esc(S.filt.lens === 'fav' ? 'favourites' : LENS_NAME[S.filt.lens] || S.filt.lens));
+  if (S.filt.chain !== 'all') parts.push(esc(S.filt.chain.charAt(0).toUpperCase() + S.filt.chain.slice(1)));
+  const hid = q ? S.live.pools.filter((p) => hideStable(p) && qMatch(p, q.toLowerCase())).length : 0;
+  st.innerHTML = (n ? `<b>${int(n)} pool${n === 1 ? '' : 's'}</b> match${n === 1 ? 'es' : ''} ${parts.join(' · ')}` : `No pools match ${parts.join(' · ')}`)
+    + (hid ? ` · <span class="qnote">${hidTxt(hid)}</span>` : '') + ` · <button type="button" class="linkbtn" data-act="q-reset">${n ? 'Clear' : 'Clear filters'}</button>`;
+  qBar();
+}
+function qBar() { const b = $('#q-bar'); if (b) b.hidden = !$('#q-stat').innerHTML && $('#q-list').hidden; const x = $('#q-x'); if (x) x.hidden = !$('#f-q').value; }
 function setSort(k) {
   if (S.sort.k === k) S.sort.dir = -S.sort.dir; else S.sort = { k, dir: k === 'pair' || k === 'age' ? 1 : -1 };
   popClose();
@@ -3352,7 +3589,7 @@ function renderBt() {
 function drawScatter(rows) {
   const box = $('#bt-scatter'); if (!box) return;
   const pts2 = rows.filter((r) => isNum(r.b.forecastNet) && isNum(r.b.net)).map((r) => ({ r, x: r.b.forecastNet * 100, y: r.b.net * 100 }));
-  const Wd = SOLO ? boxW(box, 260) : Math.min(boxW(box, 260), 640), Ht = Math.round(Math.min(Math.max(Wd * 0.72, 210), 300) * (SOLO ? 1.6 : 1));
+  const Wd = SOLO ? boxW(box, 260) : Math.min(boxW(box, 260), 640), Ht = Math.round(FULL ? Math.max(260, Math.min(innerHeight - 120, Wd * 1.2)) : Math.min(Math.max(Wd * 0.72, 210), 300) * (SOLO ? 1.6 : 1)); // a full view: as tall as the window allows
   const L = 44, R = 14, T = 10, B = 32, pw = Wd - L - R, ph = Ht - T - B;
   if (!pts2.length) { delete PZ.scatter; box.innerHTML = `<p class="empty">No forecasts to compare yet (${DASH}).</p>`; return; }
   const all = pts2.flatMap((p) => [p.x, p.y]);
@@ -3409,8 +3646,13 @@ function drawScatter(rows) {
       // labels: only for dots in view, one per 11 px line; a label pushed out of the plot is left off (its dot stays), so
       // no label is ever drawn over another or past the axes
       const vis = pts2.filter((o) => X(o.x) >= L && X(o.x) <= L + pw && Y(o.y) >= T && Y(o.y) <= T + ph);
-      for (const o of spread(vis.map((o) => ({ y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 9, T + ph - 2).filter((o) => o.y >= T + 9 && o.y <= T + ph - 2)) {
-        const right = o.x < L + pw - 60;
+      // v0.5.1: and a label goes on the side of its dot where no other pool's dot sits (a phone drew "IXPAX" over ORARX's)
+      const dots = vis.map((o) => [X(o.x), Y(o.y)]);
+      const onDot = (o, x0, tw) => dots.some(([cx, cy], j) => j !== o.i && cx + 5 > x0 && cx - 5 < x0 + tw && cy + 5 > o.y - 8.5 && cy - 5 < o.y + 2.5);
+      for (const o of spread(vis.map((o, i) => ({ i, y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 9, T + ph - 2).filter((o) => o.y >= T + 9 && o.y <= T + ph - 2)) {
+        const tw = o.t.length * 6.4, sides = o.x < L + pw - 60 ? [true, false] : [false, true];
+        const fits = (r) => (r ? o.x + 7 + tw <= L + pw - 1 : o.x - 7 - tw >= L + 1), clear = (r) => !onDot(o, r ? o.x + 7 : o.x - 7 - tw, tw);
+        const right = [sides.find((r) => fits(r) && clear(r)), sides.find(fits), sides[0]].find((r) => r !== undefined);
         g += `<text x="${(o.x + (right ? 7 : -7)).toFixed(1)}" y="${o.y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="${o.b ? 't-mut' : 't-fg'}">${esc(o.t)}</text>`;
       }
       return g + '</g></svg>';
@@ -3604,12 +3846,23 @@ function renderLab(row) {
   lab.innerHTML = h + '</div>';
   // lines
   const box = $('#lab-lines'), Wd = boxW(box), L = 52, R = 12;
+  labFill = labFillHt(box, Wd);
   const PL = pzTime('lab', row.id, n, { plot: [L / Wd, R / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier', tip: (u) => labTip(row, strats, u), inner: () => labLines(row, strats, PL, Wd, L, R) });
   pzMount(box, 'lab', 'pz-line', [+((L / Wd) * 100).toFixed(2), +((R / Wd) * 100).toFixed(2)]);
   const lt = lab.querySelector('[data-chartbox="lab"] .ctools'); if (lt) lt.outerHTML = ztools('lab', row.id); // its zoom range is known now
 }
+// v0.5.1: from 1100 px the strategy list and the grid stand beside the chart; the chart takes their height (it left
+// about 270 px empty under it on a laptop), up to as tall as it is wide
+let labFill = 0;
+function labFillHt(box, Wd) {
+  if (SOLO || !matchMedia('(min-width:1100px)').matches) return 0;
+  const lab = box.closest('.lab'), side = lab ? [...lab.querySelectorAll(':scope > .lab-legend, :scope > .lab-heat')] : [];
+  if (!side.length) return 0;
+  const bot = Math.max(...side.map((e) => e.getBoundingClientRect().bottom)), top = box.getBoundingClientRect().top;
+  return Math.max(0, Math.min(Math.round(Wd * 1.05), Math.floor(bot - top)));
+}
 function labLines(row, strats, P, Wd, L, R) {
-  const b = row.b, n = b.series.t.length - 1, Ht = Math.round((Wd >= 600 ? 440 : 220) * (SOLO ? 1.4 : 1)), T = 10, B = 20, pw = Wd - L - R, ph = Ht - T - B;
+  const b = row.b, n = b.series.t.length - 1, Ht = Math.max(Math.round((Wd >= 600 ? 440 : 220) * (SOLO ? 1.4 : 1)), labFill), T = 10, B = 20, pw = Wd - L - R, ph = Ht - T - B;
   const [a, z] = P.vw(), [j0, j1] = inView(a, z, n);
   let mn = 0, mx = 0;
   for (const st of strats) for (const v of st.series.slice(j0, j1 + 1)) if (isNum(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); }
@@ -3710,7 +3963,7 @@ const PV_COL = ['#16C784', '#E8B84A', '#6EA9FF', '#B6A2FF', '#F290C4', '#98A6BA'
 function openPair(key, opener) {
   if (!pairPools(key).length) return;
   const from = S.detail && !$('#sheet').hidden ? S.detail : null; S.backTo = from;
-  if (from) { try { history.pushState({ lps: 'pair' }, ''); } catch (e) {} } // a pair whose pools are all hidden still opens: it says so, with a way to show them
+  if (from) hlOpen('pair'); // one level deeper: Back returns to the pool. A pair whose pools are all hidden still opens: it says so, with a way to show them
   S.pair = key; S.detail = null; S.opener = opener || null;
   renderPair();
   showSheet();
@@ -3759,10 +4012,38 @@ function pairRowToCard(id) {
   setBestSel(id, false);
   jumpTo('#best');
 }
+// ---------- v0.5.1 · a way out of every view (the owner's standing rule), and the browser's Back closes it ----------
+// Every level that opens over the page (a note, the pool panel, the pair view inside it, a chart's full view) puts one
+// entry in the history, so Safari's back swipe or the Back button closes the top level, one per step, and never leaves
+// the dashboard. A level closed any other way (Close, ✕, Esc, the dimmed background, a swipe down, a tap elsewhere)
+// takes its entry back with it, so none is left behind. The page's own entries say how many levels they stand for (lv);
+// the browser landing on one closes whatever is above it. The chart's own page (?view=) keeps its history as it is.
+const HL = { st: [], busy: false };
+const hlAt = () => (history.state && history.state.lps ? history.state.lv | 0 : 0);
+function hlSync() { // the history catches up with the open levels
+  if (SOLO || HL.busy) return;
+  let at = hlAt();
+  try {
+    if (at > HL.st.length) { HL.busy = true; history.go(HL.st.length - at); return; } // closed here: back past their entries
+    while (at < HL.st.length) { at++; history.pushState({ lps: HL.st[at - 1], lv: at }, ''); }
+  } catch (e) { HL.busy = false; }
+}
+function hlOpen(kind) { if (SOLO) return; HL.st.push(kind); queueMicrotask(hlSync); }
+function hlClosed(kind) { const i = HL.st.lastIndexOf(kind); if (i < 0) return; HL.st.length = i; queueMicrotask(hlSync); }
+function hlShut(kind) { // the browser went back past this level
+  if (kind === 'full') fullClose();
+  else if (kind === 'pop') popClose();
+  else if (kind === 'sheet') closeDetail();
+  else if (kind === 'pair') { if (S.pair && S.backTo && !$('#sheet').hidden) { const id = S.backTo; S.backTo = null; openDetail(id); } else closeDetail(); }
+}
 window.addEventListener('popstate', () => {
-  if (S.skipPop) { S.skipPop = false; return; }
-  if (S.pair && S.backTo && !$('#sheet').hidden) { const id = S.backTo; S.backTo = null; openDetail(id); }
+  if (HL.busy) { HL.busy = false; hlSync(); return; } // the page's own step back
+  const lv = hlAt();
+  while (HL.st.length > lv) hlShut(HL.st.pop());
+  hlSync();
 });
+// a reload while a level was open: the page opens on its main view, and that entry stands for it
+try { if (!SOLO && history.state && history.state.lps) history.replaceState(null, ''); } catch (e) { /* no history here */ }
 function openDetail(id, opener) {
   if (!poolById(id)) return;
   popClose(); qClose();
@@ -3775,6 +4056,7 @@ function openDetail(id, opener) {
   flStart(id, true);
 }
 function showSheet() {
+  if ($('#sheet').hidden) hlOpen('sheet');
   sheetReset();
   $('#sheet').hidden = false;
   document.documentElement.classList.add('modal-open');
@@ -3797,6 +4079,7 @@ function closeDetail() {
   popClose();
   flEnd();
   $('#sheet').hidden = true;
+  hlClosed('sheet'); // and the pair view above it
   S.simFor = null;
   sheetReset();
   document.documentElement.classList.remove('modal-open');
@@ -4353,7 +4636,8 @@ function popOpen(anchor, html) {
   const pop = $('#pop');
   if (S.popFor === anchor && !pop.hidden) { popClose(); return; }
   popClose();
-  pop.innerHTML = html; pop.hidden = false; S.popFor = anchor;
+  hlOpen('pop');
+  pop.innerHTML = '<button type="button" class="pop-x" data-act="popclose" aria-label="Close this note" title="Close"></button>' + html; pop.hidden = false; S.popFor = anchor;
   anchor.setAttribute('aria-expanded', 'true');
   popPlace();
 }
@@ -4371,9 +4655,12 @@ function popPlace() {
 function popClose() {
   const pop = $('#pop');
   if (!pop || pop.hidden) return;
+  const back = pop.contains(document.activeElement) ? S.popFor : null; // focus inside the note goes back to what opened it
   pop.hidden = true; pop.innerHTML = '';
+  hlClosed('pop');
   if (S.popFor) S.popFor.setAttribute('aria-expanded', 'false');
   S.popFor = null;
+  if (back && back.isConnected) back.focus({ preventScroll: true });
 }
 
 // ---------- why a pool is interesting: small pictograms built from its lenses, shape, age, market and fee pattern ----------
@@ -4652,43 +4939,40 @@ function hiMatch(label, q) {
   const i = label.toLowerCase().indexOf(q);
   return i < 0 || !q ? esc(label) : esc(label.slice(0, i)) + '<b>' + esc(label.slice(i, i + q.length)) + '</b>' + esc(label.slice(i + q.length));
 }
-const qHintItem = () => { const inp = $('#f-q'), it = Q.items[0]; return Q.open && it && it.k !== 'pool' && inp && inp.value && it.label.toLowerCase().startsWith(inp.value.toLowerCase()) && it.label.length > inp.value.length ? it : null; };
-function qHint() {
-  const h = $('#q-hint'), inp = $('#f-q');
-  if (!h || !inp) return;
-  const it = qHintItem();
-  h.innerHTML = it && inp.scrollWidth <= inp.clientWidth + 1 ? `<span class="t">${esc(inp.value)}</span>${esc(it.label.slice(inp.value.length))}` : '';
-}
 function qRender() {
   const ul = $('#q-list'), inp = $('#f-q');
   if (!ul || !inp) return;
-  if (!Q.open || (!Q.items.length && !Q.hidden)) {
+  if (!Q.open || !Q.items.length) {
     if (!ul.hidden) { ul.hidden = true; ul.innerHTML = ''; }
-    inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); qHint(); return;
+    inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); qBar(); return;
   }
   ul.innerHTML = Q.items.map((it, i) => `<li role="option" id="qo-${i}" class="qopt" data-act="q-pick" data-i="${i}" aria-selected="${i === Q.act}"><span class="qk">${it.k === 'pair' ? 'PAIR' : it.k === 'token' ? 'TOKEN' : 'POOL'}</span>`
     + `<span class="qt">${it.k === 'pool' ? esc(it.label) : hiMatch(it.label, Q.q)}</span><span class="qm">${it.k === 'pool' ? `${feeTxt(it.p.feeTier)} · ${chainShort(it.p.chain)}` : `${it.n} pool${it.n === 1 ? '' : 's'}${it.vol > 0 ? ' · ' + usd(it.vol) + '/d' : ''}`}</span></li>`).join('')
-    + (Q.hidden ? `<li class="qnote" role="presentation">${hidTxt(Q.hidden)}</li>` : '');
+;
   ul.hidden = false; inp.setAttribute('aria-expanded', 'true');
-  if (Q.act >= 0) { inp.setAttribute('aria-activedescendant', 'qo-' + Q.act); const o = $('#qo-' + Q.act); if (o) o.scrollIntoView({ block: 'nearest' }); }
+  if (Q.act >= 0) { inp.setAttribute('aria-activedescendant', 'qo-' + Q.act); const o = $('#qo-' + Q.act); if (o) o.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
   else inp.removeAttribute('aria-activedescendant');
-  qHint();
+  qBar();
 }
 function qUpdate() {
   const inp = $('#f-q');
-  Q.q = inp.value.trim().toLowerCase(); Q.items = suggest(Q.q); Q.act = -1;
-  Q.open = document.activeElement === inp && (Q.items.length > 0 || Q.hidden > 0);
+  Q.q = inp.value.trim().toLowerCase(); Q.items = suggest(Q.q).slice(0, 4); Q.act = -1;
+  // the chips: only what adds something (not the very text already typed, which the rows already show)
+  Q.items = Q.items.filter((it) => it.k === 'pool' || it.label.toLowerCase() !== Q.q);
+  Q.open = document.activeElement === inp && Q.items.length > 0;
   qRender();
 }
 function qClose() { if (Q.open) { Q.open = false; Q.act = -1; qRender(); } }
-function qApply(text) { clearTimeout(qt); S.filt.q = text; S.showAll = false; renderTable(); }
+function qApply(text) { clearTimeout(qt); S.filt.q = text; S.showAll = false; renderTable(); qBar(); }
+function qClear(keep) { const inp = $('#f-q'); inp.value = ''; qApply(''); qUpdate(); if (keep) inp.focus({ preventScroll: true }); }
 function qPick(i) {
   const it = Q.items[i], inp = $('#f-q');
   if (!it) return;
   Q.open = false; Q.act = -1;
   if (it.k === 'pool') { qRender(); qApply(inp.value); openDetail(it.id, inp); return; }
-  inp.value = it.label; Q.q = it.label.toLowerCase(); Q.items = suggest(Q.q);
+  inp.value = it.label; Q.q = it.label.toLowerCase(); Q.items = [];
   qRender(); qApply(it.label);
+  inp.blur(); // picked: the keyboard goes, the rows it filtered to show
 }
 function qKey(e) {
   const inp = e.target, n = Q.items.length;
@@ -4698,18 +4982,34 @@ function qKey(e) {
     Q.open = true;
     Q.act = e.key === 'ArrowDown' ? (Q.act + 1) % n : Q.act <= 0 ? n - 1 : Q.act - 1;
     qRender();
-  } else if (e.key === 'Enter') {
+  } else if (e.key === 'Enter') { // the Search key: nothing to confirm (the rows already show it), the keyboard goes
     e.preventDefault();
     if (Q.open && Q.act >= 0) qPick(Q.act);
-    else if (qHintItem()) qPick(0);
-    else { qClose(); qApply(inp.value); }
-  } else if (e.key === 'Escape' && Q.open) {
+    else { qClose(); qApply(inp.value); inp.blur(); }
+  } else if (e.key === 'Escape') { // Esc: clears what's typed, then leaves the field
     e.preventDefault(); e.stopPropagation();
-    qClose();
-  } else if (e.key === 'ArrowRight' && inp.selectionStart === inp.value.length && qHintItem()) {
-    e.preventDefault();
-    inp.value = Q.items[0].label; qUpdate(); qApply(inp.value);
+    if (inp.value) qClear(true); else { qClose(); inp.blur(); }
   }
+}
+// focus on a phone: the field moves near the top of what's visible, so the rows show above the keyboard
+function qLift() {
+  if (!matchMedia('(max-width:700px), (hover:none) and (pointer:coarse)').matches) return;
+  const inp = $('#f-q'), fld = inp.closest('.fld') || inp, vv = window.visualViewport;
+  const want = (vv ? vv.offsetTop : 0) + barBottom() + 6, top = fld.getBoundingClientRect().top;
+  if (Math.abs(top - want) > 8) scrollTo({ top: Math.max(0, scrollY + top - want), behavior: 'instant' });
+}
+let qLiftT = 0;
+if (window.visualViewport) visualViewport.addEventListener('resize', () => { if (document.activeElement === $('#f-q') && Date.now() - qLiftT < 1500) qLift(); }); // the keyboard coming up
+// the 🔍 in the bar (and "/" on a laptop): to the search, ready to type
+function qFind() {
+  if (SOLO || !S.live) return;
+  popClose(); if (!$('#sheet').hidden) closeDetail();
+  const inp = $('#f-q');
+  inp.focus({ preventScroll: true });
+  qLiftT = Date.now();
+  if (matchMedia('(max-width:700px), (hover:none) and (pointer:coarse)').matches) qLift();
+  else { const r = (inp.closest('.fld') || inp).getBoundingClientRect(); if (r.top < barBottom() + 8 || r.bottom > innerHeight * 0.5) scrollTo({ top: Math.max(0, scrollY + r.top - barBottom() - 16), behavior: 'instant' }); }
+  if (inp.value) qUpdate();
 }
 
 // ---------- backtest highlights: one strategy, one money line, one grid tile ----------
@@ -4772,13 +5072,13 @@ document.addEventListener('click', (e) => {
     case 'mc-scroll': mcScroll(el); break;
     case 'hl': hlToggle(el); break;
     case 'cell': cellToggle(el); break;
-    case 'q-pick': qPick(Number(el.dataset.i)); break;
+    case 'q-pick': if (Date.now() - (Q.picked || 0) > 700) qPick(Number(el.dataset.i)); break; // a finger's tap already picked it
     case 'ext': break; // a plain link: the browser opens the explorer in a new tab
     case 'win': setWin(el.dataset.w); break;
     case 'view': viewPress(el); break;
     case 'tab': setBestSel(el.dataset.id, false); break;
     case 'pair': openPair(el.dataset.key, el); break;
-    case 'pair-back': if (S.backTo) { const id = S.backTo; S.backTo = null; try { if (history.state && history.state.lps === 'pair') { S.skipPop = true; history.back(); } } catch (e) {} openDetail(id, el); } break;
+    case 'pair-back': if (S.backTo) { const id = S.backTo; S.backTo = null; hlClosed('pair'); openDetail(id, el); } break;
     case 'zoom': zoom(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'zreset': zreset(el.dataset.chart); break;
     case 'merge': mgToggle(el.dataset.id); break;
@@ -4788,7 +5088,13 @@ document.addEventListener('click', (e) => {
     case 'fmode': case 'fscale': case 'fzc': fcSet(el.dataset.act, el.dataset.v); break;
     case 'pan': pzStep(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'totop': toTop(); break;
-    case 'openchart': openChart(el.dataset.chart, el.dataset.pool); break;
+    case 'openchart': openChart(el.dataset.chart, el.dataset.pool, el); break;
+    case 'fullclose': fullClose(); break;
+    case 'q-clear': qClear(true); break;
+    case 'q-reset': if (!S.filt.q.trim() || /^No pools/.test($('#q-stat').textContent)) { S.filt.lens = 'all'; S.filt.chain = 'all'; } qClear(false); break; // Clear: the search (or the filters when no search); Clear filters: all
+    case 'qfind': qFind(); break;
+    case 'popclose': { const a = S.popFor; popClose(); if (a && a.isConnected) a.focus({ preventScroll: true }); break; }
+    case 'soloclose': soloClose(); break;
     case 'pair-row': pairRowToCard(el.dataset.id); break;
     case 'refresh': manualRefresh(); break;
     case 'jump': jumpTo(el.dataset.to); break;
@@ -4806,6 +5112,9 @@ document.addEventListener('click', (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('#fullv')) { fullClose(); return; } // the full view first: the panel under it stays
+  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target.closest && e.target.closest('input, select, textarea, [contenteditable]')) && !$('#fullv') && $('#lockscreen').hidden && !SOLO) { e.preventDefault(); qFind(); return; }
+  if (e.key === 'Escape' && FULL && parent !== window) { parent.postMessage('lps-full-close', location.origin); return; } // inside it
   if (e.target && e.target.id === 'f-q') { qKey(e); if (e.defaultPrevented) return; }
   if (e.key === 'Escape' && (TIP.host || TIP.mini)) tipHide(); // and whatever else Esc closes
   if (e.key === 'Escape' && S.popFor) { const a = S.popFor; popClose(); a.focus({ preventScroll: true }); return; }
@@ -4834,19 +5143,125 @@ document.addEventListener('change', (e) => {
 let qt = 0;
 document.addEventListener('input', (e) => {
   const a = e.target.dataset && e.target.dataset.act;
-  if (a === 'search') { qUpdate(); clearTimeout(qt); qt = setTimeout(() => { S.filt.q = e.target.value; S.showAll = false; renderTable(); }, 120); }
+  if (a === 'search') { qUpdate(); qBar(); clearTimeout(qt); qt = setTimeout(() => { S.filt.q = e.target.value; S.showAll = false; renderTable(); }, 90); }
   if (a === 'scrub') { stopPlay(); S.cut = +e.target.value; const r = currentReplay(); if (r) renderReplay(r); }
 });
 $('#unlock-form').addEventListener('submit', onUnlock);
 // the search's suggestions: open while its box has the focus; a press on one keeps the focus in the box
-document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q' && e.target.value) qUpdate(); });
-document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q')) qClose(); }, 120); });
-document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list')) e.preventDefault(); });
+document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q') { qLiftT = Date.now(); qLift(); if (e.target.value) qUpdate(); } });
+document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q') && Date.now() - (Q.press || 0) > 900) qClose(); }, 120); });
+document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('#q-list')) Q.press = Date.now(); }, { capture: true, passive: true });
+// a finger's tap on a chip picks it as the finger lifts (Safari may hold back or drop the click on a field it just
+// blurred); a swipe along the chips scrolls them and picks nothing; the click that may follow is then ignored
+document.addEventListener('touchstart', (e) => {
+  const inL = e.target.closest && e.target.closest('#q-list'), o = inL && e.target.closest('.qopt');
+  if (inL) Q.press = Q.touch = Date.now();
+  Q.tp = o && e.touches && e.touches.length === 1 ? { o, x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+}, { capture: true, passive: true });
+document.addEventListener('touchmove', (e) => { const t = Q.tp && e.touches && e.touches[0]; if (t && Math.hypot(t.clientX - Q.tp.x, t.clientY - Q.tp.y) > 10) Q.tp = null; }, { capture: true, passive: true });
+document.addEventListener('touchend', (e) => {
+  const t = Q.tp, c = e.changedTouches && e.changedTouches[0]; Q.tp = null;
+  if (!t || !t.o.isConnected || (c && Math.hypot(c.clientX - t.x, c.clientY - t.y) > 10)) return;
+  Q.picked = Date.now(); qPick(Number(t.o.dataset.i));
+}, { capture: true, passive: true });
+document.addEventListener('touchcancel', () => { Q.tp = null; }, { capture: true, passive: true });
+document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list') && Date.now() - (Q.touch || 0) > 800) e.preventDefault(); }); // a mouse keeps the field's focus
 // card strips: fades follow the scroll; a pop-up note follows its control
 document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); if (TIP.host || TIP.mini) tipScroll(); }, { capture: true, passive: true });
 for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) addEventListener(ev, () => { S.touched = true; cancelSettle(); }, { passive: true, capture: true });
 for (const ev of ['pointerdown', 'wheel', 'touchstart', 'keydown']) addEventListener(ev, (e) => { if (S.fl && !(e.target && e.target.closest && e.target.closest('[data-act="flash"]'))) flEnd(); }, { passive: true, capture: true });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && S.key) refresh(); });
+// ---------- v0.5.1 · back on the page: fresh data, without asking ----------
+// Coming back (the tab shown again, the page restored from the back-forward cache, the window focused, or the phone woken
+// with the page on screen) reads the sealed files again, as the minute's check does. After 5 minutes away, or when the next
+// pass should already have landed, it is the refresh button's own refresh, with its "Updated 17:05" chip. A fetch frozen
+// while the phone slept is called off and started again. Never a reload, never the passphrase again.
+const AWAY_MS = 5 * 60e3;
+let hiddenAt = document.hidden ? Date.now() : 0, beat = Date.now(), backT = 0;
+const passDue = () => { const n = S.live && S.live.next; return isNum(n) && Date.now() > n + 60e3; };
+function onBack(src) {
+  if (!S.key || document.hidden || SOLO) return;
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = 0;
+  const since = Date.now() - (S.tried || 0);
+  if (src === 'focus' && away < AWAY_MS && since < 60e3) return; // a click back into the window: the minute's check has it
+  clearTimeout(backT);
+  backT = setTimeout(() => { // the browser fires visibilitychange, pageshow and focus together: one refresh
+    const shown = away >= AWAY_MS || (passDue() && since >= 60e3);
+    if (S.busy) {
+      S.again = shown ? 'shown' : S.again || 'quiet';
+      if (Date.now() - (S.tried || 0) > 20e3 && S.ac) S.ac.abort(); // frozen mid-fetch while away: start again
+    } else if (shown) manualRefresh(true); else refresh();
+  }, 60);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) { if (!hiddenAt) hiddenAt = Date.now(); } else onBack('visible'); });
+addEventListener('pagehide', () => { if (!hiddenAt) hiddenAt = Date.now(); });
+addEventListener('pageshow', (e) => { if (e.persisted) onBack('pageshow'); });
+addEventListener('focus', () => onBack('focus'));
+setInterval(() => { const now = Date.now(); if (!document.hidden && now - beat > AWAY_MS) { if (!hiddenAt) hiddenAt = beat; onBack('wake'); } beat = now; }, 15e3); // timers stopped: the phone slept
+
+// ---------- v0.5.1 · pull to refresh: a finger at the very top of the page pulls it down ----------
+// From the top only (the page not scrolled), on touch only, never from a chart, a field or the open panel (it keeps its own
+// drag to close) and never while a chart is dragged; a sideways or upward move, a second finger or the page scrolling lets
+// it go. Passive touch events: the page scrolls and bounces as ever. Past 80 px "Release to refresh"; letting go runs the
+// refresh button's own refresh (its spinner and "Updated" chip), and the pill says "Refreshing…", then "Updated 17:05".
+const PTR = { on: false, live: false, id: null, x0: 0, y0: 0, dy: 0, hideT: 0 }, PTR_GO = 80, ptrEl = $('#ptr');
+function ptrSet(st, txt, dy) {
+  clearTimeout(PTR.hideT);
+  ptrEl.style.top = Math.max(0, Math.round($('#top').getBoundingClientRect().bottom) + 8) + 'px'; // just under the bar, wherever it is
+  ptrEl.hidden = false;
+  if (ptrEl.dataset.s !== st) ptrEl.dataset.s = st;
+  const t = ptrEl.querySelector('.pt'); if (t.textContent !== txt) t.textContent = txt;
+  const k = Math.min(1, dy / PTR_GO);
+  ptrEl.classList.toggle('pulling', st === 'pull' || st === 'release');
+  ptrEl.style.setProperty('--ptr-y', (reduced() ? 0 : Math.round(-40 + 40 * k)) + 'px');
+  ptrEl.style.setProperty('--ptr-o', '1'); // opaque: it slides out from under the bar
+}
+function ptrHide() {
+  clearTimeout(PTR.hideT);
+  ptrEl.classList.remove('pulling'); ptrEl.style.setProperty('--ptr-y', reduced() ? '0px' : '-40px'); ptrEl.style.setProperty('--ptr-o', '0');
+  PTR.hideT = setTimeout(() => { ptrEl.hidden = true; ptrEl.dataset.s = ''; }, reduced() ? 0 : 200);
+}
+function ptrDrop() { if (PTR.live) ptrHide(); PTR.on = PTR.live = false; }
+const ptrTouch = (e, id) => [...(e.touches || [])].find((t) => t.identifier === id);
+addEventListener('touchstart', (e) => {
+  const t = e.touches && e.touches[0], tg = e.target;
+  if (PTR.busy) return;
+  if (!t || e.touches.length !== 1) { if (PTR.on) ptrDrop(); return; }
+  if (!S.key || SOLO || $('#app').hidden || document.documentElement.classList.contains('modal-open') || G || PIN || scrollY > 0) return;
+  if (tg && tg.closest && tg.closest('.pz, #sheet, #lockscreen, input, select, textarea')) return;
+  Object.assign(PTR, { on: true, live: false, id: t.identifier, x0: t.clientX, y0: t.clientY, dy: 0 });
+}, { passive: true, capture: true });
+addEventListener('touchmove', (e) => {
+  if (!PTR.on) return;
+  const t = ptrTouch(e, PTR.id);
+  if (!t || e.touches.length !== 1 || G || PIN) { ptrDrop(); return; }
+  const dy = t.clientY - PTR.y0, dx = t.clientX - PTR.x0;
+  if (!PTR.live) {
+    if ((Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) || dy < -6 || scrollY > 0) { ptrDrop(); return; } // a sideways swipe, a scroll up: theirs
+    if (dy < 12) return;
+    PTR.live = true;
+  }
+  if (scrollY > 2) { ptrDrop(); return; } // the page scrolled after all
+  PTR.dy = dy;
+  if (dy >= PTR_GO) ptrSet('release', 'Release to refresh', dy); else ptrSet('pull', 'Pull to refresh', Math.max(0, dy));
+}, { passive: true, capture: true });
+addEventListener('touchend', (e) => {
+  if (!PTR.on || ![...(e.changedTouches || [])].some((t) => t.identifier === PTR.id)) return;
+  const go = PTR.live && PTR.dy >= PTR_GO;
+  PTR.on = PTR.live = false;
+  if (go) ptrRun(); else ptrHide();
+}, { passive: true, capture: true });
+addEventListener('touchcancel', () => { if (PTR.on) ptrDrop(); }, { passive: true, capture: true });
+async function ptrRun() {
+  PTR.busy = true;
+  ptrSet('busy', 'Refreshing…', PTR_GO);
+  try {
+    if (S.busy) { const t0 = Date.now(); await new Promise((r) => { const w = () => (!S.busy || Date.now() - t0 > 20e3 ? r() : setTimeout(w, 100)); w(); }); } // one already running
+    else await manualRefresh(true, true);
+  } finally { PTR.busy = false; }
+  if (S.failing) ptrSet('fail', 'Refresh failed', PTR_GO); else ptrSet('done', `Updated ${hm(Date.now())}`, PTR_GO);
+  PTR.hideT = setTimeout(ptrHide, 1800);
+}
 setInterval(() => { renderFresh(); renderStripTime(false); }, 15e3);
 let lastW = innerWidth, rt = 0;
 addEventListener('resize', () => {
@@ -5046,7 +5461,12 @@ function d3Model(h) {
     m.X = (o) => L + ((o - v0) / (v1 - v0)) * W;
     m.r = r; m.trail = d3Trail(P.p);
     // the chart's own labels (on top of the canvas): the floor's label keeps clear of them
-    m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
+    m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint, :scope > .pz-edge', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
+    // v0.5.1: and of its lines (the price now, the walls: thin bars the whole height), which are drawn over it
+    for (const e of svg.querySelectorAll(':scope > rect')) {
+      const rx = +e.getAttribute('x'), ry = +e.getAttribute('y'), rw = +e.getAttribute('width'), rh = +e.getAttribute('height');
+      if (rw > 0 && rw <= 2 && rh >= vb.height / 2) { const x0 = L + (rx - vb.x) * sx; m.avoid.push([x0 - 2, T + (ry - vb.y) * sy, x0 + rw * sx + 2, T + (ry + rh - vb.y) * sy]); }
+    }
   }
   return m;
 }
@@ -5132,12 +5552,26 @@ function d3Render(c, m, k = 1) {
           const inr = m.r == null || Math.abs(o) <= m.r + 1e-9, a = 1 - 0.65 * (j / R), rad = Math.max(1, 2.6 * (1 - gk(j)));
           x.beginPath(); x.arc(q[0], q[1], rad, 0, 2 * Math.PI); x.fillStyle = inr ? `rgba(94,230,200,${a.toFixed(3)})` : `rgba(255,138,101,${a.toFixed(3)})`; x.fill();
         }
-        const end = pts[pts.length - 1], lab = `${end[2]} d ago`;
+        const end = pts[pts.length - 1];
         x.font = '600 9px ui-monospace,Menlo,Consolas,monospace'; x.textBaseline = 'bottom';
-        const tw = x.measureText(lab).width, ly = end[0][1] - 2, free = (lx) => lx >= L + 2 && lx + tw <= L + W - 2 && !(m.avoid || []).some((q) => lx < q[2] && lx + tw > q[0] && ly - 10 < q[3] && ly > q[1]);
-        const lx = [end[0][0] + 6, end[0][0] - 6 - tw].find(free); // beside the oldest day, wherever no label of the chart's own sits
-        if (lx != null) { x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(lab, lx, ly); }
-        info.lab = lx != null;
+        // v0.5.1: never under a bar either (the flat bar in front, or its side and top going into the deep), nor across
+        // the price line or a wall; on a narrow chart it may say just "14 d", by the oldest day or by the price line
+        const bars = towers.map((t) => { const yt = Math.min(...t.segs.map((s) => s.yt)), a = pr(t.x0, yt, gT), b = pr(t.x1, yt, gT); return [Math.min(t.x0, a[0]) - 1, Math.min(yt, a[1]) - 1, Math.max(t.x1, b[0]) + 1, t.yb]; });
+        const ly0 = end[0][1] - 2, keep = [...(m.avoid || []), ...bars];
+        const free = (lx, ly, tw) => lx >= L + 2 && lx + tw <= L + W - 2 && ly - 10 >= 0 && !keep.some((q) => lx < q[2] && lx + tw > q[0] && ly - 10 < q[3] && ly > q[1]);
+        let at = null;
+        for (const lab of [`${end[2]} d ago`, `${end[2]} d`]) {
+          const tw = x.measureText(lab).width;
+          for (const dy of [0, -11, 11]) {
+            for (const lx of [end[0][0] + 6, end[0][0] - 6 - tw, X0 + 5, X0 - 5 - tw]) if (free(lx, ly0 + dy, tw)) { at = [lx, ly0 + dy, tw, lab]; break; }
+            if (at) break;
+          }
+          if (at) break;
+        }
+        if (at) { x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(at[3], at[0], at[1]); }
+        info.lab = !!at;
+        info.labBox = at ? [+at[0].toFixed(1), +(at[1] - 10).toFixed(1), +(at[0] + at[2]).toFixed(1), +at[1].toFixed(1)] : null;
+        info.labTxt = at ? at[3] : null;
         info.trail = pts.length - 1;
       }
     }
