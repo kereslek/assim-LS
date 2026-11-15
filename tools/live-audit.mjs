@@ -722,6 +722,9 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       addEventListener('load', () => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Open in a window'); b.textContent = 'open'; document.querySelector('footer').append(b); });
     });
     const page = await ctx.newPage();
+    // a page that stops answering anywhere in the walk ends this profile with the phase it was in (a WebKit job once sat
+    // 38 minutes after the click walk until it was cancelled, without a word), instead of holding the job to its limit
+    { const ev0 = page.evaluate.bind(page); page.evaluate = (fn, arg) => Promise.race([ev0(fn, arg), new Promise((res, rej) => setTimeout(() => rej(Object.assign(new Error('stuck'), { name: 'PageStuck' })), 150000))]); }
     let newPages = 0; // a page opened by the dashboard itself (open-in-window): counted, then closed
     ctx.on('page', (p) => { if (p !== page) { newPages++; p.close().catch(() => {}); } });
     const errs = { page: 0, console: 0, failedLoads: 0, kinds: {} }; // page errors by class name only
@@ -883,7 +886,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     R.ok('errors: no page errors', errs.page === 0);
     R.ok('errors: no console errors', errs.console === 0);
   } catch (e) {
-    console.log(`[${tag}] stopped: ${errName(e)}`);
+    console.log(`[${tag}] stopped: ${errName(e)}${e && e.name === 'PageStuck' ? ' (the page stopped answering for 150 s; the timings below say after which phase)' : ''}`);
     R.ok('profile ran to the end', false);
   }
   return finish();
