@@ -22,8 +22,11 @@ function world() {
   const run = (env = {}) => {
     const t = Date.now();
     // the world's clock: 12:00 UTC with FAKE_NOON, or FAKE_CLOCK's time of day (a sweep across the hours sets it for
-    // every world: FAKE_CLOCK=03:04:50 node --test test/feehist-scan.test.mjs)
-    const clock = { ...(process.env.FAKE_CLOCK ? { FAKE_CLOCK: process.env.FAKE_CLOCK } : {}), ...env };
+    // every world: FAKE_CLOCK=03:04:50 node --test test/feehist-scan.test.mjs). A test that pins its own clock keeps
+    // it: the sweep's FAKE_CLOCK would win over its FAKE_NOON in the preload (test/fakes/noon.mjs), and a check that
+    // holds only at noon (the deep-today fault: no honest 00:05 moment of today in the plan) failed at 00:20
+    const pinned = 'FAKE_NOON' in env || 'FAKE_CLOCK' in env;
+    const clock = { ...(!pinned && process.env.FAKE_CLOCK ? { FAKE_CLOCK: process.env.FAKE_CLOCK } : {}), ...env };
     const r = spawnSync(process.execPath, [path.join(ROOT, 'test', 'fakes', 'fake-chains.mjs')], { cwd: dir, encoding: 'utf8', timeout: 240e3,
       env: { PATH: process.env.PATH, HOME: process.env.HOME, LOCK_PASSPHRASE: DUMMY, MODE: 'live', ...(clock.FAKE_NOON || clock.FAKE_CLOCK ? { NODE_OPTIONS: `--import ${path.join(ROOT, 'test', 'fakes', 'noon.mjs')}` } : {}), ...clock } });
     assert.ok(r.stdout.includes('PASS sealed outputs'), r.stdout.slice(-3000) + r.stderr.slice(-3000));
