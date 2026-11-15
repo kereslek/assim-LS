@@ -11,6 +11,7 @@
 //                                                    merge feebar stablewalk flash dates feescale perday disc view
 //                                                    balance wraps floorlab iphone back pull full way qsearch (v0.5.1) stress (v0.5.2)
 //                                                    workspace compare deeplink tiers (v0.6.0; history, way and flash follow the workspace and the tiers' build-up)
+//                                                    tools (v0.6.2: the chart toolbar everywhere, the replay's labels, quiet hours)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -52,7 +53,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -560,8 +561,8 @@ async function testCharts(browser) {
     const span = () => p.evaluate(() => document.querySelector('[data-chartbox="liq-best"] .chart-head').innerText.match(/±(\d+)%/)[1]);
     const press = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); b.scrollIntoView({ block: 'center' }); b.click(); }, sel);
     ok(`charts ${tag}: the liquidity chart opens at ±45%`, (await span()) === '45');
-    const geo = await p.evaluate(() => [...document.querySelectorAll('.ctools')].filter((c) => c.offsetParent).map((c) => { const z = c.querySelector('.zseg').getBoundingClientRect(), o = c.querySelector('.openwin').getBoundingClientRect(); return { gap: o.left - z.right, h: o.height, w: o.width }; }));
-    ok(`charts ${tag}: on every chart the open button stands ≥ 12 px from the zoom pair, 44×44 (${geo.length})`, geo.length >= 3 && geo.every((g) => g.gap >= 12 && g.h >= 43.5 && g.w >= 43.5), JSON.stringify(geo[0]));
+    const geo = await p.evaluate(() => [...document.querySelectorAll('.ctools')].filter((c) => c.offsetParent).map((c) => { const z = c.querySelector('.zseg').getBoundingClientRect(), o = c.querySelector('.openwin').getBoundingClientRect(); return { gap: o.left - z.right, h: o.height, w: o.width, mw: matchMedia('(pointer:coarse)').matches ? 43.5 : 31.5 }; }));
+    ok(`charts ${tag}: on every chart the open button stands ≥ 10 px from the zoom pair, 44 px tall, 44 wide on touch (${geo.length})`, geo.length >= 3 && geo.every((g) => g.gap >= 10 && g.h >= 43.5 && g.w >= g.mw), JSON.stringify(geo[0]));
     await press('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(100);
     const s1 = await span();
     await press('[data-act="zoom"][data-chart="liq-best"][data-dir="1"]'); await sleep(100);
@@ -1347,7 +1348,7 @@ const CHART_AUDIT = (id) => {
   const hr = host.getBoundingClientRect(), out = { hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth, w: Math.round(hr.width), over: [], outside: [], junk: /\bNaN\b|\bundefined\b|\bInfinity\b/.test(box.textContent) };
   const head = box.querySelector(':scope > .chart-head, :scope > .pane-title');
   const parts = head ? [...head.children].filter((e) => e.getBoundingClientRect().width > 0) : [];
-  const ctl = head ? [...head.querySelectorAll('.zseg, .zreset, .openwin')] : [];
+  const ctl = head ? [...head.querySelectorAll('.ctools > *')] : []; // its groups (v0.6.2: reset sits in the zoom pill)
   const items = [...parts.filter((e) => !e.classList.contains('ctools')), ...ctl];
   for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
     const a = items[i].getBoundingClientRect(), b = items[j].getBoundingClientRect();
@@ -5036,8 +5037,155 @@ async function testTiers(browser) {
 }
 
 // /v060-tests
+// ---------- v0.6.2 · tools: the chart toolbar (the owner, 15 Nov 2026: "these plus-minus buttons look bad, they don't fit
+// and slightly overlap ... click through them, everywhere") and what the live audit of v0.6.0 met on real data ----------
+// Every chart's tool buttons (zoom − + ↺, History, ⤢), the round icon buttons and the replay's ▶, judged where they sit:
+//  1. in every pane title the toolbar never covers the label's text, and no button sticks out of the screen
+//  2. every one has a label and a 44 px tap box on touch (44 tall, 32 wide with a mouse)
+//  3. what is drawn is small: no outline, fill or group pill taller than 34 px
+//  4. at the zoom limits − or + is disabled (and looks it), the other works; reset restores the view
+//  5. a term in a title (LOG …) can be tapped: nothing lies over its middle (the live iPhone audit: "term not clickable")
+// and, on the tiny case (sub-cent prices, quiet hours): the replay's labels stay inside their charts with nothing cut or
+// scrolling sideways, and the hourly fee chart keeps its $ axis and its typical-hour line when the typical hour is $0.
+const TOOL_AUDIT = (root) => {
+  const R = root ? document.querySelector(root) : document, bad = [], vw = innerWidth, coarse = matchMedia('(pointer:coarse)').matches;
+  if (!R) return { n: 0, bad: ['no ' + root] };
+  const on = (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility === 'visible' && !e.closest('[hidden]');
+  const clear = (c) => /rgba\(0, 0, 0, 0\)|transparent/.test(c);
+  const drawn = (el, ps) => { // the height of what is drawn (an outline or a fill), 0 when nothing is
+    const cs = getComputedStyle(el, ps);
+    if (ps && (cs.content === 'none' || cs.content === 'normal')) return 0;
+    const line = parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none' && !clear(cs.borderTopColor), fill = !clear(cs.backgroundColor);
+    if (!line && !fill) return 0;
+    const h = el.getBoundingClientRect().height;
+    if (!ps) return h;
+    const t = parseFloat(cs.top), b = parseFloat(cs.bottom);
+    return cs.position === 'absolute' && isFinite(t) && isFinite(b) ? h - t - b : parseFloat(cs.height) || h;
+  };
+  const textRects = (el) => { const out = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (!n.textContent.trim()) continue; const r = document.createRange(); r.selectNodeContents(n); for (const q of r.getClientRects()) if (q.width > 0) out.push(q); } return out; };
+  const hit = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+  const btns = [...R.querySelectorAll('.ctools button, .iconbtn, .play')].filter(on);
+  for (const b of btns) {
+    const r = b.getBoundingClientRect(), name = (b.dataset.act || b.className.split(' ')[0]) + (b.dataset.chart ? ':' + b.dataset.chart : '');
+    if (!(b.getAttribute('aria-label') || '').trim()) bad.push(name + ' no label');
+    if (r.height < 43.5 || r.width < (coarse ? 43.5 : 31.5)) bad.push(`${name} box ${Math.round(r.width)}x${Math.round(r.height)}`);
+    if (r.left < -0.5 || r.right > vw + 0.5) bad.push(name + ' off screen');
+    const g = b.closest('.ctools > *');
+    const hs = [drawn(b), drawn(b, '::before'), drawn(b, '::after'), ...[...b.children].filter((c) => c.tagName === 'SPAN').map((c) => drawn(c)), ...(g && g !== b ? [drawn(g), drawn(g, '::before')] : [])];
+    const dh = Math.max(...hs);
+    if (dh > 34.5) bad.push(`${name} drawn ${Math.round(dh)} px`);
+  }
+  let titles = 0;
+  for (const t of [...R.querySelectorAll('.ctools')].filter(on)) {
+    const head = t.parentElement; titles++;
+    const txt = [...head.children].filter((c) => c !== t && on(c)).flatMap(textRects);
+    for (const b of [...t.querySelectorAll('button')].filter(on)) { const r = b.getBoundingClientRect(); if (txt.some((q) => hit(q, r))) bad.push(`${b.dataset.act}:${b.dataset.chart || ''} over the title`); }
+  }
+  let terms = 0;
+  for (const e of [...R.querySelectorAll('[data-act="term"]')].filter(on)) {
+    if (e.closest('#pop, .pop')) continue;
+    const r0 = e.getBoundingClientRect(); if (r0.width < 1) continue;
+    e.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (x < 0 || x > vw || y < 0 || y > innerHeight) continue;
+    let seen = true; // scrolled out of a strip or a panel that clips it: not in sight
+    for (let a = e.parentElement; a && seen; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') { const q = a.getBoundingClientRect(); if (x < q.left || x > q.right || y < q.top || y > q.bottom) seen = false; } }
+    if (!seen) continue;
+    terms++;
+    const top = document.elementFromPoint(x, y);
+    if (!top || !(top === e || e.contains(top))) bad.push(`term "${e.textContent.trim().slice(0, 12)}" covered by ${top ? (top.dataset.act || top.className || top.tagName).toString().split(' ')[0] : 'nothing'}`);
+  }
+  return { n: btns.length, titles, terms, bad };
+};
+async function toolSteps(p, tag, out) {
+  const look = async (step, root) => { const a = await p.evaluate(TOOL_AUDIT, root); out.views++; out.btns += a.n; out.titles += a.titles; out.terms += a.terms; for (const x of a.bad) out.bad.push(`${tag} ${step}: ${x}`); };
+  const click = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); if (!b || b.disabled) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
+  const allOut = async (root, id) => { for (let k = 0; k < 9 && (await click(`${root} [data-act="zoom"][data-chart="${id}"][data-dir="-1"]`)); k++) await sleep(90); };
+  await look('home', '#best');
+  await allOut('#best', 'liq-best'); await allOut('#best', 'daily-best');
+  await look('home zoomed out', '#best');
+  if (await click('#bt-lead tr.row')) { await sleep(900); await look('replay', '#bt'); await allOut('#bt', 'liq-replay'); await look('replay zoomed out', '#bt'); }
+  await p.evaluate(() => scrollTo(0, 0));
+  if (await click('#best [data-act="detail"]')) {
+    await p.waitForSelector('#sheet:not([hidden])'); await sleep(500);
+    await look('pool panel', '#sheet');
+    for (const id of ['liq-detail', 'daily-detail', 'd-px', 'd-hr', 'd-day']) await allOut('#sheet', id);
+    await look('pool panel zoomed out', '#sheet');
+    if (await click('#sheet-ws')) {
+      await wsWait(p); await look('workspace overview', '#ws');
+      for (const v of ['liquidity', 'history', 'pair']) {
+        if (!(await click(`#ws-tabs [data-v="${v}"]`))) continue;
+        await sleep(600); if (v === 'liquidity') await allOut('#ws', 'liq-ws');
+        await look('workspace ' + v, '#ws');
+      }
+      await p.keyboard.press('Escape'); await wsWait(p, false);
+    }
+    await p.click('#sheet-close').catch(() => {}); await sleep(200);
+  }
+}
+async function testTools(browser) {
+  // 1, 2, 3, 5: everywhere the buttons appear, at a phone and a laptop
+  for (const o of DEVICE ? [{ phone: true }, { width: 1440 }] : [{ width: 360 }, { width: 393 }, { width: 1440 }]) {
+    const t = await openUnlocked(browser, 'long', { ...o, height: 860, mg: true, storage: { 'lps.hint': '1' } }), p = t.page, tag = o.width ? 'w' + o.width : 'phone';
+    const out = { views: 0, btns: 0, titles: 0, terms: 0, bad: [] };
+    try { await toolSteps(p, tag, out); } catch (e) { out.bad.push('ran: ' + String(e.message).split('\n')[0].slice(0, 90)); }
+    ok(`tools ${tag}: every chart toolbar sits beside or under its title, never over its text, inside the screen (${out.titles} toolbars, ${out.views} views)`, out.titles >= 12 && !out.bad.some((x) => / over the title| off screen|ran:/.test(x)), out.bad.filter((x) => / over the title| off screen|ran:/.test(x)).slice(0, 3).join(' | '));
+    ok(`tools ${tag}: every tool button is labelled, a 44 px tap box on touch (${out.btns} buttons)`, out.btns >= 30 && !out.bad.some((x) => / no label| box /.test(x)), out.bad.filter((x) => / no label| box /.test(x)).slice(0, 3).join(' | '));
+    ok(`tools ${tag}: what each button draws is small (≤ 34 px)`, !out.bad.some((x) => / drawn /.test(x)), out.bad.filter((x) => / drawn /.test(x)).slice(0, 3).join(' | '));
+    ok(`tools ${tag}: every term in sight can be tapped, nothing over it (${out.terms})`, out.terms >= 3 && !out.bad.some((x) => /term "/.test(x)), out.bad.filter((x) => /term "/.test(x)).slice(0, 3).join(' | '));
+    if (t.errors.length) ok(`tools ${tag}: no page errors`, false, t.errors[0]);
+    await t.ctx.close();
+  }
+  // the rest doesn't depend on the look: the WebKit 3D job (near its time limit) leaves it to the 2D job
+  if (BROWSER === 'webkit' && MODE === '3d' && !opt('only')) { console.log('  · tools (buttons at work, tiny case): in the WebKit 2D job'); return; }
+  // 4: the zoom limits, reset, ⤢, History and ▶ do their jobs
+  for (const phone of [true, false]) {
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop', B = '[data-act="zoom"][data-chart="liq-best"]';
+    const st = () => p.evaluate((B) => { const m = document.querySelector(B + '[data-dir="-1"]'), q = document.querySelector(B + '[data-dir="1"]'), op = (b) => +getComputedStyle(b.querySelector('svg') || b).opacity * +getComputedStyle(b).opacity;
+      return { m: m.disabled, q: q.disabled, mo: op(m), qo: op(q), reset: !!document.querySelector('[data-act="zreset"][data-chart="liq-best"]'), v: document.querySelector('[data-pz="liq-best"]').dataset.view }; }, B);
+    const press = (sel) => p.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(sel); if (!b || b.disabled) return false; b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
+    const s0 = await st();
+    let k = 0; while (k < 12 && (await press(B + '[data-dir="-1"]'))) { k++; await sleep(90); }
+    const lo = await st();
+    k = 0; while (k < 16 && (await press(B + '[data-dir="1"]'))) { k++; await sleep(90); }
+    const hi = await st();
+    await press('[data-act="zreset"][data-chart="liq-best"]'); await sleep(150);
+    const s1 = await st();
+    ok(`tools ${tag}: − stops at the widest view (disabled, dimmed), + then zooms to its limit (disabled), reset brings the view back`,
+      !s0.m && !s0.q && !s0.reset && lo.m && !lo.q && lo.mo <= 0.5 && lo.qo > 0.9 && lo.reset && lo.v !== s0.v && hi.q && !hi.m && hi.qo <= 0.5 && hi.v !== lo.v && !s1.reset && s1.v === s0.v && !s1.m && !s1.q, JSON.stringify({ s0, lo, hi, s1 }));
+    await press('[data-chartbox="liq-best"] .ctools [data-act="openchart"]'); await wsWait(p);
+    const w1 = await p.evaluate(WS_LOOK); await p.keyboard.press('Escape'); await wsWait(p, false);
+    await press('[data-chartbox="liq-best"] .ctools [data-act="ws-hist"]'); await wsWait(p);
+    const w2 = await p.evaluate(WS_LOOK); await p.keyboard.press('Escape'); await wsWait(p, false);
+    ok(`tools ${tag}: ⤢ opens the pool full screen on its liquidity, History on its History`, w1 && w1.tab === 'liquidity' && w2 && w2.tab === 'history', JSON.stringify([w1 && w1.tab, w2 && w2.tab]));
+    let pl = null;
+    if (await press('#bt-lead tr.row')) {
+      await sleep(800); const a = await p.getAttribute('#rp-play', 'aria-label'); await press('#rp-play'); await sleep(500);
+      const b = await p.getAttribute('#rp-play', 'aria-label'); await press('#rp-play'); await sleep(200);
+      pl = [a, b, await p.getAttribute('#rp-play', 'aria-label')];
+    }
+    ok(`tools ${tag}: ▶ plays the replay and pauses it`, pl && pl[0] === 'Play the replay' && pl[1] === 'Pause the replay' && pl[2] === 'Play the replay', JSON.stringify(pl));
+    await t.ctx.close();
+  }
+  // the tiny case: the replay's labels inside their charts; the hourly fee chart's axis and typical line at a $0 median
+  for (const o of DEVICE ? [{ phone: true }, { width: 1440 }] : [{ width: 360 }, { width: 1440 }]) {
+    const t = await openUnlocked(browser, 'tiny', { ...o, height: 860 }), p = t.page, tag = o.width ? 'w' + o.width : 'phone';
+    await p.evaluate(() => { const r = document.querySelector('#bt-lead tr.row'); r.scrollIntoView({ block: 'center' }); r.click(); }); await sleep(1200);
+    const rp = await p.evaluate(() => {
+      const out = { n: 0, cut: [], hs: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+      for (const s of ['#rp-price', '#rp-money', '#lab-lines']) { const box = document.querySelector(s); if (!box || !box.getClientRects().length) { out.cut.push(s + ' missing'); continue; } const br = box.getBoundingClientRect();
+        for (const e of box.querySelectorAll('text')) { const r = e.getBoundingClientRect(); if (!r.width) continue; out.n++; if (r.left < br.left - 0.5 || r.right > br.right + 0.5) out.cut.push(`${s} "${e.textContent.slice(0, 12)}" ${Math.round(r.left - br.left)}…${Math.round(r.right - br.right)}`); } }
+      return out; });
+    ok(`tools ${tag}: the replay's labels (sub-cent prices) stay inside their charts, nothing scrolls sideways (${rp.n} labels)`, rp.n >= 10 && rp.cut.length === 0 && rp.hs <= 0, `${rp.cut.length} out, hscroll ${rp.hs}: ${rp.cut.slice(0, 3).join(' | ')}`);
+    await p.evaluate(() => { scrollTo(0, 0); document.querySelector('#best [data-act="detail"]').click(); }); await p.waitForSelector('#sheet:not([hidden])'); await sleep(600);
+    const hr = await p.evaluate(() => { const b = document.querySelector('[data-chartbox="d-hr"]'); return b ? { ys: b.querySelectorAll('.yax > span').length, med: !!b.querySelector('line.median'), cap: b.textContent.match(/typical hour \(median\) \S+/) } : null; });
+    ok(`tools ${tag}: a quiet pool's hourly fee chart keeps its $ axis and its typical-hour line at a $0 median`, hr && hr.ys >= 2 && hr.med && hr.cap && /\$0\b/.test(hr.cap[0]), JSON.stringify(hr));
+    await t.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
-  workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers }; // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+  workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools }; // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
 const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers']); // look-independent (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {

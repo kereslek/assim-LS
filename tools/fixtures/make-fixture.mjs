@@ -26,13 +26,15 @@
 //            six-figure prices (real names and numbers run longer than the fixtures: the overlap audit reads this case)
 //   stress   the long case and eleven copies of every pool across ethereum, base, bsc and arbitrum: 12-letter symbols,
 //            8-letter quotes, long venue names, about 1,500 pools (v0.5.2: what the live iPhone audit met)
+//   tiny     the default data with what the live audit of 15 Nov 2026 met on real data (v0.6.2): sub-cent prices in the
+//            backtest replay (0.00000xyz: the widest y-axis labels) and hourly fees that are $0 three hours in four (a $0 median)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newLockFile, unlock, seal, ITERATIONS } from '../../lib/lock.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -686,6 +688,20 @@ export function longCase(data) {
   return { live, history: hist, backtest: bt };
 }
 
+// tiny (v0.6.2): every replay's price walks around 0.0000037 (prices keep their shape, only the unit changes), and three
+// hourly fee rows in four read $0 (a quiet pool: its typical hour is $0)
+export function tinyCase(data) {
+  const bt = structuredClone(data.backtest), hist = structuredClone(data.history);
+  for (const e of Object.values(bt.pools)) for (const b of Object.values(e)) {
+    const ref = b && b.series && b.series.px.find((v) => isNum(v) && v > 0);
+    if (!ref) continue;
+    const k = 3.7e-6 / ref;
+    for (const key of ['px', 'lo', 'hi']) b.series[key] = b.series[key].map((v) => (isNum(v) ? sig(v * k, 6) : v));
+  }
+  for (const h of Object.values(hist.pools)) if (Array.isArray(h.h)) h.h = h.h.map((r, i) => (i % 4 && isNum(r[3]) ? [r[0], r[1], r[2], 0, ...r.slice(4)] : r));
+  return { live: data.live, history: hist, backtest: bt };
+}
+
 // stress (v0.5.2): data as wide and as many as live data gets (the live iPhone audit of 15 Nov 2026 scrolled sideways
 // after a click, on data the fixtures never had): the long case, plus eleven copies of every pool on every chain the page
 // knows, with 12-letter symbols, 8-letter quotes and long venue names, in the discovery lanes beside their originals
@@ -1014,6 +1030,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'nomarket'), keys, unreadMarket(data), now);
   sealCase(path.join(outDir, 'long'), keys, longCase(data), now);
   sealCase(path.join(outDir, 'stress'), keys, stressCase(data), now);
+  sealCase(path.join(outDir, 'tiny'), keys, tinyCase(data), now);
   sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
   sealCase(path.join(outDir, 'nodisc'), keys, noDiscovery(data), now);
   sealCase(path.join(outDir, 'oddlanes'), keys, { ...data, live: { ...data.live, discovery: { newPools: [], cexLed: ['0x' + 'f'.repeat(40)], crossChain: [] } } }, now);
