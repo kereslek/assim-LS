@@ -28,7 +28,7 @@ import { pathToFileURL } from 'node:url';
 import { isEnvelope, isLockFile, open, unlock, passphraseFrom, readLock } from '../lib/lock.mjs';
 import { inboxKeys, inboxOpen } from '../lib/inbox.mjs';
 import { ALL_FILES, DATA_FILES, OWNER_EXTRA, openStore } from '../lib/store.mjs';
-import { KEYS_FILE, isKeysFile, ringOf } from '../lib/keyring.mjs';
+import { KEYS_FILE, STATUS_FILE, isKeysFile, isStatusFile, openVault, ringOf } from '../lib/keyring.mjs';
 import { parseStore } from '../lib/snapshots.mjs';
 import { unpackGt } from '../lib/feehist.mjs';
 import { unpackSx } from '../lib/exactfees.mjs';
@@ -101,9 +101,14 @@ export const SHAPES = {
 const sealedIn = (data) => ALL_FILES.filter((n) => n in data);
 // The keys that open a backup's files: the lock's, and the data key of its keys.json (null when it has none or it
 // doesn't open, which the checks report).
-function ringOfData(data, aes) {
-  if (!(KEYS_FILE in data)) return { ring: ringOf(aes, null), ok: null };
-  try { return { ring: ringOf(aes, parse(data[KEYS_FILE])), ok: true }; } catch { return { ring: ringOf(aes, null), ok: false }; }
+function ringOfData(data, keys) {
+  if (!(KEYS_FILE in data)) return { ring: ringOf(keys, null), ok: null };
+  try { return { ring: ringOf(keys, parse(data[KEYS_FILE])), ok: true }; } catch { return { ring: ringOf(keys, null), ok: false }; }
+}
+// What the passphrase opens for a backup: its keys.json's owner slots (the passphrase of that day), else the lock's own check.
+export function vaultOfFolder(repoLock, passphrase, folder) {
+  const kf = KEYS_FILE in folder.data ? parse(folder.data[KEYS_FILE]) : null;
+  return openVault(repoLock, passphrase, isKeysFile(kf) ? kf : null);
 }
 
 // Counts only (pools, rows, days), for the comparison with the live data branch.
@@ -137,8 +142,8 @@ export function checkBackup({ folder, stamp, repoLock, repoInbox = null, keys, n
   const want = [...DATA_FILES, 'lock.json'];
   const missing = want.filter((n) => !(n in data)).length + ['lock.json', 'inbox.json'].filter((n) => !(n in lock)).length;
   check(`every file is there (${DATA_FILES.length} data files, lock.json, lock/)`, missing === 0);
-  check('no unknown files', Object.keys(data).every((n) => want.includes(n) || n === 'inbox.json' || OWNER_EXTRA.includes(n) || n === KEYS_FILE) && Object.keys(lock).every((n) => ['lock.json', 'inbox.json', 'config.sealed.json'].includes(n)));
-  const kr = ringOfData(data, keys.aes);
+  check('no unknown files', Object.keys(data).every((n) => want.includes(n) || n === 'inbox.json' || OWNER_EXTRA.includes(n) || n === KEYS_FILE || (n === STATUS_FILE && isStatusFile(parse(data[n])))) && Object.keys(lock).every((n) => ['lock.json', 'inbox.json', 'config.sealed.json'].includes(n)));
+  const kr = ringOfData(data, keys);
   if (kr.ok !== null) check('keys.json holds wrapped keys only, and its owner slot opens with the lock', kr.ok && isKeysFile(parse(data[KEYS_FILE])));
   check('lock.json equals the repo lock', isLockFile(parse(data['lock.json'])) && canon(parse(data['lock.json'])) === canon(repoLock));
   check('lock/lock.json equals the repo lock', isLockFile(parse(lock['lock.json'])) && canon(parse(lock['lock.json'])) === canon(repoLock));
@@ -233,8 +238,8 @@ export async function loopStart({ folder, env, say = () => {} }) {
 export function liveCounts({ dir, keys }) {
   const objs = {};
   let t = null;
-  let ring = ringOf(keys.aes, null);
-  try { if (fs.existsSync(path.join(dir, KEYS_FILE))) ring = ringOf(keys.aes, JSON.parse(fs.readFileSync(path.join(dir, KEYS_FILE), 'utf8'))); } catch { /* unread: null counts */ }
+  let ring = ringOf(keys, null);
+  try { if (fs.existsSync(path.join(dir, KEYS_FILE))) ring = ringOf(keys, JSON.parse(fs.readFileSync(path.join(dir, KEYS_FILE), 'utf8'))); } catch { /* unread: null counts */ }
   for (const n of DATA_FILES) {
     const f = path.join(dir, n);
     if (!fs.existsSync(f)) continue;
@@ -257,10 +262,10 @@ const COUNT_LABELS = { livePools: 'live.json pools', histPools: 'history pools',
 
 export async function drill({ dir, stamp, lockDir = 'lock', liveDir = null, maxAgeH = 2, label = 'backup', env = process.env, now = Date.now(), say = console.log }) {
   const repoLock = readLock(lockDir);
-  const keys = unlock(repoLock, passphraseFrom(env));
+  const folder = readFolder(dir);
+  const keys = vaultOfFolder(repoLock, passphraseFrom(env), folder);
   let repoInbox = null;
   try { repoInbox = JSON.parse(fs.readFileSync(path.join(lockDir, 'inbox.json'), 'utf8')); } catch { repoInbox = null; }
-  const folder = readFolder(dir);
   const c = checkBackup({ folder, stamp, repoLock, repoInbox, keys, now, maxAgeH });
   say(`drill ${label} ${stamp}: ${c.ageMin} min old; its newest file sealed ${c.lagMin ?? '—'} min before it`);
   for (const k of c.checks) say(`drill ${label}: ${k.name}: ${k.ok ? 'pass' : 'FAIL'}`);
@@ -308,8 +313,8 @@ export function loopActive({ repo, gh = ghCall }) {
 export function restore({ dir, stamp, lockDir = 'lock', repo = '.', remote, apply = false, confirm = '', env = process.env, now = Date.now(), active = null, say = console.log }) {
   if (!remote) throw new Error('missing remote: name the remote to restore');
   const repoLock = readLock(lockDir);
-  const keys = unlock(repoLock, passphraseFrom(env));
   const folder = readFolder(dir);
+  const keys = vaultOfFolder(repoLock, passphraseFrom(env), folder);
   const c = checkBackup({ folder, stamp, repoLock, keys, now, maxAgeH: null });
   for (const k of c.checks) say(`restore: ${k.name}: ${k.ok ? 'pass' : 'FAIL'}`);
   say(`restore: backup ${stamp}, ${c.ageMin} min old; counts: ${Object.entries(c.counts).map(([k, v]) => `${COUNT_LABELS[k]} ${v ?? '—'}`).join(', ')}`);

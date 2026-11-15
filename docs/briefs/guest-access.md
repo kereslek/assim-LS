@@ -1,140 +1,172 @@
-# Guest access with key slots (owner's yes, top priority, 15 Nov 2026)
+# Guest access, recovery key, passphrase change (owner's yes, 15 Nov 2026)
 
-Friends get a guest passphrase that the owner can take back. Guests see all market data and every view
-(charts, History, Compare, Pair, the workspace, search). They get no favourites, notes, settings or anything
-of the owner's. Approved signals: mockups A, B, D and E, plus a calm "ended" screen. Violet (`#B39DFF`) is
-used only for guest signals.
+**What this covers:**
+- **Guests:** friends get a guest passphrase that the owner can take back. They see all market data and every view (charts, History, Compare, Pair, the workspace, search). They get no favourites, notes, settings or anything of the owner's. Signals: mockups A, B, D and E, plus a calm "ended" screen. Violet (`#B39DFF`) is used only for guest signals.
+- **Owner additions** (after the passphrase was briefly lost on 15 Nov):
+  - a recovery key;
+  - a safe passphrase change;
+  - a mismatch alarm.
 
 This file is public, like the repo: it describes shapes and flows only.
 
-## 1 · Keys
+## 1 · Keys: two data keys behind one master key
 
 | Key | What it is | Who holds it |
 |---|---|---|
-| **Owner key** | PBKDF2-SHA256(owner passphrase, `lock.json` salt, 600k, 64 bytes): AES key + token (unchanged). | The owner's devices; the loop (`LOCK_PASSPHRASE`). |
-| **Data key (DEK)** | 32 random bytes. It seals the **market files** only. | Whoever opens a slot in `keys.json`. |
-| **Guest key (KEK)** | PBKDF2-SHA256(guest passphrase, the shared **guest salt**, 600k, 64 bytes): the first 32 bytes. | That guest's devices; the loop (sealed in `guests.json`, to re-wrap after a rotation). |
+| **Market key (MDEK)** | 32 random bytes. It seals `live.json`, `history.json` and `backtest.json`. | The owner and every guest, through their slots. |
+| **Private key (PDEK)** | 32 random bytes. It seals `snapshots.json`, `log.json`, `owner.json` and `guests.json`. | The owner only. |
+| **Master key (MK)** | 32 random bytes. It wraps both data keys and the inbox seed. | Whoever opens an owner slot or the recovery slot. |
+| **Passphrase key** | PBKDF2-SHA256(passphrase, `lock.json` salt, 600k): the first 32 bytes. | The owner's devices; the loop (`LOCK_PASSPHRASE`). |
+| **Recovery key** | 160 random bits, shown as 8 groups of 4 (base32). PBKDF2 with its own salt `rsalt`. | Written down by the owner, kept at home. |
+| **Guest key** | PBKDF2(guest passphrase, the shared guest salt `gsalt`, 600k). | That guest's devices; the loop (to re-wrap after a rotation). |
 
-- **`keys.json`** (data branch, readable, like `lock.json`): `{ keys: 1, t, gsalt, iter, owner: Slot, slots: [Slot] }`, where `Slot = { iv, ct }` is AES-256-GCM.
-  - **The owner slot** is sealed under the owner key (additional data `lps-owner-slot`). Inside: `{ k: DEK, p: [the previous DEKs, at most 2], g: generation }`.
-  - **A guest slot** is sealed under that guest's KEK (additional data `lps-guest-slot`). Inside: `{ k: DEK, s: slot id, n: name, e: expiry ms or null, g }`.
-  - The slots are shuffled at every write and carry nothing readable. **A reader without a key learns only how many slots there are.**
-- **One guest salt for all guests:** a phone derives once and tries every slot (each try is one fast AES-GCM check).
-- **The unlock form** derives the owner key and the guest key at the same time, then tries the owner check first and the guest slots second.
+**`keys.json`** sits on the data branch, readable like `lock.json`:
+
+```
+{ keys: 2, t, iter, gsalt, rsalt, owner: [Slot], recovery: Slot|null, mk: Slot, slots: [Slot] }
+Slot = { iv, ct }   AES-256-GCM over JSON, its kind bound as additional data
+  owner slot    under a passphrase key      { m: MK }
+  recovery slot under the recovery key      { m: MK }
+  master slot   under MK                    { k: MDEK, p: [older MDEKs], pk: PDEK, pp: [older PDEKs], tk: inbox seed, g }
+  guest slot    under a guest key           { k: MDEK, s: slot id, n: name, e: expiry, g }
+```
+
+- **What a reader without a key learns:** the number of owner slots (1–4), whether a recovery key exists, and the number of guest slots. Slots are shuffled at every write.
+- **What a passphrase change touches:** it adds or drops an owner slot. No file is sealed again, and the private key stays the same.
+- **What a guest's removal touches:** it replaces the market key, and only the market files are sealed again.
+- **What the migration keeps (the first run with slots):**
+  - the lock's own key, as the oldest private key (`pp`), so every older file and backup still opens;
+  - the lock's token, as the inbox seed (`tk`), so `lock/inbox.json` and `lock/config.sealed.json` don't change.
+- **Whatever holds the lock** (`openLock`, `lib/lock.mjs`) gets the vault from `keys.json`: `aes` is the private key, `token` the inbox seed. So the scan, the backtest and the log code stay as they were.
+- **When a passphrase counts:** once `keys.json` exists, only an owner slot makes a passphrase valid, and `lock.json`'s check no longer decides. Before that, the check decides, as before.
 
 ## 2 · Which file is which (the private audit)
 
 | File | Sealed under | What's in it | Why |
 |---|---|---|---|
-| `live.json` | **DEK** (market) | Pools, windows, pairs, the market strip, discovery, chains, health counts. | Market data, plus counts that public logs already print. |
-| `history.json` | **DEK** | Each pool's hourly/daily/yearly rows, and the passes' health rows. | Market data. |
-| `backtest.json` | **DEK** | Simulated backtests of the top pools. | Market data (simulations, not positions). `realCheck` counts the pool's own positions, not the owner's. |
-| `owner.json` *(new)* | owner key | `ticket`, `stopLoss`, `gemAt`, `ageDays` (the token-age threshold). | The owner's settings (the sealed config). |
-| `guests.json` *(new)* | owner key | Guest labels, expiry, status, their KEKs, finished request ids, the generation. | Only the owner manages guests. |
-| `snapshots.json` | owner key | The raw per-pool state the loop recomputes windows from. | Loop state; the page never reads it. |
-| `log.json` | owner key | The sealed log. | Logs stay owner-only. |
-| `keys.json` *(new)* | (its slots are sealed) | Wrapped DEK copies. | Public: the slot count only. |
-| `lock.json` | (readable) | Salt, rounds, check. | Unchanged. |
+| `live.json` | market key | Pools, windows, pairs, the market strip, discovery, chains, health counts. | Market data, plus counts the public logs print anyway. |
+| `history.json` | market key | Each pool's rows, and the passes' health rows. | Market data. |
+| `backtest.json` | market key | Simulated backtests of the top pools. | Simulations, not positions. `realCheck` counts the pool's own positions. |
+| `owner.json` *(new)* | private key | `ticket`, `stopLoss`, `gemAt`, `ageDays`. | The owner's settings. |
+| `guests.json` *(new)* | private key | Guest labels, expiry, status and keys; finished request ids; the passphrase change's state (`vault`). | Only the owner manages access. |
+| `snapshots.json`, `log.json` | private key | Loop state and the sealed log. | Owner only. |
+| `keys.json` *(new)* | (its slots are sealed) | Wrapped keys. | Public: slot counts only. |
+| `status.json` *(new)* | readable | `{"lock":"mismatch","since":<ms>}`, and only while the loop is paused. | The alarm (§9). |
 
-**The split happens in one place, `lib/store.mjs`**, so no caller can forget it:
-- `put('live.json')`, once a DEK exists, moves `ticket`, `stopLoss` and `gemAt` into `owner.json`. It also rewrites the token-age check's label from "tokens ranked and trading N+ days" to "tokens ranked and trading long enough", keeping N in `owner.json`.
-- `put('backtest.json')` drops `ticket`: it's the same config value as live's.
-- `get()` merges them back, so the loop's code sees the same objects as before.
-- `publish-data` refuses to publish a market file that still carries an owner-only field.
-- **Until the first migration** (no `keys.json` yet), everything is sealed and shaped exactly as before. That way an older pinned loop, the backtest job and the pools job keep working side by side.
+**Where the split happens:** in `lib/store.mjs`, so no caller can forget it.
+- **Writing `live.json`:** `ticket`, `stopLoss` and `gemAt` move into `owner.json`. The token-age label "tokens ranked and trading N+ days" becomes "tokens ranked and trading long enough", and N goes into `owner.json`.
+- **Writing `backtest.json`:** `ticket` is dropped (it's the same value).
+- **Reading:** `get()` merges everything back.
+- **Publishing:** `publish-data` refuses to publish a market file that still carries an owner-only field.
+- **Before the migration:** everything is sealed and shaped exactly as before.
 
-**What a determined guest could still work out (residual inference, stated plainly):**
-- The market numbers are computed at the owner's ticket and settings. Fee APR = 365·F ÷ (V + ticket) and the backtest's $ amounts let a guest back out the ticket. `gemFirstAt` hints at the gem threshold.
-- Hiding these fully means scoring a second copy of every pool at a public $1,000 ticket for guests. That's a later step and needs the owner's yes.
-- The page shows guests no ticket, stop-loss or threshold, and no "$ a day at the ticket".
+**What a guest can still work out:** the market numbers are computed at the owner's ticket and settings.
+- Fee APR = 365·F ÷ (V + ticket) and the backtest's dollars let a guest back out the ticket. `gemFirstAt` hints at the gem threshold.
+- Hiding this fully needs a second scoring of every pool at a public $1,000 ticket (a later step; the owner's yes).
+- A guest's page shows "$ a day" for a public $1,000 example, as in mockup A, and never shows the owner's ticket, stop-loss or threshold.
 
-## 3 · Adding a guest (owner's unlocked page)
+## 3 · Adding a guest (owner's page, Settings → Guests)
 
-1. **Guests → Add guest:** a name, and expiry 7 / 30 / 90 days or none.
-2. **The page makes a passphrase:** 5 words from an embedded 1,024-word list plus 2 digits (5 × 10 + 6.6 = 56.6 bits).
-3. **It wraps the key:** it opens the owner slot with the stored owner key, derives the guest KEK (600k rounds, guest salt) and wraps the DEK into a guest slot.
-4. **It seals a request** to the inbox key (`lock/inbox.json`, X25519 → HKDF → AES-GCM, as `lib/inbox.mjs`):
-   `{ lps: "guest-add", id, at, slot, kek, name, exp, wrap }`.
-5. **It shows the passphrase once**, with Copy, and a **"Send to the loop"** button. The button opens GitHub's new-file page with the file already filled in (`inbox/<id>.json` on the code branch). The owner taps **Commit changes**; a Copy button is the fallback.
-6. **The loop picks it up:** every pass reads `inbox/` at the code branch's tip (the same sealed-to-the-inbox pattern as `lock/config.sealed.json`, but it isn't pinned, so no re-pin is needed). It checks the request (the `wrap` must open with the KEK and hold a current DEK), adds the slot and records the guest in `guests.json`.
-7. **A guest can open the page within one pass**, about 6 minutes.
+1. Enter a name and an expiry: 7, 30 or 90 days, or none.
+2. **The page makes a passphrase:** 5 words from an embedded 1,024-word list plus 2 digits (56.6 bits).
+3. **It wraps the market key into a guest slot:** it opens the master slot for the market key, then derives the guest key with `gsalt`.
+4. **It seals a request** to the inbox key (X25519 → HKDF → AES-GCM, as `lib/inbox.mjs`): `{ lps: "guest-add", id, at, slot, kek, name, exp, wrap }`.
+5. **It shows the passphrase once**, with Copy.
+6. **"Send to the loop"** opens GitHub's new-file page with `inbox/<id>.json` already filled in on the code branch. The owner taps **Commit changes**. "Copy the sealed request" is the fallback.
+7. **The loop picks it up:** every pass it reads `inbox/` at the code branch's tip. The inbox isn't pinned, so no re-pin is needed. It checks that `wrap` opens with `kek` to a current market key, adds the slot, and records the guest. This takes about one pass (about 6 minutes).
 
 ## 4 · Removing a guest, expiry, rotation
 
-- **Remove guest** (owner's page, Guests list) seals `{ lps: "guest-remove", id, at, slot }` and sends it the same way. **Remove all guests** sends `guest-reset`.
-- **The loop drops the slot and rotates the DEK** in that same pass:
-  1. a new random DEK;
-  2. the owner slot holds the new DEK and the old one (`p`);
-  3. the market files are re-sealed under the new DEK;
-  4. the remaining guests' slots are rebuilt with their KEKs.
-- **Expired guests** (expiry ≤ now) go the same way, automatically.
-- **Requests are processed once** (their ids go into `guests.json`), in time order, and replay to the same result. Keep the files in `inbox/`: they're sealed, and they're the record.
-- **After a removal, the guest's device can't open new data** and shows "Your guest access has ended".
-- **What a guest already saw can't be recalled:** data shown or saved before the removal stays with them. Removal stops new data only.
+- **Remove guest** sends `guest-remove`; **Remove all guests** sends `guest-reset`. Expired guests go the same way, automatically.
+- **The loop then:**
+  1. drops the slot;
+  2. makes a new market key (the master slot keeps the old one in `p`);
+  3. seals the market files again;
+  4. rebuilds the remaining guests' slots.
+- **A guest slot that no live guest opens** (a "stray") also rotates the key away.
+- **Requests run once each, in time order,** and replaying them gives the same result. Keep the files in `inbox/`.
+- **The removed guest's device** then shows "Your guest access has ended".
+- **What a guest already saw can't be recalled.** Removal stops new data only.
 
-## 5 · Migration (the first loop run on this code)
+## 5 · Migration (the loop's first run on this code)
 
-1. **Before it:** a `backup.yml` run (the release path), and the v0.7.0 page deployed. The page reads both formats.
-2. **The loop's start:** after restoring the data branch, and only if the data branch was read and has no `keys.json`, the loop:
-   - creates the DEK, the guest salt and the owner slot from `LOCK_PASSPHRASE`;
-   - re-seals the restored market files under the DEK, reading the old format, so nothing cumulative is lost;
-   - splits out the owner-only fields.
-3. **The first publish** carries `keys.json` and the re-sealed files in **one commit**, verified before the push.
-4. **Owner devices keep working with no re-unlock:** the page checks the stored owner key against `lock.json` (unchanged), then opens the owner slot for the DEK.
-5. **The live audit** (`LOCK_PASSPHRASE`) unlocks the same way.
-6. **Rollback:** after the migration, an older pinned loop refuses the new files (`keys.json`, `owner.json`, `guests.json`) and won't publish. Rolling back means restoring the pre-migration backup (`docs/RESTORE.md`) together with the old pin.
+1. **Before:** a `backup.yml` run, and the v0.7.0 page deployed (it reads both formats).
+2. **At the loop's start:** the loop restores the data branch. Only if the branch was read and has no `keys.json`, it:
+   - creates MK, MDEK, PDEK and `gsalt`, and the first owner slot from `LOCK_PASSPHRASE`;
+   - re-seals the restored files (market files under MDEK with the owner-only fields split off; `snapshots`/`log` under PDEK);
+   - from then on holds the vault itself.
+3. **The first publish** carries `keys.json` and every file in one verified commit.
+4. **Owner devices keep working with no re-unlock:** the stored key opens the owner slot. After that the device also keeps MK, so later passphrase changes never lock it out.
+5. **The live audit's unlock** (`LOCK_PASSPHRASE`) works the same way.
+6. **Rollback:** an older pinned loop refuses the new files. Rolling back means restoring the pre-migration backup together with the old pin.
 
 ## 6 · The guest page
 
-- **Unlock:** the owner check first, then the guest slots (both keys derived at once).
-  - The device keeps only the guest KEK, as a non-extractable CryptoKey in IndexedDB, like the owner key today.
-  - On each refresh the page reads `keys.json` (the newest copy of all sources) and opens the slot for the DEK.
-- **Private parts are never fetched for guests:** `owner.json`, `guests.json`, `snapshots.json` and `log.json` (the last two are never fetched by anyone). They wouldn't open with a guest key anyway.
-- **Disabled with message D:** ★ (it keeps a small violet lock badge), favourites, the Guests panel, and anything that saves. Message D: "Saving isn't on for guests. Ask the admin for your own login."
-  - "Sign out on this device" stays, so a guest can forget the key.
+- **Unlock:** the passphrase is derived with the lock salt and with `gsalt` at the same time. The page tries the owner slots, then the guest slots.
+  - A guest device keeps only its guest key (non-extractable, IndexedDB).
+  - Each refresh opens the slot for the market key.
+- **Never fetched for guests:** `owner.json` and `guests.json`. They're under the private key and wouldn't open anyway.
+- **Disabled with message D:** ★ (with a violet lock badge), Favourites, the Settings panel, and "Needs you". Message D: "Saving isn't on for guests. Ask the admin for your own login." Sign out stays.
 - **Signals:**
-  - **A:** a "GUEST · name" pill by the version badge, which opens a sheet: ends <date>, can / can't, Done.
-  - **B:** a 3 px violet line along the top of every screen, the workspace and full view included.
-  - **D:** the ★ lock badge and its note.
-  - **E:** a one-time "Welcome, name" card.
-  - **Ended:** "Your guest access has ended" with "Use a different passphrase". Never an error or a blank page.
-- **Everything else is the same as the owner's.** Numbers that are "at the ticket" show as rates only.
+  - **A:** a "GUEST · name" pill by the version badge, with a sheet: ends <date>, can / can't, Done.
+  - **B:** a 3 px violet top line on every screen.
+  - **D:** the locked ★.
+  - **E:** a one-time welcome card.
+  - **Ended:** "Your guest access has ended" with "Use a different passphrase".
 
 ## 7 · Safety
 
-- **A wrong passphrase still stops everything** before anything is read or sealed.
-- **`keys.json` is never overwritten without its owner slot opening:**
-  - A `keys.json` that doesn't open with the lock stops the pass.
-  - A data branch whose guest salt differs from the loop's own is refused (that would be a second migration).
-- **No migration while the data branch is unread:** a failed restore at the loop's start means no keys step until the next run.
+- **A passphrase that opens nothing stops everything** before anything is read or sealed.
+- **Never a second `keys.json`:**
+  - a process that already holds the vault never makes keys again;
+  - a data branch with a different guest salt is refused.
+- **No migration while the data branch is unread.**
 - **One commit, verified before the push:**
-  - every market file opens with the DEK that `keys.json`'s owner slot holds, and carries no owner-only field;
-  - every owner file opens with the owner key;
-  - every live guest slot opens with its KEK.
-  - A file sealed under a previous DEK (a backtest published mid-rotation) is re-sealed under the current one before the push.
-- **Not readable by the owner can't happen by mistake:** the owner slot always keeps the two previous DEKs.
-- **No tags are made:** the loop's publish pattern has none. The hourly sealed backups cover a bad rotation.
-- **Public logs** print only counts and yes/no:
-  `guests: 2 active, 1 added, 0 removed, 0 expired, 0 refused; data key rotated: no; keys written: yes`.
-- **A request's authority is repo write access:** only someone who can commit to the code branch can add or remove guests. The sealing keeps the request's content private.
+  - each market file opens with the current market key and carries no owner-only field;
+  - each private file opens with the private key;
+  - each live guest opens exactly their slot.
+  - A file left under an older key (e.g. a backtest published mid-rotation) is sealed again under the current one.
+- **Older keys stay in the master slot** (two of each), so nothing becomes unreadable for the owner.
+- **No tags are made.** The hourly sealed backups cover a bad rotation.
+- **Public logs print counts and yes/no only.**
+- **A request's authority is repo write access.** The sealing keeps its content private. A forged owner or recovery slot can't hold the real master key, so it opens nothing.
 
-## 8 · Tests
+## 8 · Recovery key and a safe passphrase change
+
+- **Create a recovery key** (Settings → Recovery key → Create):
+  1. The page makes 160 random bits, shown once as `XXXX-XXXX-…` (base32, 8 groups), with "Write this down and keep it at home".
+  2. It asks for two of its groups back.
+  3. It then wraps MK under PBKDF2(key, a new `rsalt`, 600k) and sends `{ lps: "recovery-set", rsalt, slot }` the same way. A new key replaces the old one.
+- **Use the recovery key** (unlock screen → "Use recovery key"): it opens MK, so everything opens. The page then walks straight into a passphrase change.
+- **Change the passphrase** (Settings → Passphrase → Change, or after a recovery):
+  1. The page wraps MK under the new passphrase's key and sends `{ lps: "owner-add", slot }`.
+  2. Once the loop adds it ("new passphrase ready": both passphrases now open), the page shows the exact steps to update the GitHub secret `LOCK_PASSPHRASE`.
+  3. The first pass the loop runs on the new secret drops every other owner slot, and the page says "done".
+  4. Devices keep working throughout: they hold MK.
+- **What a change does and doesn't revoke:** it isn't a response to a leaked passphrase. The old passphrase still opens older backups and the inbox (whose requests never carry a passphrase key or MK). A full key rotation is a separate, later step.
+
+## 9 · The mismatch alarm
+
+If `LOCK_PASSPHRASE` opens no owner slot, the loop stops before opening or sealing anything, and writes `out/loop/alarm` = `mismatch`. The workflow's alarm step (`scripts/alarm.mjs`, `issues: write` in `loop.yml` only) then:
+- **Adds the flag:** `status.json` (`{"lock":"mismatch","since":<ms>}`) goes onto the data branch. Every other file stays byte for byte.
+- **Shows a banner:** every page shows a red banner, locked or unlocked: "The scanner is paused: the passphrase in GitHub doesn't match your data. Nothing is lost." It comes with the fix steps.
+- **Opens one issue,** "Scanner paused: passphrase mismatch" (no details), and leaves it alone on later runs.
+- **Clears itself:** the first pass that opens publishes without the flag, and the alarm step closes the issue.
+
+## 10 · Tests
 
 - **Unit tests** (`test/guest*.test.mjs`), made-up data only:
-  - wrap and unwrap;
-  - the private split's round trip;
-  - migration that keeps cumulative state;
-  - add, remove, expiry and rotation;
-  - a wrong passphrase stopping;
-  - a guest salt mismatch refused;
-  - a removed guest locked out of re-sealed files;
-  - publish re-sealing a stale file;
-  - backup and restore with `keys.json`.
-- **Site tests,** groups `guest` and `guestend` (made-up fixtures with owner, guest, removed and expired passphrases):
-  - unlock;
-  - A, B, D and E;
-  - private parts absent;
-  - search, History and Compare working;
-  - the ended screen;
-  - the owner unlocking after migration with no re-unlock.
+  - slots and kinds;
+  - the private split;
+  - migration that keeps every row;
+  - add, remove, expiry, stray slots and rotation;
+  - the recovery key opening both data keys;
+  - a passphrase change that keeps old and new valid until the drop;
+  - a passphrase that opens nothing stopping everything;
+  - the flag published with every other file unchanged, and cleared by the next good publish;
+  - one issue, not one per run;
+  - backup and the drill reading `keys.json`;
+  - requests read from `inbox/`.
+- **Site tests:**
+  - groups `guest`, `guestend`, `recovery`, `passchange` and `mismatch`, all in v0.7.0 (they fit naturally: one key structure).
   - Every new check fails on `site/app/index.html`.

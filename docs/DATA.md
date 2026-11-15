@@ -12,27 +12,32 @@ This file describes shapes only: it holds no data. Every value below lives seale
 | `backtest.json` | yes | backtest job | daily and on demand |
 | `snapshots.json` | yes | scanner | when a pool gains an hourly row (about hourly; every pass while the backfill catches up) |
 | `inbox.json` | no (the X25519 public key only) | lock init | with `lock.json` |
-| `keys.json` | no (wrapped keys only: the owner slot and the guest slots) | the loop's keys step | at the first run with guests (migration), and when a guest is added, removed or expires |
-| `owner.json` | yes, owner key only | the store, with `live.json` once `keys.json` exists | each pass |
-| `guests.json` | yes, owner key only | the loop's keys step | when a request is applied or a guest expires |
+| `keys.json` | no (wrapped keys only: owner, recovery, master and guest slots) | the loop's keys step | at the first run with slots (migration), when a guest or a passphrase is added or removed, a guest expires, or a recovery key is set |
+| `status.json` | no (`{"lock":"mismatch","since"}` only) | the loop's alarm step | while `LOCK_PASSPHRASE` opens no slot; dropped by the next good publish |
+| `owner.json` | yes, private key | the store, with `live.json` once `keys.json` exists | each pass |
+| `guests.json` | yes, private key | the loop's keys step | when a request is applied or a guest expires |
 
 - **Envelope** (`lib/lock.mjs`): `{"lock":1,"t":<ms>,"z":1,"iv":"<b64>","ct":"<b64>"}`. `z` = gzip before sealing; only `t` is readable, so a staleness check needs no key.
 - **Key**: PBKDF2-SHA256(passphrase, salt, `iter` rounds, 64 bytes); the first 32 bytes are the AES-256-GCM key. The page derives it with WebCrypto and inflates with `DecompressionStream('gzip')`.
 - **Where**: the data files sit on the `data` branch, one commit that each pass replaces. The page reads `https://raw.githubusercontent.com/<owner>/<repo>/data/<file>?t=<now>` with `cache: 'no-store'`. `lock.json` also ships with the page.
 - **Missing is never zero**: an unread value is `null` and the page shows "—". Fractions are 0..1, money in USD, times in ms since epoch, durations in days.
 
-## Key slots: guest access (docs/briefs/guest-access.md)
+## Key slots: guests, recovery key, passphrase change (docs/briefs/guest-access.md)
 
-Once the data branch holds `keys.json` (the loop's first run on the guest code creates it):
-- **Market files** (`live.json`, `history.json`, `backtest.json`) are sealed under a random **data key**, not the owner key. Everything else (`snapshots.json`, `log.json`, `owner.json`, `guests.json`) stays under the owner key.
-- **`keys.json`** = `{ keys: 1, t, gsalt, iter, owner: Slot, slots: [Slot] }`, where `Slot = { iv, ct }` is AES-256-GCM over JSON:
-  - the **owner slot** (additional data `lps-owner-slot`) is sealed under the owner key and holds `{ k: <data key b64>, p: [<previous data keys>, ≤ 2], g: <generation> }`;
-  - each **guest slot** (additional data `lps-guest-slot`) is sealed under the first 32 bytes of PBKDF2-SHA256(guest passphrase, `gsalt`, `iter`, 64 bytes) and holds `{ k, s: <slot id>, n: <name>, e: <expiry ms|null>, g }`.
-  - The slots are shuffled at each write, and a reader without a key sees only how many there are.
-- **`owner.json`** = `{ v: 1, t, ticket, stopLoss, gemAt, ageDays }`. These are the owner's settings, moved out of `live.json` (`lib/store.mjs` splits them on write and merges them on read). The `token-age-rank` check's label in `live.json` then reads "tokens ranked and trading long enough", and `ageDays` holds the number. `backtest.json` has no `ticket` then: it's the same value.
-- **`guests.json`** = `{ v: 1, t, gen, guests: [{ s, n, e, at, st: "active"|"removed"|"expired", end, kek? }], done: [<request id>] }`. `kek` is kept only while a guest is active.
-- **Requests** are files in `inbox/` on the code branch, each sealed to `lock/inbox.json`: `guest-add`, `guest-remove`, `guest-reset` (`lib/guests.mjs`).
-- **Before `keys.json` exists**, every file is sealed and shaped exactly as above (one owner key, the settings inside `live.json`).
+Once the data branch holds `keys.json` (the loop's first run on the slot code creates it):
+- **Two data keys.** Market files (`live.json`, `history.json`, `backtest.json`) are sealed under a random **market key**. Every other file (`snapshots.json`, `log.json`, `owner.json`, `guests.json`) is sealed under a random **private key**.
+- **`keys.json`** = `{ keys: 2, t, iter, gsalt, rsalt, owner: [Slot], recovery: Slot|null, mk: Slot, slots: [Slot] }`, where `Slot = { iv, ct }` is AES-256-GCM over JSON, its kind bound as additional data:
+  - **owner slots** (`lps-owner-slot`): one per passphrase, under PBKDF2-SHA256(passphrase, `lock.json` salt, `iter`, 64 bytes)[0..32]. Each holds `{ m: <master key> }`.
+  - **the recovery slot** (`lps-recovery-slot`): under PBKDF2(recovery key, `rsalt`). It holds `{ m }`.
+  - **the master slot** (`lps-master-slot`): under the master key. It holds `{ k: <market key>, p: [<older market keys>], pk: <private key>, pp: [<older private keys>], tk: <inbox seed>, g }`. `pp` keeps the lock's own key (every older file opens) and `tk` is the lock's token (`lock/inbox.json` is unchanged).
+  - **guest slots** (`lps-guest-slot`): under PBKDF2(guest passphrase, `gsalt`). Each holds `{ k: <market key>, s: <slot id>, n: <name>, e: <expiry ms|null>, g }`.
+  - The slots are shuffled at each write. A reader without a key sees only the counts.
+- **When a passphrase counts:** once `keys.json` exists, it must open an owner slot. `lock.json`'s check decides only before that.
+- **`owner.json`** = `{ v: 1, t, ticket, stopLoss, gemAt, ageDays }`, moved out of `live.json` (`lib/store.mjs` splits it on write and merges it on read). The `token-age-rank` label in `live.json` then reads "tokens ranked and trading long enough". `backtest.json` has no `ticket` then.
+- **`guests.json`** = `{ v: 1, t, gen, guests: [{ s, n, e, at, st: "active"|"removed"|"expired", end, kek? }], done: [<request id>], vault: { change: { at, ct }|null, changedAt, recoveryAt } }`.
+- **`status.json`** (readable, only while the loop is paused) = `{ "lock": "mismatch", "since": <ms> }`: `LOCK_PASSPHRASE` opens no owner slot. The first publish that opens drops it.
+- **Requests** are files in `inbox/` on the code branch, each sealed to `lock/inbox.json`: `guest-add`, `guest-remove`, `guest-reset`, `owner-add`, `recovery-set` (`lib/guests.mjs`).
+- **Before `keys.json` exists:** every file is sealed under the lock's own key and shaped as described below.
 
 ## live.json
 

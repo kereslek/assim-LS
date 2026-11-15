@@ -28,10 +28,12 @@ import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { isEnvelope, openLock } from '../lib/lock.mjs';
 import { openStore } from '../lib/store.mjs';
 import { guestLine, guestStep, readInbox } from '../lib/guests.mjs';
-import { publishData, restoreData } from './publish-data.mjs';
+import { publishData, restoreData, restoreKeysFile } from './publish-data.mjs';
 
 export const HOUR = 3600e3, DAY = 24 * HOUR, MIN = 60e3;
 export const MARKER = 'out/loop/successor';
+// out/loop/alarm: 'mismatch' when the passphrase opens no owner slot (the workflow raises the flag and the issue), 'ok' once it opens
+export const ALARM = 'out/loop/alarm';
 const GRACE = 15 * MIN;              // a pass may run this far past the deadline before it is stopped
 const HANDOVER_AFTER = 30 * MIN;     // a live loop asks for a successor only once it has run this long
 const ACTIVE = new Set(['queued', 'in_progress', 'waiting', 'pending', 'requested']);
@@ -186,6 +188,10 @@ function writeMarker(value) {
   fs.writeFileSync(MARKER, value + '\n');
 }
 
+function writeAlarm(value) {
+  try { fs.mkdirSync(path.dirname(ALARM), { recursive: true }); fs.writeFileSync(ALARM, value + '\n'); } catch { /* the alarm step reads nothing: no change */ }
+}
+
 // The dummy pass for rehearsals: a sealed live.json with no pools. REHEARSAL_FAIL_PASS=n plants a failure.
 export function rehearsalPass({ env = process.env, store = null, t = Date.now() } = {}) {
   const n = Number(env.LOOP_PASS || 0), fail = Number(env.REHEARSAL_FAIL_PASS || 0);
@@ -241,8 +247,15 @@ async function main(argv) {
     watchdog({ dryRun: argv.includes('--dry-run'), staleMin: num('--stale-min', 'STALE_MIN', 20), repo, branch });
     return;
   }
+  // key slots: keys.json is readable, so it comes first; the passphrase must then open one of its owner slots
+  try { restoreKeysFile(); } catch (e) { console.log(`loop: keys file not read (${safeMsg(e)}); the lock's own check decides`); }
   let keys;
-  try { keys = openLock().keys; } catch (e) { console.log(`loop: ${safeMsg(e)}`); process.exitCode = 1; return; }
+  try { keys = openLock().keys; } catch (e) {
+    console.log(`loop: ${safeMsg(e)}`);
+    if (/^wrong passphrase/.test(String(e?.message))) writeAlarm('mismatch'); // nothing was opened or sealed; the workflow raises the alarm
+    process.exitCode = 1; return;
+  }
+  writeAlarm('ok');
   const { publicLog: say, stats } = installSealedLogs({ keys });
   const store = openStore({ keys });
   const mode = arg('--mode', 'rehearsal') === 'live' ? 'live' : 'rehearsal';

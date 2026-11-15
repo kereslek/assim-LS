@@ -31,7 +31,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isEnvelope, isLockFile } from '../lib/lock.mjs';
-import { KEYS_FILE, isKeysFile } from '../lib/keyring.mjs';
+import { KEYS_FILE, STATUS_FILE, isKeysFile, isStatusFile } from '../lib/keyring.mjs';
 
 export const STAMP_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})(\d{2})Z$/;
 export const DAY = 86400e3;
@@ -79,6 +79,7 @@ export function fileProblem(where, name, text, repoLock) {
   }
   if (name === 'inbox.json') return isInboxKey(x) ? null : 'not-a-public-key';
   if (where === 'data' && name === KEYS_FILE) return isKeysFile(x) ? null : 'not-a-keys-file';   // guest slots: wrapped keys only
+  if (where === 'data' && name === STATUS_FILE) return isStatusFile(x) ? null : 'not-a-status-flag';   // the readable mismatch flag
   if (isEnvelope(x)) return null;
   if (where === 'lock' && isInboxEnvelope(x)) return null;   // lock/config.sealed.json is sealed to the inbox
   return 'not-sealed';
@@ -265,7 +266,7 @@ export function rehearse({ backupsDir, lockDir, now = Date.now(), maxAgeH = 48, 
   const repoLock = parse(fs.readFileSync(path.join(lockDir, 'lock.json'), 'utf8'));
   const repoInbox = fs.existsSync(path.join(lockDir, 'inbox.json')) ? parse(fs.readFileSync(path.join(lockDir, 'inbox.json'), 'utf8')) : undefined;
 
-  envs = Object.entries(data).filter(([n]) => n !== 'lock.json' && n !== 'inbox.json' && n !== KEYS_FILE);
+  envs = Object.entries(data).filter(([n]) => n !== 'lock.json' && n !== 'inbox.json' && n !== KEYS_FILE && n !== STATUS_FILE);
   lockSealed = Object.entries(lock).filter(([n]) => n !== 'lock.json' && n !== 'inbox.json');
   check('newest backup is recent', at <= now + SKEW && now - at <= maxAgeH * 3600e3);
   check('data envelopes present', envs.length > 0);

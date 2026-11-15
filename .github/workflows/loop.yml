@@ -23,6 +23,7 @@ on:
 permissions:
   contents: write   # publish the sealed data branch
   actions: write    # dispatch the successor
+  issues: write     # the passphrase mismatch alarm only (scripts/alarm.mjs): one issue, opened and closed
 concurrency:
   group: loop
   cancel-in-progress: false
@@ -96,6 +97,13 @@ jobs:
           else
             node scripts/loop.mjs --mode live --by "$BY" --pass "$LIVE_PASS" --spacing 360 --deadline-min 320 --pass-timeout-min 50
           fi
+      - name: Passphrase mismatch alarm (the readable flag and one issue; cleared on the first pass that opens)
+        if: always() && env.MODE == 'live'
+        continue-on-error: true
+        working-directory: pinned
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: if [ -f scripts/alarm.mjs ]; then node scripts/alarm.mjs; else echo 'alarm: not in this pinned code'; fi
       - name: Stop the hourly sealed copies
         if: always() && env.MODE == 'live'
         continue-on-error: true
