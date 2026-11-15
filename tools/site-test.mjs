@@ -13,6 +13,7 @@
 //                                                    workspace compare deeplink tiers (v0.6.0; history, way and flash follow the workspace and the tiers' build-up)
 //                                                    tools (v0.6.2: the chart toolbar everywhere, the replay's labels, quiet hours)
 //                                                    guest member guestend guestadmin recovery passchange mismatch (v0.7.0: key slots, the alarm)
+//                                                    histbtn (every History button clear of its neighbours; All combined a toggle)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -54,7 +55,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -4951,7 +4952,7 @@ async function testTiers(browser) {
     const h2 = await H(), m2 = await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode);
     ok(`tiers ${tag}: the liquidity pane has its own History (${pane || 'a labelled 44 px button'}): all tiers on → History all combined; only this pool → this pool alone`, !pane && h1.tab === 'history' && h1.tiers === null && m1.mode === 'all' && m1.pressed === m1.chips && h2.tiers && h2.tiers.length === 1 && h2.tiers[0] === base.id && m2 === 'one', JSON.stringify({ pane, h1: h1 && h1.tiers, m1, h2: h2 && h2.tiers && h2.tiers.length, m2 }));
     // History's own chips: a tier switches off and on, All combined puts every one back, a double-click keeps one
-    await p.click('#ws [data-act="ws-tier"][data-v="all"]'); await sleep(250);
+    await p.evaluate(() => { const b = document.querySelector('#ws [data-act="ws-tier"][data-v="all"]'); if (b.getAttribute('aria-pressed') !== 'true') b.click(); }); await sleep(250); // every tier on (pressed again it would keep this pool alone)
     await p.click(`#ws [data-act="ws-tier"][data-v="${peers[0].id}"]`); await sleep(250);
     const tg = await p.evaluate(() => ({ mode: document.querySelector('#ws .hs').dataset.mode, off: [...document.querySelectorAll('#ws .hs-chip[data-act="ws-tier"]')].filter((b) => b.getAttribute('aria-pressed') === 'false').length }));
     await wsOnly(p, peers[0].id);
@@ -5547,10 +5548,205 @@ async function testMismatch(browser) {
   }
 }
 
+// ---------- v0.7.x · every History button clear of its neighbours, and All combined as a toggle (the owner, 16 Nov 2026) ----------
+// "The History button in several places runs into something else or is covered": every visible History control, on every
+// pool surface, in the long and stress cases (long names cause most collisions). Counts and short reasons out, never text.
+const HB_AUDIT = async (o) => {
+  const out = [], seenKeys = {};
+  const vis = (e) => { if (!e || e.closest('[hidden]')) return false; if (e.checkVisibility && !e.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false; const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
+  const LAYER = '#ws, #sheet, #pop, #q-list, header.top, .sh, #fullv, #ctip';
+  const layer = (e) => e.closest(LAYER) || document.body;
+  const clipR = (e, r) => { // trimmed to what its clipping boxes still show
+    r = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const b = a.getBoundingClientRect();
+      r = { left: Math.max(r.left, b.left), top: Math.max(r.top, b.top), right: Math.min(r.right, b.right), bottom: Math.min(r.bottom, b.bottom) };
+      if (r.right - r.left < 0.5 || r.bottom - r.top < 0.5) return null;
+    }
+    return r;
+  };
+  const painted = (e) => { const cs = getComputedStyle(e); return !/^(rgba\(0, 0, 0, 0\)|transparent)$/.test(cs.backgroundColor) || cs.backgroundImage !== 'none' || parseFloat(cs.borderTopWidth) > 0 || parseFloat(cs.borderLeftWidth) > 0 || cs.boxShadow !== 'none' || /^(svg|IMG|CANVAS)$/.test(e.tagName); };
+  const paintRects = (e, acc = []) => { // what a control draws: its painted boxes, text lines (less the font's leading), icons
+    if (!vis(e)) return acc;
+    if (painted(e)) { acc.push(e.getBoundingClientRect()); if (/^(svg|IMG)$/.test(e.tagName)) return acc; }
+    for (const n of e.childNodes) {
+      if (n.nodeType === 3 && n.nodeValue.trim()) { const rg = document.createRange(); rg.selectNodeContents(n); for (const r of rg.getClientRects()) { const h = r.bottom - r.top; acc.push({ left: r.left, right: r.right, top: r.top + h * 0.16, bottom: r.bottom - h * 0.16 }); } }
+      else if (n.nodeType === 1) paintRects(n, acc);
+    }
+    return acc;
+  };
+  const union = (rs) => (rs.length ? rs.reduce((a, r) => ({ left: Math.min(a.left, r.left), top: Math.min(a.top, r.top), right: Math.max(a.right, r.right), bottom: Math.max(a.bottom, r.bottom) }), { left: 1e9, top: 1e9, right: -1e9, bottom: -1e9 }) : null);
+  const inter = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+  const kind = (e) => (e.id ? '#' + e.id : e.tagName.toLowerCase() + (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/)[0] : ''));
+  const where = (e) => { const s = e.closest('#ws-tabs, #ws .ws-in > *, .sheet-ctl, #sim, #sheet-main, #sheet-body, #best, #fav, #disc, #all, section[id], #ws'); return s ? kind(s) : 'page'; };
+  const root = document.querySelector(o.root);
+  if (!root) return [{ where: o.root, el: '-', probs: ['missing'] }];
+  const layerEl = o.layer ? document.querySelector(o.layer) : document.body;
+  const els = [...root.querySelectorAll('[data-act="ws-hist"], #ws-tabs [data-v="history"]')].filter(vis).filter((e) => layer(e) === layerEl);
+  for (const el of els) {
+    const wk = where(el) + ' ' + kind(el);
+    if ((seenKeys[wk] = (seenKeys[wk] || 0) + 1) > (o.cap || 4)) continue; // a few of each kind (a table's rows are all alike)
+    const card = el.closest('.mc-track') && el.closest('.mc, .dcw');
+    (card || el).scrollIntoView({ block: 'center', inline: card ? 'start' : 'nearest', behavior: 'instant' });
+    await new Promise((r) => setTimeout(r, card ? 160 : 40)); // a strip's snap settles
+    const r = el.getBoundingClientRect(), vr = union(paintRects(el)) || r, L = layer(el), probs = [], hits = [];
+    for (const c of L.querySelectorAll('button, a[href], input, select, [role="tab"], [role="button"], summary, label')) {
+      if (c === el || c.contains(el) || el.contains(c) || !vis(c) || layer(c) !== L) continue;
+      const pr = paintRects(c).map((x) => clipR(c, x)).filter(Boolean);
+      if (pr.some((x) => inter(vr, x))) { hits.push('control ' + kind(c)); continue; }
+      for (const x of pr) if (inter(r, x)) { // its tap box over another control's drawing: does a tap there land on History?
+        const h = document.elementFromPoint((Math.max(r.left, x.left) + Math.min(r.right, x.right)) / 2, (Math.max(r.top, x.top) + Math.min(r.bottom, x.bottom)) / 2);
+        if (h && (h === el || el.contains(h))) { hits.push('takes taps of ' + kind(c)); break; }
+      }
+    }
+    const tw = document.createTreeWalker(L, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeValue.trim() ? 1 : 2) });
+    const cell = el.closest('td, th'), stickyCell = cell && getComputedStyle(cell).position === 'sticky' ? cell : null; // a table's sticky History column: cells scroll under it
+    for (let n; (n = tw.nextNode());) {
+      const pe = n.parentElement;
+      if (!pe || el.contains(pe) || pe.closest('button, a[href], [role="tab"], [role="button"], label, summary') || !vis(pe) || layer(pe) !== L) continue;
+      const rg = document.createRange(); rg.selectNodeContents(n);
+      if ([...rg.getClientRects()].some((q) => {
+        const h = q.bottom - q.top, x = clipR(pe, { left: q.left, right: q.right, top: q.top + h * 0.16, bottom: q.bottom - h * 0.16 });
+        if (!x || !inter(vr, x)) return false;
+        if (!stickyCell) return true;
+        const top = document.elementFromPoint((Math.max(vr.left, x.left) + Math.min(vr.right, x.right)) / 2, (Math.max(vr.top, x.top) + Math.min(vr.bottom, x.bottom)) / 2);
+        return !(top && stickyCell.contains(top));
+      })) hits.push('text ' + kind(pe));
+    }
+    for (const c of L.querySelectorAll('svg, i, .sq, .cg, img, canvas')) {
+      if (el.contains(c) || c.contains(el) || c.closest('button, a[href], [role="tab"], .fx3d, [aria-hidden="true"]:not(svg)') || (c.parentElement && c.parentElement.closest('svg')) || !vis(c) || layer(c) !== L) continue;
+      const x = clipR(c, c.getBoundingClientRect()); if (x && inter(vr, x)) hits.push('icon ' + kind(c));
+    }
+    if (hits.length) probs.push('runs into ' + [...new Set(hits)].slice(0, 3).join(', '));
+    const pts = [[0.5, 0.5], [0.2, 0.25], [0.8, 0.25], [0.2, 0.75], [0.8, 0.75]], cov = new Set();
+    for (const [fx, fy] of pts) for (const R of [vr, r]) { const h = document.elementFromPoint(R.left + (R.right - R.left) * fx, R.top + (R.bottom - R.top) * fy); if (!h || !(h === el || el.contains(h))) cov.add(h ? kind(h) : 'nothing'); }
+    if (cov.size) probs.push('covered by ' + [...cov].slice(0, 2).join(', '));
+    let box = null;
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { const cs = getComputedStyle(a); if (painted(a) || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') { box = a; break; } }
+    if (box) { const b = box.getBoundingClientRect(); if (vr.left < b.left - 1 || vr.right > b.right + 1 || vr.top < b.top - 1 || vr.bottom > b.bottom + 1) probs.push('outside its ' + kind(box)); }
+    if (vr.left < -0.5 || vr.right > innerWidth + 0.5 || vr.top < -0.5 || vr.bottom > innerHeight + 0.5) probs.push('off screen');
+    if (o.touch && (r.width < 43.5 || r.height < 43.5)) probs.push(`tap box ${Math.round(r.width)}×${Math.round(r.height)}`);
+    if (!(el.getAttribute('aria-label') || (el.getAttribute('role') === 'tab' ? el.textContent : '') || '').trim()) probs.push('no label');
+    if (probs.length) out.push({ where: where(el), el: kind(el), probs });
+  }
+  return out.length ? out : els.length ? [] : [{ where: o.root, el: '-', probs: ['no History control'] }];
+};
+// the "Within ±x%" line: each chain icon centred on its text (±1.5 px) and clear of it on both sides (≥ 2 px)
+const HB_LEGEND = () => [...document.querySelectorAll('.mgline')].filter((e) => e.getClientRects().length && !e.closest('[hidden]')).flatMap((ml) => [...ml.querySelectorAll('.cg')].map((c) => {
+  const sp = c.parentElement, tn = [...sp.childNodes].find((x) => x.nodeType === 3 && x.nodeValue.trim()), sq = sp.querySelector('.sq');
+  if (!tn) return null;
+  const rg = document.createRange(); rg.selectNodeContents(tn); const t = rg.getClientRects()[0], i = c.getBoundingClientRect(), s = sq ? sq.getBoundingClientRect() : null;
+  const dy = (i.top + i.bottom) / 2 - (t.top + t.bottom) / 2, gapR = t.left - i.right, gapL = s ? i.left - s.right : 9;
+  return Math.abs(dy) <= 1.5 && gapR >= 2 && gapL >= 2 ? null : `dy ${dy.toFixed(1)} gaps ${gapL.toFixed(1)}/${gapR.toFixed(1)}`;
+})).filter(Boolean);
+const HB_WHERE = () => { const s = document.querySelector('#sheet'), b = document.querySelector('#sheet-body'); return { y: Math.round(scrollY), sheet: !!s && !s.hidden, sb: b ? Math.round(b.scrollTop) : 0 }; };
+async function hbPress(p, sel) { // press the first visible match: the workspace opens on that pool's History; Close comes back to where it was
+  const got = await p.evaluate((sel) => {
+    const el = [...document.querySelectorAll(sel)].find((e) => e.getClientRects().length && !e.closest('[hidden]'));
+    if (!el) return null;
+    window.dispatchEvent(new WheelEvent('wheel'));
+    const card = el.closest('.mc-track') && el.closest('.mc, .dcw');
+    (card || el).scrollIntoView({ block: 'center', inline: card ? 'start' : 'nearest', behavior: 'instant' });
+    for (const e of document.querySelectorAll('[data-hb]')) e.removeAttribute('data-hb');
+    el.setAttribute('data-hb', '1');
+    return { id: el.dataset.id || null };
+  }, sel);
+  if (!got) return 'missing';
+  await sleep(200);
+  const before = await p.evaluate(HB_WHERE), want = got.id;
+  const clicked = await p.click('[data-hb="1"]', { timeout: 4000 }).then(() => true, () => false);
+  if (!clicked) return 'not clickable';
+  await wsWait(p);
+  const w = await p.evaluate(WS_LOOK);
+  if (!w || w.tab !== 'history' || (want && w.id !== want)) { await p.keyboard.press('Escape'); await wsWait(p, false); return 'opened ' + JSON.stringify(w && { tab: w.tab, same: w.id === want }); }
+  await p.keyboard.press('Escape'); await wsWait(p, false);
+  const after = await p.evaluate(HB_WHERE), g = await p.evaluate(WS_GONE);
+  if (!g.hidden) return 'did not close';
+  if (after.sheet !== before.sheet || Math.abs(after.y - before.y) > 2 || Math.abs(after.sb - before.sb) > 2) return 'came back elsewhere ' + JSON.stringify({ dy: after.y - before.y, sheet: [before.sheet, after.sheet], dsb: after.sb - before.sb });
+  return '';
+}
+async function testHistBtn(browser) {
+  const looks = MODE && !(BROWSER === 'webkit' && MODE === '2d') ? [MODE] : ['3d', '2d']; // the WebKit 3D job leaves both looks to its 2D job
+  for (const look of looks) for (const [tag, c, o] of [['phone', 'stress', { phone: true }], ['w1440', 'long', { width: 1440, height: 900 }]]) {
+    const t = await openUnlocked(browser, c, { ...o, mode: look, mg: true }), p = t.page, touch = tag === 'phone', T = `${look} ${tag} ${c}`;
+    const bad = [], clicks = {}, A = async (name, root, layer) => { for (const f of await p.evaluate(HB_AUDIT, { root, layer, touch, cap: 4 })) bad.push(`${name} ${f.where} ${f.el}: ${f.probs.join('; ')}`); };
+    if (!(await p.$('#best [data-act="ws-hist"]'))) { await p.evaluate(() => document.querySelector('#best [role="tab"]').click()); await sleep(400); } // the stress case's best waits for a tab
+    await A('main', '#app', 'body');
+    for (const s of ['#best .fmlink', '#best .ctools [data-act="ws-hist"]', '#best .pz-hist', '#disc [data-act="ws-hist"]']) clicks[s] = await hbPress(p, s);
+    await p.evaluate(() => { const b = document.querySelectorAll('#best [role="tab"]')[2]; if (b) { b.scrollIntoView({ block: 'center' }); b.click(); } }); await sleep(300);
+    await A('tab', '#best', 'body');
+    clicks['#best tab'] = await hbPress(p, '#best .ctools [data-act="ws-hist"]');
+    await p.evaluate(() => { const s = document.querySelector('#best .star'); if (s && s.getAttribute('aria-pressed') !== 'true') s.click(); }); await sleep(300);
+    await A('fav', '#fav', 'body');
+    clicks['#fav'] = await hbPress(p, '#fav .hbtn[data-act="ws-hist"]');
+    await fillQ(p, 'WMW'); await sleep(300);
+    await A('search', '#all', 'body');
+    clicks['search'] = await hbPress(p, '#all-tbl tbody tr.row [data-act="ws-hist"]');
+    const bid = await p.getAttribute('#best [data-act="ws-hist"]', 'data-id');
+    await openPool(p, bid.slice(0, 12));
+    await A('panel', '#sheet', '#sheet');
+    const leg = await p.evaluate(HB_LEGEND);
+    for (const s of ['#sheet-hist', '#sim .mc:not(.self) [data-act="ws-hist"]', '#sheet .ctools [data-act="ws-hist"]', '#sheet .pz-hist']) clicks[s] = await hbPress(p, s);
+    if (await p.evaluate(() => { const b = document.querySelector('#sheet-pair'); return !!b && !b.hidden; })) {
+      await p.click('#sheet-pair'); await sleep(400);
+      await A('pair view', '#sheet', '#sheet');
+      clicks['pair view'] = await hbPress(p, '#sheet-main [data-act="ws-hist"]');
+    }
+    await p.keyboard.press('Escape'); await sleep(300); await fillQ(p, '');
+    await p.evaluate(() => { scrollTo(0, 0); document.querySelector('#best [data-act="ws-hist"]').click(); }); await wsWait(p);
+    for (const v of ['overview', 'history', 'liquidity', 'pair', 'compare']) {
+      await p.click(`#ws-tabs [data-v="${v}"]`); await sleep(400);
+      await A('workspace ' + v, '#ws', '#ws');
+      if (v === 'liquidity') leg.push(...(await p.evaluate(HB_LEGEND)));
+      if (v === 'pair') { // a row's History in the pair table opens History on that row's pool
+        const id = await p.evaluate(() => { const b = [...document.querySelectorAll('#ws .ws-pt [data-act="ws-hist"]')].pop(); if (!b) return null; b.scrollIntoView({ block: 'center', inline: 'nearest' }); return b.dataset.id; });
+        if (id) { await p.evaluate(() => [...document.querySelectorAll('#ws .ws-pt [data-act="ws-hist"]')].pop().setAttribute('data-hb', '2')); await p.click('[data-hb="2"]', { timeout: 4000 }).catch(() => {}); await sleep(400); const w = await p.evaluate(WS_LOOK); clicks['workspace pair'] = w && w.tab === 'history' && w.id === id ? '' : 'opened ' + JSON.stringify(w && { tab: w.tab, same: w.id === id }); await p.click('#ws-tabs [data-v="pair"]'); await sleep(300); }
+      }
+    }
+    await p.keyboard.press('Escape'); await wsWait(p, false);
+    const cbad = Object.entries(clicks).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+    ok(`histbtn ${T}: every visible History control is clear of other text and controls, uncovered, inside its box and the screen${touch ? ', a 44 px tap box' : ''}, labelled (${bad.length} findings)`, bad.length === 0, bad.slice(0, 6).join(' | '));
+    ok(`histbtn ${T}: each History control opens the workspace's History on its own pool, and Close comes back to where it was (${Object.keys(clicks).length} surfaces)`, Object.keys(clicks).length >= 10 && cbad.length === 0, cbad.slice(0, 4).join(' | '));
+    ok(`histbtn ${T}: the "Within ±9%" line's chain icons sit centred on their text and clear of it (${leg.length} off)`, leg.length === 0, leg.slice(0, 3).join(' | '));
+    ok(`histbtn ${T}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // All combined is a toggle (the owner, 16 Nov 2026): every tier on → the others leave, animated, this pool stays; again → all
+  const v4 = FXT.live.pools.find((q) => { const k = (x) => [x.t0.sym, x.t1.sym].sort().join('/') + '@' + x.chain; return FXT.history.pools[q.id] && FXT.live.pools.filter((x) => k(x) === k(q) && FXT.history.pools[x.id]).length >= 3; });
+  const CHIPS = () => { const a = document.querySelector('#ws [data-act="ws-tier"][data-v="all"]'), cs = [...document.querySelectorAll('#ws .hs-chip[data-act="ws-tier"]:not([data-v="all"])')], hs = document.querySelector('#ws .hs');
+    return { all: a && a.getAttribute('aria-pressed'), word: a ? a.textContent.trim() : '', said: a ? a.getAttribute('aria-label') + ' ' + (a.getAttribute('title') || '') : '', on: cs.filter((b) => b.getAttribute('aria-pressed') === 'true').length, n: cs.length, self: cs.filter((b) => b.getAttribute('aria-pressed') === 'true' && /\(this pool\)/.test(b.getAttribute('aria-label') || '')).length, ph: hs ? hs.dataset.ph || '' : '', mode: hs ? hs.dataset.mode : '' }; };
+  for (const [tag, rm] of [['motion', 'no-preference'], ['reduced', 'reduce']]) {
+    const t = await openUnlocked(browser, 'tiny', { phone: true, mg: true, flash: true, reducedMotion: rm, mode: MODE || '2d' }), p = t.page;
+    await openPool(p, v4.id.slice(0, 10));
+    await p.evaluate(() => document.querySelector('#sheet-hist').click()); await wsWait(p);
+    await p.waitForFunction(() => { const h = document.querySelector('#ws .hs'); return h && (!h.dataset.ph || h.dataset.ph === 'end'); }, null, { timeout: 8000 }).catch(() => {}); // its own build-up first
+    const s0 = await p.evaluate(CHIPS);
+    const seq = [], t0 = Date.now();
+    await p.click('#ws [data-act="ws-tier"][data-v="all"]');
+    let s1 = null;
+    while (Date.now() - t0 < 5000) { s1 = await p.evaluate(CHIPS); seq.push(`${s1.on}${s1.ph === 'drop' ? 'd' : ''}`); if (s1.mode === 'one' && s1.ph !== 'drop') break; await sleep(40); }
+    const ms1 = Date.now() - t0, steps = [...new Set(seq)];
+    const t1 = Date.now();
+    await p.click('#ws [data-act="ws-tier"][data-v="all"]');
+    let s2 = null;
+    while (Date.now() - t1 < 6000) { s2 = await p.evaluate(CHIPS); if (s2.on === s2.n && (!s2.ph || s2.ph === 'end')) break; await sleep(40); }
+    const ms2 = Date.now() - t1;
+    const r = { s0: [s0.all, s0.on, s0.n, s0.word], s1: [s1.all, s1.on, s1.self, s1.word, s1.mode], ms1, steps: steps.join(' '), s2: [s2.all, s2.on, s2.n, s2.word], ms2 };
+    ok(`histbtn all ${tag}: All combined reads pressed "All combined ✓" with every tier on, says a press shows only this pool; a press leaves only "this" on, unpressed "All combined"`, s0.n >= 2 && s0.all === 'true' && s0.on === s0.n && /✓/.test(s0.word) && /only this pool/i.test(s0.said) && s1.all === 'false' && s1.on === 1 && s1.self === 1 && !/✓/.test(s1.word) && s1.mode === 'one', JSON.stringify(r));
+    if (rm === 'reduce') ok(`histbtn all ${tag}: under reduced motion the end state comes at once (no drop phase, ${ms1} ms)`, !seq.some((x) => /d/.test(x)) && ms1 < 700, JSON.stringify(r));
+    else ok(`histbtn all ${tag}: the other tiers leave one at a time (a drop phase, ${steps.length} steps), done in under 2 s (${ms1} ms)`, seq.some((x) => /d/.test(x)) && steps.filter((x) => /d/.test(x)).length >= Math.min(2, s0.n - 1) && ms1 < 2200, JSON.stringify(r));
+    ok(`histbtn all ${tag}: pressed again, every tier comes back (the build-up), pressed and "All combined ✓" (${ms2} ms)`, s2.all === 'true' && s2.on === s2.n && /✓/.test(s2.word) && ms2 < (rm === 'reduce' ? 700 : 3500), JSON.stringify(r));
+    ok(`histbtn all ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch']); // look-independent (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
