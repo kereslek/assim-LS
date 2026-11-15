@@ -5419,7 +5419,10 @@ async function testGuestAdmin(browser) {
   const opened = await Promise.all(made.items.map((x) => slotFor(lp.kf, x.pass)));
   ok('guestadmin: Add guests: three names, three passphrases (5 words and 2 digits), each with a share text holding the link and the passphrase, and one link', made.items.length === 3 && made.links.length === 1 && made.items.every((x) => /^([a-z]{3,6}-){5}\d\d$/.test(x.pass) && x.share.includes(x.pass) && x.share.includes('/app/index.html') && x.share.startsWith(`Hi ${x.n}!`)));
   ok('guestadmin: the loop\'s own code adds all three from the one request; each passphrase opens its own slot, read-only', !!lp.r && lp.r.added === 3 && opened.every((s, i) => s && s.name === made.items[i].n && s.role === 'guest'));
-  ok('guestadmin: the sealed request carries no name or passphrase in the clear', !made.links[0].includes('Fay') && !made.items.some((x) => made.links[0].includes(x.pass.split('-').slice(0, 2).join('-'))));
+  { // whole names and passphrases only: a bare 3-letter run can turn up in random base64 by chance
+    const env = sealedOf(made.links[0]) || {}, plain = [decodeURIComponent(made.links[0]), new URL(made.links[0]).searchParams.get('value') || '', Buffer.from(String(env.ct || ''), 'base64').toString('latin1')];
+    ok('guestadmin: the sealed request carries no name or passphrase in the clear', Object.keys(env).sort().join() === 'ct,epk,inbox,iv' && made.items.every((x) => plain.every((t) => !t.includes(x.n) && !t.includes(x.pass))), Object.keys(env).sort().join());
+  }
   // upgrade and extend: sealed, and the loop gives back the same passphrase with the new role or limit
   await p.click('#g-out [data-act="g-cancel"]'); // the list's own result goes first (its link must never be read as the next one's)
   const sealedAs = (lbl) => p.waitForFunction((l) => { const x = document.querySelector('#g-out .lbl'); return !!x && x.textContent === l && !!document.querySelector('#g-out a.g-send'); }, lbl, { timeout: 20000 });
