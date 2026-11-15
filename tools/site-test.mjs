@@ -4296,6 +4296,23 @@ async function testStress(browser) {
   if (await press('[data-act="more"]')) await after('more');
   if (await press('[data-act="dl-all"]')) { await sleep(400); await after('dl-all'); if (await press('#q-stat [data-act="q-reset"]')) await after('q-reset'); }
   if (await press('#qfind')) { await after('qfind'); await p.$eval('#f-q', (e) => e.blur()); }
+  // v0.5.3: the scrubber's labels in a backtest replay sat right of the line at the chart's right edge; real dollar amounts
+  // ran past the chart and the iPhone page scrolled sideways (live audit, 15 Nov 2026). No chart text may pass its chart.
+  // Its own page with the page's defaults (no stable filter, no window picked), the way the live audit opened it.
+  const t2 = await newPage(browser, { phone: true, stableDefault: true }), p2 = t2.page;
+  await p2.goto(url('stress')); await unlockWith(p2, FIXTURE_PASSPHRASE); await waitApp(p2);
+  const PAST = () => Math.max(0, ...[...document.querySelectorAll('.pz-c svg text')].filter((t) => t.getClientRects().length).map((t) => t.getBoundingClientRect().right - t.ownerSVGElement.getBoundingClientRect().right));
+  let past = 0, opened = 0;
+  for (let i = 0; i < 3; i++) {
+    const hit = await p2.evaluate((i) => { const el = [...document.querySelectorAll('[data-act="bt-row"]')].filter((e) => e.getClientRects().length)[i]; if (!el) return false; el.scrollIntoView({ block: 'center' }); el.click(); return true; }, i);
+    if (!hit) continue;
+    opened++; await sleep(500); past = Math.max(past, await p2.evaluate(PAST));
+    await p2.$eval('#rp-scrub', (e) => { e.value = e.max; e.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(150);
+    past = Math.max(past, await p2.evaluate(PAST));
+    const hs = await p2.evaluate(HS_WHO); if (hs && bad.length < 3) bad.push(`after bt-row · ${hs}`);
+  }
+  await t2.ctx.close();
+  ok('stress phone: backtest replay labels stay inside their chart', opened > 0 && past <= 1, `${opened} replays opened · ${Math.round(past)} px past the chart`);
   ok(`stress phone: on the widest data the page never scrolls sideways after a press (${n} presses)`, n >= 15 && bad.length === 0, bad.join(' | '));
   ok('stress phone: no page errors', t.errors.length === 0, t.errors[0]);
   await t.ctx.close();

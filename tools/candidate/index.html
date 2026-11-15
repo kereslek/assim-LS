@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-g7G/zocrEq8p4yN2kvILDWoWjcjVsSE2fvwfdxqIEBM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-k8EuSSodhsbb/BEygoacBws5tMT68PFso3WEtQhhfr8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -425,7 +425,7 @@ td .tags{margin-top:2px}
 svg text{font-family:var(--mono);font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}
 svg .gridl{stroke:var(--grid);stroke-width:1;fill:none}
 svg .axisl{stroke:var(--line);stroke-width:1;fill:none}
-svg .t-fg{fill:var(--fg)}svg .t-acc{fill:var(--accent);font-weight:700}svg .t-pos{fill:var(--pos)}svg .t-neg{fill:var(--neg)}svg .t-cost{fill:var(--cost)}svg .t-mut{fill:var(--muted)}
+svg .t-fg{fill:var(--fg)}svg .t-acc{fill:var(--accent);font-weight:700}svg .t-pos{fill:var(--pos)}svg .t-neg{fill:var(--neg)}svg .t-cost{fill:var(--cost)}svg .t-mut{fill:var(--muted)}svg .halo{paint-order:stroke;stroke:var(--surface);stroke-width:6px;stroke-linejoin:round}#rp-price,#rp-money,#lab-lines{overflow-x:clip}
 .pane{display:grid;gap:4px;min-width:0}
 .pane-title{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px;align-items:baseline}
 .caption{font-size:12px;color:var(--muted)}
@@ -1246,7 +1246,7 @@ html.m3d .g-cheap{--gc:#5EE6C8}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.5.2';
+const BUILD = 'v0.5.3';
 const TZ = 'Europe/Budapest';
 const CHECK = 'lps-lock-check-v1';
 const WINS = ['24h', '7d', '30d'];
@@ -3695,7 +3695,13 @@ function renderReplay(row) {
   const rq = p ? liqChart(p, W(p), 'liq-replay') : '';
   putHtml('rp-shape', p ? `<div class="chartbox" data-chartbox="liq-replay"><div class="pane-title"><span class="lbl">Liquidity around the price · now · <span class="pz-cap1">${liqCap('liq-replay')}</span></span>${ztools('liq-replay', row.id)}</div>${rq}</div>` : '');
   // the price pane (log scale) and the money pane (one $ axis) each drag along the window on their own
-  const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58, MR = 78, inset = [+((ML / Wd) * 100).toFixed(2), +((MR / Wd) * 100).toFixed(2)];
+  const pbox = $('#rp-price'), Wd = boxW(pbox), ML = 58;
+  // v0.5.3: the right margin holds the scrubber's labels, so it is as wide as the widest one can get over the whole replay
+  // (steady while it plays); past 40% of the chart, labels flip left of the scrubber instead (besideCut)
+  let wide = 'HOLD $0'.length;
+  for (const [k, name] of [['fees', 'Fees'], ['lvr', 'LVR'], ['costs', 'Costs'], ['net', 'NET']]) for (const v of s[k]) if (isNum(v)) wide = Math.max(wide, name.length + 1 + usd(v, { sign: true }).length);
+  for (const v of s.px) if (isNum(v)) wide = Math.max(wide, String(px(v)).length);
+  const MR = Math.round(Math.min(Math.max(78, wide * SVG_CH + 14), Wd * 0.4)), inset = [+((ML / Wd) * 100).toFixed(2), +((MR / Wd) * 100).toFixed(2)];
   const tw = { plot: [ML / Wd, MR / Wd], words: ['earlier', 'later'], aria: ['Show earlier', 'Show later'], hint: '◂ drag for earlier' };
   const P1 = pzTime('rp', row.id, n, { ...tw, tip: (u) => rpTip(row, u, cut, 'px'), inner: () => rpPrice(row, P1, Wd, ML, MR, cut, re, span) });
   pzMount(pbox, 'rp', 'pz-line', inset);
@@ -3757,11 +3763,18 @@ function rpPrice(row, P, Wd, ML, MR, cut, re, span) {
     if (x - lastNum >= w + 4 && (pw < 500 || x + w < countAt)) { g += `<text x="${(x + 6).toFixed(1)}" y="${T1 - 5}" class="t-acc">${j + 1}</text>`; lastNum = x; }
   });
   g += `<path d="${path(s.px, X, Y, k1, j0)}" fill="none" stroke="#E6EDF3" stroke-width="1.6" stroke-linejoin="round"/></g>`;
-  if (isNum(s.px[cut]) && cut >= a - 1e-9 && cut <= b + 1e-9) g += `<circle cx="${X(cut).toFixed(1)}" cy="${Y(s.px[cut]).toFixed(1)}" r="3" fill="#E6EDF3"/><text x="${(X(cut) + 7).toFixed(1)}" y="${(Y(s.px[cut]) + 3.5).toFixed(1)}" class="t-fg">${px(s.px[cut])}</text>`;
+  if (isNum(s.px[cut]) && cut >= a - 1e-9 && cut <= b + 1e-9) g += `<circle cx="${X(cut).toFixed(1)}" cy="${Y(s.px[cut]).toFixed(1)}" r="3" fill="#E6EDF3"/>${((sd) => `<text x="${sd.x}" y="${(Y(s.px[cut]) + 3.5).toFixed(1)}"${sd.a} class="t-fg${sd.h}">${px(s.px[cut])}</text>`)(besideCut(X(cut), Wd, [px(s.px[cut])]))}`;
   if (pw >= 500) g += `<text x="${countAt}" y="${T1 - 5}" class="t-acc">${re.length} re-range${re.length === 1 ? '' : 's'}</text>`;
   g += `<line class="axisl" x1="${ML}" x2="${ML + pw}" y1="${T1 + ph}" y2="${T1 + ph}"/>`;
   g += svgTaxis(s.t, a, b, X, H1 - 5, pw, ML + 12, Wd - 24);
   return g + '</svg>';
+}
+// a label beside the scrubber: right of it when the text fits inside the chart, else left of it (v0.5.3: real dollar
+// amounts are wider than the right margin, and a label past the edge made the iPhone page scroll sideways)
+const SVG_CH = 6.4; // 10.5 px mono, per character
+function besideCut(xc, Wd, texts) {
+  const w = Math.max(0, ...texts.map((t) => String(t).length * SVG_CH));
+  return xc + 7 + w <= Wd - 2 ? { x: (xc + 7).toFixed(1), a: '', h: '' } : { x: (xc - 7).toFixed(1), a: ' text-anchor="end"', h: ' halo' };
 }
 function rpMoney(row, P, Wd, ML, MR, cut, span) {
   const s = row.b.series, n = s.t.length - 1, pw = Wd - ML - MR, [a, b] = P.vw(), X = (i) => ML + ((i - a) / (b - a)) * pw;
@@ -3787,7 +3800,7 @@ function rpMoney(row, P, Wd, ML, MR, cut, span) {
     if (end && isNum(s[k][cut])) { dots.push(`<circle cx="${X(cut).toFixed(1)}" cy="${Y2(s[k][cut]).toFixed(1)}" r="${k === 'net' ? 3.5 : 2.5}" fill="${col}"/>`); labs.push({ y: Y2(s[k][cut]) + 3.5, t: name + ' ' + usd(s[k][cut], { sign: true }), c: cls }); }
   }
   m += hits.join('') + '</g>' + dots.join('');
-  if (end) for (const l of spread(labs, 12, T2 + 4, H2 - B2 + 4)) m += `<text x="${(X(cut) + 7).toFixed(1)}" y="${l.y.toFixed(1)}" class="${l.c}">${esc(l.t)}</text>`;
+  if (end) { const sd = besideCut(X(cut), Wd, labs.map((l) => l.t)); for (const l of spread(labs, 12, T2 + 4, H2 - B2 + 4)) m += `<text x="${sd.x}" y="${l.y.toFixed(1)}"${sd.a} class="${l.c}${sd.h}">${esc(l.t)}</text>`; }
   m += `<line class="axisl" x1="${ML}" x2="${ML + pw}" y1="${T2 + qh}" y2="${T2 + qh}"/>`;
   m += svgTaxis(s.t, a, b, X, H2 - 5, pw, ML + 12, Wd - 24);
   return m + '</svg>';
