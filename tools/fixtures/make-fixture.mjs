@@ -197,6 +197,10 @@ const NEW_EXTRAS = [
   { base: 'QUILO', quote: 'WETH', chain: 'ethereum', v: 4, fee: 0.003, shape: 'mixed', tvl: 60e3, inside9: 30e3, lps: 2,
     sigma: 0.09, volDay: 20e3, ageDays: 0.8, pairAgeDays: 0.8, persistence: 0.2, markout: 0.6, traders7d: 8, usd: 0.05,
     vmul: { '24h': 1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 }, senders: 8 },
+  // v0.6.0: born 12 days ago, with a fee history (its daily strip and History show where it starts: never days of 0 before)
+  { base: 'BORNA', quote: 'WETH', chain: 'ethereum', v: 3, fee: 0.003, shape: 'mixed', tvl: 540e3, inside9: 160e3, lps: 6,
+    sigma: 0.05, volDay: 220e3, ageDays: 12.4, pairAgeDays: 12.4, persistence: 0.4, markout: 0.45, traders7d: 90, usd: 0.21,
+    vmul: { '24h': 1, '7d': 1, '30d': 1 }, smul: { '24h': 1, '7d': 1, '30d': 1 }, senders: 90, keepY: true },
 ];
 const NEW_POOL_MS = 72 * H, NEW_POOL_SENDERS = 20, BLOCKS_DAY = { ethereum: 7200, base: 43200 };
 
@@ -801,7 +805,7 @@ function makeHistory(r, pools, now) {
     // days exact (the daily rows' own fees), older days mostly estimated, a few unread (null, never 0); some pools have no
     // y at all (the page falls back to d), one pool's start is not known (yp.age null), and one day is a 30× outlier the
     // scanner marks unconfirmed (history.json u.y)
-    if (k % 9 === 4) { // no fee history: the page draws d; one d row a 30× spike the scanner lists unconfirmed (u.d)
+    if (k % 9 === 4 && !spec.keepY) { // no fee history: the page draws d; one d row a 30× spike the scanner lists unconfirmed (u.d)
       const i = d.length - 20;
       if (i > 1 && d[i][2] != null && d[i - 1][0] > d[i][0] - 1.5 * D) { d[i][2] = sig(d[i][2] * 30, 4); out.pools[p.id].u = { d: [d[i][0]] }; }
       return;
@@ -820,9 +824,12 @@ function makeHistory(r, pools, now) {
     }
     const out1 = k % 4 === 0 && ny > 60 ? y[y.length - 41] : null; // a 30× day 40 days back, unconfirmed
     if (out1 && out1[1] != null) { const sv = y.map((x) => x[1]).filter((x) => x != null).sort((a, b) => a - b); out1[1] = sig(30 * sv[Math.floor(sv.length / 2)], 4); out1[2] = 'x'; out.pools[p.id].u = { y: [out1[0]] }; }
+    // Base: its archive keeps about 90 days, so an older day is never exact (an estimate, or not readable); yp.lim/from say so
+    const baseFrom = p.chain === 'base' ? yd - 89 * D : null;
+    if (baseFrom != null) for (const row of y) if (row[0] < baseFrom && (row[2] === 'x' || row[2] === 's')) row[2] = 'e';
     const ex = y.filter((x) => x[2] === 'x' || x[2] === 's').length, es = y.filter((x) => x[2] === 'e').length, sw = y.filter((x) => x[2] === 's').length;
     out.pools[p.id].y = y;
-    out.pools[p.id].yp = { exact: ex, est: es, age: k % 17 === 6 ? null : ny, dyn: !!p.dynamicFee, sw };
+    out.pools[p.id].yp = { exact: ex, est: es, age: k % 17 === 6 ? null : ny, dyn: !!p.dynamicFee, sw, lim: baseFrom != null ? 'archive' : null, from: baseFrom };
     // v0.6.0 fixtures: each y day's volume (yv) and end-of-day TVL (yt), aligned row for row with y (history.json,
     // lib/tvlhist.mjs). Made up: volume = the day's fees ÷ the LP fee rate (the swaps' own days 's', older ones from the
     // candles 'g'), a few unread days (null, never 0) and a stretch of unread candles on some pools; TVL walks around the

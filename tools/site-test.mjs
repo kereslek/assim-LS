@@ -10,7 +10,7 @@
 //                                                    search links terms fold locknote clicks motion history stable chains
 //                                                    merge feebar stablewalk flash dates feescale perday disc view
 //                                                    balance wraps floorlab iphone back pull full way qsearch (v0.5.1) stress (v0.5.2)
-//                                                    workspace compare deeplink (v0.6.0; history and way grew the workspace's checks)
+//                                                    workspace compare deeplink tiers (v0.6.0; history, way and flash follow the workspace and the tiers' build-up)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -52,7 +52,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -92,7 +92,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // page's own default (off), and the stable group and the overlap walk use it.
 // The competition flash (v0.4.5) plays when a pool's detail opens; groups that read the detail's chart at once turn its
 // auto-play off (`flash: true` leaves it on: the flash group and the walk-through). A tap on its badge still plays it.
-async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false, flash = false, mode = MODE, dpr = null } = {}) {
+async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false, flash = false, mode = MODE, dpr = null, mg = false } = {}) {
   if (!stableDefault) storage = { 'lps.stable': '1', ...(storage || {}) };
   if (mode) storage = { 'lps.view': mode, ...(storage || {}) }; // the look (--mode): set before the page's script reads it
   const base = phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: phone ? { width: 390, height: 844 } : { width, height } }; // phone = 390 px here, the device in Actions
@@ -100,6 +100,9 @@ async function newPage(browser, { phone = false, width = 390, height = 860, redu
   const ctx = await browser.newContext({ ...base, reducedMotion, ...(dpr ? { deviceScaleFactor: dpr } : {}) });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
   if (!flash) await ctx.addInitScript(() => { window.__lpsNoFlash = true; });
+  // v0.6.0: every tier of a pair is on by default; groups that read one pool's own bars start with them off (`mg: true` leaves
+  // the page's default: the tiers group and the flash's build-up)
+  if (!mg) await ctx.addInitScript(() => { window.__lpsMgOff = true; });
   await ctx.addInitScript(() => { window.__lpsHooks = {}; }); // the page hands its time axis to the dates check
   await ctx.addInitScript(() => { window.open = (u) => { (window.__opened ||= []).push(String(u)); return null; }; }); // "open in a new window" is recorded, not opened
   await ctx.addInitScript(() => new MutationObserver(() => { // a chart's full view (v0.5.1): its address is recorded the same way (without full=1)
@@ -178,7 +181,7 @@ async function testUnlock(browser) {
   // (text, titles, attributes, form values, the tab title), in the main view, the closed panel or the strips
   await page.evaluate(() => document.querySelector('#best [data-act="detail"]').click());
   await page.waitForSelector('#sheet:not([hidden])'); await sleep(300);
-  await page.evaluate(() => { const b = document.querySelector('#sim [data-act]'); if (b) b.click(); });
+  await page.evaluate(() => { const b = document.querySelector('#sim [data-act]:not([data-act="ws-hist"])'); if (b) b.click(); }); // a similar pool (v0.6.0: its head's first button is History)
   await sleep(150);
   await page.evaluate(() => { const b = document.querySelector('#sheet [data-act="fav"]'); if (b) b.click(); });
   await page.click('#sheet-close'); await sleep(200);
@@ -2576,7 +2579,7 @@ async function testMerge(browser) {
   for (const phone of [true, false]) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440 }), p = t.page, tag = phone ? 'phone' : 'laptop', ID = 'liq-detail';
     await openPool(p, base.id.slice(0, 10));
-    const look = () => p.evaluate(MG_LOOK, ID), tap = async (qid) => { await p.evaluate((qid) => document.querySelector(`#sheet-body [data-act="merge"][data-id="${qid}"]`).click(), qid); await sleep(200); };
+    const look = () => p.evaluate(MG_LOOK, ID), tap = async (qid) => { await p.evaluate((qid) => document.querySelector(`#sheet-body [data-act="merge"][data-id="${qid}"]`).click(), qid); await sleep(420); }; // (v0.6.0: a layer shrinks or grows in 280 ms)
     let a = await look();
     ok(`merge ${tag}: a chip for each other pool of the pair (${a.chips.length}: other tiers, v4 and another chain), each with its chain mark, all off by default`, a.chips.length === peers.length && peers.length >= 3 && a.chips.every((c) => !c.on && c.chain) && new Set(a.chips.map((c) => c.id)).size === peers.length && a.chips.some((c) => pools.find((q) => q.id === c.id).chain !== base.chain), JSON.stringify(a.chips.map((c) => c.txt)));
     ok(`merge ${tag}: by default the chart is this pool only, and the ±9% line names this pool alone`, a.layers.length === 0 && /Within ±9%/.test(a.line) && /this/.test(a.line) && !/total/.test(a.line), a.line);
@@ -2687,16 +2690,16 @@ async function testFeeBar(browser) {
     const sim = await p.evaluate(() => [...document.querySelectorAll('#sim .mc:not(.end)')].map((c) => !!c.querySelector('.fmini svg')));
     ok(`feebar ${tag}: the similar-pool cards carry it (${sim.length} cards)`, sim.length > 0 && sim.every(Boolean), JSON.stringify(sim));
     // the header's bigger bar: a tap lands on the full daily fee chart, zoomed out to every day it has
-    const hb = await p.evaluate(() => { const b = document.querySelector('#sheet-fee [data-act="feehist"]'); return b ? { w: +b.querySelector('svg').getAttribute('width'), t: b.textContent, h: b.getBoundingClientRect().height } : null; });
-    ok(`feebar ${tag}: the pool header has a bigger bar (${hb && hb.w} px) that is a 44 px button`, hb && hb.w >= 140 && hb.h >= 43.5 && /\/d/.test(hb.t), JSON.stringify(hb));
+    const hb = await p.evaluate(() => { const b = document.querySelector('#sheet-fee [data-act="ws-hist"]'); return b ? { w: +b.querySelector('svg').getAttribute('width'), t: b.textContent, h: b.getBoundingClientRect().height } : null; });
+    ok(`feebar ${tag}: the pool header has a bigger bar (${hb && hb.w} px) that is a 44 px button to History (v0.6.0)`, hb && hb.w >= 140 && hb.h >= 43.5 && /\/d/.test(hb.t) && /History ›/.test(hb.t), JSON.stringify(hb));
     await pzClick(p, '#sheet-body [data-act="zoom"][data-chart="d-day"][data-dir="1"]'); await sleep(150);
     await pzClick(p, '#sheet-body [data-act="zoom"][data-chart="d-day"][data-dir="1"]'); await sleep(150);
     const zin = +(await p.getAttribute('[data-pz="d-day"]', 'data-view')).split(',')[1];
     await p.evaluate(() => document.querySelector('#sheet-body').scrollTo(0, 0)); await sleep(150);
-    await p.click('#sheet-fee [data-act="feehist"]'); await sleep(900);
-    const land = await p.evaluate(() => { const b = document.querySelector('#sheet-body [data-chartbox="d-day"]').getBoundingClientRect(), sb = document.querySelector('#sheet-body').getBoundingClientRect(); return { top: b.top - sb.top, h: sb.height, view: document.querySelector('[data-pz="d-day"]').dataset.view }; });
-    const rr = pick && H[pick.id].d.filter((x) => typeof x[0] === 'number'), yy = pick && H[pick.id].y, span = yy ? yy.length : (rr[rr.length - 1][0] - rr[0][0]) / 864e5; // v0.4.7: the fee history's days (y), else the daily rows'
-    ok(`feebar ${tag}: a tap scrolls to the daily fee chart and zooms it out to all ${Math.round(span)} days (was ${zin.toFixed(1)})`, land.top >= -4 && land.top < land.h * 0.5 && Math.abs(+land.view.split(',')[1] - span) < 0.05 && span > 85 && zin < span - 1, JSON.stringify(land));
+    await p.click('#sheet-fee [data-act="ws-hist"]'); await sleep(600);
+    const land = await p.evaluate(() => { const w = document.querySelector('#ws'); return { ws: !!w && !w.hidden, tab: window.__lpsHooks.ws ? window.__lpsHooks.ws().tab : null, tiers: window.__lpsHooks.ws ? window.__lpsHooks.ws().tiers : 'x' }; });
+    ok(`feebar ${tag}: a tap opens the pool's History, every tier on (v0.6.0; the daily chart was zoomed to ${zin.toFixed(1)} days and stays)`, land.ws && land.tab === 'history' && land.tiers === null, JSON.stringify(land));
+    await p.keyboard.press('Escape'); await sleep(300);
     await pzClick(p, '#sheet-body [data-act="zoom"][data-chart="d-day"][data-dir="1"]'); await sleep(150);
     const v0 = await p.getAttribute('[data-pz="d-day"]', 'data-view');
     await pzDrag(p, 'd-day', 120); await pzSettled(p, 'd-day');
@@ -2839,116 +2842,6 @@ const flLook = (p, root = '#sheet') => p.evaluate(FL_LOOK, root);
 // waits for the slot's phase (polled every frame inside the page, so a slow browser can't skip past it unseen)
 const flWait = (p, ph, ms = 8000) => p.waitForFunction((ph) => { const c = document.querySelector('[data-chartbox="liq-detail"] .cmp'); return !!c && c.dataset.ph === ph; }, ph, { polling: 'raf', timeout: ms }).then(() => true, () => false);
 const badgeNum = (txt) => { const m = /\+(\d+) pools? · (≥?(?:[\d.]+|<0\.1)×) liquidity/.exec(txt || ''); return m ? { n: +m[1], x: m[2] } : null; };
-async function testFlash(browser) {
-  const pools = FXD.live.pools;
-  const base = pools.find((q) => q.pair === 'VELNA/WETH' && q.chain === 'ethereum'), peers = pools.filter((q) => q.id !== base.id && samePairFx(base, q));
-  for (const phone of [true, false]) {
-    const tag = phone ? 'phone' : 'laptop';
-    const t = await openUnlocked(browser, 'default', { phone, width: 1440, flash: true }), p = t.page;
-    // 1. the timeline: grow → hold (every other pool stacked, chips lit, gold banner) → fade → end, once
-    await fillQ(p, base.id.slice(0, 10)); await sleep(250);
-    const t0 = Date.now();
-    await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
-    const samples = [];
-    const watcher = p.evaluate(() => new Promise((res) => { const out = [], t0 = performance.now(); const f = () => { const box = document.querySelector('[data-chartbox="liq-detail"]'), c = box && box.querySelector('.cmp'); if (c) out.push([Math.round(performance.now() - t0), c.dataset.ph, box.querySelectorAll('path.mg').length, [...box.querySelectorAll('[data-act="merge"]')].filter((x) => x.getAttribute('aria-pressed') === 'true').length]); if (performance.now() - t0 < 5500) requestAnimationFrame(f); else res(out); }; requestAnimationFrame(f); }));
-    const sawHold = await p.waitForFunction(() => document.querySelector('[data-chartbox="liq-detail"] .cmp.ban'), null, { polling: 'raf', timeout: 8000 }).then(() => true, () => false); // the banner joins at 0.8 s
-    const hold = await flLook(p);
-    const sawEnd = await flWait(p, 'end'), tEnd = Date.now() - t0;
-    const end = await flLook(p);
-    samples.push(...(await watcher));
-    const seq = samples.map((s) => s[1]).filter((x, i, a) => !i || x !== a[i - 1]), phases = seq.join('>'), ORD = ['grow', 'hold', 'fade', 'end'];
-    const inOrder = seq.every((x, i) => !i || ORD.indexOf(x) > ORD.indexOf(seq[i - 1])) && ['hold', 'fade', 'end'].every((x) => seq.includes(x)) && (BROWSER === 'webkit' || seq[0] === 'grow');
-    ok(`flash ${tag}: a pool with ${peers.length} other pools of its pair plays grow → hold → fade → end once (${phases}), about 3.5 s (${(tEnd / 1000).toFixed(1)} s)`, sawHold && sawEnd && inOrder && tEnd >= 3300 && tEnd < (BROWSER === 'webkit' ? 9000 : 6000), phases + ' ' + tEnd);
-    ok(`flash ${tag}: in the hold every other pool is stacked, its chip lit, under a gold banner ("${hold.banTxt.slice(0, 60)}")`, hold.layers === peers.length && hold.lit === peers.length && hold.ban && !hold.badge && hold.pressed === 0 && /^This pair: \d+ other pools hold/.test(hold.banTxt), JSON.stringify(hold).slice(0, 220));
-    ok(`flash ${tag}: the end state is this pool alone, chips off and unlit, the ghost and the badge (with replay) shown, the banner gone`, end.ph === 'end' && end.layers === 0 && end.lit === 0 && end.pressed === 0 && !end.ban && end.badge && end.replay && end.ghost > 0.8 && end.legend, JSON.stringify(end).slice(0, 220));
-    ok(`flash ${tag}: never a stack the chips don't own once it has ended (${samples.length} frames read)`, samples.every((s) => s[3] === 0) && samples.filter((s) => s[1] === 'end').every((s) => s[2] === 0) && samples.some((s) => s[2] === peers.length), JSON.stringify(samples.filter((s) => s[1] === 'end' && s[2]).slice(0, 3)));
-    for (const x of await p.evaluate(TEXT_OVERLAP, { root: '#sheet' })) ok(`flash ${tag}: end state, no text collides`, false, `${x.kind}: ${x.a} × ${x.b}`);
-    if (phone) await snap(p, 'flash-end-phone', '#sheet [data-chartbox="liq-detail"]'); else await snap(p, 'flash-end-laptop', '#sheet [data-chartbox="liq-detail"]');
-    // 2. the badge's maths against the independent model
-    const m = cmpModel(base), bn = badgeNum(end.badgeTxt);
-    ok(`flash ${tag}: the badge says +${m.n} pools · ${m.txt} liquidity, as the independent model reads the fixture`, bn && bn.n === m.n && bn.x === m.txt, `${end.badgeTxt} vs ${m.n} ${m.txt}`);
-    // 3. once per pool per page: closed and opened again, it doesn't play; the replay plays it
-    await closePool(p); await openPool(p, base.id.slice(0, 10));
-    await sleep(500);
-    let a = await flLook(p);
-    ok(`flash ${tag}: opened again in the same page it doesn't replay by itself`, a.ph === 'end' && a.layers === 0 && a.ghost > 0.8, JSON.stringify(a).slice(0, 120));
-    // 4. any interaction ends it at once on the end state: a chip, a zoom, a drag, a wheel, a key, close
-    const replay = async () => { await p.evaluate(() => document.querySelector('#sheet [data-act="flash"]').click()); return flWait(p, 'hold'); };
-    const ends = {};
-    if (await replay()) { await p.evaluate(() => document.querySelector('#sheet [data-act="merge"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))); await p.evaluate(() => document.querySelector('#sheet [data-act="merge"]').click()); await frames(p, 2); a = await flLook(p); ends.chip = a.ph === 'end' && a.layers === 1 && a.pressed === 1 && a.lit === 0 && !a.ban; }
-    if (await replay()) { await frames(p, 1); a = await flLook(p); const mid = a.layers; await sleep(BROWSER === 'webkit' ? 4500 : 3800); a = await flLook(p); ends.keepChip = mid >= 1 && a.ph === 'end' && a.layers === 1 && a.pressed === 1; } // a chip on before the replay is still on after
-    await p.evaluate(() => document.querySelector('#sheet [data-act="merge"][aria-pressed="true"]').click()); await sleep(200);
-    if (await replay()) { await p.evaluate(() => document.querySelector('#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="1"]').click()); await frames(p, 2); a = await flLook(p); ends.zoom = a.ph === 'end' && a.layers === 0 && !a.ban; }
-    await pzClick(p, '#sheet [data-act="zreset"][data-chart="liq-detail"]').catch(() => {}); await sleep(150);
-    if (await replay()) { await finger(p, 'liq-detail', -60, { root: '#sheet', steps: 4 }); await frames(p, 2); a = await flLook(p); ends.drag = a.ph === 'end' && a.layers === 0; }
-    await pzClick(p, '#sheet [data-act="zreset"][data-chart="liq-detail"]').catch(() => {}); await sleep(150);
-    if (await replay()) { await p.evaluate(() => document.querySelector('#sheet-body').dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }))); await frames(p, 2); a = await flLook(p); ends.wheel = a.ph === 'end' && a.layers === 0; }
-    if (await replay()) { await p.keyboard.press('Shift'); await frames(p, 2); a = await flLook(p); ends.key = a.ph === 'end' && a.layers === 0; }
-    if (await replay()) { await p.click('#sheet-close'); await sleep(150); const s = await p.evaluate(() => ({ hidden: document.querySelector('#sheet').hidden })); await openPool(p, base.id.slice(0, 10)); a = await flLook(p); ends.close = s.hidden && a.ph === 'end' && a.layers === 0 && a.lit === 0; }
-    ok(`flash ${tag}: a chip, a zoom, a drag, a wheel, a key or close ends it at once on the end state (${Object.keys(ends).join(', ')})`, Object.keys(ends).length === 7 && Object.values(ends).every(Boolean), JSON.stringify(ends));
-    // 5. a pool with no other pool of its pair: nothing (no badge, no ghost, no chips)
-    await closePool(p);
-    const solo = pools.find((q) => q.t0.sym === 'QUARX');
-    await openPool(p, 'QUARX'); await sleep(300);
-    const s0 = await p.evaluate(() => { const b = document.querySelector('#sheet [data-chartbox="liq-detail"]'); return { cmp: !!b.querySelector('.cmp'), ghost: !!b.querySelector('path.ghost'), chips: b.querySelectorAll('.mgchips').length, legend: /Whole pair/.test(b.textContent) }; });
-    ok(`flash ${tag}: a pool with no other pool of its pair (${solo.pair}) shows nothing of it`, !s0.cmp && !s0.ghost && !s0.chips && !s0.legend, JSON.stringify(s0));
-    await closePool(p);
-    ok(`flash ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
-    await t.ctx.close();
-  }
-  // 6. the badge's maths on the other pools of the pair (one under 1×, one over 10×); planted faults must be caught
-  {
-    const t = await openUnlocked(browser, 'default', { width: 1440 }), p = t.page, res = [];
-    for (const q of [base, ...peers]) {
-      await openPool(p, q.id.slice(0, 10));
-      const b = badgeNum((await flLook(p)).badgeTxt), m = cmpModel(q);
-      res.push({ pair: q.pair, tier: q.feeTier, v: q.v, chain: q.chain, got: b && b.x, n: b && b.n, want: m.txt, ok: !!b && b.n === m.n && b.x === m.txt, noFr: cmpModel(q, { fr: false }).txt, b10: cmpModel(q, { B: 0.1 }).txt });
-      await closePool(p);
-    }
-    ok(`flash: the badge matches the independent model on every pool of the pair (${res.map((r) => r.got).join(', ')})`, res.every((r) => r.ok) && res.some((r) => parseFloat(r.want) < 1) && res.some((r) => parseFloat(r.want) >= 10), JSON.stringify(res.filter((r) => !r.ok)));
-    ok('flash: planted: a model without the full-range layer, or reading ±10%, is caught somewhere on the pair', res.some((r) => r.noFr !== r.got) && res.some((r) => r.b10 !== r.got), JSON.stringify(res.map((r) => [r.got, r.noFr, r.b10])));
-    // the best-find card: the badge only (no flash there); its tap opens the pool and plays it
-    await setWin(p, '30d');
-    const tabOk = await p.evaluate(() => { const t = [...document.querySelectorAll('#best [role="tab"]')].find((e) => /VELNA/.test(e.textContent)); if (!t) return false; t.click(); return true; });
-    await sleep(250);
-    const card = await p.evaluate(() => { const b = document.querySelector('#best .cmp-b'); return { txt: b ? b.textContent : '', act: b && b.dataset.act, mg: document.querySelectorAll('#best path.mg, #best path.ghost').length, chips: document.querySelectorAll('#best .mgchips').length, id: b && b.dataset.id }; });
-    const cm = card.id && cmpModel(pools.find((q) => q.id === card.id)), cb = badgeNum(card.txt);
-    ok(`flash: the best-find card carries the badge only (${card.txt.slice(0, 50)}), as the model reads it`, tabOk && card.act === 'flash-open' && card.mg === 0 && card.chips === 0 && cb && cm && cb.n === cm.n && cb.x === cm.txt, JSON.stringify(card));
-    await p.evaluate(() => document.querySelector('#best .cmp-b').click());
-    const played = await flWait(p, 'hold', 6000) || (await flWait(p, 'grow', 100));
-    ok('flash: the card\'s badge opens that pool and plays it there (even with the auto-play off)', (await p.isVisible('#sheet')) && played);
-    await p.click('#sheet-close'); await sleep(200);
-    ok('flash: card and model, no page errors', t.errors.length === 0, t.errors[0]);
-    await t.ctx.close();
-  }
-  // 7. reduced motion: never animated, the ghost and the badge (no replay) at once
-  {
-    const t = await openUnlocked(browser, 'default', { phone: true, flash: true, reducedMotion: 'reduce' }), p = t.page;
-    await fillQ(p, base.id.slice(0, 10)); await sleep(250);
-    const watcher = p.evaluate(() => new Promise((res) => { let worst = 0; const t0 = performance.now(); const f = () => { const b = document.querySelector('[data-chartbox="liq-detail"]'); if (b) worst = Math.max(worst, b.querySelectorAll('path.mg, .mgc.fl-on').length + (b.querySelector('.cmp.ban') ? 1 : 0)); if (performance.now() - t0 < 2500) requestAnimationFrame(f); else res(worst); }; requestAnimationFrame(f); }));
-    await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
-    const worst = await watcher, a = await flLook(p);
-    ok('flash: under reduced motion nothing animates (no stack, no light, no banner), the ghost and the badge show at once, without a replay', worst === 0 && a.ph === 'end' && a.ghost > 0.8 && a.badge && !a.replay, JSON.stringify({ worst, a }).slice(0, 200));
-    ok('flash: reduced motion, no page errors', t.errors.length === 0, t.errors[0]);
-    await t.ctx.close();
-  }
-  // 8. the pop-out window: the same flash on its own (a page of its own: it plays there once too)
-  {
-    const t = await openUnlocked(browser, 'default', { width: 1440, flash: true }), p = t.page;
-    await openPool(p, base.id.slice(0, 10)); await flWait(p, 'end');
-    // the chart's own page (v0.6.0: ⧉ opens the workspace; the page at that address is the pop-out window)
-    const u = await p.evaluate((id) => (window.__lpsHooks.soloUrl ? window.__lpsHooks.soloUrl('liq-detail', id) : (document.querySelector('#sheet [data-act="openchart"][data-chart="liq-detail"]').click(), (window.__opened || []).slice(-1)[0] || '')), base.id);
-    const w2 = await t.ctx.newPage(), e2 = [];
-    w2.on('pageerror', (e) => e2.push(String(e.message).slice(0, 100)));
-    await w2.goto(u);
-    await w2.waitForSelector('.solo-box[data-chartbox="liq-detail"], .solo-box [data-pz="liq-detail"]', { timeout: 20000 }).catch(() => {});
-    const hold = await flWait(w2, 'hold', 15000), end = (await flWait(w2, 'end')) && (await flLook(w2, 'body'));
-    ok('flash: the pop-out window plays it as well and ends on the ghost and the badge', hold && end && end.layers === 0 && end.ghost > 0.8 && end.badge && e2.length === 0, JSON.stringify(end).slice(0, 160) + ' ' + (e2[0] || ''));
-    await w2.close();
-    await t.ctx.close();
-  }
-}
-
 // ---------- 4z. dates (v0.4.6): every chart over time has a date axis, and a hover or a tap shows the date and the values there ----------
 const DATE_RE = /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2,3}\b|\b\d{1,2} [A-Z][a-z]{2,3}\b/;
 // a chart's axis: the visible tick labels, whether they read as dates or hours, and whether any two touch or leave the box
@@ -4400,7 +4293,7 @@ const HIST_OK = (el) => {
   if (r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) return 'off screen';
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   if (!hit || !(hit === el || el.contains(hit))) return 'covered';
-  if (!/^History of /.test(el.getAttribute('aria-label') || '')) return 'no label';
+  if (!/^(History of |Open this pool's history)/.test(el.getAttribute('aria-label') || '')) return 'no label';
   if (!/History/.test(el.textContent) || !el.querySelector('svg')) return 'no icon or word';
   return '';
 };
@@ -4436,7 +4329,7 @@ async function testHist0(browser, tag, o) {
   res.rows = await histPress(p, '#all-tbl tbody tr.row [data-act="ws-hist"]', 1);
   res.disc = await histPress(p, '#disc [data-act="ws-hist"]');
   await p.evaluate(() => { const s = document.querySelector('#best .star'); if (s && s.getAttribute('aria-pressed') !== 'true') s.click(); }); await sleep(250);
-  res.fav = await histPress(p, '#fav [data-act="ws-hist"]');
+  res.fav = await histPress(p, '#fav .hbtn[data-act="ws-hist"]');
   await fillQ(p, 'VEL'); await sleep(300);
   res.search = await histPress(p, '#all-tbl tbody tr.row [data-act="ws-hist"]');
   await fillQ(p, ''); await sleep(200);
@@ -4491,6 +4384,17 @@ async function testWorkspace(browser) {
       }, v);
     }
     ok(`workspace ${tag}: Overview, Liquidity, Pair, Compare and History each draw their view, and the address follows the tab`, Object.values(tabs).every(Boolean), JSON.stringify(tabs));
+    // the hourly fee chart on Overview has the panel's linear/log switch: inside the workspace it redraws that chart too
+    await p.click('#ws-tabs [data-v="overview"]'); await sleep(300);
+    if (await p.$('#ws [data-act="fscale"]')) {
+      const fs = () => p.evaluate(() => { const b = document.querySelector('#ws [data-act="fscale"][aria-pressed="true"]'), w = document.querySelector('#ws'); return { on: b ? b.dataset.v : '', foc: (document.activeElement && document.activeElement.dataset.act) || '', svg: (document.querySelector('#ws [data-pz="ws-hr"]') || { innerHTML: '' }).innerHTML, open: !!w && !w.hidden }; });
+      const f0 = await fs(), want = f0.on === 'log' ? 'lin' : 'log';
+      await p.click(`#ws [data-act="fscale"][data-v="${want}"]`); await sleep(350);
+      const f1 = await fs();
+      await p.click(`#ws [data-act="fscale"][data-v="${f0.on}"]`); await sleep(250);
+      const f2 = await fs();
+      ok(`workspace ${tag}: the hourly fee chart's linear/log switch works inside it (redraws, keeps focus, switches back)`, f1.on === want && f1.foc === 'fscale' && f1.svg !== f0.svg && f2.on === f0.on && f2.open, `${f0.on}→${f1.on}→${f2.on} · ${f1.foc}`);
+    } else ok(`workspace ${tag}: the hourly fee chart (and its linear/log switch) is on Overview`, false, 'no switch');
     // ‹ › through the list it came from ([ and ] on a laptop, a swipe sideways on the header of a phone)
     const n = m ? m.n : 0;
     if (n > 1) {
@@ -4564,7 +4468,7 @@ async function testWorkspace(browser) {
 // History (option B): three synced charts, one crosshair, the day card, the day table; missing is never 0
 const CARD = () => {
   const c = document.querySelector('#hs-card'), g = (k) => { const d = c && c.querySelector(`[data-k="${k}"]`); return d ? { v: d.querySelector('b').textContent.trim(), q: d.querySelector('.q').textContent.trim() } : null; };
-  return { day: c && c.querySelector('.hs-dd') ? c.querySelector('.hs-dd').firstChild.textContent : '', f: g('f'), v: g('v'), tv: g('tv'), r: g('r') };
+  return { day: c && c.querySelector('.hs-dd') ? c.querySelector('.hs-dd').firstChild.textContent : '', f: g('f'), v: g('v'), tv: g('tv'), r: g('r'), pre: c && c.querySelector('.hs-pre') ? c.querySelector('.hs-pre').textContent : '' };
 };
 async function wsDay(p, t) { // the crosshair to day t through its row in the day table
   const hit = await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (!b) return false; b.click(); return true; }, t);
@@ -4573,7 +4477,7 @@ async function wsDay(p, t) { // the crosshair to day t through its row in the da
 }
 async function wsRange(p, d) { await p.click(`#ws [data-act="ws-range"][data-v="${d}"]`); await sleep(300); }
 const HS_SVG = () => { const o = {}; for (const s of document.querySelectorAll('#ws .hs-stack svg[data-k]')) o[s.dataset.k] = { n: +s.dataset.n, gaps: +s.dataset.gaps, na: +(s.dataset.na || 0), h: s.getBoundingClientRect().height, w: Math.round(s.getBoundingClientRect().width), zero: [...s.querySelectorAll('text')].some((t) => t.textContent === '$0') }; o.ax = document.querySelectorAll('#ws [data-svg="ax"] text').length; o.rows = +document.querySelector('#ws .hs').dataset.rows; o.ms = +document.querySelector('#ws .hs').dataset.ms; return o; };
-async function wsHistOf(p, id) { await openPool(p, id.slice(0, 12)); await p.click('#sheet-hist'); await wsWait(p); }
+async function wsHistOf(p, id, alone = true) { await openPool(p, id.slice(0, 12)); await p.click('#sheet-hist'); await wsWait(p); if (alone) await wsOnly(p, id); } // (every tier on at first: this pool alone for its own checks)
 async function testWsHistory(browser) {
   const ents = Object.entries(FXD.history.pools), pick = (f) => ents.find(([id, h]) => poolOf(id) && f(h, poolOf(id)));
   const v4 = pick((h) => h.ytp && h.ytp.lim === 'v4' && h.y.length >= 120 && h.yv.slice(-90).some((r) => r[0] === null) && h.y.some((r) => r[2] === 'e'));
@@ -4596,7 +4500,7 @@ async function testWsHistory(browser) {
     // a whole year: estimated days marked ≈, every source named, past v4 TVL "—" with its note
     await wsRange(p, 365);
     s = await p.evaluate(HS_SVG);
-    const nY = Math.min(365, h.y.length);
+    const nY = 365; // the range is the range (v0.6.0, D): days before the pool are a labelled band
     const ie = h.y.findIndex((r, i) => r[2] === 'e' && h.yv[i][0] !== null), is = h.y.findIndex((r, i) => r[2] === 's' && h.yv[i][1] === 's');
     const im = h.yt.findIndex((r) => r[1] === 'm'), ina = h.yt.findIndex((r, i) => r[0] === null && i < h.y.length - 30);
     const ce = await wsDay(p, h.y[ie][0]), cs = await wsDay(p, h.y[is][0]), cm = await wsDay(p, h.y[im][0]), cn = await wsDay(p, h.y[ina][0]);
@@ -4621,7 +4525,7 @@ async function testWsHistory(browser) {
     await p.click('#ws [data-act="ws-sort"][data-k="f"]'); await sleep(250);
     const so = await p.evaluate(() => { const th = document.querySelector('#ws [data-act="ws-sort"][data-k="f"]').closest('th'), vals = [...document.querySelectorAll('#ws .hst tbody tr')].map((r) => r.children[1].textContent); return { sort: th.getAttribute('aria-sort'), first: vals.slice(0, 5), last: vals[vals.length - 1] }; });
     const mv = so.first.map((x) => money(x));
-    ok(`history ws ${tag}: the day table sorts by fees, highest first, a day not read last`, so.sort === 'descending' && mv.every((x, i) => i === 0 || x <= mv[i - 1] * 1.06) && (h.y.some((r) => r[1] === null) ? so.last === 'not read' : true), JSON.stringify(so).slice(0, 160));
+    ok(`history ws ${tag}: the day table sorts by fees, highest first, a day not read last`, so.sort === 'descending' && mv.every((x, i) => i === 0 || x <= mv[i - 1] * 1.06) && (h.y.some((r) => r[1] === null) ? ['not read', '—'].includes(so.last) : true), JSON.stringify(so).slice(0, 160));
     await p.click('#ws [data-act="ws-sort"][data-k="t"]'); await sleep(200);
     if (!phone) {
       // a drag across the dates zooms into them; a double-click resets
@@ -4665,16 +4569,16 @@ async function testWsHistory(browser) {
     await p.keyboard.press('Escape'); await wsWait(p, false); await p.click('#sheet-close').catch(() => {}); await sleep(200);
     // a Base pool: TVL before the archive's reach is "—" with its note; the pair combined: a day with any pool not read is a gap
     const [aid, ah] = arch;
-    await fillQ(p, ''); await wsHistOf(p, aid); await wsRange(p, 365);
+    await fillQ(p, ''); await wsHistOf(p, aid, false); await wsRange(p, 365); await wsOnly(p, aid);
     const ia = ah.yt.findIndex((r, i) => r[0] === null && ah.y[i][0] < ah.ytp.from), ib = ah.yt.findIndex((r) => r[1] === 'b'), ir = ah.yt.findIndex((r) => r[1] === 'r');
     const ca = await wsDay(p, ah.y[ia][0]), cb = await wsDay(p, ah.y[ib][0]), cr = await wsDay(p, ah.y[ir][0]);
-    ok(`history ws ${tag}: a Base pool's TVL before the archive's reach is "—" with its note; balances "b", recorded "r"`, !!ca && ca.tv.v === '—' && /archive reach/.test(ca.tv.q) && !!cb && /b · balances/.test(cb.tv.q) && !!cr && /r · recorded/.test(cr.tv.q), JSON.stringify({ ca: ca && ca.tv, cb: cb && cb.tv.q, cr: cr && cr.tv.q }));
+    ok(`history ws ${tag}: a Base pool's TVL before the archive's reach is "—" with its note; balances "b", recorded "r"`, !!ca && ca.tv.v === '—' && /archive/.test(ca.tv.q) && !!cb && /b · balances/.test(cb.tv.q) && !!cr && /r · recorded/.test(cr.tv.q), JSON.stringify({ ca: ca && ca.tv, cb: cb && cb.tv.q, cr: cr && cr.tv.q }));
     const tiers = await p.$$eval('#ws [data-act="ws-tier"]', (b) => b.map((x) => x.dataset.v).filter((v) => v !== 'all'));
     if (tiers.length >= 2) {
       await p.click('#ws [data-act="ws-tier"][data-v="all"]'); await sleep(350);
       const hs = tiers.map((x) => FXD.history.pools[x]), days = ah.y.map((r) => r[0]).slice(-365);
       const at = (hh, d) => { const i = hh.y.findIndex((r) => r[0] === d); return i < 0 ? undefined : hh.y[i]; };
-      const gapDay = days.find((d) => { const xs = hs.map((hh) => at(hh, d)); return xs.every(Boolean) && xs.filter((x) => x[1] === null).length === 1; });
+      const gapDay = days.find((d) => { const xs = hs.map((hh) => at(hh, d)); return d >= ((ah.yp && ah.yp.from) || 0) && xs.every(Boolean) && xs.filter((x) => x[1] === null).length === 1; }); // within the archive's reach: not read (older: not readable)
       const fullDay = days.find((d) => { const xs = hs.map((hh) => at(hh, d)); return xs.every((x) => x && x[1] !== null); });
       const cg = gapDay ? await wsDay(p, gapDay) : null, cf = fullDay ? await wsDay(p, fullDay) : null, sum = fullDay ? hs.reduce((a, hh) => a + at(hh, fullDay)[1], 0) : null;
       const sc = await p.evaluate(HS_SVG), mode = await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode);
@@ -4853,10 +4757,261 @@ async function testWayWs(browser) {
   }
 }
 
+// ---------- v0.6.0 · A: every tier on, and the build-up (the owner, 15 Nov 2026) ----------
+// Opening a pool's liquidity chart: the whole stack flashes, collapses to the baseline, then builds back a tier at a time
+// (this pool first, then the others by liquidity), each chip lit as its layer grows; it ends with every tier on, in under
+// 2.5 s; once per pool in a page's life (▶ replay plays it again); a touch ends it at once on that end state; under
+// reduced motion the end state shows at once. Chips switch a tier off and on with an animated shrink and growth.
+const TIER_LOOK = (root) => {
+  const box = document.querySelector(`${root} [data-chartbox^="liq-"]`);
+  if (!box) return null;
+  const c = box.querySelector('.mgchips'), chips = [...box.querySelectorAll('[data-act="merge"]')];
+  const h = (pid) => { const pa = box.querySelector(`path.mg[data-pid="${pid}"]`); return pa ? [...pa.getAttribute('d').matchAll(/v(-?[\d.]+)h/g)].reduce((a, m) => a + Math.abs(+m[1]), 0) / 2 : 0; };
+  return { ph: c ? c.dataset.ph || 'end' : null, chips: chips.length, pressed: chips.filter((b) => b.getAttribute('aria-pressed') === 'true').length, wait: box.querySelectorAll('.mgc.fl-wait').length, lit: box.querySelectorAll('.mgc.fl-on').length,
+    selfWait: !!box.querySelector('.mgc.self.fl-wait'), layers: box.querySelectorAll('path.mg').length, ids: chips.map((b) => b.dataset.id), hs: Object.fromEntries(chips.map((b) => [b.dataset.id, h(b.dataset.id)])),
+    line: (box.querySelector('.mgline') || {}).textContent || '', leg: [...box.querySelectorAll('[data-mgleg]')].filter((x) => !x.hidden).length, replay: !!c && !!c.querySelector('[data-act="flash"]') };
+};
+const tierWatch = (p, root, ms = 4000) => p.evaluate(({ root, ms, F }) => new Promise((res) => {
+  const look = new Function('return (' + F + ')')(), t0 = performance.now(), out = [];
+  const f = () => { const a = look(root); if (a) out.push({ t: Math.round(performance.now() - t0), ph: a.ph, wait: a.wait, lit: a.lit, self: a.selfWait, layers: a.layers, pressed: a.pressed, line: (a.line.match(/·/g) || []).length });
+    if (a && a.ph === 'end' && out.length > 2 && out.some((x) => x.ph !== 'end')) { res(out); return; } if (performance.now() - t0 > ms) { res(out); return; } requestAnimationFrame(f); };
+  requestAnimationFrame(f);
+}), { root, ms, F: TIER_LOOK.toString() });
+async function testFlash(browser) {
+  const pools = FXD.live.pools;
+  const base = pools.find((q) => q.pair === 'VELNA/WETH' && q.chain === 'ethereum'), peers = pools.filter((q) => q.id !== base.id && samePairFx(base, q));
+  const lim = BROWSER === 'webkit' ? 3600 : 2600;
+  for (const phone of [true, false]) {
+    const tag = phone ? 'phone' : 'laptop';
+    const t = await openUnlocked(browser, 'default', { phone, width: 1440, flash: true, mg: true }), p = t.page;
+    // 1. the build-up as the panel opens: flash → collapse → build → end, every tier on at the end, in under 2.5 s
+    await fillQ(p, base.id.slice(0, 10)); await sleep(250);
+    const watch = tierWatch(p, '#sheet');
+    await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
+    const fr = await watch, end = await p.evaluate(TIER_LOOK, '#sheet');
+    const seq = fr.map((x) => x.ph).filter((x, i, a) => !i || x !== a[i - 1]), ORD = ['flash', 'collapse', 'build', 'end'];
+    const inOrder = seq.every((x, i) => !i || ORD.indexOf(x) > ORD.indexOf(seq[i - 1])) && ['collapse', 'build', 'end'].every((x) => seq.includes(x));
+    const tEnd = (fr.find((x) => x.ph === 'end') || {}).t;
+    ok(`flash ${tag}: opening a pool with ${peers.length} other tiers plays flash → collapse → build → end (${seq.join('>')}) in ${tEnd} ms (under ${lim})`, inOrder && Number.isFinite(tEnd) && tEnd < lim, JSON.stringify(seq) + ' ' + tEnd);
+    const mid = fr.filter((x) => x.ph === 'build');
+    ok(`flash ${tag}: while it builds, tiers still to come wait dim, the one growing is lit, this pool's first (${mid.length} frames)`, mid.some((x) => x.wait >= 1 && x.lit >= 1) && fr.some((x) => x.ph === 'collapse' && x.self) && mid.some((x) => !x.self && x.wait === peers.length), JSON.stringify(mid.slice(0, 3)));
+    ok(`flash ${tag}: …and the ±9% line counts each tier as it lands (${[...new Set(fr.map((x) => x.line))].join(',')} parts)`, new Set(fr.filter((x) => x.ph === 'build').map((x) => x.line)).size >= 2, JSON.stringify(fr.map((x) => x.line)).slice(0, 120));
+    ok(`flash ${tag}: it ends with every tier on: ${peers.length} chips pressed, ${peers.length} layers stacked, none dim, the line and the legend complete`, end.ph === 'end' && end.pressed === peers.length && end.layers === peers.length && end.wait === 0 && end.lit === 0 && /total \$/.test(end.line) && end.leg === peers.length && end.replay, JSON.stringify(end).slice(0, 220));
+    for (const x of await p.evaluate(TEXT_OVERLAP, { root: '#sheet' })) ok(`flash ${tag}: end state, no text collides`, false, `${x.kind}: ${x.a} × ${x.b}`);
+    // 2. the badge's maths against the independent model
+    const m = cmpModel(base), bn = badgeNum((await flLook(p)).badgeTxt);
+    ok(`flash ${tag}: the badge says +${m.n} pools · ${m.txt} liquidity, as the independent model reads the fixture`, bn && bn.n === m.n && bn.x === m.txt, `${bn && bn.x} vs ${m.n} ${m.txt}`);
+    // 3. switching a tier off shrinks its layer away; on grows it back
+    const id = end.ids[0], h0 = end.hs[id];
+    const track = () => p.evaluate(({ id, F }) => new Promise((res) => { const look = new Function('return (' + F + ')')(), out = [], t0 = performance.now(); const f = () => { out.push(Math.round(look('#sheet').hs[id])); if (performance.now() - t0 > 700) { res(out); return; } requestAnimationFrame(f); }; requestAnimationFrame(f); }), { id, F: TIER_LOOK.toString() });
+    let tr = track(); await p.evaluate((id) => document.querySelector(`#sheet [data-act="merge"][data-id="${id}"]`).click(), id);
+    const shr = await tr, off = await p.evaluate(TIER_LOOK, '#sheet');
+    tr = track(); await p.evaluate((id) => document.querySelector(`#sheet [data-act="merge"][data-id="${id}"]`).click(), id);
+    const grw = await tr, on = await p.evaluate(TIER_LOOK, '#sheet');
+    const between = (xs, full) => xs.some((x) => x > full * 0.05 && x < full * 0.95);
+    ok(`flash ${tag}: a chip switches its tier off with a shrink, and back on with a growth (${shr.length} and ${grw.length} frames)`, between(shr, h0) && off.hs[id] === 0 && off.pressed === peers.length - 1 && between(grw, on.hs[id]) && on.pressed === peers.length && on.layers === peers.length,
+      JSON.stringify({ h0: Math.round(h0), shr: shr.slice(0, 8), off: off.hs[id], grw: grw.slice(0, 8), on: Math.round(on.hs[id]) }));
+    // 4. once per pool: closed and opened again it doesn't play (the choice holds while open; a new opening starts all on)
+    await p.evaluate((id) => document.querySelector(`#sheet [data-act="merge"][data-id="${id}"]`).click(), id); await sleep(350);
+    await closePool(p); await openPool(p, base.id.slice(0, 10)); await sleep(500);
+    let a = await p.evaluate(TIER_LOOK, '#sheet');
+    ok(`flash ${tag}: opened again it doesn't replay by itself, and starts with every tier on again`, a.ph === 'end' && a.pressed === peers.length && a.layers === peers.length && a.wait === 0, JSON.stringify(a).slice(0, 160));
+    // 5. ▶ replay plays it again; a touch, a zoom or a key ends it at once on every tier on
+    const ends = {};
+    for (const [k, how] of [['zoom', () => p.evaluate(() => document.querySelector('#sheet [data-act="zoom"][data-chart="liq-detail"][data-dir="1"]').click())], ['key', () => p.keyboard.press('Shift')], ['touch', () => p.evaluate(() => document.querySelector('#sheet-body').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))]]) {
+      await p.evaluate(() => document.querySelector('#sheet .mgchips [data-act="flash"]').click());
+      const ran = await p.waitForFunction(() => { const c = document.querySelector('#sheet .mgchips'); return !!c && c.dataset.ph && c.dataset.ph !== 'end'; }, null, { polling: 'raf', timeout: 3000 }).then(() => true, () => false);
+      await how(); await frames(p, 2);
+      a = await p.evaluate(TIER_LOOK, '#sheet'); ends[k] = ran && a.ph === 'end' && a.pressed === peers.length && a.layers === peers.length && a.wait === 0;
+      await pzClick(p, '#sheet [data-act="zreset"][data-chart="liq-detail"]').catch(() => {}); await sleep(150);
+    }
+    ok(`flash ${tag}: ▶ replay plays it again; a zoom, a key or a touch ends it at once on every tier on (${Object.keys(ends).join(', ')})`, Object.values(ends).length === 3 && Object.values(ends).every(Boolean), JSON.stringify(ends));
+    // 6. a pool with no other pool of its pair: no chips, no badge, no ghost
+    await closePool(p);
+    await openPool(p, 'QUARX'); await sleep(300);
+    const s0 = await p.evaluate(() => { const b = document.querySelector('#sheet [data-chartbox="liq-detail"]'); return { cmp: !!b.querySelector('.cmp'), ghost: !!b.querySelector('path.ghost'), chips: b.querySelectorAll('.mgchips').length }; });
+    ok(`flash ${tag}: a pool with no other pool of its pair shows no chips, badge or ghost`, !s0.cmp && !s0.ghost && !s0.chips, JSON.stringify(s0));
+    await closePool(p);
+    ok(`flash ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    await t.ctx.close();
+  }
+  // 7. the badge's maths on every pool of the pair; the best find's map stays the pool's own, and its History has every tier
+  {
+    const t = await openUnlocked(browser, 'default', { width: 1440, mg: true }), p = t.page, res = [];
+    for (const q of [base, ...peers]) {
+      await openPool(p, q.id.slice(0, 10));
+      const b = badgeNum((await flLook(p)).badgeTxt), m = cmpModel(q);
+      res.push({ got: b && b.x, n: b && b.n, want: m.txt, ok: !!b && b.n === m.n && b.x === m.txt, noFr: cmpModel(q, { fr: false }).txt, b10: cmpModel(q, { B: 0.1 }).txt });
+      await closePool(p);
+    }
+    ok(`flash: the badge matches the independent model on every pool of the pair (${res.map((r) => r.got).join(', ')})`, res.every((r) => r.ok) && res.some((r) => parseFloat(r.want) < 1) && res.some((r) => parseFloat(r.want) >= 10), JSON.stringify(res.filter((r) => !r.ok)).slice(0, 160));
+    ok('flash: planted: a model without the full-range layer, or reading ±10%, is caught somewhere on the pair', res.some((r) => r.noFr !== r.got) && res.some((r) => r.b10 !== r.got), JSON.stringify(res.map((r) => [r.got, r.noFr, r.b10])));
+    const tabOk = await p.evaluate(() => { const x = [...document.querySelectorAll('#best [role="tab"]')].find((e) => /VELNA/.test(e.textContent)); if (!x) return false; x.click(); return true; });
+    await sleep(300);
+    const card = await p.evaluate((F) => new Function('return (' + F + ')')()('#best'), TIER_LOOK.toString());
+    const bid = await p.evaluate(() => document.querySelector('#best [data-act="detail"]').dataset.id);
+    const hb0 = await p.evaluate(() => { const b = document.querySelector('#best [data-chartbox="liq-best"] .ctools [data-act="ws-hist"]'); if (!b) return null; b.click(); return true; });
+    if (hb0) await wsWait(p);
+    const hw = await p.evaluate(() => (window.__lpsHooks.ws ? window.__lpsHooks.ws() : null));
+    ok(`flash: the best find's map stays the pool's own (no tier chips, no stack); its title row's History opens every tier combined`, tabOk && !!card && card.chips === 0 && card.layers === 0 && !!hb0 && !!hw && hw.open && hw.tab === 'history' && hw.id === bid && hw.tiers === null, JSON.stringify({ card: card && [card.chips, card.layers], hb0, hw: hw && [hw.open, hw.tab, hw.tiers, hw.id === bid] }));
+    if (hw && hw.open) { await p.keyboard.press('Escape'); await wsWait(p, false); }
+    ok('flash: card and model, no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 8. reduced motion: never animated, every tier on at once, no replay
+  {
+    const t = await openUnlocked(browser, 'default', { phone: true, flash: true, mg: true, reducedMotion: 'reduce' }), p = t.page;
+    await fillQ(p, base.id.slice(0, 10)); await sleep(250);
+    const watch = tierWatch(p, '#sheet', 1500);
+    await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
+    const fr = await watch, a = await p.evaluate(TIER_LOOK, '#sheet');
+    ok('flash: under reduced motion nothing animates and every tier shows on at once (no replay)', fr.length > 3 && fr.every((x) => x.ph === 'end' && x.wait === 0 && x.lit === 0) && a.pressed === peers.length && a.layers === peers.length && !a.replay, JSON.stringify({ n: fr.length, a }).slice(0, 200));
+    ok('flash: reduced motion, no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 9. the chart's own page: it builds up there too, once, ending all on
+  {
+    const t = await openUnlocked(browser, 'default', { width: 1440, flash: true, mg: true }), p = t.page;
+    const u = await p.evaluate((id) => window.__lpsHooks.soloUrl('liq-detail', id), base.id);
+    const w2 = await t.ctx.newPage(), e2 = [];
+    w2.on('pageerror', (e) => e2.push(String(e.message).slice(0, 100)));
+    await w2.goto(u);
+    await w2.waitForSelector('.solo-box [data-pz="liq-detail"]', { timeout: 20000 }).catch(() => {});
+    const built = await w2.waitForFunction(() => { const c = document.querySelector('[data-chartbox="liq-detail"] .mgchips'); return !!c && c.dataset.ph === 'build'; }, null, { polling: 'raf', timeout: 15000 }).then(() => true, () => false);
+    await sleep(2800);
+    const end = await w2.evaluate((F) => new Function('return (' + F + ')')()('#sheet'), TIER_LOOK.toString()); // the chart the page stands for (the panel's map; the best find's has no tiers)
+    ok('flash: the chart\'s own page builds it up too and ends with every tier on', built && !!end && end.ph === 'end' && end.pressed === end.chips && end.layers === end.chips && e2.length === 0, JSON.stringify(end).slice(0, 160) + ' ' + (e2[0] || ''));
+    await w2.close();
+    await t.ctx.close();
+  }
+}
+// ---------- v0.6.0 · B, C, D: History from the tiers' chart, the fee row, the strip's end; bands that never read as 0 ----------
+async function wsOnly(p, id) { // keep one tier alone in History (a double-click on its chip)
+  await p.evaluate((id) => { const c = document.querySelector(`#ws .hs-chip[data-v="${id}"]`); if (c) c.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); }, id); await sleep(250);
+}
+const LINK_OK = (sel) => { // a link to History: a real button, 44 px tall, labelled, the bars icon and "History"
+  const el = [...document.querySelectorAll(sel)].find((e) => e.getClientRects().length);
+  if (!el) return 'missing';
+  el.scrollIntoView({ block: 'center' });
+  const r = el.getBoundingClientRect();
+  if (el.tagName !== 'BUTTON') return 'not a button';
+  if (r.height < 43.5) return 'short ' + Math.round(r.height);
+  if (!/history/i.test(el.getAttribute('aria-label') || '')) return 'no label';
+  if (!/History/.test(el.textContent) || !el.querySelector('svg')) return 'no icon or word';
+  return '';
+};
+async function testTiers(browser) {
+  const pools = FXD.live.pools, base = pools.find((q) => q.pair === 'VELNA/WETH' && q.chain === 'ethereum'), peers = pools.filter((q) => q.id !== base.id && samePairFx(base, q));
+  const born = pools.find((q) => q.pair === 'BORNA/WETH'), ents = Object.entries(FXD.history.pools);
+  const arch = ents.find(([id, h]) => poolOf(id) && h.yp && h.yp.lim === 'archive' && h.y.length >= 300 && h.y.some((r) => r[1] === null && r[0] < h.yp.from));
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }]] : [['laptop', { width: 1440 }], ['phone', { phone: true }]];
+  for (const [tag, o] of SETS) {
+    const t = await openUnlocked(browser, 'default', { ...o, mg: true }), p = t.page, phone = tag === 'phone';
+    const H = () => p.evaluate(() => (window.__lpsHooks.ws ? window.__lpsHooks.ws() : null));
+    // B · the liquidity pane's own History: every tier on → History all combined; one tier on (this pool) → that tier
+    await openPool(p, base.id.slice(0, 10));
+    const pane = await p.evaluate(LINK_OK, '#sheet [data-chartbox="liq-detail"] .ctools [data-act="ws-hist"]');
+    await p.evaluate(() => document.querySelector('#sheet [data-chartbox="liq-detail"] .ctools [data-act="ws-hist"]').click()); await wsWait(p);
+    const h1 = await H(), m1 = await p.evaluate(() => ({ mode: document.querySelector('#ws .hs').dataset.mode, pressed: [...document.querySelectorAll('#ws .hs-chip[data-act="ws-tier"]')].filter((b) => b.getAttribute('aria-pressed') === 'true').length, chips: document.querySelectorAll('#ws .hs-chip[data-act="ws-tier"]').length }));
+    await p.keyboard.press('Escape'); await wsWait(p, false);
+    for (const q of peers) await p.evaluate((id) => { const b = document.querySelector(`#sheet [data-act="merge"][data-id="${id}"][aria-pressed="true"]`); if (b) b.click(); }, q.id);
+    await sleep(400);
+    await p.evaluate(() => document.querySelector('#sheet [data-chartbox="liq-detail"] .ctools [data-act="ws-hist"]').click()); await wsWait(p);
+    const h2 = await H(), m2 = await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode);
+    ok(`tiers ${tag}: the liquidity pane has its own History (${pane || 'a labelled 44 px button'}): all tiers on → History all combined; only this pool → this pool alone`, !pane && h1.tab === 'history' && h1.tiers === null && m1.mode === 'all' && m1.pressed === m1.chips && h2.tiers && h2.tiers.length === 1 && h2.tiers[0] === base.id && m2 === 'one', JSON.stringify({ pane, h1: h1 && h1.tiers, m1, h2: h2 && h2.tiers && h2.tiers.length, m2 }));
+    // History's own chips: a tier switches off and on, All combined puts every one back, a double-click keeps one
+    await p.click('#ws [data-act="ws-tier"][data-v="all"]'); await sleep(250);
+    await p.click(`#ws [data-act="ws-tier"][data-v="${peers[0].id}"]`); await sleep(250);
+    const tg = await p.evaluate(() => ({ mode: document.querySelector('#ws .hs').dataset.mode, off: [...document.querySelectorAll('#ws .hs-chip[data-act="ws-tier"]')].filter((b) => b.getAttribute('aria-pressed') === 'false').length }));
+    await wsOnly(p, peers[0].id);
+    const iso = await H();
+    ok(`tiers ${tag}: History's tier chips switch a tier off and on (${tg.mode}), All combined brings every one back, a double-click keeps one alone`, tg.mode === 'some' && tg.off >= 1 && iso.tiers && iso.tiers.length === 1 && iso.tiers[0] === peers[0].id, JSON.stringify({ tg, iso: iso && iso.tiers }));
+    await p.keyboard.press('Escape'); await wsWait(p, false);
+    // B · the pair view and the similar pools carry History too
+    await p.evaluate(() => { const b = document.querySelector('#sheet-pair'); if (b && !b.hidden) b.click(); }); await sleep(400);
+    const pv = await p.evaluate(LINK_OK, '#sheet-hist');
+    await p.evaluate(() => document.querySelector('#sheet-hist').click()); await wsWait(p);
+    const hp = await H();
+    await p.keyboard.press('Escape'); await wsWait(p, false); await p.keyboard.press('Escape'); await sleep(300);
+    await openPool(p, base.id.slice(0, 10));
+    const sm = await p.evaluate(LINK_OK, '#sim .mc-head [data-act="ws-hist"]');
+    ok(`tiers ${tag}: the pair view's header and the similar pools' head each have a History (all tiers combined)`, !pv && !sm && hp && hp.tab === 'history' && hp.tiers === null, JSON.stringify({ pv, sm, hp: hp && [hp.tab, hp.tiers] }));
+    // C · the panel's "LP fees" bar is a link to History
+    const fb = await p.evaluate(LINK_OK, '#sheet-fee [data-act="ws-hist"]');
+    await p.evaluate(() => document.querySelector('#sheet-fee [data-act="ws-hist"]').click()); await wsWait(p);
+    const hf = await H();
+    ok(`tiers ${tag}: the pool panel's fee bar opens its History, every tier on (${fb || 'a labelled 44 px button'})`, !fb && hf.tab === 'history' && hf.tiers === null && hf.id === base.id, JSON.stringify({ fb, hf: hf && [hf.tab, hf.tiers] }));
+    await p.keyboard.press('Escape'); await wsWait(p, false);
+    // D · the daily strip's left end: older days live in History (a tappable marker)
+    for (let k = 0; k < 6 && (await p.evaluate(() => { const b = document.querySelector('#sheet [data-act="zoom"][data-chart="daily-detail"][data-dir="-1"]'); if (!b || b.disabled) return false; b.click(); return true; })); k++) await sleep(100);
+    const mk = await p.evaluate(() => { const b = document.querySelector('#sheet [data-chartbox="daily-detail"] .pz-hist'); if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { txt: b.textContent, on: !!hit && b.contains(hit), h: Math.round(r.height), coarse: matchMedia('(pointer:coarse)').matches }; });
+    if (mk && mk.on) { await p.evaluate(() => document.querySelector('#sheet [data-chartbox="daily-detail"] .pz-hist').click()); await wsWait(p); }
+    const hd = await H();
+    ok(`tiers ${tag}: at the strip's left end a marker says "30-day view · older days in History ›" and opens History`, !!mk && /^30-day view · older days in History ›$/.test(mk.txt) && mk.on && (!mk.coarse || mk.h >= 44) && hd.open && hd.tab === 'history', JSON.stringify({ mk, hd: hd && [hd.open, hd.tab] }));
+    if (hd.open) { await p.keyboard.press('Escape'); await wsWait(p, false); }
+    await closePool(p);
+    // C · the best find's "LP fees · 30 d" row: one link to History (90 days); a favourite's bar too
+    const bl = await p.evaluate(LINK_OK, '#best .fmlink');
+    const blab = await p.evaluate(() => { const b = document.querySelector('#best .fmlink'); return b && b.getAttribute('aria-label') === 'Open this pool\'s history: fees, volume and TVL' && /History ›/.test(b.textContent); });
+    await p.evaluate(() => document.querySelector('#best .fmlink').click()); await wsWait(p);
+    const hb = await H(), rows = await p.evaluate(() => +document.querySelector('#ws .hs').dataset.rows);
+    ok(`tiers ${tag}: the best find's "LP fees · 30 d" row is one History link ("History ›", its own label), every tier on, 90 days`, !bl && blab && hb.tab === 'history' && hb.tiers === null && hb.range === 90 && rows === 90, JSON.stringify({ bl, blab, hb: hb && [hb.tab, hb.tiers, hb.range], rows }));
+    await p.keyboard.press('Escape'); await wsWait(p, false);
+    await p.evaluate(() => { const s = document.querySelector('#best .star'); if (s && s.getAttribute('aria-pressed') !== 'true') s.click(); }); await sleep(250);
+    const fv = await p.evaluate(() => { const b = document.querySelector('#fav .fmbtn[data-act="ws-hist"]'); if (!b) return 'missing'; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return r.height >= 43.5 && hit && b.contains(hit) && /history/i.test(b.getAttribute('aria-label')) ? '' : 'covered or small'; });
+    if (!fv) { await p.evaluate(() => document.querySelector('#fav .fmbtn[data-act="ws-hist"]').click()); await wsWait(p); }
+    const hv = await H();
+    ok(`tiers ${tag}: a favourite's fee bar opens its History`, !fv && hv.open && hv.tab === 'history', fv + ' ' + JSON.stringify(hv && [hv.open, hv.tab]));
+    if (hv.open) { await p.keyboard.press('Escape'); await wsWait(p, false); }
+    // D · a pool born 12 days ago: its strip says so; History's 90 days show the days before it as a labelled band, never 0;
+    // its fee link opens all of it (shorter than 90 days)
+    if (born) {
+      await openPool(p, born.id.slice(0, 10));
+      const bm = await p.evaluate(() => { const b = document.querySelector('#sheet [data-chartbox="daily-detail"] .pz-born'); return b ? b.textContent : null; });
+      ok(`tiers ${tag}: a pool born inside the window says "Pool created <date> · no earlier history" at the strip's start`, !!bm && /^Pool created \d{1,2} [A-Z][a-z]{2,3} · no earlier history$/.test(bm), String(bm));
+      await p.evaluate(() => document.querySelector('#sheet-hist').click()); await wsWait(p);
+      await p.click('#ws [data-act="ws-range"][data-v="90"]'); await sleep(300);
+      const by = FXD.history.pools[born.id], first = by.y[0][0];
+      const sv = await p.evaluate(() => { const o = {}; for (const s of document.querySelectorAll('#ws .hs-stack svg[data-k]')) o[s.dataset.k] = { n: +s.dataset.n, pre: +s.dataset.pre, label: [...s.querySelectorAll('text.hs-bl')].map((x) => x.textContent).join('|') }; o.rows = document.querySelectorAll('#ws .hst tbody tr').length; return o; });
+      await p.focus('#ws .hs-stack'); for (let k = 0; k < 80; k++) await p.keyboard.press('ArrowLeft');
+      const cc = await p.evaluate(CARD);
+      ok(`tiers ${tag}: History's 90 days of a 12-day pool: the days before it are a labelled band ("pool created …"), never 0 bars; the day card says so`, sv.f && sv.f.n === 90 && sv.f.pre >= 75 && /pool created \d{1,2} [A-Z][a-z]{2,3}/.test(sv.f.label) && sv.v.pre === sv.f.pre && sv.rows <= 14 && cc.f && cc.f.v === '—' && cc.v && cc.v.v === '—' && cc.tv && cc.tv.v === '—' && /^before the pool existed \(created \d{1,2} [A-Z][a-z]{2,3}\)/.test(cc.pre), JSON.stringify({ sv, cc: cc && [cc.f, cc.pre] }));
+      await p.keyboard.press('Escape'); await wsWait(p, false);
+      await closePool(p);
+    } else ok(`tiers ${tag}: the fixtures carry a pool born 12 days ago`, false);
+    // D · a Base pool: fee days past its 90-day archive that weren't estimated are a labelled band, "not readable"
+    if (arch) {
+      const [aid, ah] = arch;
+      await openPool(p, aid.slice(0, 10));
+      await p.evaluate(() => document.querySelector('#sheet-hist').click()); await wsWait(p);
+      await wsOnly(p, aid); await p.click('#ws [data-act="ws-range"][data-v="365"]'); await sleep(300);
+      const nd = ah.y.filter((r) => r[1] === null && r[0] < ah.yp.from).map((r) => r[0]), want = nd.filter((d) => d >= ah.y[Math.max(0, ah.y.length - 365)][0]).length;
+      const cd = await wsDay(p, nd[nd.length - 1]);
+      const fs2 = await p.evaluate(() => { const s = document.querySelector('#ws .hs-stack svg[data-k="f"]'); return { na: +s.dataset.na, gaps: +s.dataset.gaps }; });
+      ok(`tiers ${tag}: a Base pool's fee days past the archive, not estimated, are a "not readable" band (${fs2.na} of ${want}), the day card says why`, fs2.na === want && !!cd && cd.f.v === '—' && /older than Base.s 90-day archive · not readable/.test(cd.f.q), JSON.stringify({ fs2, want, cd: cd && cd.f }));
+      await p.keyboard.press('Escape'); await wsWait(p, false); await closePool(p);
+    } else ok(`tiers ${tag}: the fixtures carry a Base pool with fee days past its archive`, false);
+    ok(`tiers ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    await t.ctx.close();
+  }
+  // B · History's chips build up the first time several tiers show, once; under reduced motion at once
+  for (const red of [false, true]) {
+    const t = await openUnlocked(browser, 'default', { width: 1440, flash: true, mg: true, reducedMotion: red ? 'reduce' : 'no-preference' }), p = t.page;
+    await openPool(p, base.id.slice(0, 10));
+    const watch = p.evaluate(() => new Promise((res) => { const t0 = performance.now(), out = []; const f = () => { const h = document.querySelector('#ws .hs'); if (h) { const s = h.dataset.ph; if (out[out.length - 1] !== s) out.push(s); if (s === 'end' && out.length > 1) { res({ seq: out, t: Math.round(performance.now() - t0) }); return; } } if (performance.now() - t0 > 4000) { res({ seq: out, t: -1 }); return; } requestAnimationFrame(f); }; requestAnimationFrame(f); }));
+    await p.evaluate(() => document.querySelector('#sheet-hist').click());
+    const w = await watch; await wsWait(p);
+    const lim = BROWSER === 'webkit' ? 3800 : 2800;
+    if (!red) ok(`tiers: History's tiers build up the first time (${w.seq.join('>')}) in ${w.t} ms, ending every tier on`, w.seq.includes('build') && w.seq[w.seq.length - 1] === 'end' && w.t > 0 && w.t < lim && (await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode)) === 'all', JSON.stringify(w));
+    else ok('tiers: under reduced motion History shows every tier at once', !w.seq.includes('build') && !w.seq.includes('collapse'), JSON.stringify(w));
+    await t.ctx.close();
+  }
+}
+
 // /v060-tests
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
-  workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink }; // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink']); // look-independent (the fit, the full view, the ways out)
+  workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers }; // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers']); // look-independent (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ljkAEVhwlvHfOdEYblpv3PMK3iu8SMFFxC85LDuANP8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-W84qlYGCqjE7Iv7qUhrHqE4YLz4QjDgGem5BiisbW/c='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1073,6 +1073,38 @@ html.m3d .wi.g,html.m3d .mc.dc .k.g,html.m3d .mc-rel.g0,html.m3d .fm-t .up,html.
 html.m3d .chip.p-steady{border-color:rgba(94,230,200,.55)}
 html.m3d .g-cheap{--gc:#5EE6C8}
 /* v060-css */
+/* v0.6.0 (the owner, 15 Nov 2026): every tier on; while they build up, a chip waits dim until its layer grows in */
+.mgc.fl-wait{opacity:.42}
+.mgc.fl-wait::before{border-color:var(--line2)!important;box-shadow:none!important}
+.mgc.fl-on{opacity:1}
+.mgc.mgr{color:var(--accent2);font-weight:600}
+.mgc.mgr::before{border-style:dashed}
+.hs-chip.fl-wait{opacity:.42}
+.hs-chip.fl-on>span{box-shadow:0 0 0 2px var(--c)}
+.ws-body{overflow-anchor:none}
+.hs-dv .q{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:700px){.hs-card{min-height:128px;align-content:flex-start}.hs-dv .q,.hs-dv .q.na{max-width:150px}}
+/* C · the "LP fees · 30 d" row is a link to History; D · a chart's end marker that leads to History */
+.fmlink{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;width:100%;min-height:44px;margin:4px 0 0;padding:2px 6px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.fmlink:hover,.fmlink:active{border-color:var(--line3);background:rgba(94,230,200,.06)}
+.fmlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fmlink .hgo{margin-left:auto;display:inline-flex;align-items:center;gap:5px;color:var(--accent2);font:600 11px/1 var(--mono);letter-spacing:.04em;white-space:nowrap}
+.fmlink .hgo svg{width:12px;height:12px}
+@media (max-width:430px){.fmlink{gap:4px 8px;padding:2px 4px;margin:0 0 -10px}.fmlink .fmini svg{width:54px}} /* one line on a phone: the bars give way and the 44 px target reaches into the space below, so the shape stays in view */
+.fmbtn{display:block;min-height:44px;margin:0 -9px;padding:0 9px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;position:relative;z-index:2;border-radius:6px}
+.fmbtn:hover{background:rgba(94,230,200,.06)}
+td.fees .fmbtn{margin:0;padding:0 2px;display:inline-flex;align-items:center}
+.feeh .hgo{display:inline-flex;align-items:center;gap:4px;color:var(--accent2);font:600 10.5px/1 var(--mono);letter-spacing:.04em;white-space:nowrap}
+.feeh .hgo svg{width:11px;height:11px}
+/* the strip's end note, in its title row over the left end: why it stops (30 days here, older days in History; or the day the
+   pool was created) — never over the bars, and no taller than the zoom buttons beside it */
+.pz-foot{display:inline-flex;align-items:center;min-width:0}
+.pz-hist{display:inline-flex;align-items:center;min-height:44px;margin:0 0 0 -2px;padding:0;border:0;background:transparent;color:var(--accent2);font:600 10px/1.25 var(--mono);letter-spacing:.04em;text-align:left;cursor:pointer} /* a 44 px target, drawn as a small hatched pill */
+.pz-hist>span{display:inline-flex;align-items:center;min-height:24px;padding:2px 8px;border:1px dashed var(--line3);border-radius:6px;background:repeating-linear-gradient(135deg,rgba(139,150,163,.13) 0 2px,transparent 2px 7px)}
+.pz-hist:hover>span,.pz-hist:active>span{border-color:var(--accent2);background-color:rgba(94,230,200,.06)}
+.pz-hist:focus-visible{outline:none}.pz-hist:focus-visible>span{outline:2px solid var(--accent);outline-offset:2px}
+.pz-born{display:inline-block;padding:3px 8px;border:1px dashed var(--line2);border-radius:6px;background:repeating-linear-gradient(135deg,rgba(139,150,163,.13) 0 2px,transparent 2px 7px);color:var(--fg2);font:600 10px/1.25 var(--mono);letter-spacing:.03em}
+
 /* ---------- v0.6.0 · History on every pool, and the pool workspace (the owner's picks, 14 Nov 2026) ----------
    The History button looks the same everywhere: the bars icon and the word, a 44 px tap target round a small pill. */
 .hbtn{flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:0;border:0;background:transparent;color:var(--accent2);cursor:pointer;font:600 11px/1 var(--mono);letter-spacing:.04em;-webkit-tap-highlight-color:transparent}
@@ -1100,9 +1132,9 @@ html.m3d .hbtn:hover>span{background:rgba(94,230,200,.2)}
 .dcw.chs{box-shadow:inset 3px 0 0 var(--cc)}
 .mc-track.enter>.dcw{animation:mcIn .34s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0) * 40ms)}
 .mc .hbtn.mch{position:relative;z-index:2;align-self:flex-start;margin:-6px 0 -10px -6px}
-.sim .mc .hbtn.mch{position:absolute;left:4px;bottom:-4px;margin:0}
-.sim .mc{min-height:76px}
-.sim .mc-name{padding-bottom:28px}
+.sim .mc .hbtn.mch{position:absolute;left:4px;bottom:0;margin:0}
+.sim .mc{min-height:96px}
+.sim .mc-name{padding-bottom:46px}
 
 /* the workspace: the whole window, above the bar and the pool panel */
 html.ws-open{overflow:hidden}
@@ -1184,6 +1216,7 @@ html.m3d .hs-card{background:#0F4246}
 .hs-dv b.nr{color:var(--muted);font-weight:600}
 .hs-dv .q{font:500 10px/1.2 var(--mono);color:var(--muted);white-space:nowrap}
 .hs-dv .q.na{white-space:normal;max-width:220px}
+.hs-pre{flex:1 1 220px;min-width:0;font:500 10px/1.3 var(--mono);color:var(--muted)}
 .hs-dc{margin-left:auto}
 .hs-stack{position:relative;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:crosshair;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:6px 0 0;outline:none}
 .hs-stack:focus-visible{box-shadow:0 0 0 2px var(--accent)}
@@ -2279,24 +2312,46 @@ function mgBand(bars, fr) { // a pool's own value within ±9% of its price: its 
   if (fr) v += (fr.v * eInt(Math.max(-MG_B9, fr.a), Math.min(MG_B9, fr.b))) / eInt(fr.a, fr.b);
   return v;
 }
-const mgOn = (p) => (S.mg && S.mg.for === p.id ? S.mg.on : []);
+const MGOFF = window.__lpsMgOff === true; // browser tests of the one pool's bars start with the tiers switched off (made-up fixtures)
+const mgOn = (p) => (S.mg && S.mg.for === p.id ? S.mg.on : MGOFF ? [] : mgPeers(p).map((q) => q.id)); // v0.6.0 (the owner): every tier on unless switched off
 function mgToggle(qid, el) {
-  const inWs = !!(el && el.closest && el.closest('#ws')), p = poolById(inWs ? WS.id : S.detail); // v0.6.0: the workspace's chart stacks the same way
+  const inWs = !!(el && el.closest && el.closest('#ws')), inBest = !inWs && !!(el && el.closest && el.closest('#best'));
+  const cid = inWs ? 'liq-ws' : inBest ? 'liq-best' : 'liq-detail', p = poolById(flOwner(cid)); // v0.6.0: the workspace's and the best find's charts stack the same way
   if (!p) return;
-  if (!S.mg || S.mg.for !== p.id) S.mg = { for: p.id, on: [] };
-  const i = S.mg.on.indexOf(qid);
-  if (i >= 0) S.mg.on.splice(i, 1); else S.mg.on.push(qid);
+  if (S.fl) flEnd();
+  if (!S.mg || S.mg.for !== p.id) S.mg = { for: p.id, on: mgOn(p).slice() };
+  const i = S.mg.on.indexOf(qid), was = i >= 0;
+  if (was) S.mg.on.splice(i, 1); else S.mg.on.push(qid);
+  mgTween(p.id, cid, qid, was ? 1 : 0, was ? 0 : 1); // the layer shrinks away or grows back in
   if (inWs) { wsRender(); refocus(`#ws [data-act="merge"][data-id="${qid}"]`); return; }
+  if (inBest) { const k = $('#best .tabs') ? $('#best .tabs').scrollLeft : 0; renderBest(); if ($('#best .tabs')) $('#best .tabs').scrollLeft = k; refocus(`#best [data-act="merge"][data-id="${qid}"]`); return; }
   renderDetail();
   refocus(`#sheet-body [data-act="merge"][data-id="${qid}"]`);
+}
+// a chip switched off or on: its layer shrinks to the bars under it, or grows back, in 280 ms (at once under reduced motion)
+function mgTween(pid, cid, id, from, to) {
+  if (S.mgT) cancelAnimationFrame(S.mgT.raf);
+  S.mgT = null;
+  if (reduced()) return;
+  const t0 = performance.now(), T = (S.mgT = { for: pid, cid, id, from, to, f: from, raf: 0 });
+  const step = () => {
+    if (S.mgT !== T) return;
+    const k = clamp((performance.now() - t0) / 280, 0, 1);
+    T.f = from + (to - from) * (1 - Math.pow(1 - k, 3));
+    if (k >= 1) { S.mgT = null; pzRedraw(cid); return; }
+    pzRedraw(cid);
+    T.raf = requestAnimationFrame(step);
+  };
+  T.raf = requestAnimationFrame(step);
 }
 function LTALL(id) { return SOLO || id === 'liq-ws'; } // a map taller than the page's own: its labels follow the bars by percent
 const mgLabel = (q) => `${feeTxt(q.feeTier)} · v${esc(q.v)}`;
 function mgChips(p, peers) { // a row of chips over the chart: this pool, then the pair's other pools (fixed colours by place)
   const on = mgOn(p);
-  return `<div class="mgchips" role="group" aria-label="Stack other pools of this pair">`
+  return `<div class="mgchips" role="group" aria-label="The pair's tiers on the chart: tap one to switch it off or on">`
     + `<span class="mgc self" style="--c:#16C784" title="This pool">${chainMark(p.chain)}<span class="sq"></span>${mgLabel(p)} · this</span>`
     + peers.map((q, k) => `<button type="button" class="mgc${S.fl && S.fl.for === p.id && S.fl.st.lit[q.id] ? ' fl-on' : ''}" data-act="merge" data-id="${esc(q.id)}" style="--c:${MG_COL[k % MG_COL.length]}" aria-pressed="${on.includes(q.id)}" title="${esc(q.pair)} · ${esc(chainOf(q.chain).name)} · ${feeTxt(q.feeTier)} · v${esc(q.v)}${q.verified === false ? ' · unverified' : ''}: tap to ${on.includes(q.id) ? 'remove it from' : 'stack it on'} the chart">${chainMark(q.chain)}<span class="sq"></span>${mgLabel(q)}</button>`).join('')
+    + (reduced() ? '' : `<button type="button" class="mgc mgr" data-act="flash" data-id="${esc(p.id)}" aria-label="Replay how the pair's tiers build up on the chart" title="Replay the build-up">▶ replay</button>`)
     + '</div>';
 }
 const frScale = (f, k) => (k === 1 ? f : { v: f.v * k, a: f.a, b: f.b, at: (x) => f.at(x) * k });
@@ -2313,13 +2368,24 @@ const FL_MS = 3500, FL_GROW = 600, FL_HOLD = 600, FL_BAN = 800, FL_FADE = 2600, 
 const FL_SEEN = new Set();
 const NOFLASH = window.__lpsNoFlash === true; // browser tests of other features turn the auto-play off (made-up fixtures)
 const easeIO = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-function flAt(t, ids) { // the flash at t ms: each other pool's share of its height, which chips are lit, the banner, the ghost
-  const n = Math.max(1, ids.length), d = FL_GROW / n, a = {}, lit = {}, fade = clamp((t - FL_FADE) / (FL_MS - FL_FADE), 0, 1);
-  ids.forEach((id, k) => {
-    a[id] = t < FL_FADE ? easeIO(clamp((t - k * d) / d, 0, 1)) : 1 - easeIO(fade);
-    lit[id] = t >= k * d && fade < 0.5;
-  });
-  return { a, lit, ban: t >= FL_BAN && t < FL_FADE, ghost: easeIO(fade), ph: t < FL_HOLD ? 'grow' : t < FL_FADE ? 'hold' : t < FL_MS ? 'fade' : 'end' };
+// v0.6.0 (the owner, 15 Nov 2026): every tier on; opening a pool's chart shows them building up: the whole stack flashes
+// (250 ms), collapses to the baseline (250 ms), then grows back a tier at a time: this pool first, then the others from the
+// most liquidity near the price to the least (ease-out, 180–420 ms each, all of it under 2.5 s); each chip lights as its
+// layer grows, the ±9% line and the legend count each tier as it lands. It ends with every tier on.
+const FB_FLASH = 250, FB_COLL = 250, fbStep = (n) => clamp(1500 / (n + 1), 180, 420), fbMs = (n) => FB_FLASH + FB_COLL + (n + 1) * fbStep(n);
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
+function flAt(t, ids) { // the build-up at t ms: this pool's share of its height (own), each other's (a), which chips are lit
+  const st = fbStep(ids.length), b0 = FB_FLASH + FB_COLL, a = {}, lit = {};
+  let own = 1, ownLit = true, ph;
+  if (t < FB_FLASH) { ph = 'flash'; for (const id of ids) { a[id] = 1; lit[id] = true; } }
+  else if (t < b0) { ph = 'collapse'; const k = 1 - easeIO((t - FB_FLASH) / FB_COLL); own = k; ownLit = false; for (const id of ids) { a[id] = k; lit[id] = false; } }
+  else {
+    const u = t - b0;
+    own = easeOut(u / st); ownLit = true;
+    ids.forEach((id, k) => { const v = clamp((u - (k + 1) * st) / st, 0, 1); a[id] = easeOut(v); lit[id] = v > 0; });
+    ph = u >= (ids.length + 1) * st ? 'end' : 'build';
+  }
+  return { a, lit, own, ownLit, ban: false, ghost: 1, ph, landed: ids.filter((id) => a[id] >= 1 - 1e-6), ownIn: own >= 1 - 1e-6 };
 }
 function cmpOf(p) { // the pair's other pools, and their liquidity near the price against this pool's
   const peers = mgPeers(p);
@@ -2344,13 +2410,27 @@ function cmpHtml(p, id, c) {
     + (reduced() ? `<span class="cmp-b" title="${esc(say)}">${lab}</span>` : `<button type="button" class="cmp-b" data-act="flash" data-id="${esc(p.id)}" aria-label="${esc(say)}: replay">${lab} · <u>replay</u></button>`) + '</div>';
 }
 let FLC = 'liq-detail'; // v0.6.0: the chart the flash plays on (the pool panel's, or the workspace's)
-const flOwner = (cid) => (cid === 'liq-ws' ? (WS.open ? WS.id : null) : S.detail);
+const flOwner = (cid) => (cid === 'liq-ws' ? (WS.open ? WS.id : null) : cid === 'liq-best' ? ($('#best [data-act="detail"]') || { dataset: {} }).dataset.id || null : S.detail);
 function flPaint() { // this frame: the chart, the chips' light, the banner
   const cid = S.fl ? S.fl.cid : FLC, hst = pzHost(cid), box = hst && hst.closest('[data-chartbox]');
   if (!box) return;
   const st = S.fl && S.fl.st;
   pzRedraw(cid);
-  for (const b of box.querySelectorAll('[data-act="merge"]')) { const on = !!(st && st.lit[b.dataset.id]); if (b.classList.contains('fl-on') !== on) b.classList.toggle('fl-on', on); }
+  for (const b of box.querySelectorAll('[data-act="merge"]')) {
+    const id = b.dataset.id, on = !!(st && st.lit[id] && st.a[id] < 1 - 1e-6), wait = !!(st && !st.lit[id]);
+    if (b.classList.contains('fl-on') !== on) b.classList.toggle('fl-on', on);
+    if (b.classList.contains('fl-wait') !== wait) b.classList.toggle('fl-wait', wait);
+  }
+  const self = box.querySelector('.mgc.self');
+  if (self) { self.classList.toggle('fl-wait', !!(st && !st.ownLit)); self.classList.toggle('fl-on', !!(st && st.ownLit && !st.ownIn)); }
+  const ch = box.querySelector('.mgchips');
+  if (ch) ch.dataset.ph = st ? st.ph : 'end';
+  const P = PZ[cid], ml = box.querySelector('.mgline');
+  if (P && P.mgParts && ml) { // the ±9% line and the legend count the tiers that have landed (all that are on, at rest)
+    const on = st ? new Set(st.landed) : new Set((P.mg || []).map((m) => m.id));
+    ml.innerHTML = mgLineInner(P.mgParts.filter((x) => (x.self ? !st || st.ownIn : on.has(x.id))));
+    for (const s of box.querySelectorAll('[data-mgleg]')) s.hidden = !on.has(s.dataset.mgleg);
+  }
   const c = box.querySelector('.cmp[data-ph]');
   if (c) { c.classList.toggle('ban', !!(st && st.ban)); c.dataset.ph = st ? st.ph : 'end'; }
 }
@@ -2366,19 +2446,24 @@ function flStart(id, auto, cid = 'liq-detail') {
   const P = PZ[cid];
   if (flOwner(cid) !== id || !P || !P.p || P.p.id !== id || !P.every || !P.every.length || reduced() || (auto && NOFLASH)) return;
   flEnd();
-  const ids = P.every.map((m) => m.id), t0 = performance.now();
+  const ids = P.every.slice().sort((x, y) => (isNum(y.v9) ? y.v9 : -1) - (isNum(x.v9) ? x.v9 : -1)).map((m) => m.id), t0 = performance.now(), ms = fbMs(ids.length);
+  S.mg = { for: id, on: P.every.map((m) => m.id) }; // it ends with every tier on
   S.fl = { for: id, cid, ids, st: flAt(0, ids), raf: 0 };
   const step = () => {
     const f = S.fl;
     if (!f || f.for !== id) return;
     if (flOwner(cid) !== id || !pzHost(cid) || reduced()) { flEnd(); return; }
     const t = performance.now() - t0;
-    if (t >= FL_MS) { flEnd(); return; }
+    if (t >= ms) { flEnd(); return; }
     f.st = flAt(t, f.ids); flPaint();
     f.raf = requestAnimationFrame(step);
   };
   flPaint();
   S.fl.raf = requestAnimationFrame(step);
+}
+function mgLineInner(parts) { // "Within ±9%:" each tier's share of the stack's value near the price, and the total
+  const known = parts.every((x) => isNum(x.v9)), tot9 = known ? sum(parts.map((x) => x.v9)) : null;
+  return `Within ±9%: ${parts.map((x) => `<span><i class="sq" style="--c:${x.col}"></i>${chainMark(x.p.chain)}${feeTxt(x.p.feeTier)} v${esc(x.p.v)}${x.self ? ' this' : ''} ${parts.length > 1 ? (known && tot9 > 0 ? pct(x.v9 / tot9) : DASH) : usd(x.v9)}</span>`).join(' · ')}${parts.length > 1 ? ` · <span>total ${usd(tot9)}</span>` : ' · <span>tap a chip to stack another pool</span>'}`;
 }
 function liqChart(p, w, id) {
   // a null bar is a stretch of the map that wasn't read: hatched, never drawn as 0
@@ -2389,7 +2474,7 @@ function liqChart(p, w, id) {
   const fr0 = frLayer(p.shape), peers = id === 'liq-detail' || id === 'liq-ws' ? mgPeers(p) : [], on = mgOn(p);
   const mg = [], parts = [{ p, col: '#16C784', v9: mgBand(ext.bars, fr0), self: true }], every = [];
   peers.forEach((q, k) => { // every other pool of the pair onto this pool's bars: the stack (its chip on), the flash, the ghost
-    const src = mgSrc(q, mgFlip(p, q)), col = MG_COL[k % MG_COL.length], m = src ? { id: q.id, col, v: mgOnto(src, ext.bars), fr: src.fr } : null;
+    const src = mgSrc(q, mgFlip(p, q)), col = MG_COL[k % MG_COL.length], m = src ? { id: q.id, col, v: mgOnto(src, ext.bars), fr: src.fr, v9: mgBand(src.bars, src.fr) } : null;
     if (m) every.push(m);
     if (!on.includes(q.id)) return;
     parts.push({ p: q, col, v9: src ? mgBand(src.bars, src.fr) : null });
@@ -2420,8 +2505,8 @@ function liqChart(p, w, id) {
   const by = (p.shape && p.shape.beyond) || {}, byTxt = [['below', 'further down'], ['above', 'further up']].filter(([k]) => by[k] !== 0 && by[k] !== undefined).map(([k, t]) => `${usd(by[k])} ${t}`);
   let mgl = '';
   if (peers.length) { // each pool's share of the stack's value within ±9% of the price, and the total
-    const known = parts.every((x) => isNum(x.v9)), tot9 = known ? sum(parts.map((x) => x.v9)) : null;
-    mgl = `<p class="mgline" data-mgline="${parts.length}">Within ±9%: ${parts.map((x) => `<span><i class="sq" style="--c:${x.col}"></i>${chainMark(x.p.chain)}${feeTxt(x.p.feeTier)} v${esc(x.p.v)}${x.self ? ' this' : ''} ${parts.length > 1 ? (known && tot9 > 0 ? pct(x.v9 / tot9) : DASH) : usd(x.v9)}</span>`).join(' · ')}${parts.length > 1 ? ` · <span>total ${usd(tot9)}</span>` : ' · <span>tap a chip to stack another pool</span>'}</p>`;
+    P.mgParts = [{ ...parts[0], id: p.id }, ...peers.map((q, k) => { const m = every.find((x) => x.id === q.id); return { p: q, id: q.id, col: MG_COL[k % MG_COL.length], v9: m ? m.v9 : null }; })];
+    mgl = `<p class="mgline" data-mgline="${parts.length}">${mgLineInner(parts)}</p>`;
   }
   const mgUnread = mg.some((m) => m.v.some((v) => v === null));
   return (peers.length ? mgChips(p, peers) : '') + (id === 'liq-detail' || id === 'liq-best' || id === 'liq-ws' ? cmpHtml(p, id, cmpOf(p)) : '') + pzShell(id, 'liq') + mgl
@@ -2429,7 +2514,7 @@ function liqChart(p, w, id) {
     + `${termB('price', '<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>')}${isNum(walls.below) || isNum(walls.above) ? termB('walls', '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>') : ''}`
     + (fr ? termB('fullrange', `<span><i class="sw fr"></i>Full range ${usd(fr.v)}</span>`) : '')
     + (ghost ? termB('ghost', `<span><i class="sw gh"></i>Whole pair · ${every.length + 1} pools</span>`) : '')
-    + (mg.length ? mg.map((m) => `<span><i class="sw" style="background:${m.col}"></i>${mgLabel(poolById(m.id))}</span>`).join('') : '')
+    + (mg.length ? mg.map((m) => `<span data-mgleg="${esc(m.id)}"><i class="sw" style="background:${m.col}"></i>${mgLabel(poolById(m.id))}</span>`).join('') : '')
     + (unread.length || mgUnread ? termB('unread', '<span><i class="sw hatch"></i>Not read</span>') : '')
     + (byTxt.length ? termB('beyond', `<span>Past the bars: ${byTxt.join(' · ')}</span>`) : '') + '</div>';
 }
@@ -2444,12 +2529,14 @@ function liqInner(id) {
   // the bars fill the height for what is in view (zoomed in, the bars near the price stay readable); while a drag or a
   // coast is running the scale eases towards it, so bars glide instead of jumping as taller ones come into view
   // the stack: chips that are on at full height; while the competition flash plays, the others at its share (0..1)
-  const fx = (id === 'liq-detail' || id === 'liq-ws') && S.fl && S.fl.for === p.id && (S.fl.cid || 'liq-detail') === id ? S.fl.st : null, onIds = new Set((P.mg || []).map((m) => m.id));
-  const mg = (P.every || P.mg || []).map((m) => ({ ...m, f: onIds.has(m.id) ? 1 : fx ? fx.a[m.id] || 0 : 0 })).filter((m) => m.f > 1e-3);
-  const fr = frJoin([P.fr0, ...mg.map((m) => m.fr && frScale(m.fr, m.f))].filter(Boolean));
+  const fx = S.fl && S.fl.for === p.id && (S.fl.cid || 'liq-detail') === id ? S.fl.st : null, onIds = new Set((P.mg || []).map((m) => m.id));
+  const tw = S.mgT && S.mgT.for === p.id && S.mgT.cid === id ? S.mgT : null, ownK = fx ? fx.own : 1;
+  const mg = (P.every || P.mg || []).map((m) => ({ ...m, f: fx ? fx.a[m.id] || 0 : tw && tw.id === m.id ? tw.f : onIds.has(m.id) ? 1 : 0 })).filter((m) => m.f > 1e-3);
+  const fr = frJoin([P.fr0 && ownK > 1e-3 && frScale(P.fr0, ownK), ...mg.map((m) => m.fr && frScale(m.fr, m.f))].filter(Boolean));
   const bars = ext.bars, stk = (i) => (isNum(bars[i].v) ? bars[i].v : 0) + sum(mg.map((m) => (isNum(m.v[i]) ? m.v[i] * m.f : 0)));
   const dn = (v, b) => (v * ext.step) / (b.b - b.a);
   let want = Math.max(1, ...bars.map((b, i) => (seen(b) ? dn(stk(i), b) : 0)));
+  if (fx) want = Math.max(1, ...bars.map((b, i) => (seen(b) ? dn((isNum(b.v) ? b.v : 0) + sum((P.every || []).map((m) => (isNum(m.v[i]) ? m.v[i] : 0))), b) : 0))); // the build-up: the whole stack's scale, held
   if (P.ghost) { // one scale for the whole pair, so its ghost fits: this pool's tallest bar stays at least a quarter of the height
     const own = Math.max(1, ...bars.map((b) => (seen(b) && isNum(b.v) ? dn(b.v, b) : 0)));
     const gw = Math.max(0, ...bars.map((b, i) => (seen(b) && isNum(P.ghost[i]) ? dn(P.ghost[i], b) : 0)));
@@ -2465,8 +2552,8 @@ function liqInner(id) {
   const edges = (b) => { const a = X(b.a), e = X(b.b), g = Math.min(2, (e - a) * 0.2); return [a + g / 2, Math.max(1, e - a - g)]; };
   const top = new Map(); // where each bar's stack has reached so far
   for (const b of depth) { // each bar stands on the band at its own value (the scanner took the layer out of it)
-    if (b.v <= 0 || !seen(b)) continue;
-    const h = Math.max(1.5, (dens(b) / max) * (VH - 4 - hb)), [x, bw] = edges(b), d = `M${x.toFixed(1)} ${base.toFixed(1)}v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`; // a sliver at least: something is there
+    if (b.v <= 0 || !seen(b) || ownK < 1e-3) continue;
+    const h = Math.max(ownK < 1 ? 0.05 : 1.5, ownK * (dens(b) / max) * (VH - 4 - hb)), [x, bw] = edges(b), d = `M${x.toFixed(1)} ${base.toFixed(1)}v${(-h).toFixed(1)}h${bw.toFixed(1)}v${h.toFixed(1)}z`; // a sliver at least: something is there
     top.set(b, base - h);
     if (inR(b.o)) { pin += d; hin = Math.max(hin, h + hb); } else pout += d;
   }
@@ -2681,7 +2768,7 @@ function renderBest() {
     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
     + `<div class="ttl">${chainMark(p.chain)}<h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
     + `<div class="lbl best-meta">${metaTerms(p)} · ${term('range', rangeTxt(w.range))}</div>`
-    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div><div class="fmrow"><span class="lbl">LP fees · 30 d</span>${feeMini(p)}${histBtn(p, { list: 'best' })}</div></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
+    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div>${fmLink(p, 'best')}</div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + `<div class="best-body"><div class="best-l">`
     + `<div class="bigline"><span class="bignum${w.net < 0 ? ' neg' : ''}">${pct(w.net)}</span><span class="bigsub">${daysTxt} ${term('net', 'net APR')} at ${usdFull(L.ticket)}<br>after ${term('lvr', 'LVR')}, swaps and gas</span></div>`
     + `<p class="lead" data-lead>${leadLine(w)}</p>` + breakdown(w)
@@ -2730,6 +2817,12 @@ function dailyStrip(p, w, id = 'daily-best') {
     return { i0, i1, med: sv.length ? sv[Math.floor(sv.length / 2)] : null, hi, iMax: hi > 0 ? i0 + v.slice(i0, i1).indexOf(hi) : -1 };
   };
   const ts = d.map((x) => x.t);
+  // v0.6.0 (the owner, 15 Nov 2026): over its left end the strip says why it stops: 30 days here, the year in History; a pool
+  // born inside the window: when, and that nothing came before (never bars of 0). In its title row (room the zoom buttons leave
+  // free), never over the bars
+  const born = isNum(p.createdAt) && p.createdAt > d[0].t - D, endMark = born
+    ? `<span class="pz-born">Pool created ${dm(p.createdAt)} · no earlier history</span>`
+    : `<button type="button" class="pz-hist" data-act="ws-hist" data-id="${esc(p.id)}" aria-label="30-day view: older days are in this pool's History"><span>30-day view · older days in History ›</span></button>`;
   const P = pzTime(id, p.id, N, {
     words: ['older', 'newer'], aria: ['Show older days', 'Show newer days'], hint: '◂ drag for older days',
     mid: true, tAt: (u) => kAt(ts, u, D), uAt: (t) => kU(ts, t, D), axis: () => taxOf(id), tip: (u) => dailyTip(p, d, v, Math.floor(u), seen().med),
@@ -2738,7 +2831,7 @@ function dailyStrip(p, w, id = 'daily-best') {
       let s = `<svg viewBox="${x0.toFixed(2)} 0 ${Wd} ${Ht}" preserveAspectRatio="none" role="img" aria-label="Fees per 1,000 dollars, one bar per day; the median is marked">`;
       v.forEach((x, i) => { if (isNum(x)) s += `<rect x="${(i * bw + 0.4).toFixed(1)}" y="${(Ht - (x / mx) * (Ht - 2)).toFixed(1)}" width="${Math.max(0.6, bw - 0.8).toFixed(1)}" height="${((x / mx) * (Ht - 2)).toFixed(1)}" fill="${i === z.iMax ? '#E8B84A' : '#16C784'}"/>`; });
       if (z.med != null) { const y = (Ht - (z.med / mx) * (Ht - 2)).toFixed(1); s += `<line class="median" x1="${x0.toFixed(1)}" x2="${(x0 + Wd).toFixed(1)}" y1="${y}" y2="${y}" stroke="#E6EDF3" stroke-dasharray="3 2" stroke-width="1" vector-effect="non-scaling-stroke"/>`; }
-      return s + '</svg>' + pzEnds(-a / len, (b - N) / len, 'NO OLDER DAYS', 'TODAY');
+      return s + '</svg>' + pzEnds(-a / len, (b - N) / len, born ? 'NO EARLIER DAYS' : 'IN HISTORY ›', 'TODAY');
     },
     caps: () => {
       const z = seen();
@@ -2746,7 +2839,7 @@ function dailyStrip(p, w, id = 'daily-best') {
         z.iMax >= 0 ? `median $${z.med.toFixed(2)} · max $${z.hi.toFixed(2)} on ${dm(d[z.iMax].t)}` : `no fees in ${z.i1 - z.i0} days`];
     },
   });
-  return `<div class="daily chartbox" data-chartbox="${id}"><div class="pane-title">${pzCapsHtml(id)}${ztools(id, p.id)}</div>${pzShell(id, 'pz-bars')}${warn}</div>`;
+  return `<div class="daily chartbox" data-chartbox="${id}"><div class="pane-title">${pzCapsHtml(id)}<span class="pz-foot">${endMark}</span>${ztools(id, p.id)}</div>${pzShell(id, 'pz-bars')}${warn}</div>`;
 }
 
 // ---------- chart zoom, pan and "open in a new window" ----------
@@ -2786,7 +2879,8 @@ const panPut = (id, key, v) => { (S.pan ||= {})[id] = { k: key, v }; };
 const panned = (id, key) => !!(S.pan && S.pan[id] && S.pan[id].k === key);
 function ztools(id, pool) {
   const lv = zget(id), [z0, z1] = zrange(id);
-  return `<div class="ctools"><div class="zseg" role="group" aria-label="Zoom this chart">`
+  const hp = (id === 'liq-best' || id === 'liq-detail' || id === 'liq-ws') && pool && !SOLO ? poolById(pool) : null; // v0.6.0 (the owner): the tiers' History, from the chart that stacks them
+  return `<div class="ctools">${hp ? histBtn(hp, { cls: 'sm zh', src: id }) : ''}<div class="zseg" role="group" aria-label="Zoom this chart">`
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="-1" aria-label="Zoom out" title="Zoom out (or pinch)"${lv <= z0 + 1e-6 ? ' disabled' : ''}>−</button>`
     + `<button type="button" data-act="zoom" data-chart="${id}" data-dir="1" aria-label="Zoom in" title="Zoom in (or pinch)"${lv >= z1 - 1e-6 ? ' disabled' : ''}>+</button></div>`
     + (!near1(lv, zdef(id)) || panned(id, pool || '') ? `<button type="button" class="zreset" data-act="zreset" data-chart="${id}" aria-label="Reset zoom" title="Reset zoom (or double-tap the chart)">reset</button>` : '')
@@ -4258,7 +4352,8 @@ function renderPair() {
   { const b = $('#sheet-pair'), bp = S.backTo && poolById(S.backTo);
     if (bp) { b.hidden = false; b.dataset.act = 'pair-back'; b.textContent = `‹ Back to ${bp.pair} ${feeTxt(bp.feeTier)}`; } else b.hidden = true; }
   $('#sheet-star').innerHTML = ''; renderSim(null);
-  $('#sheet-hist').hidden = true; $('#sheet-ws').hidden = true; // each pool's row has its own History
+  $('#sheet-ws').hidden = true; // v0.6.0: the pair's History (every tier combined) in the header, and each pool's in its row
+  { const b = $('#sheet-hist'), q = pools[0] || every[0]; b.hidden = !q; if (q) { b.dataset.id = q.id; b.setAttribute('aria-label', `History of ${name}: every tier combined`); } }
   $('#sheet-title').textContent = name;
   sheetChain(null);
   $('#sheet-meta').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${[...new Set(pools.map((p) => chainLong(p.chain)))].join(' + ')} · ${usd(totVol)} ${WIN_WORD[wk]} volume${hid ? ' · ' + hidTxt(hid) : ''}`;
@@ -4618,7 +4713,11 @@ function feeChart(p, id) {
 }
 function fcSet(act, v) { // the switches: which pools, the scale (kept on this device), the days shown
   const id = 'd-day';
-  if (act === 'fscale') { store.set('lps.flog', v === 'log' ? '1' : '0'); renderDetail(); return; }
+  if (act === 'fscale') { // v0.6.0: the workspace's hourly chart has the same switch: both views follow it
+    store.set('lps.flog', v === 'log' ? '1' : '0');
+    if (WS.open) { if (S.detail) renderDetail(); wsRender(); const w = $(`#ws [data-act="fscale"][data-v="${v}"]`); if (w) w.focus({ preventScroll: true }); return; }
+    renderDetail(); return;
+  }
   const P = PZ[id];
   if (act === 'fmode') { S.fwant = P ? P.span() : null; S.fmode = v; renderDetail(); }
   else if (act === 'fzc' && P) { const d = +v; pzStop(id); (S.zoom ||= {})[id] = d ? clamp(Math.log2(P.n / d), 0, P.zr()[1]) : 0; if (S.pan) delete S.pan[id]; renderDetail(); }
@@ -4636,7 +4735,7 @@ function renderDetail() {
   $('#sheet-pair').hidden = false; $('#sheet-pair').dataset.key = pairKey(p); $('#sheet-pair').dataset.act = 'pair'; $('#sheet-pair').textContent = 'Pair view ▸';
   for (const [sel, lab] of [['#sheet-hist', 'History of '], ['#sheet-ws', 'Open full screen: ']]) { const b = $(sel); b.hidden = false; b.dataset.id = p.id; b.setAttribute('aria-label', lab + poolWord(p)); } // v0.6.0: History and the workspace
   const hd = S.hist && S.hist.pools && S.hist.pools[p.id], fh = feeHist(p);
-  $('#sheet-fee').innerHTML = fh && hd && Array.isArray(hd.d) ? `<button type="button" class="feeh" data-act="feehist" title="Every day of LP fees: the full chart below">${feeMini(p, 150, 28, true)}<span class="lbl">30 D ▸</span></button>` : `<span class="feeh" style="cursor:default">${feeMini(p, 150, 28, true)}<span class="lbl">30 D</span></span>`;
+  $('#sheet-fee').innerHTML = `<button type="button" class="feeh" data-act="ws-hist" data-id="${esc(p.id)}" aria-label="Open this pool's history: fees, volume and TVL" title="History: fees, volume and TVL a day">${feeMini(p, 150, 28, true)}<span class="hgo">${HIST_SVG}History ›</span></button>`; // v0.6.0: the bar leads to History
   renderSim(p);
   const rowsDef = [
     ['Days covered', (x) => (isNum(x.days) ? +x.days.toFixed(1) + (x.partial ? ' (partial)' : '') : DASH)],
@@ -4704,16 +4803,18 @@ const WS_RANGES = [[30, '30D'], [90, '90D'], [365, '1Y'], [0, 'All']];
 const WS_IDS = ['liq-ws', 'daily-ws', 'ws-hr']; // its pan charts: let go of when it closes or changes tab
 const WS_CHART_TAB = { 'liq-best': 'liquidity', 'liq-detail': 'liquidity', 'daily-best': 'overview', 'daily-detail': 'overview', 'd-px': 'overview', 'd-hr': 'overview', 'd-fees': 'history', 'd-day': 'history' };
 const WS_CHART_FOCUS = { 'liq-best': 'liq-ws', 'liq-detail': 'liq-ws', 'daily-best': 'daily-ws', 'daily-detail': 'daily-ws', 'd-hr': 'ws-hr', 'd-fees': 'hs', 'd-day': 'hs' };
-const WS = { open: false, id: null, tab: 'overview', list: [], opener: null, osig: null, y: 0, sb: 0, tier: null, cur: null, zoom: null, big: null, sort: { k: 't', dir: -1 }, cmp: [], lvl: null, dead: null, full: false, ms: null, v: null, q: '' };
+const WS = { open: false, id: null, tab: 'overview', list: [], opener: null, osig: null, y: 0, sb: 0, tiers: null, rangeOv: null, anim: null, cur: null, zoom: null, big: null, sort: { k: 't', dir: -1 }, cmp: [], lvl: null, dead: null, full: false, ms: null, v: null, q: '' };
 const HIST_SVG = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="6.5" width="2.4" height="4.5" rx=".6" fill="currentColor"/><rect x="4.8" y="3.5" width="2.4" height="7.5" rx=".6" fill="currentColor"/><rect x="8.6" y="1" width="2.4" height="10" rx=".6" fill="currentColor"/></svg>';
 const FS_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const wsSelf = () => (document.documentElement.classList.contains('m3d') ? '#5EE6C8' : '#16C784');
 const poolWord = (p) => `${p.pair} ${feeTxt(p.feeTier)} on ${chainOf(p.chain).name}`;
 // the History button: the same everywhere; list names the list ‹ › walks through in the workspace
-function histBtn(p, { list = '', cls = '', word = 'History' } = {}) {
-  return `<button type="button" class="hbtn${cls ? ' ' + cls : ''}" data-act="ws-hist" data-id="${esc(p.id)}"${list ? ` data-wsl="${list}"` : ''} aria-label="${esc('History of ' + poolWord(p))}" title="History: fees, volume and TVL a day"><span>${HIST_SVG}${word}</span></button>`;
+function histBtn(p, { list = '', cls = '', word = 'History', src = '' } = {}) {
+  return `<button type="button" class="hbtn${cls ? ' ' + cls : ''}" data-act="ws-hist" data-id="${esc(p.id)}"${list ? ` data-wsl="${list}"` : ''}${src ? ` data-src="${src}"` : ''} aria-label="${esc('History of ' + poolWord(p))}" title="History: fees, volume and TVL a day"><span>${HIST_SVG}${word}</span></button>`;
 }
-const wsRange = () => { const s = store.get('lps.wsr'), v = Number(s); return s !== null && [30, 90, 365, 0].includes(v) ? v : 90; }; // the last range used, else 90 days
+const wsRange = () => { if (WS.rangeOv != null) return WS.rangeOv; const s = store.get('lps.wsr'), v = Number(s); return s !== null && [30, 90, 365, 0].includes(v) ? v : 90; }; // the last range used, else 90 days
+// C (the owner, 15 Nov 2026): the "LP fees · 30 d" row is one link to History (tiers all on; 90 days, or all of a younger pool)
+const fmLink = (p, list) => `<button type="button" class="fmrow fmlink" data-act="ws-hist" data-id="${esc(p.id)}" data-wsl="${list}" data-range="auto" aria-label="Open this pool's history: fees, volume and TVL" title="History: fees, volume and TVL a day"><span class="lbl">LP fees · 30 d</span>${feeMini(p, 90, 22, true)}<span class="hgo">${HIST_SVG}History ›</span></button>`;
 function wsListFrom(el, id) { // the pools ‹ › walks through: the list the button sat in, in the order shown
   const L = el && el.dataset ? el.dataset.wsl || (el.closest && el.closest('#best') ? 'best' : el.closest && el.closest('#sheet') ? 'all' : '') : '';
   let ids = [];
@@ -4741,6 +4842,8 @@ function wsOpen(id, tab, el, o = {}) {
   WS.list = o.list || wsListFrom(el, id);
   WS.dead = null;
   wsSet(id);
+  if (o.tiers !== undefined) WS.tiers = o.tiers;
+  if (o.range === 'auto') { const d = hsDays(poolById(id)); WS.rangeOv = d && d.last - d.first < 89 * D ? 0 : 90; } else WS.rangeOv = null;
   WS.tab = WS_TAB.has(tab) ? tab : 'overview';
   wsRender(true);
   wsHash();
@@ -4748,7 +4851,7 @@ function wsOpen(id, tab, el, o = {}) {
 }
 function wsSet(id) {
   const was = WS.id;
-  WS.id = id; WS.tier = id; WS.cur = null; WS.zoom = null;
+  WS.id = id; WS.tiers = null; WS.cur = null; WS.zoom = null; // a pool opens with every tier on
   if (!WS.cmp.length || (WS.cmp.length === 1 && WS.cmp[0] === was)) WS.cmp = [id];
 }
 function wsFocus(want) {
@@ -4913,10 +5016,13 @@ function wsRender(fresh = false) {
   const tabs = $('#ws-tabs');
   tabs.hidden = !p;
   if (p) tabs.innerHTML = WS_TABS.map(([k, t]) => `<button type="button" role="tab" class="ws-tab" id="ws-t-${k}" data-act="ws-tab" data-v="${k}" aria-selected="${k === WS.tab}" aria-controls="ws-body" tabindex="${k === WS.tab ? 0 : -1}">${k === 'history' ? `<span class="hbi">${HIST_SVG}</span>` : ''}${t}</button>`).join('');
+  const stb = p && tabs.querySelector('[aria-selected="true"]'); // a phone's tab row scrolls: the open tab stays in it
+  if (stb) { const r = stb.offsetLeft + stb.offsetWidth - tabs.clientWidth + 12; tabs.scrollLeft = stb.offsetLeft < 12 ? 0 : Math.max(0, r); }
   body.setAttribute('role', 'tabpanel'); body.setAttribute('aria-labelledby', p ? 'ws-t-' + WS.tab : 'ws-title');
   for (const id of WS_IDS) { pzStop(id); delete PZ[id]; }
   if (S.fl && S.fl.cid === 'liq-ws') flEnd();
   WS.v = null; WS.mod = null; WS.lmod = null;
+  if (WS.anim) { cancelAnimationFrame(WS.anim.raf); WS.anim = null; }
   let html = '';
   try {
     if (WS.dead) html = wsDeadHtml();
@@ -5025,8 +5131,10 @@ function hsAt(e, t) { // a pool's day: its row; not read (HS_NR); undefined befo
   if (t < e.d.first) return (e.d.yp && isNum(e.d.yp.age)) || (isNum(e.q.createdAt) && t + D <= e.q.createdAt) ? undefined : HS_NR;
   return HS_NR;
 }
+function hsFeeNote(e, t) { const yp = e.d.yp; return yp && yp.lim === 'archive' && isNum(yp.from) && t < yp.from ? 'archive' : null; }
+const hsBorn = (m) => { const ts = m.tiers.map((e) => (e.d.yp && isNum(e.d.yp.age) ? e.d.first : isNum(e.q.createdAt) ? e.q.createdAt : null)).filter(isNum); return ts.length ? Math.min(...ts) : null; };
 function hsTvNote(e, t) { const tp = e.d.ytp; return !tp ? null : tp.lim === 'v4' ? 'v4' : tp.lim === 'archive' && isNum(tp.from) && t < tp.from ? 'archive' : null; }
-const HS_NA = { v4: 'not readable: a v4 pool holds no balance of its own (its TVL is read from its map, from the day recording began)', archive: 'not readable: past Base’s archive reach (about 90 days)' };
+const HS_NA = { v4: 'not readable: a v4 pool holds no balance of its own (its TVL is read from its map, from the day recording began)', archive: 'older than Base’s 90-day archive · not readable' };
 const HS_SRC = {
   f: { s: ['s', 'swaps', 'exact: the day’s own swaps'], x: ['x', 'counters', 'exact: the pool’s fee counters'], e: ['e', '≈ estimate', 'estimated: the day’s volume × the fee'], g: ['g', 'gap average', 'a stretch the backfill hasn’t split into days yet'] },
   v: { s: ['s', 'swaps', 'the day’s own swaps'], g: ['g', 'candles', 'GeckoTerminal’s day candle'] },
@@ -5045,14 +5153,17 @@ function hsAgg(xs, k) { // a day's total: undefined where no pool was there; nul
   return !n ? undefined : un ? null : v;
 }
 function hsModel(p) {
-  const all = hsTierList(p), comb = WS.tier === 'all' && all.length > 1;
-  const one = comb ? null : all.find((e) => e.q.id === WS.tier) || all.find((e) => e.q.id === p.id) || all[0] || null;
-  const tiers = comb ? all : one ? [one] : [];
+  const all = hsTierList(p), onSet = WS.tiers ? new Set(WS.tiers) : null;
+  let tiers = onSet ? all.filter((e) => onSet.has(e.q.id)) : all;
+  if (!tiers.length) tiers = all.slice(0, 1);
+  const comb = tiers.length > 1;
   const out = { all, tiers, comb, rows: [], days: 0, R: wsRange() };
   if (!tiers.length) return out;
-  const a = Math.min(...tiers.map((e) => e.d.first)), b = Math.max(...tiers.map((e) => e.d.last));
+  let a = Math.min(...tiers.map((e) => e.d.first));
+  const b = Math.max(...tiers.map((e) => e.d.last));
+  out.days = Math.round((b - a) / D) + 1;
+  if (out.R && out.R > out.days) a = b - (out.R - 1) * D; // D (the owner): the range is the range; days before the pool are a band of their own
   const days = []; for (let t = a; t <= b + 1; t += D) days.push(t);
-  out.days = days.length;
   let vis = out.R ? days.slice(-out.R) : days;
   if (WS.zoom) { const z = vis.filter((t) => t >= WS.zoom[0] && t <= WS.zoom[1]); if (z.length >= 2) vis = z; else WS.zoom = null; }
   out.rows = vis.map((t) => {
@@ -5060,6 +5171,8 @@ function hsModel(p) {
     r.tvNa = r.tv === null ? tiers.map((e, j) => (xs[j] && !isNum(xs[j].tv) ? hsTvNote(e, t) : '-')).filter((x) => x !== '-') : null;
     if (r.tvNa && !r.tvNa.every(Boolean)) r.tvNa = null; // some of it just wasn't read
     r.fe = xs.some((x) => x && x.fs === 'e');
+    r.fNa = r.f === null && tiers.every((e, j) => !xs[j] || isNum(xs[j].f) || hsFeeNote(e, t)) ? 'archive' : null; // fees past Base's archive: not readable
+    r.pre = r.f === undefined && r.v === undefined && r.tv === undefined; // before the pool (every pool shown) existed
     return r;
   });
   return out;
@@ -5080,38 +5193,45 @@ function hsScale(vals, Ht) {
   for (let v = 0; v <= top + step * 1e-6; v += step) ticks.push({ v, y: Y(v) });
   return { Y, ticks, top };
 }
-function hsBars(m, k, Wd, Ht, kind) { // one chart: bars (fees, volume) or a stepped area (TVL), stacked by pool when combined
+function hsBars(m, k, Wd, Ht, kind, fr = null) { // one chart: bars (fees, volume) or a stepped area (TVL), stacked by pool when combined; fr: each pool's share while it builds up
   const rows = m.rows, n = rows.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), base = Ht - 1;
+  let pre = '', preN = 0, preA = null, preB = null, naA = null, naB = null;
   const conf = rows.map((r) => (r.xs.some((x) => x && x.fu) && k === 'f' ? null : r[k]));
   const sc = hsScale(conf.some((v) => isNum(v) && v > 0) ? conf : rows.map((r) => r[k]), Ht), Y = sc.Y;
   const paths = new Map(), add = (key, d) => paths.set(key, (paths.get(key) || '') + d);
   let nr = '', na = '', line = '', prevEnd = null;
   rows.forEach((r, i) => {
     const x0 = HS_AX + i * slot, v = r[k];
-    if (v === undefined) { prevEnd = null; return; }
-    if (v === null) { const dd = `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; if (k === 'tv' && r.tvNa) na += dd; else nr += dd; prevEnd = null; return; }
+    if (v === undefined) { if (r.pre) { pre += `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; preN++; if (preA == null) preA = x0; preB = x0 + slot; } prevEnd = null; return; }
+    if (v === null) { const dd = `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; if ((k === 'tv' && r.tvNa) || (k === 'f' && r.fNa)) { na += dd; if (naA == null) naA = x0; naB = x0 + slot; } else nr += dd; prevEnd = null; return; }
     const bw = kind === 'area' ? slot : Math.max(0.6, slot - Math.min(1.2, slot * 0.24));
     let cum = 0;
     r.xs.forEach((x, j) => {
       if (!x || !isNum(x[k]) || x[k] <= 0) return;
-      const y0 = Y(cum); cum += x[k]; const y1 = Y(cum);
+      const sh = fr ? fr[j] : 1;
+      if (!(sh > 1e-3)) return;
+      const y0 = Y(cum); cum += x[k] * sh; const y1 = Y(cum);
       if (y0 - y1 < 0.05) return;
       const col = m.tiers[j].col, key = col + (k === 'f' && x.fs === 'e' ? '|e' : '') + (k === 'f' && x.fu ? '|u' : '');
       add(key, `M${x0.toFixed(2)} ${y1.toFixed(2)}h${bw.toFixed(2)}V${y0.toFixed(2)}H${x0.toFixed(2)}z`);
     });
-    if (kind === 'area') { const y = Y(v).toFixed(2); line += prevEnd === i ? `V${y}H${(x0 + slot).toFixed(2)}` : `M${x0.toFixed(2)} ${y}H${(x0 + slot).toFixed(2)}`; prevEnd = i + 1; }
+    if (kind === 'area' && cum > 0) { const y = Y(cum).toFixed(2); line += prevEnd === i ? `V${y}H${(x0 + slot).toFixed(2)}` : `M${x0.toFixed(2)} ${y}H${(x0 + slot).toFixed(2)}`; prevEnd = i + 1; } else if (kind === 'area') prevEnd = null;
   });
   let g = `<defs><pattern id="hs-nr-${k}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.34)"/></pattern><pattern id="hs-na-${k}" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r=".8" fill="rgba(139,150,163,.38)"/></pattern></defs>`;
   for (const t of sc.ticks) g += `<line class="grid" x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${t.y.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke-width="1"/><text x="${HS_AX - 6}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="end">${fcAx(t.v)}</text>`;
+  if (pre) g += `<path class="hs-pre" d="${pre}" fill="rgba(139,150,163,.07)"/>`;
   if (nr) g += `<path class="hs-nr" d="${nr}" fill="url(#hs-nr-${k})"/>`;
   if (na) g += `<path class="hs-na" d="${na}" fill="url(#hs-na-${k})"/>`;
+  const band = (a, b2, t) => (b2 - a >= 120 ? `<text class="hs-bl" x="${((a + b2) / 2).toFixed(1)}" y="${(HS_PT + 14).toFixed(1)}" text-anchor="middle">${esc(t)}</text>` : '');
+  if (k === 'f' && pre) { const bt = hsBorn(m); g += band(preA, preB, bt ? `pool created ${dm(bt)} · nothing before` : 'before the pool existed'); }
+  if (na && naB - naA >= 120) g += band(naA, naB, k === 'tv' && m.tiers.some((e) => e.d.ytp && e.d.ytp.lim === 'v4') ? 'v4: TVL before recording · not readable' : 'older than Base’s 90-day archive · not readable');
   for (const [key, d] of paths) {
     const [col, ...fl] = key.split('|'), e = fl.includes('e'), u = fl.includes('u');
     g += `<path class="hs-b${e ? ' e' : ''}${u ? ' u' : ''}" d="${d}" fill="${col}"${kind === 'area' ? ' fill-opacity=".34"' : e ? ' fill-opacity=".38"' : u ? ' fill-opacity=".3"' : ''}${u ? ` stroke="${col}" stroke-width="1"` : ''}/>`;
   }
   if (line) g += `<path class="hs-l" d="${line}" fill="none" stroke="${m.tiers.length === 1 ? m.tiers[0].col : '#E6EDF3'}" stroke-width="1.6"/>`;
   g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${base + 0.5}" y2="${base + 0.5}" stroke="#3B4756" stroke-width="1"/>`;
-  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" aria-hidden="true">${g}</svg>`;
+  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" aria-hidden="true">${g}</svg>`;
 }
 function hsAxis(ts, Wd) { // the one date axis under the three charts
   const n = ts.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), most = Math.max(2, Math.floor(PW / 74));
@@ -5162,8 +5282,8 @@ function hsHtml(p) {
   if (!S.hist) return `<div class="hs-empty" role="status"><b>History isn’t read yet.</b> ${S.missing && S.missing.hist ? 'The history file isn’t published yet.' : 'The history file hasn’t loaded; it is read again every minute.'} <button type="button" class="linkbtn" data-act="ws-tab" data-v="overview">Overview</button></div>`;
   const m = hsModel(p);
   if (!m.tiers.length) return `<div class="hs-empty" role="status"><b>No history read for this pool yet.</b> The scanner hasn’t recorded a day of it. <button type="button" class="linkbtn" data-act="ws-tab" data-v="overview">Overview</button> · <button type="button" class="linkbtn" data-act="ws-close">Go to the dashboard</button></div>`;
-  const chips = m.all.length > 1 ? `<div class="hs-tiers" role="group" aria-label="Which pool of the pair">${m.all.map((e) => `<button type="button" class="hs-chip" data-act="ws-tier" data-v="${esc(e.q.id)}" style="--c:${e.col}" aria-pressed="${!m.comb && m.tiers[0] === e}" aria-label="${esc(poolWord(e.q))}${e.q.id === p.id ? ' (this pool)' : ''}"><span><i class="sq"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}${e.q.id === p.id ? ' · this' : ''}</span></button>`).join('')}`
-    + `<button type="button" class="hs-chip" data-act="ws-tier" data-v="all" style="--c:#E6EDF3" aria-pressed="${m.comb}" aria-label="All tiers of the pair combined, stacked"><span><i class="sq" style="background:linear-gradient(90deg,${m.all.map((e) => e.col).join(',')})"></i>All combined</span></button></div>` : '';
+  const chips = m.all.length > 1 ? `<div class="hs-tiers" role="group" aria-label="The pair's tiers: tap one to switch it off or on, double-click to keep it alone">${m.all.map((e) => `<button type="button" class="hs-chip" data-act="ws-tier" data-v="${esc(e.q.id)}" style="--c:${e.col}" aria-pressed="${m.tiers.includes(e)}" aria-label="${esc(poolWord(e.q))}${e.q.id === p.id ? ' (this pool)' : ''}: ${m.tiers.includes(e) ? 'on, tap to switch off' : 'off, tap to switch on'}"><span><i class="sq"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}${e.q.id === p.id ? ' · this' : ''}</span></button>`).join('')}`
+    + `<button type="button" class="hs-chip" data-act="ws-tier" data-v="all" style="--c:#E6EDF3" aria-pressed="${m.tiers.length === m.all.length}" aria-label="All tiers of the pair combined, stacked"><span><i class="sq" style="background:linear-gradient(90deg,${m.all.map((e) => e.col).join(',')})"></i>All combined</span></button></div>` : '';
   const one = m.comb ? null : m.tiers[0], dd = m.tiers.map((e) => e.d);
   const notes = [];
   for (const e of m.tiers) {
@@ -5179,7 +5299,7 @@ function hsHtml(p) {
   const prog = one && one.d.yp ? (() => { const yp = one.d.yp, vp = one.d.yvp, tp = one.d.ytp; return `exact fees <b>${int(yp.exact)}</b>${isNum(yp.age) ? ` of <b>${int(yp.age)}</b>` : ''} days${yp.est ? ` · ${int(yp.est)} estimated` : ''}${vp ? ` · volume ${int((vp.s || 0) + (vp.g || 0))} days (${int(vp.s || 0)} swaps, ${int(vp.g || 0)} candles)` : ''}${tp ? ` · TVL ${int((tp.b || 0) + (tp.r || 0) + (tp.m || 0))} days` : ''}`; })() : '';
   const leg = `<div class="hs-leg">${m.comb ? m.tiers.map((e) => `<span><i style="background:${e.col}"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}</span>`).join('') : `<span><i style="background:${one.col}"></i>exact</span><span><i class="e" style="background:${one.col}"></i>≈ estimated</span>`}<span><i class="nr"></i>not read (never 0)</span>${m.rows.some((r) => r.tvNa) ? '<span><i class="na"></i>not readable</span>' : ''}</div>`;
   WS.mod = m;
-  return `<div class="hs" data-ms="" data-rows="${m.rows.length}" data-mode="${m.comb ? 'all' : 'one'}"><div class="hs-main">`
+  return `<div class="hs" data-ms="" data-rows="${m.rows.length}" data-mode="${m.comb ? (m.tiers.length === m.all.length ? 'all' : 'some') : 'one'}" data-ph="end"><div class="hs-main">`
     + `<div class="hs-ctl">${hsRangeSeg()}${chips}</div>`
     + `<div class="hs-card" id="hs-card" aria-live="polite"></div>`
     + hsStackHtml(`Fees, volume and TVL a day, ${m.comb ? 'all tiers combined' : poolWord(one.q)}`, m.rows.length)
@@ -5191,12 +5311,12 @@ const HS_COLS = [['t', 'Day'], ['f', 'Fees'], ['v', 'Volume'], ['tv', 'TVL'], ['
 const hsKeyOf = (r, k) => (k === 't' ? r.t : k === 'r' ? (isNum(r.f) && isNum(r.v) && r.v > 0 ? r.f / r.v : null) : isNum(r[k]) ? r[k] : null);
 function hsSorted(m) {
   const { k, dir } = WS.sort;
-  return m.rows.filter((r) => r.f !== undefined || r.v !== undefined || r.tv !== undefined).slice().sort((a, b) => { const x = hsKeyOf(a, k), y = hsKeyOf(b, k); if (x == null || y == null) return x == null && y == null ? b.t - a.t : x == null ? 1 : -1; return (x - y) * dir || b.t - a.t; });
+  return m.rows.filter((r) => !r.pre).slice().sort((a, b) => { const x = hsKeyOf(a, k), y = hsKeyOf(b, k); if (x == null || y == null) return x == null && y == null ? b.t - a.t : x == null ? 1 : -1; return (x - y) * dir || b.t - a.t; });
 }
 function hsCell(r, k) {
   const v = r[k], src = hsSrcOf(null, r, k).join('+');
   if (v === undefined) return `<td class="nr">${DASH}</td>`;
-  if (!isNum(v)) return `<td class="nr">${k === 'tv' && r.tvNa ? DASH : 'not read'}</td>`;
+  if (!isNum(v)) return `<td class="nr">${(k === 'tv' && r.tvNa) || (k === 'f' && r.fNa) ? DASH : 'not read'}</td>`;
   return `<td>${k === 'f' && r.fe ? '≈ ' : ''}${usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
 }
 function hsTableHtml(m) {
@@ -5222,14 +5342,18 @@ function hsCardHtml(m, r) {
   const dv = (k, label) => {
     const v = r[k], s = hsSrcOf(m, r, k), map = HS_SRC[k];
     let q = s.map((x) => (map[x] ? `${map[x][0]} · ${map[x][1]}` : x)).join(' + ');
-    if (v === null && k === 'tv' && r.tvNa) q = HS_NA[r.tvNa[0]] || 'not readable';
+    if (r.pre) q = ''; // said once, in the card's own line below (three times over made the card jump on a phone)
+    else if (v === null && k === 'f' && r.fNa) q = HS_NA.archive;
+    else if (v === null && k === 'tv' && r.tvNa) q = HS_NA[r.tvNa[0]] || 'not readable';
     else if (v === null) q = m.comb ? `${r.xs.filter((x) => x && !isNum(x[k])).length} of ${r.xs.filter(Boolean).length} pools not read` : 'gap: never counted as 0';
     else if (v === undefined) q = 'the pool wasn’t there yet';
     const tt = s.map((x) => (map[x] ? map[x][2] : '')).filter(Boolean).join('; ');
-    return `<span class="hs-dv" data-k="${k}"><span class="lbl">${label}</span><b class="${isNum(v) ? '' : 'nr'}">${v === null && k === 'tv' && r.tvNa ? DASH : hsMoney(v, k === 'f' && r.fe)}</b><span class="q${v === null && k === 'tv' && r.tvNa ? ' na' : ''}"${tt ? ` title="${esc(tt)}"` : ''}>${esc(q)}</span></span>`;
+    const naV = (v === null && ((k === 'tv' && r.tvNa) || (k === 'f' && r.fNa))) || r.pre;
+    return `<span class="hs-dv" data-k="${k}"><span class="lbl">${label}</span><b class="${isNum(v) ? '' : 'nr'}">${naV ? DASH : hsMoney(v, k === 'f' && r.fe)}</b><span class="q${naV ? ' na' : ''}" title="${esc(tt || q)}">${esc(q)}</span></span>`;
   };
   return `<span class="hs-dd">${hsDayTxt(r.t)}<small>${m.comb ? `${m.tiers.length} tiers combined` : esc(feeTxt(m.tiers[0].q.feeTier) + ' · ' + chainOf(m.tiers[0].q.chain).name)}</small></span>`
     + dv('f', 'Fees') + dv('v', 'Volume') + dv('tv', 'TVL') + `<span class="hs-dv" data-k="r"><span class="lbl">Fee ÷ vol</span><b>${hsRate(r)}</b><span class="q">${isNum(r.f) && isNum(r.v) ? 'the fee the LPs kept' : DASH}</span></span>`
+    + (r.pre ? `<span class="hs-pre">${(() => { const bt = hsBorn(m); return bt ? `before the pool existed (created ${dm(bt)}): nothing to read, never 0` : 'before the pool existed: nothing to read, never 0'; })()}</span>` : '')
     + `<button type="button" class="linkbtn hs-dc" data-act="ws-day" data-t="${r.t}" aria-label="Every pool of the pair on ${hsDayTxt(r.t)}">Day detail ▸</button>`;
 }
 // the day's detail: every pool of the pair on that day (one level deeper: ‹ Back returns to History)
@@ -5265,12 +5389,37 @@ function hsMount() {
   st.querySelector('[data-svg="ax"]').innerHTML = rows.length ? hsAxis(rows, Wd) : '';
   WS.ms = performance.now() - t0;
   const hs = st.closest('.hs, .ln'); if (hs) hs.dataset.ms = WS.ms.toFixed(1);
+  if (WS.tab === 'history' && WS.mod && WS.mod.comb && !HS_SEEN.has(WS.id) && !reduced() && !NOFLASH) setTimeout(() => hsBuild(Wd), 0);
   draw = { st, rows, cardOf, Wd, slot: (Wd - HS_AX - HS_PR) / Math.max(1, rows.length) };
   WS.v = draw;
   let i = rows.indexOf(WS.cur);
   if (i < 0) i = rows.length - 1;
   hsCursor(i, false);
 }
+// the History chips' build-up (the owner, 15 Nov 2026): the whole stack flashes, collapses, then each tier grows back in
+// (this pool first, then the others by their fees in view), its chip lit as it grows; once per pool in a page's life
+const HS_SEEN = new Set();
+function hsBuild(Wd) {
+  const m = WS.mod, st = $('#ws .hs-stack'), hs = st && st.closest('.hs');
+  if (!m || !st || !m.comb || HS_SEEN.has(WS.id)) return;
+  HS_SEEN.add(WS.id);
+  const size = (j) => sum(m.rows.map((r) => (r.xs[j] && isNum(r.xs[j].f) ? r.xs[j].f : 0)));
+  const ids = m.tiers.map((e, j) => j).slice(1).sort((x, y) => size(y) - size(x)).map(String), ms = fbMs(ids.length), t0 = performance.now(), A = (WS.anim = { raf: 0 });
+  const chips = (f) => { for (const b of $$('#ws .hs-chip[data-act="ws-tier"]')) { const j = m.tiers.findIndex((e) => e.q.id === b.dataset.v); if (j < 0) continue; const lit = j === 0 ? f && f.ownLit : f && f.lit[String(j)], grow = f && (j === 0 ? !f.ownIn : f.a[String(j)] < 1 - 1e-6); b.classList.toggle('fl-wait', !!f && !lit); b.classList.toggle('fl-on', !!f && !!lit && !!grow); } };
+  const draw = (fr) => { for (const [k] of HS_CH) { const c = st.querySelector(`[data-svg="${k}"]`); if (c) c.innerHTML = hsBars(m, k, Wd, hsHt(k), k === 'tv' ? 'area' : 'bar', fr); } };
+  const frame = () => {
+    if (WS.anim !== A || !st.isConnected) return;
+    const t = performance.now() - t0, f = flAt(t, ids);
+    if (t >= ms) { hsBuildEnd(); return; }
+    draw(m.tiers.map((e, j) => (j === 0 ? f.own : f.a[String(j)] || 0))); chips(f); hs.dataset.ph = f.ph;
+    A.raf = requestAnimationFrame(frame);
+  };
+  A.end = () => { draw(null); chips(null); hs.dataset.ph = 'end'; };
+  hs.dataset.ph = 'flash';
+  A.raf = requestAnimationFrame(frame);
+}
+function hsBuildEnd() { const A = WS.anim; if (!A) return; WS.anim = null; cancelAnimationFrame(A.raf); if (A.end) A.end(); }
+for (const ev of ['pointerdown', 'keydown', 'wheel']) addEventListener(ev, () => { if (WS.anim) hsBuildEnd(); }, { capture: true, passive: true }); // a touch ends it at once, on every tier on
 function hsCursor(i, scrollRow = true) {
   const v = WS.v;
   if (!v || !v.rows.length) { const c = $('#hs-card'); if (c) c.innerHTML = hsCardHtml(WS.mod, null); return; }
@@ -5407,7 +5556,7 @@ function wsPair(p) {
   return `<div class="card"><span class="lbl">${esc(pairName(key))} · every pool of the pair · ${WIN_LABEL[wk]}</span><div style="margin-top:8px">${tbl}</div></div>` + lnBlock(lnModel(pools, cols), `Fees, volume and TVL a day: every pool of ${pairName(key)}`);
 }
 function wsHelpHtml() {
-  const k = [['Esc', 'close the top view (a day, the picker, then the workspace)'], ['[  ]', 'previous / next pool of the list'], ['← →', 'step the crosshair a day'], ['F V T', 'make Fees, Volume or TVL big'], ['drag', 'across the dates: zoom into them'], ['double-click', 'reset the zoom'], ['hold + slide', 'on a phone: scrub the days'], ['swipe ↓', 'on a phone, on the header: close'], ['swipe ← →', 'on a phone, on the header: next or previous pool'], ['⌘ / Ctrl-click', 'History, ⤢ or ⧉ opens a new tab']];
+  const k = [['Esc', 'close the top view (a day, the picker, then the workspace)'], ['[  ]', 'previous / next pool of the list'], ['← →', 'step the crosshair a day'], ['F V T', 'make Fees, Volume or TVL big'], ['tap a tier', 'switch it off or on (double-click: keep it alone)'], ['drag', 'across the dates: zoom into them'], ['double-click', 'reset the zoom'], ['hold + slide', 'on a phone: scrub the days'], ['swipe ↓', 'on a phone, on the header: close'], ['swipe ← →', 'on a phone, on the header: next or previous pool'], ['⌘ / Ctrl-click', 'History, ⤢ or ⧉ opens a new tab']];
   return `<span class="lbl">Shortcuts and gestures</span><div class="ws-help">${k.map(([a, b]) => `<kbd>${esc(a)}</kbd><span>${esc(b)}</span>`).join('')}</div>`;
 }
 // the keyboard inside the workspace (called first by the page's key handler)
@@ -5425,9 +5574,9 @@ function wsKey(e) {
   if (e.key === 'Tab') { // the keyboard stays inside the workspace (and its open note)
     const f = $$('#ws button, #ws input, #ws [tabindex="0"], #ws [href], #pop:not([hidden]) button').filter((x) => !x.disabled && x.tabIndex >= 0 && x.getClientRects().length && !x.closest('[hidden]'));
     if (!f.length) return true;
-    const i = f.indexOf(document.activeElement);
-    if (e.shiftKey && (i <= 0)) { e.preventDefault(); f[f.length - 1].focus(); }
-    else if (!e.shiftKey && (i < 0 || i === f.length - 1)) { e.preventDefault(); f[0].focus(); }
+    e.preventDefault(); // every step taken here (Safari's own Tab skips buttons and would leave the workspace)
+    const i = f.indexOf(document.activeElement), j = e.shiftKey ? (i <= 0 ? f.length - 1 : i - 1) : i < 0 || i === f.length - 1 ? 0 : i + 1;
+    f[j].focus({ preventScroll: false });
     return true;
   }
   if (inField || e.metaKey || e.ctrlKey || e.altKey) return false;
@@ -5478,8 +5627,11 @@ function wsClick(el, e) {
     case 'ws-hist': case 'ws-open': {
       const id = el.dataset.id || (S.detail && el.closest('#sheet') ? S.detail : WS.id), tab = act === 'ws-hist' ? 'history' : el.dataset.v || 'overview';
       if (e && (e.metaKey || e.ctrlKey)) { wsNewTab(id, tab); return true; }
-      if (act === 'ws-hist' && WS.open && WS.id === id && !WS.dead) { wsTab('history'); return true; }
-      wsOpen(id, tab, el, { full: act === 'ws-open', list: WS.open && WS.list.includes(id) && !el.dataset.wsl ? WS.list : undefined });
+      let tiers; // B (the owner): from a chart with tier chips, History shows the tiers that chart has on (all on: all combined)
+      const P = el.dataset.src && PZ[el.dataset.src], p0 = poolById(id);
+      if (P && P.every && p0) { const ev = P.every.map((x) => x.id), on = mgOn(p0).filter((x) => ev.includes(x)); tiers = !ev.length || on.length === ev.length ? null : [id, ...on]; }
+      if (act === 'ws-hist' && WS.open && WS.id === id && !WS.dead) { if (tiers !== undefined) WS.tiers = tiers; WS.rangeOv = null; if (WS.tab === 'history') wsRender(true); else wsTab('history'); return true; }
+      wsOpen(id, tab, el, { full: act === 'ws-open', tiers, range: el.dataset.range, list: WS.open && WS.list.includes(id) && !el.dataset.wsl ? WS.list : undefined });
       return true;
     }
     case 'ws-close': wsClose(); return true;
@@ -5487,9 +5639,14 @@ function wsClick(el, e) {
     case 'ws-tab': wsTab(el.dataset.v); return true;
     case 'ws-nav': wsNav(Number(el.dataset.dir)); return true;
     case 'ws-help': popOpen(el, wsHelpHtml()); return true;
-    case 'ws-range': { const v = Number(el.dataset.v); store.set('lps.wsr', String(v)); WS.zoom = null; wsRender(); refocus(`#ws [data-act="ws-range"][data-v="${v}"]`); return true; }
+    case 'ws-range': { const v = Number(el.dataset.v); store.set('lps.wsr', String(v)); WS.rangeOv = null; WS.zoom = null; wsRender(); refocus(`#ws [data-act="ws-range"][data-v="${v}"]`); return true; }
     case 'ws-zreset': WS.zoom = null; wsRender(); refocus('#ws .hs-stack'); return true;
-    case 'ws-tier': WS.tier = el.dataset.v; WS.zoom = null; wsRender(); refocus(`#ws [data-act="ws-tier"][data-v="${el.dataset.v}"]`); return true;
+    case 'ws-tier': { // a tier switches off or on; All combined: every tier; at least one stays on
+      const p = poolById(WS.id), all = p ? hsTierList(p).map((x) => x.q.id) : [], v = el.dataset.v;
+      if (v === 'all') WS.tiers = null;
+      else { let cur = WS.tiers ? WS.tiers.filter((x) => all.includes(x)) : all.slice(); cur = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]; if (!cur.length) cur = [v]; WS.tiers = cur.length === all.length ? null : cur; }
+      WS.zoom = null; wsRender(); refocus(`#ws [data-act="ws-tier"][data-v="${v}"]`); return true;
+    }
     case 'ws-big': WS.big = WS.big === el.dataset.v ? null : el.dataset.v; wsRender(); refocus(`#ws [data-act="ws-big"][data-v="${el.dataset.v}"]`); return true;
     case 'ws-sort': { const k = el.dataset.k; WS.sort = WS.sort.k === k ? { k, dir: -WS.sort.dir } : { k, dir: k === 't' ? -1 : -1 }; wsRender(); refocus(`#ws [data-act="ws-sort"][data-k="${k}"]`); return true; }
     case 'ws-row': { const t = Number(el.dataset.t), v = WS.v; if (v) { const i = v.rows.indexOf(t); if (i >= 0) hsCursor(i, false); } return true; }
@@ -5510,7 +5667,8 @@ document.addEventListener('auxclick', (e) => {
   if (!id || !tab || !poolById(id)) return;
   e.preventDefault(); wsNewTab(id, tab);
 });
-if (window.__lpsHooks) window.__lpsHooks.ws = () => ({ open: WS.open, id: WS.id, tab: WS.tab, lvl: WS.lvl && WS.lvl.kind, list: WS.list.length, tier: WS.tier, cur: WS.cur, zoom: WS.zoom, ms: WS.ms, big: WS.big, cmp: WS.cmp.slice(), dead: WS.dead, full: WS.full }); // the browser tests only
+document.addEventListener('dblclick', (e) => { const b = e.target.closest && e.target.closest('#ws .hs-chip[data-act="ws-tier"]'); if (!b || b.dataset.v === 'all') return; WS.tiers = [b.dataset.v]; WS.zoom = null; wsRender(); refocus(`#ws [data-act="ws-tier"][data-v="${b.dataset.v}"]`); }); // keep one tier alone
+if (window.__lpsHooks) window.__lpsHooks.ws = () => ({ open: WS.open, id: WS.id, tab: WS.tab, lvl: WS.lvl && WS.lvl.kind, list: WS.list.length, tiers: WS.tiers ? WS.tiers.slice() : null, range: wsRange(), cur: WS.cur, zoom: WS.zoom, ms: WS.ms, big: WS.big, cmp: WS.cmp.slice(), dead: WS.dead, full: WS.full }); // the browser tests only
 // /v060-js
 // ---------- jumps that land with the heading in view ----------
 let settle = 0;
@@ -5899,7 +6057,7 @@ function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } =
   const cover = mode === 'sim' ? `<button type="button" class="mc-cover" data-act="sim-cycle" aria-label="Show the next figure on every card (now ${SIM_M[mi][0]})"></button>` : '';
   const foot = mode === 'sim' ? termB(self ? 'thispool' : uv ? 'unverified' : REL_TERM[rel], `<span class="mc-rel${self ? ' g0' : uv ? ' uv' : rel === 0 ? ' g0' : ''}">${self ? 'this pool' : uv ? 'unverified' : REL[rel] || ''}</span>`, 'mc-relb')
     : `<span class="mc-rel"><span class="why-icons">${whyKeys(p, W(p)).slice(0, 4).map(wiSvg).join('') || DASH}</span></span>`;
-  return `<div class="mc chs${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i};${chainCol(p.chain)}">${cover}${name}${feeMini(p)}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}${histBtn(p, { list: mode === 'fav' ? 'fav' : 'sim', cls: 'mch' })}</div>`; // v0.6.0: its History, one tap away
+  return `<div class="mc chs${mode === 'fav' ? ' fav' : ''}${self ? ' self' : ''}${uv ? ' uv' : ''}" data-id="${esc(p.id)}" style="--i:${i};${chainCol(p.chain)}">${cover}${name}${mode === 'fav' ? `<button type="button" class="fmbtn" data-act="ws-hist" data-id="${esc(p.id)}" data-wsl="fav" aria-label="Open this pool's history: fees, volume and TVL" title="History">${feeMini(p)}</button>` : feeMini(p)}<span class="mc-v">${mcVal(p, mode === 'sim' ? mi : 0)}</span>${foot}${mode === 'fav' ? starBtn(p) : ''}${histBtn(p, { list: mode === 'fav' ? 'fav' : 'sim', cls: 'mch' })}</div>`; // v0.6.0: its History, one tap away
 }
 const NAV = (d) => `<button type="button" class="mc-nav ${d < 0 ? 'l' : 'r'}" data-act="mc-scroll" data-dir="${d}" tabindex="-1" aria-label="Scroll the cards ${d < 0 ? 'back' : 'on'}">${CHEV(d)}</button>`;
 const mcStrip = (id, cards, enter) => `<div class="mc-wrap">${NAV(-1)}<div class="mc-track${enter ? ' enter' : ''}" id="${id}">${cards}</div>${NAV(1)}</div>`;
@@ -5960,7 +6118,7 @@ function renderSim(p) {
   if (all.length > SIM_N) cards.push(`<button type="button" class="mc end" data-act="sim-all" aria-expanded="${!!S.simOpen}" aria-controls="sim-list" style="--i:${cards.length}"><span class="big">${all.length}</span>${S.simOpen ? 'hide the list' : 'see all'}</button>`);
   el.hidden = false;
   const hid = S.live.pools.filter((q) => q.id !== p.id && hideStable(q) && (samePair(p, q) || q.feeTier === p.feeTier || symsN(q).some((t) => symsN(p).includes(t)))).length;
-  el.innerHTML = `<div class="mc-head"><span class="lbl">Similar pools · ${all.length}${hid ? `<span class="hidn"> · ${hidTxt(hid)}</span>` : ''}</span><span class="lbl" id="sim-m" aria-live="polite">${SIM_M[mi][0]} <span class="mdots">${SIM_M.map((_, j) => `<i${j === mi ? ' class="on"' : ''}></i>`).join('')}</span></span></div>`
+  el.innerHTML = `<div class="mc-head">${histBtn(p, { cls: 'sm', list: '', word: 'History · tiers' })}<span class="lbl">Similar pools · ${all.length}${hid ? `<span class="hidn"> · ${hidTxt(hid)}</span>` : ''}</span><span class="lbl" id="sim-m" aria-live="polite">${SIM_M[mi][0]} <span class="mdots">${SIM_M.map((_, j) => `<i${j === mi ? ' class="on"' : ''}></i>`).join('')}</span></span></div>`
     + mcStrip('sim-track', cards.join(''), fresh && !reduced())
     + `<div class="sim-list" id="sim-list"${S.simOpen ? '' : ' hidden'}>${S.simOpen ? [simRow(p, 0, mi, true), ...all.map((x) => simRow(x.q, x.g, mi, false))].join('') : ''}</div>`;
   const t = el.querySelector('.mc-track');
@@ -6181,7 +6339,7 @@ document.addEventListener('click', (e) => {
     case 'zoom': zoom(el.dataset.chart, Number(el.dataset.dir)); break;
     case 'zreset': zreset(el.dataset.chart); break;
     case 'merge': mgToggle(el.dataset.id, el); break;
-    case 'flash': flStart(el.dataset.id, false, el.closest('#ws') ? 'liq-ws' : 'liq-detail'); break;
+    case 'flash': flStart(el.dataset.id, false, el.closest('#ws') ? 'liq-ws' : el.closest('#best') ? 'liq-best' : 'liq-detail'); break;
     case 'flash-open': if (el.dataset.id) { openDetail(el.dataset.id, el); flStart(el.dataset.id, false); } break;
     case 'feehist': feeJump(); break;
     case 'fmode': case 'fscale': case 'fzc': fcSet(el.dataset.act, el.dataset.v); break;
@@ -6476,7 +6634,7 @@ function d3Drop(h) {
 // a chart that is being dragged, pinched, coasting or stepping, playing the competition flash, or whose panel is still
 // sliding in shows its flat drawing alone (each frame costs what 2D's does); its depth comes back the moment it rests
 const d3Sliding = (h) => { const c = h.closest('.sheet-card'); return !!c && c.getAnimations().some((a) => a.playState === 'running' || a.pending); };
-const d3Moving = (h) => h.classList.contains('dragging') || !!PZA[h.dataset.pz] || (!!PIN && PIN.host === h) || (!!S.fl && h.dataset.pz === (S.fl.cid || 'liq-detail')) || d3Sliding(h);
+const d3Moving = (h) => h.classList.contains('dragging') || !!PZA[h.dataset.pz] || (!!PIN && PIN.host === h) || (!!S.fl && h.dataset.pz === (S.fl.cid || 'liq-detail')) || (!!S.mgT && h.dataset.pz === S.mgT.cid) || d3Sliding(h);
 // all reads first, then all writes: one layout for any number of charts
 function d3Many(hosts, initial = false) {
   if (!D3.on) return;
