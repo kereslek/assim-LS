@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jecqdbKQk5DCFLvINOc/VPc0n0ckQvrLiQhZJ96P4p8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sVfJYUqpnfcL4XmWUPRezjhs2f3KcLkySSEfhjBLcM8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1264,7 +1264,10 @@ html.m3d .hs-card{background:#0F4246}
 .hs svg text,.ln svg text{font:500 10px var(--mono);fill:var(--muted)}
 .hs svg .grid{stroke:var(--grid)}
 .hs-ax{height:22px}
-.hs-x{position:absolute;top:6px;bottom:22px;width:0;border-left:1px solid rgba(230,237,243,.75);pointer-events:none;z-index:2}
+.hs-x{position:absolute;top:6px;bottom:22px;width:0;margin-left:-.5px;border-left:1px solid rgba(230,237,243,.75);pointer-events:none;z-index:2} /* v0.6.2: centred on its day's bar */
+.hs-leg i.pt{background:repeating-linear-gradient(45deg,rgba(139,150,163,.55) 0 2px,transparent 2px 5px);border:1px solid rgba(230,237,243,.45)}
+.hs-dv b.pt,.hst td.pt{color:var(--fg2)}
+.hs-dv.pt .q{white-space:normal;text-overflow:clip} /* a partial day says which tiers in full: "3 of 4 tiers · 0.30% v4 not recorded" */
 html.m3d .hs-x{border-left-color:rgba(255,181,71,.9)}
 .hs-x[hidden]{display:none}
 .hs-sel{position:absolute;top:6px;bottom:22px;background:rgba(94,230,200,.14);border-left:1px solid var(--accent2);border-right:1px solid var(--accent2);pointer-events:none;z-index:1}
@@ -5213,6 +5216,13 @@ function hsAgg(xs, k) { // a day's total: undefined where no pool was there; nul
   for (const x of xs) { if (!x) continue; n++; if (isNum(x[k])) v += x[k]; else un++; }
   return !n ? undefined : un ? null : v;
 }
+const hsTierName = (e) => `${feeTxt(e.q.feeTier)} v${e.q.v}`;
+function hsMissTxt(e, t, k) { // why a tier's value is missing on day t (a partial day's card)
+  const why = k === 'tv' ? ({ v4: 'not recorded', archive: 'past the archive' }[hsTvNote(e, t)] || 'not read') : k === 'f' && hsFeeNote(e, t) ? 'past the archive' : 'not read';
+  return `${hsTierName(e)} ${why}`;
+}
+const hsPart = (r, k) => (r[k] === null && r.p && r.p[k]) || null;
+const hsPartTxt = (pt) => `${pt.n} of ${pt.of} tiers · ${pt.miss.length > 2 ? pt.miss.slice(0, 2).join(', ') + ' …' : pt.miss.join(', ')}`;
 function hsModel(p) {
   const all = hsTierList(p), onSet = WS.tiers ? new Set(WS.tiers) : null;
   let tiers = onSet ? all.filter((e) => onSet.has(e.q.id)) : all;
@@ -5234,6 +5244,14 @@ function hsModel(p) {
     r.fe = xs.some((x) => x && x.fs === 'e');
     r.fNa = r.f === null && tiers.every((e, j) => !xs[j] || isNum(xs[j].f) || hsFeeNote(e, t)) ? 'archive' : null; // fees past Base's archive: not readable
     r.pre = r.f === undefined && r.v === undefined && r.tv === undefined; // before the pool (every pool shown) existed
+    // v0.6.2 (the owner): combined, a day with some tiers read and some not is partial: the tiers read are drawn, stacked, and
+    // said as "x of y tiers"; r[k] stays null (no total of that day: never a smaller sum shown as the whole)
+    if (comb) for (const k of ['f', 'v', 'tv']) {
+      if (r[k] !== null) continue;
+      const kn = [], miss = [];
+      xs.forEach((x, j) => { if (x) (isNum(x[k]) ? kn : miss).push(j); });
+      if (kn.length) (r.p ||= {})[k] = { v: sum(kn.map((j) => xs[j][k])), n: kn.length, of: kn.length + miss.length, miss: miss.map((j) => hsMissTxt(tiers[j], t, k)) };
+    }
     return r;
   });
   return out;
@@ -5257,15 +5275,16 @@ function hsScale(vals, Ht) {
 function hsBars(m, k, Wd, Ht, kind, fr = null) { // one chart: bars (fees, volume) or a stepped area (TVL), stacked by pool when combined; fr: each pool's share while it builds up
   const rows = m.rows, n = rows.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), base = Ht - 1;
   let pre = '', preN = 0, preA = null, preB = null, naA = null, naB = null;
-  const conf = rows.map((r) => (r.xs.some((x) => x && x.fu) && k === 'f' ? null : r[k]));
-  const sc = hsScale(conf.some((v) => isNum(v) && v > 0) ? conf : rows.map((r) => r[k]), Ht), Y = sc.Y;
+  const val = (r) => (hsPart(r, k) ? r.p[k].v : r[k]); // a partial day's known part counts for the scale
+  const conf = rows.map((r) => (r.xs.some((x) => x && x.fu) && k === 'f' ? null : val(r)));
+  const sc = hsScale(conf.some((v) => isNum(v) && v > 0) ? conf : rows.map(val), Ht), Y = sc.Y;
   const paths = new Map(), add = (key, d) => paths.set(key, (paths.get(key) || '') + d);
-  let nr = '', na = '', line = '', prevEnd = null;
+  let nr = '', na = '', line = '', prevEnd = null, cap = '', partN = 0;
   rows.forEach((r, i) => {
-    const x0 = HS_AX + i * slot, v = r[k];
+    const x0 = HS_AX + i * slot, pt = hsPart(r, k), v = pt ? pt.v : r[k];
     if (v === undefined) { if (r.pre) { pre += `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; preN++; if (preA == null) preA = x0; preB = x0 + slot; } prevEnd = null; return; }
     if (v === null) { const dd = `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; if ((k === 'tv' && r.tvNa) || (k === 'f' && r.fNa)) { na += dd; if (naA == null) naA = x0; naB = x0 + slot; } else nr += dd; prevEnd = null; return; }
-    const bw = kind === 'area' ? slot : Math.max(0.6, slot - Math.min(1.2, slot * 0.24));
+    const bw = kind === 'area' ? slot : Math.max(0.6, slot - Math.min(1.2, slot * 0.24)), xb = x0 + (slot - bw) / 2; // centred on the day
     let cum = 0;
     r.xs.forEach((x, j) => {
       if (!x || !isNum(x[k]) || x[k] <= 0) return;
@@ -5273,9 +5292,10 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) { // one chart: bars (fees, volum
       if (!(sh > 1e-3)) return;
       const y0 = Y(cum); cum += x[k] * sh; const y1 = Y(cum);
       if (y0 - y1 < 0.05) return;
-      const col = m.tiers[j].col, key = col + (k === 'f' && x.fs === 'e' ? '|e' : '') + (k === 'f' && x.fu ? '|u' : '');
-      add(key, `M${x0.toFixed(2)} ${y1.toFixed(2)}h${bw.toFixed(2)}V${y0.toFixed(2)}H${x0.toFixed(2)}z`);
+      const col = m.tiers[j].col, key = col + (k === 'f' && x.fs === 'e' ? '|e' : '') + (k === 'f' && x.fu ? '|u' : '') + (pt ? '|p' : '');
+      add(key, `M${xb.toFixed(2)} ${y1.toFixed(2)}h${bw.toFixed(2)}V${y0.toFixed(2)}H${xb.toFixed(2)}z`);
     });
+    if (pt && cum > 0) { const yc = Y(cum); cap += `M${xb.toFixed(2)} ${(yc - 4).toFixed(2)}h${bw.toFixed(2)}v4H${xb.toFixed(2)}z`; partN++; } // partial: a hatched cap
     if (kind === 'area' && cum > 0) { const y = Y(cum).toFixed(2); line += prevEnd === i ? `V${y}H${(x0 + slot).toFixed(2)}` : `M${x0.toFixed(2)} ${y}H${(x0 + slot).toFixed(2)}`; prevEnd = i + 1; } else if (kind === 'area') prevEnd = null;
   });
   let g = `<defs><pattern id="hs-nr-${k}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.34)"/></pattern><pattern id="hs-na-${k}" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r=".8" fill="rgba(139,150,163,.38)"/></pattern></defs>`;
@@ -5287,12 +5307,13 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) { // one chart: bars (fees, volum
   if (k === 'f' && pre) { const bt = hsBorn(m); g += band(preA, preB, bt ? `pool created ${dm(bt)} · nothing before` : 'before the pool existed'); }
   if (na && naB - naA >= 120) g += band(naA, naB, k === 'tv' && m.tiers.some((e) => e.d.ytp && e.d.ytp.lim === 'v4') ? 'v4: TVL before recording · not readable' : 'older than Base’s 90-day archive · not readable');
   for (const [key, d] of paths) {
-    const [col, ...fl] = key.split('|'), e = fl.includes('e'), u = fl.includes('u');
-    g += `<path class="hs-b${e ? ' e' : ''}${u ? ' u' : ''}" d="${d}" fill="${col}"${kind === 'area' ? ' fill-opacity=".34"' : e ? ' fill-opacity=".38"' : u ? ' fill-opacity=".3"' : ''}${u ? ` stroke="${col}" stroke-width="1"` : ''}/>`;
+    const [col, ...fl] = key.split('|'), e = fl.includes('e'), u = fl.includes('u'), pp = fl.includes('p');
+    g += `<path class="hs-b${e ? ' e' : ''}${u ? ' u' : ''}${pp ? ' p' : ''}" d="${d}" fill="${col}"${kind === 'area' ? ` fill-opacity="${pp ? '.2' : '.34'}"` : e ? ' fill-opacity=".38"' : u ? ' fill-opacity=".3"' : pp ? ' fill-opacity=".55"' : ''}${u ? ` stroke="${col}" stroke-width="1"` : ''}/>`;
   }
+  if (cap) g += `<path class="hs-pt" d="${cap}" fill="url(#hs-nr-${k})" stroke="rgba(230,237,243,.45)" stroke-width=".6"/>`;
   if (line) g += `<path class="hs-l" d="${line}" fill="none" stroke="${m.tiers.length === 1 ? m.tiers[0].col : '#E6EDF3'}" stroke-width="1.6"/>`;
   g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${base + 0.5}" y2="${base + 0.5}" stroke="#3B4756" stroke-width="1"/>`;
-  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" aria-hidden="true">${g}</svg>`;
+  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" data-part="${partN}" aria-hidden="true">${g}</svg>`;
 }
 function hsAxis(ts, Wd) { // the one date axis under the three charts
   const n = ts.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), most = Math.max(2, Math.floor(PW / 74));
@@ -5353,12 +5374,12 @@ function hsHtml(p) {
     else {
       if (!e.d.hasV) notes.push(`${nm}volume not recorded yet (${DASH})`);
       if (!e.d.hasT) notes.push(`${nm}TVL not recorded yet (${DASH})`);
-      else if (tp && tp.lim === 'v4') notes.push(`${nm}past v4 TVL isn’t readable (no balance of its own): ${DASH} before recording began`);
+      else if (tp && tp.lim === 'v4') { const t1 = Math.min(...[...e.d.m].filter(([, x]) => isNum(x.tv)).map(([t]) => t)); notes.push(m.comb && isFinite(t1) ? `${hsTierName(e)} TVL not recorded before ${dm(t1)} · shown without it (no balance of its own)` : `${nm}past v4 TVL isn’t readable (no balance of its own): ${DASH} before recording began`); }
       else if (tp && tp.lim === 'archive' && isNum(tp.from)) notes.push(`${nm}TVL before ${dm(tp.from)} is past Base’s archive reach: ${DASH}`);
     }
   }
   const prog = one && one.d.yp ? (() => { const yp = one.d.yp, vp = one.d.yvp, tp = one.d.ytp; return `exact fees <b>${int(yp.exact)}</b>${isNum(yp.age) ? ` of <b>${int(yp.age)}</b>` : ''} days${yp.est ? ` · ${int(yp.est)} estimated` : ''}${vp ? ` · volume ${int((vp.s || 0) + (vp.g || 0))} days (${int(vp.s || 0)} swaps, ${int(vp.g || 0)} candles)` : ''}${tp ? ` · TVL ${int((tp.b || 0) + (tp.r || 0) + (tp.m || 0))} days` : ''}`; })() : '';
-  const leg = `<div class="hs-leg">${m.comb ? m.tiers.map((e) => `<span><i style="background:${e.col}"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}</span>`).join('') : `<span><i style="background:${one.col}"></i>exact</span><span><i class="e" style="background:${one.col}"></i>≈ estimated</span>`}<span><i class="nr"></i>not read (never 0)</span>${m.rows.some((r) => r.tvNa) ? '<span><i class="na"></i>not readable</span>' : ''}</div>`;
+  const leg = `<div class="hs-leg">${m.comb ? m.tiers.map((e) => `<span><i style="background:${e.col}"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}</span>`).join('') + (m.rows.some((r) => r.p) ? '<span class="hs-ptk"><i class="pt"></i>partial: only the tiers read</span>' : '') : `<span><i style="background:${one.col}"></i>exact</span><span><i class="e" style="background:${one.col}"></i>≈ estimated</span>`}<span><i class="nr"></i>not read (never 0)</span>${m.rows.some((r) => r.tvNa) ? '<span><i class="na"></i>not readable</span>' : ''}</div>`;
   WS.mod = m;
   return `<div class="hs" data-ms="" data-rows="${m.rows.length}" data-mode="${m.comb ? (m.tiers.length === m.all.length ? 'all' : 'some') : 'one'}" data-ph="end"><div class="hs-main">`
     + `<div class="hs-ctl">${hsRangeSeg()}${chips}</div>`
@@ -5377,6 +5398,8 @@ function hsSorted(m) {
 function hsCell(r, k) {
   const v = r[k], src = hsSrcOf(null, r, k).join('+');
   if (v === undefined) return `<td class="nr">${DASH}</td>`;
+  const pt = hsPart(r, k);
+  if (pt) return `<td class="pt" title="${esc(hsPartTxt(pt))}">${usd(pt.v)}<span class="s">${pt.n}/${pt.of}</span></td>`; // partial: never shown as the day's total
   if (!isNum(v)) return `<td class="nr">${(k === 'tv' && r.tvNa) || (k === 'f' && r.fNa) ? DASH : 'not read'}</td>`;
   return `<td>${k === 'f' && r.fe ? '≈ ' : ''}${usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
 }
@@ -5403,6 +5426,8 @@ function hsCardHtml(m, r) {
   const dv = (k, label) => {
     const v = r[k], s = hsSrcOf(m, r, k), map = HS_SRC[k];
     let q = s.map((x) => (map[x] ? `${map[x][0]} · ${map[x][1]}` : x)).join(' + ');
+    const pt = hsPart(r, k);
+    if (pt) return `<span class="hs-dv pt" data-k="${k}"><span class="lbl">${label}</span><b class="pt">${usd(pt.v)}</b><span class="q" title="${esc('Partial: only the tiers read that day are summed; ' + hsPartTxt(pt))}">${esc(hsPartTxt(pt))}</span></span>`;
     if (r.pre) q = ''; // said once, in the card's own line below (three times over made the card jump on a phone)
     else if (v === null && k === 'f' && r.fNa) q = HS_NA.archive;
     else if (v === null && k === 'tv' && r.tvNa) q = HS_NA[r.tvNa[0]] || 'not readable';

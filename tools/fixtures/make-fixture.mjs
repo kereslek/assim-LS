@@ -699,7 +699,22 @@ export function tinyCase(data) {
     for (const key of ['px', 'lo', 'hi']) b.series[key] = b.series[key].map((v) => (isNum(v) ? sig(v * k, 6) : v));
   }
   for (const h of Object.values(hist.pools)) if (Array.isArray(h.h)) h.h = h.h.map((r, i) => (i % 4 && isNum(r[3]) ? [r[0], r[1], r[2], 0, ...r.slice(4)] : r));
-  return { live: data.live, history: hist, backtest: bt };
+  // four tiers, one of them a v4 whose past TVL was never recorded (the owner's UNI/WETH, 15 Nov 2026): the v4 pool's v3
+  // sibling gets two more v3 siblings (1% and 0.01%), with their own made-up history (the sibling's, scaled)
+  const live = structuredClone(data.live), pk = (q) => [q.t0.sym, q.t1.sym].sort().join('/') + '@' + q.chain;
+  const sibOf = (v) => live.pools.find((q) => q.id !== v.id && pk(q) === pk(v) && hist.pools[q.id]);
+  const v4 = live.pools.find((q) => q.v === 4 && hist.pools[q.id] && hist.pools[q.id].ytp && hist.pools[q.id].ytp.lim === 'v4' && sibOf(q));
+  const sib = v4 && sibOf(v4);
+  if (sib) [[0.01, 'c1', 0.45], [0.0001, 'c2', 0.2]].forEach(([fee, tag, k]) => {
+    const q = structuredClone(sib), id = sib.id.slice(0, -2) + tag, sc = (x) => (isNum(x) ? sig(x * k, 6) : x);
+    q.id = id; q.feeTier = fee; q.tvlUsd = sc(q.tvlUsd);
+    live.pools.push(q);
+    const h = structuredClone(hist.pools[sib.id]);
+    h.y = h.y.map((r) => [r[0], sc(r[1]), ...r.slice(2)]); if (h.yv) h.yv = h.yv.map((r) => [sc(r[0]), ...r.slice(1)]); if (h.yt) h.yt = h.yt.map((r) => [sc(r[0]), ...r.slice(1)]);
+    hist.pools[id] = h;
+    for (const pr of Object.values(live.pairs || {})) if (Array.isArray(pr.pools) && pr.pools.includes(sib.id)) pr.pools.push(id);
+  });
+  return { live, history: hist, backtest: bt };
 }
 
 // stress (v0.5.2): data as wide and as many as live data gets (the live iPhone audit of 15 Nov 2026 scrolled sideways

@@ -27,7 +27,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures, makeData, oldDepth, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR } from './fixtures/make-fixture.mjs';
+import { writeFixtures, makeData, oldDepth, tinyCase, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR } from './fixtures/make-fixture.mjs';
 import { TEXT_OVERLAP } from './overlap.mjs';
 import { FINGERS, HOST_BOX, STILL_BOX, pinchPts } from './gestures.mjs';
 
@@ -61,6 +61,7 @@ const LAPTOP = DEVICE ? [768, 1440] : [];
 // the same made-up pass the page reads (pool ids, shapes and history rows don't depend on the time it is made at)
 const FXD = makeData({ now: Date.now() });
 const poolOf = (id) => FXD.live.pools.find((x) => x.id === id);
+const FXT = tinyCase(FXD); // v0.6.2: the tiny case (four tiers, quiet hours, sub-cent replays)
 const bestId = (page) => page.getAttribute('#best [data-act="detail"]', 'data-id');
 
 // ---------- results: names and short reasons only ----------
@@ -4501,7 +4502,7 @@ async function wsDay(p, t) { // the crosshair to day t through its row in the da
   return hit ? p.evaluate(CARD) : null;
 }
 async function wsRange(p, d) { await p.click(`#ws [data-act="ws-range"][data-v="${d}"]`); await sleep(300); }
-const HS_SVG = () => { const o = {}; for (const s of document.querySelectorAll('#ws .hs-stack svg[data-k]')) o[s.dataset.k] = { n: +s.dataset.n, gaps: +s.dataset.gaps, na: +(s.dataset.na || 0), h: s.getBoundingClientRect().height, w: Math.round(s.getBoundingClientRect().width), zero: [...s.querySelectorAll('text')].some((t) => t.textContent === '$0') }; o.ax = document.querySelectorAll('#ws [data-svg="ax"] text').length; o.rows = +document.querySelector('#ws .hs').dataset.rows; o.ms = +document.querySelector('#ws .hs').dataset.ms; return o; };
+const HS_SVG = () => { const o = {}; for (const s of document.querySelectorAll('#ws .hs-stack svg[data-k]')) o[s.dataset.k] = { n: +s.dataset.n, gaps: +s.dataset.gaps, na: +(s.dataset.na || 0), part: +(s.dataset.part || 0), h: s.getBoundingClientRect().height, w: Math.round(s.getBoundingClientRect().width), zero: [...s.querySelectorAll('text')].some((t) => t.textContent === '$0') }; o.ax = document.querySelectorAll('#ws [data-svg="ax"] text').length; o.rows = +document.querySelector('#ws .hs').dataset.rows; o.ms = +document.querySelector('#ws .hs').dataset.ms; return o; };
 async function wsHistOf(p, id, alone = true) { await openPool(p, id.slice(0, 12)); await p.click('#sheet-hist'); await wsWait(p); if (alone) await wsOnly(p, id); } // (every tier on at first: this pool alone for its own checks)
 async function testWsHistory(browser) {
   const ents = Object.entries(FXD.history.pools), pick = (f) => ents.find(([id, h]) => poolOf(id) && f(h, poolOf(id)));
@@ -4607,7 +4608,8 @@ async function testWsHistory(browser) {
       const fullDay = days.find((d) => { const xs = hs.map((hh) => at(hh, d)); return xs.every((x) => x && x[1] !== null); });
       const cg = gapDay ? await wsDay(p, gapDay) : null, cf = fullDay ? await wsDay(p, fullDay) : null, sum = fullDay ? hs.reduce((a, hh) => a + at(hh, fullDay)[1], 0) : null;
       const sc = await p.evaluate(HS_SVG), mode = await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode);
-      ok(`history ws ${tag}: All combined stacks the ${tiers.length} tiers: a day with one tier not read is a gap ("1 of N not read"), never a smaller total; a full day is the sum`, mode === 'all' && !!cg && cg.f.v === 'not read' && /^1 of \d+ pools not read/.test(cg.f.q) && !!cf && Math.abs(money(cf.f.v) - sum) / sum < 0.06 && sc.f.gaps >= 1, JSON.stringify({ mode, cg: cg && cg.f, cf: cf && cf.f.v, sum: sum && usdFx(sum), gaps: sc.f.gaps }));
+      const part = gapDay ? hs.reduce((a, hh) => a + (at(hh, gapDay)[1] || 0), 0) : null;
+      ok(`history ws ${tag}: All combined stacks the ${tiers.length} tiers: a day with one tier not read is partial ("${tiers.length - 1} of ${tiers.length} tiers", the tiers read), never the day's total; a full day is the sum (v0.6.2)`, mode === 'all' && !!cg && Math.abs(money(cg.f.v) - part) / part < 0.06 && new RegExp(`^${tiers.length - 1} of ${tiers.length} tiers · .*not read`).test(cg.f.q) && !!cf && Math.abs(money(cf.f.v) - sum) / sum < 0.06 && sc.f.part >= 1, JSON.stringify({ mode, cg: cg && cg.f, part: part && usdFx(part), cf: cf && cf.f.v, sum: sum && usdFx(sum), part: sc.f.part }));
       // the drawing's budget: a year of three tiers in three charts
       await wsRange(p, 365);
       const ms = await p.evaluate(() => window.__lpsHooks.ws().ms);
@@ -5047,6 +5049,8 @@ async function testTiers(browser) {
 //  5. a term in a title (LOG …) can be tapped: nothing lies over its middle (the live iPhone audit: "term not clickable")
 // and, on the tiny case (sub-cent prices, quiet hours): the replay's labels stay inside their charts with nothing cut or
 // scrolling sideways, and the hourly fee chart keeps its $ axis and its typical-hour line when the typical hour is $0.
+// History (the owner, 15 Nov 2026): the crosshair runs through the middle of its day's bar; All combined with a v4 tier
+// whose past TVL was never recorded draws the other tiers' TVL, marks those days partial and says "3 of 4 tiers".
 const TOOL_AUDIT = (root) => {
   const R = root ? document.querySelector(root) : document, bad = [], vw = innerWidth, coarse = matchMedia('(pointer:coarse)').matches;
   if (!R) return { n: 0, bad: ['no ' + root] };
@@ -5134,6 +5138,54 @@ async function testTools(browser) {
     ok(`tools ${tag}: what each button draws is small (≤ 34 px)`, !out.bad.some((x) => / drawn /.test(x)), out.bad.filter((x) => / drawn /.test(x)).slice(0, 3).join(' | '));
     ok(`tools ${tag}: every term in sight can be tapped, nothing over it (${out.terms})`, out.terms >= 3 && !out.bad.some((x) => /term "/.test(x)), out.bad.filter((x) => /term "/.test(x)).slice(0, 3).join(' | '));
     if (t.errors.length) ok(`tools ${tag}: no page errors`, false, t.errors[0]);
+    await t.ctx.close();
+  }
+  // the History tab (the owner, 15 Nov 2026): the crosshair through the middle of its day's bar in all three charts, at every
+  // range, on a tap and a drag; combined, a v4 tier whose past TVL was never recorded leaves the other tiers' TVL drawn
+  // (the WebKit 3D job, near its time limit, reads it on the iPhone only)
+  for (const o of DEVICE ? (BROWSER === 'webkit' && MODE === '3d' && !opt('only') ? [{ phone: true }] : [{ phone: true }, { width: 1440 }]) : [{ width: 393 }, { width: 1440 }]) {
+    const t = await openUnlocked(browser, 'tiny', { ...o, height: 860, mg: true }), p = t.page, tag = o.width ? 'w' + o.width : 'phone';
+    const pk = (q) => [q.t0.sym, q.t1.sym].sort().join('/') + '@' + q.chain;
+    const v4 = FXT.live.pools.find((q) => q.v === 4 && FXT.history.pools[q.id] && FXT.history.pools[q.id].ytp && FXT.history.pools[q.id].ytp.lim === 'v4' && FXT.live.pools.filter((x) => pk(x) === pk(q)).length >= 4);
+    await openPool(p, v4.id.slice(0, 10));
+    await p.evaluate(() => document.querySelector('#sheet-hist').click()); await wsWait(p);
+    await p.evaluate(() => { const b = document.querySelector('#ws [data-act="ws-tier"][data-v="all"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.click(); }); await sleep(400);
+    const off = [];
+    let seen = 0;
+    for (const R of ['30', '90', '365', '0']) {
+      if (!(await p.$(`#ws [data-act="ws-range"][data-v="${R}"]`))) continue;
+      await p.click(`#ws [data-act="ws-range"][data-v="${R}"]`); await sleep(400);
+      const bb = await (await p.$('#ws .hs-stack')).boundingBox();
+      for (const fx of [0.3, 0.62, 0.9]) {
+        const x = bb.x + bb.width * fx, y = bb.y + 50;
+        if (fx === 0.9) { await p.mouse.move(bb.x + bb.width * 0.5, y); await p.mouse.down(); await p.mouse.move(x, y, { steps: 6 }); } else await p.mouse.click(x, y);
+        await sleep(120);
+        const d = await p.evaluate(() => {
+          const xr = document.querySelector('#ws .hs-x').getBoundingClientRect(), xc = xr.left + xr.width / 2, out = [];
+          for (const s of document.querySelectorAll('#ws .hs-stack svg[data-k]')) {
+            const sr = s.getBoundingClientRect(), k = sr.width / +s.getAttribute('width'), X = (xc - sr.left) / k;
+            const segs = [...s.querySelectorAll('path.hs-b')].flatMap((pa) => [...pa.getAttribute('d').matchAll(/M([\d.]+) [\d.]+h([\d.]+)/g)].map((m) => [+m[1], +m[2]]));
+            const seg = segs.find((g) => g[0] - 0.5 <= X && X <= g[0] + g[1] + 0.5);
+            if (seg) out.push([s.dataset.k, +((X - (seg[0] + seg[1] / 2)) * k).toFixed(2)]);
+          }
+          return out;
+        });
+        if (fx === 0.9) await p.mouse.up();
+        seen += d.length;
+        for (const [k, dx] of d) if (Math.abs(dx) > 0.5) off.push(`${R}d ${fx} ${k} ${dx}px`);
+      }
+    }
+    ok(`tools ${tag}: History's crosshair runs through the middle of its day's bar in every chart, any range, tapped or dragged (${seen} bars)`, seen >= 12 && off.length === 0, off.slice(0, 4).join(' | '));
+    // combined TVL with a v4 tier never recorded in the past: the other tiers' TVL drawn, the days marked partial, "3 of 4 tiers"
+    await p.click('#ws [data-act="ws-range"][data-v="30"]'); await sleep(400);
+    const hv = FXT.history.pools[v4.id], day = hv.y.map((r, i) => (hv.yt[i] && hv.yt[i][0] === null ? r[0] : null)).slice(-25).filter(Boolean).at(-1); // a recent day without the v4's TVL
+    const cd = day ? await wsDay(p, day) : null;
+    const sv = await p.evaluate(HS_SVG), tvBars = await p.evaluate(() => [...document.querySelectorAll('#ws .hs-stack svg[data-k="tv"] path.hs-b')].reduce((a, e) => a + (e.getAttribute('d').match(/M/g) || []).length, 0));
+    const note = await p.evaluate(() => [...document.querySelectorAll('#ws .hs-note')].map((e) => e.textContent).join(' '));
+    const tiers = await p.$$eval('#ws [data-act="ws-tier"]', (b) => b.filter((x) => x.dataset.v !== 'all').length);
+    ok(`tools ${tag}: All combined (${tiers} tiers, a v4 without past TVL) draws the other tiers' TVL, marks those days partial and says so`, tiers === 4 && tvBars >= 20 && sv.tv.part >= 20 && /v4 TVL not recorded before .* · shown without it/.test(note), JSON.stringify({ tiers, tvBars, part: sv.tv.part, na: sv.tv.na, note: note.slice(0, 90) }));
+    ok(`tools ${tag}: that day's card gives the known tiers' TVL as "3 of 4 tiers · … v4 not recorded", never "—" and never as the total`, !!cd && /^\$/.test(cd.tv.v) && /^3 of 4 tiers · .*v4 not recorded/.test(cd.tv.q), JSON.stringify(cd && cd.tv));
+    if (t.errors.length) ok(`tools ${tag}: History without page errors`, false, t.errors[0]);
     await t.ctx.close();
   }
   // the rest doesn't depend on the look: the WebKit 3D job (near its time limit) leaves it to the 2D job
