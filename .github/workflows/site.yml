@@ -100,7 +100,7 @@ jobs:
           PROFILE: ${{ matrix.browser == 'webkit' && 'phone' || 'laptop' }}
         run: |
           node tools/serve-fixtures.mjs ${PAGE:+--page "$PAGE"} --port 8731 > "$RUNNER_TEMP/serve.url" &
-          for i in $(seq 1 50); do [ -s "$RUNNER_TEMP/serve.url" ] && break; sleep 0.2; done
+          for i in $(seq 1 300); do [ -s "$RUNNER_TEMP/serve.url" ] && break; sleep 0.2; done # the fixtures take some seconds (keyed cases derive guest keys)
           node tools/live-audit.mjs --profile "$PROFILE" --url "$(cat "$RUNNER_TEMP/serve.url")" --wait 5
       - name: Browser tests (${{ matrix.browser }} as ${{ matrix.device }}, ${{ matrix.mode }})
         env:

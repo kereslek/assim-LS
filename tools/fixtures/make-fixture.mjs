@@ -1039,12 +1039,14 @@ export const MEMBER_PASS = 'made-up member passphrase for dee', ELI_PASS = 'quie
 export const NEW_PASS = 'a made-up new owner passphrase', RECOVERY_KEY = 'MADE-7FAK-E2RE-C0VE-RYKE-YF0R-TEST-S234';
 export const GUEST_DAYS = 45, SHARED_DAYS = 30, OWNER_TICKET = 2500;
 const normRk = (s) => s.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, ''); // as the page reads it
+const KEKS = new Map(); // one derivation per passphrase and salt: the keyed cases share their guests (keeps serve-fixtures quick)
+const kekOf = (pass, gsalt, iter) => { const k = pass + '\n' + gsalt + '\n' + iter; if (!KEKS.has(k)) KEKS.set(k, guestKek(pass, gsalt, iter)); return KEKS.get(k); };
 function sealKeyedCase(dir, lk, data, now, { v, owner, recovery, rsalt, gsalt, iterations, list, vault = {}, status = null }) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'lock.json'), JSON.stringify(lk.lock));
   fs.writeFileSync(path.join(dir, 'inbox.json'), JSON.stringify({ v: 1, x25519: inboxKeys(lk.token).publicB64 }));
   const live = splitPrivate('live.json', { ...data.live, ticket: OWNER_TICKET }), bt = splitPrivate('backtest.json', data.backtest);
-  const kek = (g) => guestKek(g.pass, gsalt, iterations);
+  const kek = (g) => kekOf(g.pass, gsalt, iterations);
   const slots = list.filter((g) => g.st === 'active').map((g) => ({ s: g.slot, n: g.name, e: g.exp, r: g.r, x: null, d: g.sh ? 0 : 30, sh: !!g.sh, kek: kek(g) }));
   fs.writeFileSync(path.join(dir, 'keys.json'), JSON.stringify(buildKeysFile({ v, owner, recovery, rsalt, gsalt, iter: iterations, guests: slots, t: now })));
   for (const [f, obj] of [['live', live.market], ['history', data.history], ['backtest', bt.market]]) fs.writeFileSync(path.join(dir, f + '.json'), JSON.stringify(seal(obj, v.mdek, { t: obj.t })));

@@ -5421,14 +5421,16 @@ async function testGuestAdmin(browser) {
   ok('guestadmin: the loop\'s own code adds all three from the one request; each passphrase opens its own slot, read-only', !!lp.r && lp.r.added === 3 && opened.every((s, i) => s && s.name === made.items[i].n && s.role === 'guest'));
   ok('guestadmin: the sealed request carries no name or passphrase in the clear', !made.links[0].includes('Fay') && !made.items.some((x) => made.links[0].includes(x.pass.split('-').slice(0, 2).join('-'))));
   // upgrade and extend: sealed, and the loop gives back the same passphrase with the new role or limit
+  await p.click('#g-out [data-act="g-cancel"]'); // the list's own result goes first (its link must never be read as the next one's)
+  const sealedAs = (lbl) => p.waitForFunction((l) => { const x = document.querySelector('#g-out .lbl'); return !!x && x.textContent === l && !!document.querySelector('#g-out a.g-send'); }, lbl, { timeout: 20000 });
   await p.click('#g-list .g-row[data-slot="0a0a0a0a0a0a0a0a"] [data-act="g-up"]');
-  await p.waitForSelector('#g-out a.g-send', { timeout: 20000 });
+  await sealedAs('UPGRADE SEALED');
   let q = await loopApplies(sealedOf(await p.getAttribute('#g-out a.g-send', 'href')));
   const ada = await slotFor(q.kf, GUEST_PASS);
   ok('guestadmin: "Upgrade to member": the same passphrase opens as a member', q.r.updated === 1 && ada && ada.role === 'member' && ada.exp === null);
   await p.click('#g-out [data-act="g-cancel"]');
   await p.click('#g-list .g-row[data-slot="0e0e0e0e0e0e0e0e"] [data-act="g-ext"]');
-  await p.waitForSelector('#g-out a.g-send', { timeout: 20000 });
+  await sealedAs('EXTENSION SEALED');
   q = await loopApplies(sealedOf(await p.getAttribute('#g-out a.g-send', 'href')));
   const eli = await slotFor(q.kf, ELI_PASS);
   ok('guestadmin: "Extend 30 days": a later limit, and the device\'s clock restarts', q.r.updated === 1 && eli && eli.exp > Date.now() + 65 * 86400e3 && Math.abs(eli.ext - Date.now()) < 600e3);
