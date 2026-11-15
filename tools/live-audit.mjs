@@ -177,8 +177,11 @@ const HS_WHO = () => {
     best = el; over = r.right - cw;
   }
   if (!best) return { px: 0, sel: 'none found' };
-  const chain = []; for (let e = best; e && e !== document.body && chain.length < 3; e = e.parentElement) chain.unshift(name(e));
-  return { px: Math.round(over), sel: chain.join(' > ') };
+  const path3 = (el) => { const c = []; for (let e = el; e && e !== document.body && c.length < 3; e = e.parentElement) c.unshift(name(e)); return c.join(' > '); };
+  // the deepest element that is itself wider than the screen: often the cause, where "best" is only the box it stretched
+  let wide = null;
+  for (const el of document.body.querySelectorAll('*')) { const r = el.getBoundingClientRect(); if (r.width > cw + 0.5 && getComputedStyle(el).position !== 'fixed' && !clips(el)) wide = el; }
+  return { px: Math.round(over), sel: path3(best) + (wide && wide !== best ? ` · too wide: ${path3(wide)} (${Math.round(wide.getBoundingClientRect().width)}px)` : '') };
 };
 // wait until the page is at rest: every chart's view the same over 3 drawn frames and no animation running (a slow
 // WebKit draws a frame every 100–260 ms, so a pan step or a fade can still be under way long after a fixed sleep).
@@ -208,7 +211,7 @@ const STUCK = () => { // the All pools header copy: right under the bar on top (
 // Each step is a check, or a skip when the live data doesn't have that part (a pool with no liquidity map, say).
 async function gestures(page, R, tag, errTotal) {
   const n = { run: 0, skip: 0 }, e0 = errTotal();
-  const run = (name, cond) => { n.run++; R.ok(name, cond); };
+  const run = (name, cond) => { n.run++; R.last = name; R.ok(name, cond); };
   const skip = () => { n.skip++; };
   const box = async (sel) => { await page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector(sel).scrollIntoView({ block: 'center' }); }, sel); await sleep(150); return page.locator(sel).first().boundingBox(); };
   const drag = async (sel, dx) => { const b = await box(sel), x = b.x + b.width / 2, y = b.y + Math.min(b.height / 2, 70); await page.mouse.move(x, y); await page.mouse.down(); for (let i = 1; i <= 10; i++) { await page.mouse.move(x + (dx * i) / 10, y); await sleep(20); } await sleep(150); await page.mouse.up(); await sleep(500); };
@@ -339,7 +342,8 @@ async function part2(page, run, skip, box, press) {
     const n1 = (await page.$$('#fav .mc')).length;
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([hidden])', { timeout: 60000 }); await page.waitForFunction(() => { const b = document.querySelector('#best'); return b && b.children.length > 0; }, null, { timeout: 30000 }); await sleep(800);
-    const n2 = (await page.$$('#fav .mc')).length, on = (await page.getAttribute('#best .ttl .star', 'aria-pressed')) === 'true';
+    const st2 = await page.$('#best .ttl .star'), n2 = (await page.$$('#fav .mc')).length, on = st2 ? (await st2.getAttribute('aria-pressed')) === 'true' : null;
+    if (!st2) console.log(`[${tag}] gestures: after the reload the best find shows no star`);
     await press('#best .ttl .star'); await sleep(250);
     run('part 2: a star fills (or empties) Favourites and stays after a reload', n1 === n0 + (was ? -1 : 1) && n2 === n1 && on === !was);
     run('part 2: a second press puts Favourites back as it was', (await page.$$('#fav .mc')).length === n0);
@@ -858,7 +862,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       await page.waitForFunction(() => { const b = document.querySelector('#best'); return b && b.children.length > 0; }, null, { timeout: 30000 });
       await sleep(800);
       await gestures(page, R, tag, errTotal);
-    } catch (e) { console.log(`[${tag}] gestures step stopped: ${errName(e)}`); R.ok('gestures: ran to the end', false); }
+    } catch (e) { console.log(`[${tag}] gestures step stopped: ${errName(e)}${R.last ? ` · after the check '${R.last}'` : ' · before its first check'}`); R.ok('gestures: ran to the end', false); }
     T.gestures = secs(t);
 
     // close anything open, then "Sign out on this device"
