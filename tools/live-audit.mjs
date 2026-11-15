@@ -103,7 +103,11 @@ const INIT = () => {
   // explorer links (a new tab) are counted like a window, never followed: the audit never leaves the dashboard
   document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a) { e.preventDefault(); window.__laOpen++; } }, true);
   // v0.5.1: a chart's ⧉ opens a full view in the page; it counts like a window, and the walk closes it like any overlay
-  new MutationObserver(() => { const v = document.querySelector('#fullv'); if (v && !v.dataset.la) { v.dataset.la = '1'; window.__laOpen++; } }).observe(document, { childList: true, subtree: true });
+  new MutationObserver(() => {
+    const v = document.querySelector('#fullv'); if (v && !v.dataset.la) { v.dataset.la = '1'; window.__laOpen++; }
+    // v0.6.0: a chart's ⧉ opens the pool workspace in the page; it counts as opened once each time it shows
+    const w = document.querySelector('#ws'); if (w) { if (!w.hidden && !w.dataset.la) { w.dataset.la = '1'; window.__laOpen++; } else if (w.hidden && w.dataset.la) delete w.dataset.la; }
+  }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
 };
 const SNAP = () => {
   let h = 0; const s = document.body.innerHTML;
@@ -859,6 +863,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     // gestures, from a fresh view of the page (the stored key opens it again without the passphrase)
     t = Date.now();
     try {
+      await page.evaluate(() => history.replaceState(null, '', location.pathname + location.search)).catch(() => {}); // no #p=… deep link: the main view
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.waitForSelector('#app:not([hidden])', { timeout: 60000 });
       await page.waitForFunction(() => { const b = document.querySelector('#best'); return b && b.children.length > 0; }, null, { timeout: 30000 });
