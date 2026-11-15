@@ -212,7 +212,7 @@ const STUCK = () => { // the All pools header copy: right under the bar on top (
 async function gestures(page, R, tag, errTotal) {
   const n = { run: 0, skip: 0 }, e0 = errTotal();
   const run = (name, cond) => { n.run++; R.last = name; R.ok(name, cond); };
-  const skip = () => { n.skip++; };
+  const skip = () => { n.skip++; (n.after ||= new Map()).set(R.last || 'start', (n.after.get(R.last || 'start') || 0) + 1); }; // where skips fall: after which check (fixed text)
   const box = async (sel) => { await page.evaluate((sel) => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector(sel).scrollIntoView({ block: 'center' }); }, sel); await sleep(150); return page.locator(sel).first().boundingBox(); };
   const drag = async (sel, dx) => { const b = await box(sel), x = b.x + b.width / 2, y = b.y + Math.min(b.height / 2, 70); await page.mouse.move(x, y); await page.mouse.down(); for (let i = 1; i <= 10; i++) { await page.mouse.move(x + (dx * i) / 10, y); await sleep(20); } await sleep(150); await page.mouse.up(); await sleep(500); };
   const press = (sel) => page.evaluate((sel) => { const b = document.querySelector(sel); if (!b || b.disabled) return false; window.dispatchEvent(new WheelEvent('wheel')); b.scrollIntoView({ block: 'center' }); b.click(); return true; }, sel);
@@ -305,6 +305,7 @@ async function gestures(page, R, tag, errTotal) {
   run('gestures: ↑ scrolls back to the top and hides', (await page.evaluate(() => scrollY)) === 0 && !(await on()));
   run('gestures: no page or console errors', errTotal() === e0);
   console.log(`[${tag}] gestures: ${n.run} checks run, ${n.skip} skipped (not in this data)`);
+  if (n.skip > 5 && n.after) for (const [k, v] of [...n.after].slice(0, 6)) console.log(`[${tag}]   ${v} skipped after '${k}'`);
 }
 // ---------- 2c. Run 2 part 2: the top strip, favourites, why, new, search, similar pools, highlights, links, the lock note ----------
 // Prints booleans and counts only. Page text stays in the browser, except the best find's first letters, which the
@@ -564,8 +565,9 @@ async function part5(page, run, skip, press) {
     for (const tb of document.querySelectorAll('table')) { const hs = [...(tb.tHead ? tb.tHead.rows[0].cells : [])].map((c) => c.textContent); hs.forEach((h, i) => { if (/APR/.test(h) && !/forecast/.test(h)) for (const tr of tb.tBodies[0] ? tb.tBodies[0].rows : []) has(tr.cells[i]); }); }
     for (const e of document.querySelectorAll('.apr, #bench .big')) has(e);
     const lead = [...document.querySelectorAll('#best [data-lead]')].some((e) => /At \$[\d,]+: fees ≈ .*\/day · LVR .*\/day · net ≈ .*\/day \(.*% a year\)/.test(e.textContent));
-    return { n, bad, lead };
+    return { n, bad, lead, leadAny: !!document.querySelector('#best [data-lead]') };
   });
+  if (!(apr.n >= 5 && apr.bad === 0 && apr.lead)) console.log(`part 5: APRs seen ${apr.n}, without $/day ${apr.bad}, best-find lead line ${apr.lead ? 'yes' : 'no'}${apr.leadAny ? '' : ' (no lead line on the page)'}`);
   run('part 5: every APR on the home page carries its $ a day at the ticket, and the best find leads with it', apr.n >= 5 && apr.bad === 0 && apr.lead);
   if (!(await press('#best [data-act="detail"]'))) { skip(); skip(); skip(); return; }
   await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(600);
