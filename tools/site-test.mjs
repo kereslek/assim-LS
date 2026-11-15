@@ -9,7 +9,7 @@
 //                                                    touch sticky top header zoomfit overlap rows refresh market fav table similar highlight
 //                                                    search links terms fold locknote clicks motion history stable chains
 //                                                    merge feebar stablewalk flash dates feescale perday disc view
-//                                                    balance wraps floorlab iphone back pull full way qsearch (v0.5.1)
+//                                                    balance wraps floorlab iphone back pull full way qsearch (v0.5.1) stress (v0.5.2)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -51,7 +51,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -4262,8 +4262,47 @@ async function testQsearch(browser) {
   }
 }
 
-const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: testWay, qsearch: testQsearch };
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch']); // look-independent (the fit, the full view, the ways out)
+// stress (v0.5.2): on the widest fixtures (12-letter symbols, long venues and check labels, ~1,500 pools) a phone's page
+// never scrolls sideways after a press: every best-find tab, each window, a pool's panel, "Show all", a Discovery lane's
+// "see all" and its Clear, the 🔍, the notes (the live iPhone audit on real data scrolled 101 px after a tab: a check
+// label that could not wrap). A failure names what sticks out by structure only (tags, ids, classes).
+const HS_WHO = () => {
+  const cw = document.documentElement.clientWidth, hs = document.documentElement.scrollWidth - cw;
+  if (hs <= 0) return null;
+  const ok = (x) => /^[a-z][a-z0-9_-]{0,40}$/i.test(x) && !/^0x|[0-9a-f]{8,}/i.test(x);
+  const clips = (el) => { for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.overflowX !== 'visible' || cs.position === 'fixed') return true; } return false; };
+  const name = (el) => el.tagName.toLowerCase() + (el.id && ok(el.id) ? '#' + el.id : '') + [...el.classList].filter(ok).slice(0, 3).map((c) => '.' + c).join('');
+  let best = null, over = 0;
+  for (const el of document.body.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.right - cw <= over + 0.5 || getComputedStyle(el).position === 'fixed' || clips(el)) continue;
+    best = el; over = r.right - cw;
+  }
+  const chain = []; for (let e = best; e && e !== document.body && chain.length < 3; e = e.parentElement) chain.unshift(name(e));
+  return `${hs}px · ${chain.join(' > ') || 'nothing found past the edge'}`;
+};
+async function testStress(browser) {
+  const t = await openUnlocked(browser, 'stress', { phone: true }), p = t.page, bad = [];
+  let n = 0;
+  const after = async (kind) => { n++; await frames(p, 2); await sleep(120); const w = await p.evaluate(HS_WHO); if (w && bad.length < 3) bad.push(`after ${kind} · ${w}`); };
+  const press = (sel, i = 0) => p.evaluate(({ sel, i }) => { const el = [...document.querySelectorAll(sel)].filter((e) => e.getClientRects().length)[i]; if (!el) return false; window.dispatchEvent(new WheelEvent('wheel')); el.scrollIntoView({ block: 'center' }); el.click(); return true; }, { sel, i });
+  await after('unlock');
+  const tabs = await p.$$eval('#best [role="tab"]', (x) => x.length);
+  for (let i = 0; i < Math.min(tabs, 12); i++) if (await press('#best [role="tab"]', i)) await after('tab');
+  for (const wk of ['24h', '7d', '30d']) { await setWin(p, wk); await after('win'); }
+  for (const v of ['2d', '3d']) { if (await press(`#viewseg [data-v="${v}"]`)) { await sleep(300); await after('view'); } }
+  for (let i = 0; i < 3; i++) if (await press('main [data-act="why"]', i)) { await after('why'); await p.keyboard.press('Escape'); await sleep(100); }
+  if (await press('#best [data-act="detail"]')) { await p.waitForSelector('#sheet:not([hidden])').catch(() => {}); await sleep(300); await after('detail'); await p.click('#sheet-close').catch(() => {}); await sleep(200); await after('close'); }
+  if (await press('[data-act="more"]')) await after('more');
+  if (await press('[data-act="dl-all"]')) { await sleep(400); await after('dl-all'); if (await press('#q-stat [data-act="q-reset"]')) await after('q-reset'); }
+  if (await press('#qfind')) { await after('qfind'); await p.$eval('#f-q', (e) => e.blur()); }
+  ok(`stress phone: on the widest data the page never scrolls sideways after a press (${n} presses)`, n >= 15 && bad.length === 0, bad.join(' | '));
+  ok('stress phone: no page errors', t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+}
+
+const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: testHistory, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: testWay, qsearch: testQsearch, stress: testStress };
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress']); // look-independent (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

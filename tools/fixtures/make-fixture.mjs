@@ -24,13 +24,15 @@
 //            cross-chain [], retailUp missing (the page reads "none this pass", skips the id, dashes the missing lane)
 //   long     the default data at its widest: long tickers, billion-dollar pools, five-digit APRs, four-digit gas,
 //            six-figure prices (real names and numbers run longer than the fixtures: the overlap audit reads this case)
+//   stress   the long case and eleven copies of every pool across ethereum, base, bsc and arbitrum: 12-letter symbols,
+//            8-letter quotes, long venue names, about 1,500 pools (v0.5.2: what the live iPhone audit met)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { newLockFile, unlock, seal, ITERATIONS } from '../../lib/lock.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -680,6 +682,32 @@ export function longCase(data) {
   return { live, history: hist, backtest: bt };
 }
 
+// stress (v0.5.2): data as wide and as many as live data gets (the live iPhone audit of 15 Nov 2026 scrolled sideways
+// after a click, on data the fixtures never had): the long case, plus eleven copies of every pool on every chain the page
+// knows, with 12-letter symbols, 8-letter quotes and long venue names, in the discovery lanes beside their originals
+export const STRESS_COPIES = 11;
+export function stressCase(data) {
+  const L = longCase(data), live = L.live, hist = L.history;
+  const CH = ['ethereum', 'base', 'bsc', 'arbitrum'], DEX = ['pancakeswap-infinity-clmm', 'aerodrome-slipstream', 'uniswap', 'sushiswap-trident-concentrated'];
+  const src = live.pools.filter((p) => !/[<>]/.test(p.pair)), copies = new Map();
+  const twelve = (s, k) => (String(s).replace(/[^A-Za-z0-9]/g, '') + 'ABCDEFGHIJKLMNOP'.slice(k % 4)).slice(0, 12).toUpperCase();
+  for (let k = 1; k <= STRESS_COPIES; k++) for (const p of src) {
+    const q = structuredClone(p);
+    q.id = p.id.slice(0, 36) + k.toString(16).padStart(6, '0');
+    q.t0.sym = twelve(p.t0.sym, k); if (k % 3) q.t1.sym = 'WXYZWXYZ';
+    q.pair = q.t0.sym + '/' + q.t1.sym;
+    q.chain = CH[k % CH.length]; q.dex = DEX[k % DEX.length];
+    if (hist.pools[p.id]) hist.pools[q.id] = hist.pools[p.id];
+    live.pools.push(q);
+    if (!copies.has(p.id)) copies.set(p.id, []);
+    copies.get(p.id).push(q.id);
+  }
+  src.forEach((p, i) => { p.dex = DEX[i % DEX.length]; });
+  for (const p of live.pools) for (const c of p.checks || []) c.label = c.label + ', checked against the chain on every pass'; // real check labels run long
+  if (live.discovery) for (const [k, ids] of Object.entries(live.discovery)) if (Array.isArray(ids)) live.discovery[k] = ids.flatMap((id) => [id, ...(copies.get(id) || [])]);
+  return L;
+}
+
 // 30 days of fees per $1,000 and net, plus the shape of the fee stream (pattern, burst) and the gem's tags.
 // Parts are renamed to "Gem now" (yield now 45, thinness 25, flow 20, staying power 10); totals stay as scored.
 function addDaily(r, p, now) {
@@ -952,6 +980,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'rekeyed'), keys, data, now, ['live', 'history', 'backtest'], other);
   sealCase(path.join(outDir, 'nomarket'), keys, unreadMarket(data), now);
   sealCase(path.join(outDir, 'long'), keys, longCase(data), now);
+  sealCase(path.join(outDir, 'stress'), keys, stressCase(data), now);
   sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
   sealCase(path.join(outDir, 'nodisc'), keys, noDiscovery(data), now);
   sealCase(path.join(outDir, 'oddlanes'), keys, { ...data, live: { ...data.live, discovery: { newPools: [], cexLed: ['0x' + 'f'.repeat(40)], crossChain: [] } } }, now);

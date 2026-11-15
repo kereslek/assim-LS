@@ -163,6 +163,23 @@ const ENUM = () => {
   return { layer: layerId, overlay: layer !== document.body, controls: out };
 };
 const HSCROLL = () => document.documentElement.scrollWidth - document.documentElement.clientWidth;
+// what makes the page scroll sideways: the element sticking out furthest past the right edge (none inside a box that
+// clips or scrolls it), as a structural selector of up to three levels: tags, ids and class names only, never text
+const HS_WHO = () => {
+  const cw = document.documentElement.clientWidth, ok = (x) => /^[a-z][a-z0-9_-]{0,40}$/i.test(x) && !/^0x|[0-9a-f]{8,}/i.test(x);
+  const clips = (el) => { for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.overflowX !== 'visible' || cs.position === 'fixed') return true; } return false; };
+  const name = (el) => el.tagName.toLowerCase() + (el.id && ok(el.id) ? '#' + el.id : '') + [...el.classList].filter(ok).slice(0, 3).map((c) => '.' + c).join('');
+  let best = null, over = 0;
+  for (const el of document.body.querySelectorAll('*')) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.right - cw <= over + 0.5) continue;
+    if (getComputedStyle(el).position === 'fixed' || clips(el)) continue;
+    best = el; over = r.right - cw;
+  }
+  if (!best) return { px: 0, sel: 'none found' };
+  const chain = []; for (let e = best; e && e !== document.body && chain.length < 3; e = e.parentElement) chain.unshift(name(e));
+  return { px: Math.round(over), sel: chain.join(' > ') };
+};
 // wait until the page is at rest: every chart's view the same over 3 drawn frames and no animation running (a slow
 // WebKit draws a frame every 100–260 ms, so a pan step or a fade can still be under way long after a fixed sleep).
 // The wheel event first is what a user's own scroll does: it ends the page's re-aligning after a jump.
@@ -758,6 +775,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     t = Date.now();
     const visited = new Set(), seen = new Set(), perKind = {}, CAP = 10, MAX = 160, BUDGET = 6 * 60 * 1000;
     let junkAfter = 0, hscrollAfter = 0, stuck = 0, hung = null, pressing = 'walk';
+    const hsWho = []; // what scrolled the page sideways, after which kind of press (structure only)
     // a page that stops answering (it never has, but a whole job once stalled here without a word) ends the walk with the
     // kind of control it was pressing, instead of holding the job until it is cancelled
     let calling = '';
@@ -806,7 +824,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       if ((next.kind === 'open-window' || next.kind === 'explorer-link') && (await ev(() => window.__laOpen)) === open0 && newPages === np0) failAs(next.kind, next.kind === 'explorer-link' ? 'link not followed' : 'window.open not called');
       else if (after === before && !next.noop) failAs(next.kind, 'no change');
       if (await ev(JUNK)) junkAfter++;
-      if ((await ev(HSCROLL)) > 0) hscrollAfter++;
+      if ((await ev(HSCROLL)) > 0) { hscrollAfter++; if (hsWho.length < 3) { const w = await ev(HS_WHO); hsWho.push(`clicks: hscroll after ${next.kind} · ${w.px}px · ${w.sel}`); } }
     } } catch (e) {
       if (e.name !== 'PageStuck') throw e;
       hung = pressing;
@@ -824,6 +842,7 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
     R.ok('clicks: every control pressed without failure', fl.length === 0);
     R.ok('clicks: no NaN / undefined / Infinity after any click', junkAfter === 0);
     R.ok('clicks: no horizontal scroll after any click', hscrollAfter === 0);
+    for (const l of hsWho) console.log(`[${tag}] ${l}`);
     R.ok('clicks: no overlay left stuck open', stuck === 0);
     R.ok('clicks: the page answered after every press', !hung);
     if (hung) { console.log(`[${tag}] the page stopped answering after a press (${hung}): the rest of this profile is skipped`); return finish(); }
