@@ -31,6 +31,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isEnvelope, isLockFile } from '../lib/lock.mjs';
+import { KEYS_FILE, isKeysFile } from '../lib/keyring.mjs';
 
 export const STAMP_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})(\d{2})Z$/;
 export const DAY = 86400e3;
@@ -77,6 +78,7 @@ export function fileProblem(where, name, text, repoLock) {
     return null;
   }
   if (name === 'inbox.json') return isInboxKey(x) ? null : 'not-a-public-key';
+  if (where === 'data' && name === KEYS_FILE) return isKeysFile(x) ? null : 'not-a-keys-file';   // guest slots: wrapped keys only
   if (isEnvelope(x)) return null;
   if (where === 'lock' && isInboxEnvelope(x)) return null;   // lock/config.sealed.json is sealed to the inbox
   return 'not-sealed';
@@ -263,7 +265,7 @@ export function rehearse({ backupsDir, lockDir, now = Date.now(), maxAgeH = 48, 
   const repoLock = parse(fs.readFileSync(path.join(lockDir, 'lock.json'), 'utf8'));
   const repoInbox = fs.existsSync(path.join(lockDir, 'inbox.json')) ? parse(fs.readFileSync(path.join(lockDir, 'inbox.json'), 'utf8')) : undefined;
 
-  envs = Object.entries(data).filter(([n]) => n !== 'lock.json' && n !== 'inbox.json');
+  envs = Object.entries(data).filter(([n]) => n !== 'lock.json' && n !== 'inbox.json' && n !== KEYS_FILE);
   lockSealed = Object.entries(lock).filter(([n]) => n !== 'lock.json' && n !== 'inbox.json');
   check('newest backup is recent', at <= now + SKEW && now - at <= maxAgeH * 3600e3);
   check('data envelopes present', envs.length > 0);
@@ -271,6 +273,7 @@ export function rehearse({ backupsDir, lockDir, now = Date.now(), maxAgeH = 48, 
   check('every t is sane (after 2026-01-01, not after the backup, not in the future)',
     envs.every(([, x]) => isEnvelope(x) && x.t >= T_FLOOR && x.t <= at + 60e3 + SKEW && x.t <= now + SKEW));
   check('every sealed lock file parses', lockSealed.every(([, x]) => isEnvelope(x) || isInboxEnvelope(x)));
+  if (KEYS_FILE in data) check('keys.json holds wrapped keys only', isKeysFile(data[KEYS_FILE]));
   check('the repo lock is a lock file', isLockFile(repoLock));
   check('lock.json equals the repo lock', isLockFile(data['lock.json']) && isLockFile(repoLock) && canon(data['lock.json']) === canon(repoLock));
   check('lock/lock.json equals the repo lock', isLockFile(lock['lock.json']) && isLockFile(repoLock) && canon(lock['lock.json']) === canon(repoLock));

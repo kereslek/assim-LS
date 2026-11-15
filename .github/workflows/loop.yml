@@ -112,8 +112,9 @@ jobs:
           LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
         run: |
           if [ -z "$(ls out/data 2>/dev/null)" ]; then echo 'sealed files to publish: none'; exit 0; fi
-          # a real push only in live mode with a live pass wired in; otherwise a dry run
-          if [ "$MODE" = live ] && [ -n "$LIVE_PASS" ]; then node scripts/publish-data.mjs; else node scripts/publish-data.mjs --dry-run; fi
+          # a real push only in live mode with a live pass wired in; otherwise a dry run. --own-keys: the loop's
+          # keys.json (guest slots, the data key) is the one to publish; older pinned code ignores the flag
+          if [ "$MODE" = live ] && [ -n "$LIVE_PASS" ]; then node scripts/publish-data.mjs --own-keys; else node scripts/publish-data.mjs --dry-run; fi
       - name: Save the market-data caches for the next run
         if: always() && hashFiles('pinned/out/cache/**') != ''
         uses: actions/cache/save@v4

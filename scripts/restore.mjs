@@ -27,7 +27,8 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isEnvelope, isLockFile, open, unlock, passphraseFrom, readLock } from '../lib/lock.mjs';
 import { inboxKeys, inboxOpen } from '../lib/inbox.mjs';
-import { DATA_FILES, openStore } from '../lib/store.mjs';
+import { ALL_FILES, DATA_FILES, OWNER_EXTRA, openStore } from '../lib/store.mjs';
+import { KEYS_FILE, isKeysFile, ringOf } from '../lib/keyring.mjs';
 import { parseStore } from '../lib/snapshots.mjs';
 import { unpackGt } from '../lib/feehist.mjs';
 import { unpackSx } from '../lib/exactfees.mjs';
@@ -92,7 +93,18 @@ export const SHAPES = {
   },
   'backtest.json': (x) => (isObj(x.pools) ? [] : ['pools']),
   'log.json': (x) => (Array.isArray(x.lines) && isNum(x.errors) ? [] : ['lines']),
+  // key slots (docs/briefs/guest-access.md): the owner's settings, and the guest list
+  'owner.json': (x) => (['ticket', 'stopLoss', 'gemAt'].every((k) => x[k] === null || isNum(x[k])) ? [] : ['fields']),
+  'guests.json': (x) => (Array.isArray(x.guests) && Array.isArray(x.done) && Number.isInteger(x.gen) ? [] : ['guests']),
 };
+// The sealed files a folder holds (the core five, plus owner.json and guests.json once there are key slots).
+const sealedIn = (data) => ALL_FILES.filter((n) => n in data);
+// The keys that open a backup's files: the lock's, and the data key of its keys.json (null when it has none or it
+// doesn't open, which the checks report).
+function ringOfData(data, aes) {
+  if (!(KEYS_FILE in data)) return { ring: ringOf(aes, null), ok: null };
+  try { return { ring: ringOf(aes, parse(data[KEYS_FILE])), ok: true }; } catch { return { ring: ringOf(aes, null), ok: false }; }
+}
 
 // Counts only (pools, rows, days), for the comparison with the live data branch.
 export function countsOf(objs) {
@@ -125,7 +137,9 @@ export function checkBackup({ folder, stamp, repoLock, repoInbox = null, keys, n
   const want = [...DATA_FILES, 'lock.json'];
   const missing = want.filter((n) => !(n in data)).length + ['lock.json', 'inbox.json'].filter((n) => !(n in lock)).length;
   check(`every file is there (${DATA_FILES.length} data files, lock.json, lock/)`, missing === 0);
-  check('no unknown files', Object.keys(data).every((n) => want.includes(n) || n === 'inbox.json') && Object.keys(lock).every((n) => ['lock.json', 'inbox.json', 'config.sealed.json'].includes(n)));
+  check('no unknown files', Object.keys(data).every((n) => want.includes(n) || n === 'inbox.json' || OWNER_EXTRA.includes(n) || n === KEYS_FILE) && Object.keys(lock).every((n) => ['lock.json', 'inbox.json', 'config.sealed.json'].includes(n)));
+  const kr = ringOfData(data, keys.aes);
+  if (kr.ok !== null) check('keys.json holds wrapped keys only, and its owner slot opens with the lock', kr.ok && isKeysFile(parse(data[KEYS_FILE])));
   check('lock.json equals the repo lock', isLockFile(parse(data['lock.json'])) && canon(parse(data['lock.json'])) === canon(repoLock));
   check('lock/lock.json equals the repo lock', isLockFile(parse(lock['lock.json'])) && canon(parse(lock['lock.json'])) === canon(repoLock));
   const pub = inboxKeys(keys.token);
@@ -137,20 +151,21 @@ export function checkBackup({ folder, stamp, repoLock, repoInbox = null, keys, n
   }
   const envs = {}, objs = {}, shapes = [];
   let sealed = 0, opened = 0, timesOk = true;
-  for (const n of DATA_FILES) {
-    if (!(n in data)) continue;
+  for (const n of sealedIn(data)) {
     const env = parse(data[n]);
     if (!isEnvelope(env)) continue;
     sealed++; envs[n] = env;
-    let x;
-    try { x = JSON.parse(open(env, keys.aes)); opened++; } catch { continue; }
+    let x = null;
+    for (const k of kr.ring.openers(n)) { try { x = JSON.parse(open(env, k)); break; } catch { x = null; } }
+    if (x === null) continue;
+    opened++;
     objs[n] = x;
     if (!isObj(x) || x.v !== 1 || !isNum(x.t)) { shapes.push(`${n}: not v1 with a time`); continue; }
     for (const p of SHAPES[n](x)) shapes.push(`${n}: ${p}`);
     // the envelope's readable t is the file's own (the sealed log is sealed a moment after its t)
     if (!(env.t >= T_FLOOR && env.t <= at + 60e3 + SKEW && env.t <= now + SKEW && Math.abs(env.t - x.t) <= 60e3)) timesOk = false;
   }
-  const present = DATA_FILES.filter((n) => n in data).length;
+  const present = sealedIn(data).length;
   check('every data file is a sealed envelope', present > 0 && sealed === present);
   check('every data file opens with the lock', present > 0 && opened === present);
   check('every data file is in its docs/DATA.md shape', opened === present && present > 0 && shapes.length === 0);
@@ -158,15 +173,17 @@ export function checkBackup({ folder, stamp, repoLock, repoInbox = null, keys, n
   if (maxAgeH != null) check(`the backup is recent (at most ${maxAgeH} h old)`, at != null && at <= now + SKEW && now - at <= maxAgeH * 3600e3);
   const newest = Math.max(0, ...Object.values(envs).map((e) => e.t));
   return { ok: checks.every((c) => c.ok), checks, objs, counts: countsOf(objs), ageMin: at == null ? null : Math.round((now - at) / 6e3) / 10,
-    lagMin: at != null && newest ? Math.round((at - newest) / 6e3) / 10 : null, shapeProblems: shapes.length, missing };
+    lagMin: at != null && newest ? Math.round((at - newest) / 6e3) / 10 : null, shapeProblems: shapes.length, missing, sealedFiles: present };
 }
 
 // ---- check 3: the set exactly as the data branch holds it --------------------------------------------------
-// One commit with no parent: lock.json and the data files, the backup's own bytes. Returns the commit id.
+// One commit with no parent: lock.json and the data files (and keys.json, owner.json, guests.json when the backup
+// has them), the backup's own bytes. Returns the commit id.
 export function dataCommit(git, folder, message) {
   const entries = [];
-  for (const n of [...DATA_FILES, 'lock.json']) {
-    if (!(n in folder.data)) throw new Error('missing file: the backup is not a complete set');
+  for (const n of [...DATA_FILES, 'lock.json']) if (!(n in folder.data)) throw new Error('missing file: the backup is not a complete set');
+  for (const n of [...ALL_FILES, 'lock.json', KEYS_FILE]) {
+    if (!(n in folder.data)) continue;
     entries.push({ mode: '100644', type: 'blob', sha: git(['hash-object', '-w', '--stdin'], folder.data[n]), name: n });
   }
   const tree = mkTree(git, entries.sort((a, b) => (a.name < b.name ? -1 : 1)));
@@ -216,10 +233,16 @@ export async function loopStart({ folder, env, say = () => {} }) {
 export function liveCounts({ dir, keys }) {
   const objs = {};
   let t = null;
+  let ring = ringOf(keys.aes, null);
+  try { if (fs.existsSync(path.join(dir, KEYS_FILE))) ring = ringOf(keys.aes, JSON.parse(fs.readFileSync(path.join(dir, KEYS_FILE), 'utf8'))); } catch { /* unread: null counts */ }
   for (const n of DATA_FILES) {
     const f = path.join(dir, n);
     if (!fs.existsSync(f)) continue;
-    try { const env = JSON.parse(fs.readFileSync(f, 'utf8')); objs[n] = JSON.parse(open(env, keys.aes)); if (n === 'live.json') t = env.t; } catch { /* unread: null counts */ }
+    try {
+      const env = JSON.parse(fs.readFileSync(f, 'utf8'));
+      for (const k of ring.openers(n)) { try { objs[n] = JSON.parse(open(env, k)); break; } catch { /* the next key */ } }
+      if (n === 'live.json' && objs[n]) t = env.t;
+    } catch { /* unread: null counts */ }
   }
   return { counts: countsOf(objs), t };
 }
@@ -245,7 +268,7 @@ export async function drill({ dir, stamp, lockDir = 'lock', liveDir = null, maxA
   if (c.missing === 0 && c.checks.find((k) => k.name.startsWith('every data file opens'))?.ok) {
     let ls = null;
     try { ls = await loopStart({ folder, env }); } catch (e) { say(`drill ${label}: rebuild failed: ${safeMsg(e)}`); }
-    const a = { name: `rebuilt as the data branch and restored by the loop's own code (${DATA_FILES.length} files)`, ok: !!ls && ls.restored === DATA_FILES.length };
+    const a = { name: `rebuilt as the data branch and restored by the loop's own code (${c.sealedFiles} files)`, ok: !!ls && ls.restored === c.sealedFiles };
     const b = { name: 'a dry-run pass starts from it (counters read, every file loads as the scan reads it, publish dry run)', ok: !!ls && ls.passOk && !!ls.loaded };
     checks.push(a, b);
     say(`drill ${label}: ${a.name}: ${a.ok ? 'pass' : 'FAIL'}${ls ? `; files restored ${ls.restored}` : ''}`);
@@ -296,7 +319,7 @@ export function restore({ dir, stamp, lockDir = 'lock', repo = '.', remote, appl
   const commit = dataCommit(git, folder, `Sealed data, restored from backup ${stamp}`);
   const line = git(['ls-remote', '--heads', remote, DATA_BRANCH]);
   const old = line ? line.split(/\s+/)[0] : null;
-  say(`restore: rebuilt as one commit with no parent (${DATA_FILES.length + 1} files); the data branch is ${old ? 'there' : 'missing'}; loop runs queued or in progress: ${active ?? 'unread'}`);
+  say(`restore: rebuilt as one commit with no parent (${c.sealedFiles + 1 + (KEYS_FILE in folder.data ? 1 : 0)} files); the data branch is ${old ? 'there' : 'missing'}; loop runs queued or in progress: ${active ?? 'unread'}`);
   let tag = `refs/tags/data-pre-restore-${tagStamp(now)}`;
   for (let i = 2; git(['ls-remote', remote, tag]) && i < 100; i++) tag = `refs/tags/data-pre-restore-${tagStamp(now)}-${i}`;
   if (!apply) {
@@ -319,7 +342,7 @@ export function restore({ dir, stamp, lockDir = 'lock', repo = '.', remote, appl
   gitInit(back);
   const r = restoreData({ repo: back, outDir: path.join(back, 'out'), lockPath: path.resolve(lockDir, 'lock.json'), remote: path.isAbsolute(remote) || /:\/\//.test(remote) ? remote : git(['remote', 'get-url', remote]), env, say: () => {} });
   fs.rmSync(back, { recursive: true, force: true });
-  if (r.copied !== DATA_FILES.length) throw new Error('bad restore: the restored data branch did not read back with the lock');
+  if (r.copied !== c.sealedFiles) throw new Error('bad restore: the restored data branch did not read back with the lock');
   say(`restore: data branch replaced with backup ${stamp} and read back with the lock (${r.copied} files): yes; pushed: yes`);
   return { dryRun: false, commit, old, tag: old ? tag : null };
 }

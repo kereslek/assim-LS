@@ -10,6 +10,10 @@
 // - After each pass: the loop's health counters go into the sealed live.json (health.loop), then the sealed
 //   files are published (--dry-run: checked, nothing pushed). Counters persist between runs inside that
 //   sealed file: at start the data branch is restored (publish-data --restore) and they are read back.
+// - Guests (lib/guests.mjs, docs/briefs/guest-access.md): after the restore, and before each publish, the keys step
+//   reads the sealed requests in inbox/ and adds or removes guest slots (a removal rotates the data key). The first
+//   run on this code creates the data key, only when the data branch was read and has no keys.json. A keys step that
+//   fails stops that pass's publish: the data branch keeps its last good commit.
 //     health.loop = { passes24h, ok24h, lastGapMin (longest gap between pass starts in the last 24 h),
 //                     watchdogLast (ms of the last run the watchdog started), recent: [[t, ok 1|0]] }
 // - The pass command's own output goes to the sealed log only (lib/quietlogs.mjs). The public log gets
@@ -23,6 +27,7 @@ import { pathToFileURL } from 'node:url';
 import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { isEnvelope, openLock } from '../lib/lock.mjs';
 import { openStore } from '../lib/store.mjs';
+import { guestLine, guestStep, readInbox } from '../lib/guests.mjs';
 import { publishData, restoreData } from './publish-data.mjs';
 
 export const HOUR = 3600e3, DAY = 24 * HOUR, MIN = 60e3;
@@ -83,7 +88,8 @@ export function injectHealth(store, state, { now, next = null, sealedLog = null 
 }
 
 // ---- the loop ----------------------------------------------------------------------------------------
-// deps: { say, now, sleep, runPass, publish, restore, store, marker, sealedLog }
+// deps: { say, now, sleep, runPass, publish, restore, store, marker, sealedLog, guests? }
+// guests(phase, ctx): the keys step; phase 'start' (ctx: { remoteRead, remoteKeys }) may migrate, 'pass' never does.
 export async function runLoop({ passCmd, mode = 'rehearsal', by = 'manual', spacing = 360, deadlineMs = 320 * MIN, maxPasses = null,
   passTimeoutMs = 45 * MIN, dryRun = true, restore = true }, deps) {
   const { say, now, sleep, runPass, publish, store, marker } = deps;
@@ -93,10 +99,15 @@ export async function runLoop({ passCmd, mode = 'rehearsal', by = 'manual', spac
     say('loop: no pass command (the live pass is not wired yet): nothing to run, no successor');
     return { passes: 0, ok: 0, exitCode: 0, refused: true, health: null };
   }
+  let restored = null;
   if (restore) {
     const r0 = now();
-    try { deps.restore(); } catch (e) { say(`restore failed: ${safeMsg(e)}`); }
+    try { restored = deps.restore() || null; } catch (e) { say(`restore failed: ${safeMsg(e)}`); }
     timing.restore += now() - r0;
+  }
+  if (deps.guests) {
+    try { deps.guests('start', { remoteRead: !!restored && restored.present !== undefined, remoteKeys: !!restored?.keys }); }
+    catch (e) { say(`guests: keys step failed (${safeMsg(e)})`); }
   }
   let prev = null;
   try { prev = store.get('live.json'); } catch { say('restore: live.json does not open with this lock; counters start empty'); }
@@ -117,9 +128,13 @@ export async function runLoop({ passCmd, mode = 'rehearsal', by = 'manual', spac
     state = recordPass(state, { t: s, ok: r.ok }, now());
     const h0 = now();
     const inj = injectHealth(store, state, { now: now(), next: s + spacing * 1000, sealedLog: deps.sealedLog?.() });
+    let keysOk = true;
+    if (deps.guests) {
+      try { deps.guests('pass'); } catch (e) { keysOk = false; say(`guests: keys step failed (${safeMsg(e)}); this pass is not published`); }
+    }
     const b = now() - h0, p0 = now();
-    let pubOk = true;
-    try { publish({ dryRun }); } catch (e) { pubOk = false; say(`publish failed: ${safeMsg(e)}`); }
+    let pubOk = keysOk;
+    if (keysOk) try { publish({ dryRun }); } catch (e) { pubOk = false; say(`publish failed: ${safeMsg(e)}`); }
     const c = now() - p0;
     if (!pubOk && r.ok) state = markPass(state, s, false);
     const passOk = r.ok && pubOk;
@@ -238,8 +253,13 @@ async function main(argv) {
     maxPasses: argv.includes('--max-passes') ? num('--max-passes', '', 3) : null, passTimeoutMs: num('--pass-timeout-min', 'PASS_TIMEOUT_MIN', 45) * MIN,
   }, {
     say, store, now: Date.now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), runPass: runPassCommand, marker: writeMarker,
-    publish: ({ dryRun: d }) => publishData({ dryRun: d, say }), restore: () => restoreData({ say }),
+    publish: ({ dryRun: d }) => publishData({ dryRun: d, say, ownKeys: true }), restore: () => restoreData({ say }),
     sealedLog: () => ({ lines: stats().lines, errors: stats().errors, categories: stats().categories }),
+    guests: (phase, ctx = {}) => {
+      const inbox = readInbox({ branch: process.env.BRANCH });
+      const r = guestStep({ keys, requests: inbox.envs, allowMigrate: phase === 'start' && !!ctx.remoteRead && !ctx.remoteKeys });
+      if (phase === 'start' || r.wrote || r.refused || r.bad || r.skipped === 'guests file unread') say(guestLine(r, inbox));
+    },
   });
   if (mode === 'rehearsal' && !res.refused) {
     let back = null;
