@@ -678,7 +678,7 @@ export function longCase(data) {
     for (const k of ['netUsd', 'feesUsd', 'lvrUsd', 'costsUsd', 'entryUsd']) b[k] = money(b[k]);
     b.grid.net = b.grid.net.map((row) => row.map((x) => (isNum(x) ? sig(x * 97, 5) : x)));
   }
-  for (const h of Object.values(hist.pools)) { h.d = h.d.map((r) => [r[0], r[1], money(r[2]), money(r[3]), r[4]]); h.h = h.h.map((r) => [r[0], r[1], r[2], money(r[3]), r[4]]); if (h.y) h.y = h.y.map((r) => [r[0], money(r[1]), ...r.slice(2)]); }
+  for (const h of Object.values(hist.pools)) { h.d = h.d.map((r) => [r[0], r[1], money(r[2]), money(r[3]), r[4]]); h.h = h.h.map((r) => [r[0], r[1], r[2], money(r[3]), r[4]]); if (h.y) h.y = h.y.map((r) => [r[0], money(r[1]), ...r.slice(2)]); for (const k of ['yv', 'yt']) if (h[k]) h[k] = h[k].map((r) => [money(r[0]), r[1]]); }
   return { live, history: hist, backtest: bt };
 }
 
@@ -767,6 +767,7 @@ function makeHistory(r, pools, now) {
   // next row's are null) and a row a few minutes off its mark.
   const out = { v: 1, t: now, pools: {}, health: [] };
   const ry = rng(9173); // the fee history's own stream: h and d stay as they were
+  const rv = rng(4409); // v0.6.0: the volume and TVL history's own stream: every other row stays as it was
   const hourNow = Math.floor(now / H) * H, dayNow = Math.floor(now / D) * D;
   const pk = (p) => [p.t0.sym, p.t1.sym].sort().join('/'), first = pools.slice(0, 60), fk = new Set(first.map(pk));
   [...first, ...pools.slice(60).filter((p) => fk.has(pk(p)))].forEach((p, k) => { // and the other pools of their pairs (v0.4.7: the fee chart's tiers)
@@ -822,6 +823,31 @@ function makeHistory(r, pools, now) {
     const ex = y.filter((x) => x[2] === 'x' || x[2] === 's').length, es = y.filter((x) => x[2] === 'e').length, sw = y.filter((x) => x[2] === 's').length;
     out.pools[p.id].y = y;
     out.pools[p.id].yp = { exact: ex, est: es, age: k % 17 === 6 ? null : ny, dyn: !!p.dynamicFee, sw };
+    // v0.6.0 fixtures: each y day's volume (yv) and end-of-day TVL (yt), aligned row for row with y (history.json,
+    // lib/tvlhist.mjs). Made up: volume = the day's fees ÷ the LP fee rate (the swaps' own days 's', older ones from the
+    // candles 'g'), a few unread days (null, never 0) and a stretch of unread candles on some pools; TVL walks around the
+    // pool's TVL. Ethereum v3: balances at archive blocks ('b') with the last days recorded by the passes ('r'); Base v3:
+    // only the last 90 days readable (archive reach, ytp.lim 'archive', ytp.from); v4: map readings only, recently and on
+    // the persistence check's 10/20/30-day marks ('m'), every other past day not readable (ytp.lim 'v4').
+    const yv = [], yt = [], lim = p.v === 4 ? 'v4' : p.chain === 'base' ? 'archive' : null, fromT = lim === 'archive' ? yd - 89 * D : null;
+    const gapV = k % 6 === 2 && ny > 150 ? [100, 130] : null, tvl0 = isNum(p.tvlUsd) ? p.tvlUsd : null;
+    let walk = 0;
+    for (let i = 0; i < y.length; i++) {
+      const j = y.length - 1 - i, t = y[i][0], f = y[i][1];
+      walk += 0.035 * gauss(rv);
+      let v = null, vs = null;
+      if (!(gapV && j >= gapV[0] && j < gapV[1]) && rv() >= 0.035) {
+        v = isNum(f) && (rate || spec.fee) ? sig((f / (rate || spec.fee)) * (y[i][2] === 'e' ? 1 : between(rv, 0.9, 1.1)), 4) : feeD != null && (rate || spec.fee) ? sig((feeD / (rate || spec.fee)) * between(rv, 0.4, 1.6), 4) : null;
+        vs = v == null ? null : y[i][2] === 's' ? 's' : 'g';
+      }
+      yv.push(v == null ? [null, null] : [v, vs]);
+      let tv = null, ts = null;
+      const readable = lim === 'v4' ? j < 3 || j === 9 || j === 19 || j === 29 : lim === 'archive' ? t >= fromT : true;
+      if (tvl0 != null && readable && rv() >= 0.03) { tv = sig(tvl0 * Math.exp(walk - 0.02 * j / 30) * (1 + 0.15 * Math.sin(j / 37)), 4); ts = lim === 'v4' ? 'm' : j < 3 ? 'r' : 'b'; }
+      yt.push(tv == null ? [null, null] : [tv, ts]);
+    }
+    const cnt = (a, s) => a.filter((x) => x[1] === s).length;
+    Object.assign(out.pools[p.id], { yv, yvp: { s: cnt(yv, 's'), g: cnt(yv, 'g') }, yt, ytp: { b: cnt(yt, 'b'), r: cnt(yt, 'r'), m: cnt(yt, 'm'), lim, from: fromT } });
   });
   for (let i = 47; i >= 0; i--) {
     const passes = 9 + (r() < 0.3 ? 1 : 0) - (i === 30 ? 6 : 0);
