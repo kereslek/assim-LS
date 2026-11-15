@@ -19,5 +19,20 @@ jobs:
           node-version: 22
       - name: Unit tests first (a broken check never reads real data)
         run: node --test test/*.test.mjs
+      # CoinGecko's monthly quota mark (lib/apicount.mjs) rides in the scan's API counts: with this month marked, the
+      # CoinGecko probes print "skipped: quota until 1 Dec" and resume by themselves on the 1st. Restored read-only
+      # (public market data and counts; never saved from here)
+      - name: The loop's market-data caches (for CoinGecko's monthly mark)
+        uses: actions/cache/restore@v4
+        with:
+          path: pinned/out/cache
+          key: loop-cache-${{ github.run_id }}
+          restore-keys: loop-cache-
+      - name: The pool list's market-data caches (for CoinGecko's monthly mark)
+        uses: actions/cache/restore@v4
+        with:
+          path: out/cache
+          key: history-${{ github.run_id }}
+          restore-keys: history-
       - name: Probes (public data only)
         run: node scripts/probes.mjs

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { makeApiCounter, quotaRefusal, statusOf, untilText, CG_STREAK } from '../lib/apicount.mjs';
+import { makeApiCounter, markOnlyCounter, quotaRefusal, statusOf, untilText, CG_STREAK } from '../lib/apicount.mjs';
 import { getJson as realGetJson } from '../lib/rpc.mjs';
 import { cachedUniverse, fetchCoinGecko, UNIVERSE_STALE_MS } from '../lib/universe.mjs';
 import { BudgetError } from '../lib/budget.mjs';
@@ -297,4 +297,37 @@ test('cexVolumes with the quota out: no CoinGecko call, the exchanges serve (src
   const cgFake = async (u) => (u.includes('coingecko') ? { tickers: [{ base: 'AAA', target: 'USDT', market: { name: 'Ex', identifier: 'ex' }, converted_volume: { usd: 1e6 } }] } : venueFake().fn(u));
   const r4 = await cexVolumes(fine.wrap(cgFake), ['aaa-coin'], { cache: makeCexCache(path.join(dir(), 'c4.json'), { now: NOW }), now: NOW, budget, apis: fine, meta: META });
   assert.deepEqual([r4.calls, r4.vol.get('aaa-coin').src, r4.vol.get('aaa-coin').usd, r4.fallback], [1, 'coingecko', 1e6, null]);
+});
+
+test('the probes carry the scan\'s monthly mark only: skipped until the 1st, then they resume; no daily budget, nothing written; an earlier month\'s mark is ignored', async () => {
+  const d = dir(), loop = path.join(d, 'loop-apis.json'), list = path.join(d, 'list-apis.json');
+  // the loop's file marks this month, with the day's counts over the budget; the pool list's has no mark
+  const scan = makeApiCounter({ file: loop, now: NOW });
+  for (let i = 0; i < scan.cap + 5; i++) scan.note('coingecko');
+  scan.markOut('test');
+  fs.writeFileSync(list, JSON.stringify({ v: 1, day: '2026-11-14', coingecko: { used: 3, cap: 150, out: null } }));
+  const before = fs.readFileSync(loop, 'utf8');
+  const c = markOnlyCounter([path.join(d, 'missing.json'), list, loop], { now: NOW });
+  assert.equal(c.isOut(), true);
+  assert.equal(`skipped: quota until ${untilText(c.month)}`, 'skipped: quota until 1 Dec');
+  let sent = 0;
+  const get = c.wrap(async () => { sent++; return {}; });
+  await assert.rejects(get('https://api.coingecko.com/api/v3/ping'), BudgetError);
+  assert.equal(sent, 0, 'no CoinGecko call while the month is out');
+  assert.equal(fs.readFileSync(loop, 'utf8'), before, 'the cache file is never written');
+  // 1 Dec: the November mark no longer holds, the probes resume, and the scan's day counts never budget them
+  const dec = markOnlyCounter([list, loop], { now: Date.UTC(2026, 11, 1, 0, 10) });
+  assert.equal(dec.isOut(), false);
+  const next = dec.wrap(async () => { sent++; return {}; });
+  await next('https://api.coingecko.com/api/v3/ping');
+  assert.equal(sent, 1);
+  // the same month without a mark (no file): asked, and a refusal that names the month's limit marks it for the run
+  const none = markOnlyCounter([], { now: NOW });
+  assert.equal(none.isOut(), false);
+  const refusing = none.wrap(async () => { throw httpErr(429, QUOTA_BODY); });
+  await assert.rejects(refusing('https://api.coingecko.com/api/v3/coins/uniswap/tickers'));
+  assert.equal(none.isOut(), true, 'found this run');
+  // an October mark read in November would skip a month too long: ignored
+  fs.writeFileSync(list, JSON.stringify({ v: 1, day: '2026-10-31', coingecko: { used: 0, cap: 150, out: '2026-10' } }));
+  assert.equal(markOnlyCounter([list], { now: NOW }).isOut(), false);
 });

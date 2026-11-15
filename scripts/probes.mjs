@@ -17,6 +17,7 @@ import { dailyHistory, geckoTerminalHistory } from '../lib/history.mjs';
 import { parseDexScreenerPairs } from '../lib/aggregators.mjs';
 import { pastBlockAnswer } from '../lib/snapshots.mjs';
 import { readVerified } from '../lib/etherscan.mjs';
+import { markOnlyCounter, untilText } from '../lib/apicount.mjs';
 
 const ETH_RPCS = {
   publicnode: 'https://ethereum-rpc.publicnode.com', drpc: 'https://eth.drpc.org', '1rpc': 'https://1rpc.io/eth',
@@ -52,6 +53,15 @@ const BASE = {
   USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
 };
 
+// CoinGecko's monthly quota mark, the scan's own (lib/apicount.mjs): probes.yml restores the loop's market-data cache
+// (public market data and API counts) and the pool list's, and the mark of this UTC month in either one skips every CoinGecko probe
+// ("skipped: quota until 1 Dec"). The mark clears itself on the 1st, so the probes resume by themselves. Without a mark,
+// the probes' CoinGecko calls go through the counter's fetcher: a refusal naming the month's limit marks it for the
+// rest of this run. Read-only: the cache files are never written here.
+const apis = markOnlyCounter((process.env.PROBE_API_FILES || 'pinned/out/cache/apis.json,out/cache/apis.json').split(',').map((f) => f.trim()).filter(Boolean));
+const cgGet = apis.wrap(getJson);
+const cgSkipped = () => `skipped: quota until ${untilText(apis.month)}`;
+
 const results = [];
 const pct = (x) => (x == null ? '—' : x < 0.1 || x > 0.9 ? `${(x * 100).toFixed(1)}%` : `${Math.round(x * 100)}%`);
 function say(ok, area, msg) {
@@ -83,11 +93,13 @@ async function probeRpcs(chain, rpcs, chainId) {
 
 async function probeApis() {
   for (const [label, url] of Object.entries(APIS)) {
+    if (label === 'coingecko' && apis.isOut()) { say(null, `api ${label}`, cgSkipped()); continue; }
     try {
-      const j = await getJson(url, { headers: { accept: 'application/json' } }, 12000);
+      const j = await (label === 'coingecko' ? cgGet : getJson)(url, { headers: { accept: 'application/json' } }, 12000);
       const fact = label === 'defillama' ? `ETH $${Math.round(j?.coins?.['coingecko:ethereum']?.price ?? NaN)}` : `${Object.keys(j || {}).length} top-level keys`;
       say(true, `api ${label}`, fact);
     } catch (e) {
+      if (label === 'coingecko' && apis.isOut()) { say(null, `api ${label}`, `${cgSkipped()} (found this run)`); continue; }
       say(false, `api ${label}`, String(e.message || e).replace(/[^A-Za-z0-9 ]/g, '').slice(0, 40));
     }
   }
@@ -297,7 +309,13 @@ async function probeRouters(eth, base) {
 
 // CoinGecko tickers (no key here): the centralised share of a coin's markets, as lib/cex.mjs reads it.
 async function probeTickers() {
-  const r = parseTickers(await getJson('https://api.coingecko.com/api/v3/coins/uniswap/tickers?order=volume_desc&depth=false&page=1', { headers: { accept: 'application/json' } }, 20000));
+  if (apis.isOut()) { say(null, 'tickers coingecko', cgSkipped()); return; }
+  const j = await cgGet('https://api.coingecko.com/api/v3/coins/uniswap/tickers?order=volume_desc&depth=false&page=1', { headers: { accept: 'application/json' } }, 20000).catch((e) => {
+    if (apis.isOut()) return null;
+    throw e;
+  });
+  if (apis.isOut()) { say(null, 'tickers coingecko', `${cgSkipped()} (found this run)`); return; }
+  const r = parseTickers(j);
   say(r ? r.cex > 0 && r.dex > 0 : null, 'tickers coingecko', r ? `UNI: ${r.cex} centralised markets ($${Math.round(r.vol / 1e3)}k in 24 h), ${r.dex} DEX markets left out, ${r.skipped} anomalous or stale` : 'unread');
 }
 
