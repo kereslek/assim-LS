@@ -426,7 +426,7 @@ svg text{font-family:var(--mono);font-size:10.5px;fill:var(--muted);font-variant
 svg .gridl{stroke:var(--grid);stroke-width:1;fill:none}
 svg .axisl{stroke:var(--line);stroke-width:1;fill:none}
 svg .t-fg{fill:var(--fg)}svg .t-acc{fill:var(--accent);font-weight:700}svg .t-pos{fill:var(--pos)}svg .t-neg{fill:var(--neg)}svg .t-cost{fill:var(--cost)}svg .t-mut{fill:var(--muted)}svg .halo{paint-order:stroke;stroke:var(--surface);stroke-width:6px;stroke-linejoin:round}#rp-price,#rp-money,#lab-lines{overflow-x:clip}
-.pane{display:grid;gap:4px;min-width:0}
+.pane{display:grid;gap:4px;min-width:0;grid-template-columns:minmax(0,1fr)}
 .pane-title{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px;align-items:baseline}
 .caption{font-size:12px;color:var(--muted)}
 .caption b{color:var(--fg);font-weight:600}

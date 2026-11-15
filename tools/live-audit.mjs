@@ -343,7 +343,7 @@ async function part2(page, run, skip, box, press) {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#app:not([hidden])', { timeout: 60000 }); await page.waitForFunction(() => { const b = document.querySelector('#best'); return b && b.children.length > 0; }, null, { timeout: 30000 }); await sleep(800);
     const st2 = await page.$('#best .ttl .star'), n2 = (await page.$$('#fav .mc')).length, on = st2 ? (await st2.getAttribute('aria-pressed')) === 'true' : null;
-    if (!st2) console.log(`[${tag}] gestures: after the reload the best find shows no star`);
+    if (!st2) console.log('part 2: after the reload the best find shows no star');
     await press('#best .ttl .star'); await sleep(250);
     run('part 2: a star fills (or empties) Favourites and stays after a reload', n1 === n0 + (was ? -1 : 1) && n2 === n1 && on === !was);
     run('part 2: a second press puts Favourites back as it was', (await page.$$('#fav .mc')).length === n0);

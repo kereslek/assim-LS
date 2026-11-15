@@ -4313,7 +4313,21 @@ async function testStress(browser) {
     past = Math.max(past, await p2.evaluate(PAST));
     const hs = await p2.evaluate(HS_WHO); if (hs && bad.length < 3) bad.push(`after bt-row · ${hs}`);
   }
+  // v0.5.4: one wide item in a backtest pane (live data: the strategy lab's heat pane, 627 px on a 393 px iPhone) must
+  // not stretch the pane's other content or its card past the screen. Plant a wide item and measure the rest.
+  const blow = await p2.evaluate(() => {
+    const pane = document.querySelector('#bt-lab .lab-heat') || document.querySelector('#bt-lab .pane');
+    if (!pane) return null;
+    const w = document.createElement('div'); w.style.cssText = 'width:700px;height:4px'; w.dataset.plant = '1';
+    pane.insertBefore(w, pane.firstChild);
+    const cw = document.documentElement.clientWidth, card = pane.closest('.sub-card').getBoundingClientRect();
+    const others = [...pane.children].filter((e) => !e.dataset.plant).map((e) => Math.round(e.getBoundingClientRect().right - card.right));
+    const out = { card: Math.round(card.right - cw), others: Math.max(0, ...others) };
+    w.remove();
+    return out;
+  });
   await t2.ctx.close();
+  ok('stress phone: a wide item in a backtest pane stretches neither the pane\'s other content nor its card', blow && blow.card <= 1 && blow.others <= 1, JSON.stringify(blow));
   ok('stress phone: backtest replay labels stay inside their chart', opened > 0 && past <= 1, `${opened} replays opened · ${Math.round(past)} px past the chart`);
   ok(`stress phone: on the widest data the page never scrolls sideways after a press (${n} presses)`, n >= 15 && bad.length === 0, bad.join(' | '));
   ok('stress phone: no page errors', t.errors.length === 0, t.errors[0]);
