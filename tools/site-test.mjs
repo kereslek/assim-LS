@@ -2348,7 +2348,9 @@ async function testFold(browser) {
     await p.evaluate(() => { document.querySelector('#sheet-body').scrollTop = 0; }); await sleep(100);
     const bb = await p.locator('#sheet-body').boundingBox(), seq = [];
     await p.mouse.move(bb.x + bb.width / 2, bb.y + Math.min(300, bb.height / 2));
-    const push = async () => { try { await p.mouse.wheel(0, 90); } catch (e) { await p.evaluate(() => document.querySelector('#sheet-body').scrollBy({ top: 90, behavior: 'smooth' })); } }; // mobile WebKit has no wheel: a smooth scroll
+    // mobile WebKit has no wheel: a smooth scroll, which waits until it has stopped (on a slow runner a new smooth scroll
+    // cancels the one still running, and eight of them once covered only 191 px: a test artefact, not the page)
+    const push = async () => { try { await p.mouse.wheel(0, 90); } catch (e) { await p.evaluate(async () => { const b = document.querySelector('#sheet-body'), frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); b.scrollBy({ top: 90, behavior: 'smooth' }); let a = b.scrollTop, same = 0; for (const t0 = performance.now(); same < 3 && performance.now() - t0 < 1500;) { await frame(); if (Math.abs(b.scrollTop - a) < 0.5) same++; else { same = 0; a = b.scrollTop; } } }); } };
     for (let i = 0; i < 8; i++) { await push(); await sleep(60); seq.push(await p.evaluate(() => [document.querySelector('#sheet-body').scrollTop, Math.round(document.querySelector('#sheet .sheet-head').getBoundingClientRect().height)])); }
     // where it ends: once the last smooth scroll has stopped (the same scrollTop over 3 drawn frames, up to 4 s)
     seq.push(await p.evaluate(async () => { const b = document.querySelector('#sheet-body'), frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); let a = b.scrollTop, same = 0; for (const t0 = performance.now(); same < 3 && performance.now() - t0 < 4000;) { await frame(); if (Math.abs(b.scrollTop - a) < 0.5) same++; else { same = 0; a = b.scrollTop; } } return [b.scrollTop, Math.round(document.querySelector('#sheet .sheet-head').getBoundingClientRect().height)]; }));
