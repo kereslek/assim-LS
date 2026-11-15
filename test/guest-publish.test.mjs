@@ -107,8 +107,8 @@ test('a rotation publishes the new key with every market file under it, includin
   s.pub('out-loop', { ownKeys: true });
   // a guest is added
   const kf = readKeysFile(s.out('out-loop')), ring = ownerRing(s.keys, kf), pass = 'made up guest words 42', kek = guestKek(pass, kf.gsalt, kf.iter), slot = hex(8);
-  const add = inboxSeal(JSON.stringify({ lps: 'guest-add', id: hex(16), at: NOW - H, slot, kek: kek.toString('base64'), name: 'Made-up Friend', exp: null,
-    wrap: wrapSlot({ k: ring.dek.toString('base64'), s: slot, n: 'Made-up Friend', e: null, g: 0 }, kek, 'guest') }), inboxKeys(s.keys.token).publicB64);
+  const add = inboxSeal(JSON.stringify({ lps: 'guest-add', id: hex(16), at: NOW - H, guests: [{ slot, kek: kek.toString('base64'), name: 'Made-up Friend', exp: null, role: 'guest',
+    wrap: wrapSlot({ k: ring.dek.toString('base64'), s: slot, n: 'Made-up Friend', e: null, g: 0 }, kek, 'guest') }] }), inboxKeys(s.keys.token).publicB64);
   guestStep({ keys: { ...s.keys }, outDir: s.out('out-loop'), now: NOW - H, requests: [add] });
   s.pub('out-loop', { ownKeys: true });
   // the backtest job publishes under the key it restored (the old one)...

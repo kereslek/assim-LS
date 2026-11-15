@@ -28,7 +28,8 @@
 //            8-letter quotes, long venue names, about 1,500 pools (v0.5.2: what the live iPhone audit met)
 //   tiny     the default data with what the live audit of 15 Nov 2026 met on real data (v0.6.2): sub-cent prices in the
 //            backtest replay (0.00000xyz: the widest y-axis labels) and hourly fees that are $0 three hours in four (a $0 median)
-//   keyed, keyedgone, keyedchange, mismatch: v0.7.0 key slots (guests, the recovery key, a passphrase change, the alarm): see below
+//   keyed, keyedgone, keyedchange, keyedup, mismatch: v0.7.0 key slots (guests, members, the shared guest password, the recovery
+//            key, a passphrase change, the alarm): see below
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +39,7 @@ import { inboxKeys } from '../../lib/inbox.mjs';
 import { buildKeysFile, guestKek, splitPrivate, wrapSlot } from '../../lib/keyring.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'keyed', 'keyedgone', 'keyedchange', 'mismatch'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'keyed', 'keyedgone', 'keyedchange', 'keyedup', 'mismatch'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -1022,27 +1023,35 @@ function sealCase(dir, { lock, aes }, data, t, files = ['live', 'history', 'back
 }
 
 // ---------- v0.7.0 · key slots (docs/briefs/guest-access.md): the default data after the loop's migration ----------
-// Market files under a made-up market key, the owner's files under a made-up private key, a master key behind both,
-// keys.json with an owner slot (the fixture passphrase), a recovery slot and guest slots; inbox.json is the lock's inbox key.
-//   keyed        Anna (GUEST_PASS, 30 days left) and Cara (EXPIRED_PASS, ended 2 hours ago: the loop hasn't run yet) hold
-//                slots; Bob was removed earlier. The owner's ticket is OWNER_TICKET (a guest never sees it)
-//   keyedgone    the next pass: Anna removed, the market key rotated (the master slot keeps the old one), no guest slots
+// Market files under a made-up market key, the owner's files under a made-up private key, a master key behind both, keys.json
+// with an owner slot (the fixture passphrase), a recovery slot and guest slots; inbox.json is the lock's inbox key. Every name
+// and password here is made up.
+//   keyed        the shared guest password "friends" (SHARED_PASS, made by the loop, 30 days); Ada Mock (a personal guest,
+//                GUEST_PASS, outer limit 45 days); Cy Mock (EXPIRED_PASS, its outer limit passed 2 hours ago: the loop hasn't run);
+//                Dee Mock (a member, MEMBER_PASS); Eli Mock (a guest the loop made, ELI_PASS kept for the owner); Bo Mock removed.
+//                The owner's ticket is OWNER_TICKET (no guest or member ever sees it)
+//   keyedgone    the next pass: Ada removed and the shared password ended, the market key rotated (the master slot keeps the old)
+//   keyedup      Ada upgraded to a member (the same passphrase)
 //   keyedchange  a passphrase change half way: the loop added NEW_PASS's owner slot ("new passphrase ready")
 //   mismatch     keyed, plus the readable status.json flag: the loop's passphrase opens no slot
-export const GUEST_PASS = 'made-up guest passphrase for anna', EXPIRED_PASS = 'made-up guest passphrase for cara', GUEST_NAME = 'Anna';
+export const SHARED_PASS = 'made-up-shared-words-for-tests-41', GUEST_PASS = 'made-up guest passphrase for ada', EXPIRED_PASS = 'made-up guest passphrase for cy';
+export const MEMBER_PASS = 'made-up member passphrase for dee', ELI_PASS = 'quiet-otter-lamp-stone-maple-07', GUEST_NAME = 'Ada Mock', MEMBER_NAME = 'Dee Mock';
 export const NEW_PASS = 'a made-up new owner passphrase', RECOVERY_KEY = 'MADE-7FAK-E2RE-C0VE-RYKE-YF0R-TEST-S234';
-export const GUEST_DAYS = 30, OWNER_TICKET = 2500;
+export const GUEST_DAYS = 45, SHARED_DAYS = 30, OWNER_TICKET = 2500;
 const normRk = (s) => s.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, ''); // as the page reads it
-function sealKeyedCase(dir, lk, data, now, { v, owner, recovery, rsalt, gsalt, iterations, guests, list, vault = {}, status = null }) {
+function sealKeyedCase(dir, lk, data, now, { v, owner, recovery, rsalt, gsalt, iterations, list, vault = {}, status = null }) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'lock.json'), JSON.stringify(lk.lock));
   fs.writeFileSync(path.join(dir, 'inbox.json'), JSON.stringify({ v: 1, x25519: inboxKeys(lk.token).publicB64 }));
   const live = splitPrivate('live.json', { ...data.live, ticket: OWNER_TICKET }), bt = splitPrivate('backtest.json', data.backtest);
-  const slots = guests.map((g) => ({ s: g.slot, n: g.name, e: g.exp, kek: guestKek(g.pass, gsalt, iterations) }));
+  const kek = (g) => guestKek(g.pass, gsalt, iterations);
+  const slots = list.filter((g) => g.st === 'active').map((g) => ({ s: g.slot, n: g.name, e: g.exp, r: g.r, x: null, d: g.sh ? 0 : 30, sh: !!g.sh, kek: kek(g) }));
   fs.writeFileSync(path.join(dir, 'keys.json'), JSON.stringify(buildKeysFile({ v, owner, recovery, rsalt, gsalt, iter: iterations, guests: slots, t: now })));
   for (const [f, obj] of [['live', live.market], ['history', data.history], ['backtest', bt.market]]) fs.writeFileSync(path.join(dir, f + '.json'), JSON.stringify(seal(obj, v.mdek, { t: obj.t })));
   fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify(seal(live.owner, v.aes, { t: data.live.t })));
-  const gl = { v: 1, t: now, gen: v.gen, done: [], vault: { change: null, changedAt: null, recoveryAt: now - 3 * D, ...vault }, guests: list.map((g) => ({ s: g.slot, n: g.name, e: g.exp, at: g.at, st: g.st, end: g.end ?? null, ...(g.st === 'active' && g.pass ? { kek: guestKek(g.pass, gsalt, iterations).toString('base64') } : {}) })) };
+  const gl = { v: 1, t: now, gen: v.gen, done: [], vault: { change: null, changedAt: null, recoveryAt: now - 3 * D, ...vault },
+    guests: list.map((g) => ({ s: g.slot, n: g.name, e: g.exp, r: g.r, x: null, d: g.sh ? 0 : 30, ...(g.sh ? { sh: true } : {}), at: g.at, st: g.st, end: g.end ?? null,
+      ...(g.st !== 'removed' ? { kek: kek(g).toString('base64') } : {}), ...(g.pw ? { pw: g.pass } : {}) })) };
   fs.writeFileSync(path.join(dir, 'guests.json'), JSON.stringify(seal(gl, v.aes, { t: now })));
   if (status) fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
 }
@@ -1052,16 +1061,20 @@ function keyedCases(outDir, lk, data, now, iterations) {
   const gsalt = rand(16).toString('base64'), rsalt = rand(16).toString('base64');
   const owner = [wrapSlot({ m: v.mk.toString('base64') }, lk.aes, 'owner')];
   const recovery = wrapSlot({ m: v.mk.toString('base64') }, deriveKeys(normRk(RECOVERY_KEY), rsalt, iterations).aes, 'recovery');
-  const anna = { pass: GUEST_PASS, name: GUEST_NAME, exp: now + GUEST_DAYS * D, slot: '0a0a0a0a0a0a0a0a', at: now - 2 * D, st: 'active' };
-  const cara = { pass: EXPIRED_PASS, name: 'Cara', exp: now - 2 * H, slot: '0c0c0c0c0c0c0c0c', at: now - 9 * D, st: 'active' };
-  const bob = { name: 'Bob', exp: null, slot: '0b0b0b0b0b0b0b0b', at: now - 20 * D, st: 'removed', end: now - 5 * D };
-  const base = { v, owner, recovery, rsalt, gsalt, iterations, guests: [anna, cara], list: [anna, bob, cara] };
+  const shared = { pass: SHARED_PASS, name: 'friends', sh: true, pw: true, r: 'guest', exp: now - 2 * D + SHARED_DAYS * D, slot: '0f0f0f0f0f0f0f0f', at: now - 2 * D, st: 'active' };
+  const ada = { pass: GUEST_PASS, name: GUEST_NAME, r: 'guest', exp: now + GUEST_DAYS * D, slot: '0a0a0a0a0a0a0a0a', at: now - 2 * D, st: 'active' };
+  const cy = { pass: EXPIRED_PASS, name: 'Cy Mock', r: 'guest', exp: now - 2 * H, slot: '0c0c0c0c0c0c0c0c', at: now - 50 * D, st: 'active' };
+  const dee = { pass: MEMBER_PASS, name: MEMBER_NAME, r: 'member', exp: null, slot: '0d0d0d0d0d0d0d0d', at: now - 4 * D, st: 'active' };
+  const eli = { pass: ELI_PASS, name: 'Eli Mock', r: 'guest', pw: true, exp: now + 40 * D, slot: '0e0e0e0e0e0e0e0e', at: now - 5 * D, st: 'active' };
+  const bo = { pass: 'made-up removed', name: 'Bo Mock', r: 'guest', exp: null, slot: '0b0b0b0b0b0b0b0b', at: now - 20 * D, st: 'removed', end: now - 5 * D };
+  const base = { v, owner, recovery, rsalt, gsalt, iterations, list: [shared, ada, cy, dee, eli, bo] };
   sealKeyedCase(path.join(outDir, 'keyed'), lk, data, now, base);
   sealKeyedCase(path.join(outDir, 'mismatch'), lk, data, now, { ...base, status: { lock: 'mismatch', since: now - 40 * 60e3 } });
   const nslot = wrapSlot({ m: v.mk.toString('base64') }, deriveKeys(NEW_PASS, lk.lock.salt, lk.lock.iter).aes, 'owner');
   sealKeyedCase(path.join(outDir, 'keyedchange'), lk, data, now, { ...base, owner: [...owner, nslot], vault: { change: { at: now - 20 * 60e3, ct: nslot.ct } } });
-  sealKeyedCase(path.join(outDir, 'keyedgone'), lk, data, now, { ...base, v: { ...v, mdek: rand(32), prev: [v.mdek], gen: 2 }, guests: [],
-    list: [{ ...anna, st: 'removed', end: now }, bob, { ...cara, st: 'expired', end: now }] });
+  sealKeyedCase(path.join(outDir, 'keyedup'), lk, data, now, { ...base, list: [shared, { ...ada, r: 'member', exp: null }, cy, dee, eli, bo] });
+  sealKeyedCase(path.join(outDir, 'keyedgone'), lk, data, now, { ...base, v: { ...v, mdek: rand(32), prev: [v.mdek], gen: 2 },
+    list: [{ ...shared, st: 'removed', end: now }, { ...ada, st: 'removed', end: now }, { ...cy, st: 'expired', end: now }, bo] });
 }
 
 function aged(data, ageMs) {

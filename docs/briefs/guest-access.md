@@ -88,6 +88,37 @@ Slot = { iv, ct }   AES-256-GCM over JSON, its kind bound as additional data
 - **The removed guest's device** then shows "Your guest access has ended".
 - **What a guest already saw can't be recalled.** Removal stops new data only.
 
+## 4b · The owner's refinements (15 Nov): one shared password first; roles; lists of friends; two clocks
+
+### The shared guest password (the main path for the first round)
+- **One guest slot for a group of friends.** Its label is `friends` (never a person's name). It's read-only, and it ends 30 days after it's made: the loop drops it then and rotates the market key. It has no per-device clock: its date is the rule.
+- **Two ways to make it:**
+  - **(a) The loop makes it** from the sealed request `{ "action": "add-shared-guest", "label": "friends", "days": 30 }`. It uses the same generator (5 words of `lib/words.mjs` plus 2 digits) and keeps the password only in `guests.json`. The owner's Settings show it with Copy, a share text and "Mark as sent" / "Show again".
+  - **(b) The owner types one** (twice; anything under about 60 bits is refused), and the page seals `shared-set` with its slot.
+- **Change** (a new one replaces it: the old one stops, the key rotates) and **End shared access now** (`guest-remove` on its slot).
+- **On a friend's device:**
+  - a violet "GUEST" pill with no name;
+  - the sheet "Guest access · friends · ends <date>";
+  - the top line and the locked ★;
+  - the welcome "Welcome! You're browsing as a guest".
+
+### Roles (personal slots, kept for later)
+- **`guest`:** read-only (A, B, D and E).
+- **`member`:** a full account. Favourites and the other personal features are saved on their own device, as favourites already are. A quiet "MEMBER · name" chip, no violet.
+- **Never shared with either role:** positions, the owner's settings, the Guests admin and the inbox.
+- **Where the role lives:** in the slot (`r`) and in `guests.json`.
+
+### A list of friends at once
+- **On the owner's page,** Add guests takes names (one per line or with commas) and makes one passphrase per friend. It shows a passphrase sheet with Copy and a share text each (the dashboard link, the passphrase and a one-line how-to), and sends ONE sealed `guest-add` with every slot.
+- **Made by the loop:** `{ "action": "add-guests", "names": [...], "role": "guest", "softDays": 30, "hardDays": 45 }`. The loop makes each passphrase and keeps it in `guests.json` for the owner's page only. The public log says only "N added".
+
+### Two clocks for a personal guest
+- **(a) The device's own clock:** 30 days (`d`) from its first unlock on that device, or from the owner's last extension (`x`). After that, the device shows "Your 30-day guest access has ended. Ask the admin to upgrade you to a full account."
+- **(b) The loop's outer limit** (`e`, 30/45/60/90 days or none; 45 by default): past it, the slot goes and the key rotates.
+- **Expiry never deletes the friend:** the record stays, "expired", with its key kept. **Upgrade to member** or **Extend 30 days** (`guest-update`) brings the same passphrase back.
+- **Remove for good** forgets the key.
+- **The owner's row** shows name and role, created, first login "—" (there's no reporting channel), status, and the three actions.
+
 ## 5 · Migration (the loop's first run on this code)
 
 1. **Before:** a `backup.yml` run, and the v0.7.0 page deployed (it reads both formats).

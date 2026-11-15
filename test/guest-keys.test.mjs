@@ -50,10 +50,14 @@ const readWith = (dir, name, key) => JSON.parse(open(JSON.parse(fs.readFileSync(
 const req = (x) => inboxSeal(JSON.stringify(x), PUB);
 const vaultOf = (dir) => reopen(K(), readKeysFile(dir));
 // what the owner's page does: open the master slot for the market key, derive the guest key with the guest salt, wrap
-function addRequest(dir, { name = 'Made-up Friend', pass = `made up guest ${hex(4)}`, exp = null, at = NOW, slot = hex(8) } = {}) {
+function guestItem(dir, { name = 'Made-up Friend', pass = `made up guest ${hex(4)}`, exp = null, slot = hex(8), role = 'guest' } = {}) {
   const kf = readKeysFile(dir), v = vaultOf(dir), kek = guestKek(pass, kf.gsalt, kf.iter);
   const wrap = wrapSlot({ k: v.mdek.toString('base64'), s: slot, n: name, e: exp, g: v.gen }, kek, 'guest');
-  return { pass, kek, slot, env: req({ lps: 'guest-add', id: hex(16), at, slot, kek: kek.toString('base64'), name, exp, wrap }) };
+  return { pass, kek, slot, item: { slot, kek: kek.toString('base64'), name, exp, role, wrap } };
+}
+function addRequest(dir, o = {}) { // one friend in one request
+  const g = guestItem(dir, o);
+  return { ...g, env: req({ lps: 'guest-add', id: hex(16), at: o.at ?? NOW, guests: [g.item] }) };
 }
 const step = (dir, o = {}) => guestStep({ keys: K(), outDir: dir, now: NOW, ...o });
 
@@ -164,8 +168,8 @@ test('add a guest: their slot opens the market files and nothing of the owner\'s
   const r2 = step(dir, { requests: [a.env] });
   assert.equal(r2.added, 0); assert.ok(!r2.wrote);
   const bad = addRequest(dir);
-  const forged = { lps: 'guest-add', id: hex(16), at: NOW, slot: hex(8), kek: bad.kek.toString('base64'), name: 'Made-up Forger', exp: null,
-    wrap: wrapSlot({ k: crypto.randomBytes(32).toString('base64') }, bad.kek, 'guest') };
+  const forged = { lps: 'guest-add', id: hex(16), at: NOW, guests: [{ slot: hex(8), kek: bad.kek.toString('base64'), name: 'Made-up Forger', exp: null, role: 'guest',
+    wrap: wrapSlot({ k: crypto.randomBytes(32).toString('base64') }, bad.kek, 'guest') }] };
   const r3 = step(dir, { requests: [a.env, req(forged), { inbox: 1, epk: 'x', iv: 'y', ct: 'z' }, null] });
   assert.equal(r3.refused, 1); assert.equal(r3.bad, 2); assert.equal(readKeysFile(dir).slots.length, 1);
   const line = guestLine(r3, { read: true, files: 4 });
@@ -208,7 +212,7 @@ test('expiry removes a guest by itself and rotates; a reset removes everyone', (
   assert.equal(r.expired, 1); assert.ok(r.rotated); assert.equal(readKeysFile(dir).slots.length, 1);
   assert.equal(readWith(dir, 'guests.json', vaultOf(dir).aes).guests.find((x) => x.s === a.slot).st, 'expired');
   const r2 = step(dir, { requests: [req({ lps: 'guest-reset', id: hex(16), at: NOW + 2 * H })], now: NOW + 3 * H });
-  assert.equal(r2.removed, 1); assert.ok(r2.rotated); assert.equal(readKeysFile(dir).slots.length, 0);
+  assert.equal(r2.removed, 2, 'everyone, the expired friend too, for good'); assert.ok(r2.rotated); assert.equal(readKeysFile(dir).slots.length, 0);
   assert.equal(openGuestSlot(readKeysFile(dir), b.kek), null);
 });
 
@@ -310,13 +314,127 @@ test('a passphrase that opens no slot, or a keys.json from another lock, stops e
 
 test('requests are checked field by field; a name is cleaned and capped', () => {
   const priv = inboxKeys(KEYS.token).privateKey, kek = crypto.randomBytes(32), wrap = wrapSlot({ k: 'x' }, kek, 'guest');
-  const base = { lps: 'guest-add', id: hex(16), at: NOW, slot: hex(8), kek: kek.toString('base64'), name: ' Made-up\u0007  Friend ', exp: NOW + H, wrap };
-  assert.equal(parseRequest(req(base), priv).name, 'Made-up Friend');
-  for (const bad of [{ id: 'x' }, { slot: 'XYZ' }, { kek: 'short' }, { exp: NOW - H }, { name: '' }, { name: 'x'.repeat(41) }, { lps: 'guest-promote' }, { wrap: { iv: 1 } }]) {
-    assert.equal(parseRequest(req({ ...base, ...bad }), priv), null, JSON.stringify(Object.keys(bad)));
+  const item = { slot: hex(8), kek: kek.toString('base64'), name: ' Made-up\u0007  Friend ', exp: NOW + H, role: 'guest', wrap };
+  const base = { lps: 'guest-add', id: hex(16), at: NOW, guests: [item], slot: item.slot };
+  assert.equal(parseRequest(req(base), priv).guests[0].name, 'Made-up Friend');
+  for (const bad of [{ slot: 'XYZ' }, { kek: 'short' }, { exp: NOW - H }, { name: '' }, { name: 'x'.repeat(41) }, { wrap: { iv: 1 } }, { role: 'owner' }]) {
+    assert.equal(parseRequest(req({ ...base, guests: [{ ...item, ...bad }] }), priv), null, JSON.stringify(Object.keys(bad)));
   }
+  for (const bad of [{ id: 'x' }, { lps: 'guest-promote' }, { guests: [] }]) assert.equal(parseRequest(req({ ...base, ...bad }), priv), null, JSON.stringify(Object.keys(bad)));
+  assert.equal(parseRequest(req({ lps: 'guest-update', id: base.id, at: NOW, slot: item.slot, role: 'owner' }), priv), null, 'never the owner role');
   assert.equal(parseRequest(req(base), crypto.generateKeyPairSync('x25519').privateKey), null, 'sealed to another inbox');
   assert.deepEqual(parseRequest(req({ lps: 'guest-remove', id: base.id, at: NOW, slot: base.slot }), priv), { lps: 'guest-remove', id: base.id, at: NOW, slot: base.slot });
   assert.equal(parseRequest(req({ lps: 'recovery-set', id: base.id, at: NOW, slot: wrap, rsalt: 'short' }), priv), null);
   assert.equal(parseRequest(req({ lps: 'owner-add', id: base.id, at: NOW, slot: { iv: 'x' } }), priv), null);
+});
+
+test('a list of friends in one request; roles; the hard cap keeps the friend and their key; an upgrade or an extension brings the same passphrase back', () => {
+  const dir = legacyDir();
+  step(dir, { allowMigrate: true });
+  const names = ['Ada Mock', 'Bo Mock', 'Cy Mock'];
+  const items = names.map((name, i) => guestItem(dir, { name, exp: NOW + (i === 0 ? H : 45 * 24 * H), role: i === 2 ? 'member' : 'guest' }));
+  const env = req({ lps: 'guest-add', id: hex(16), at: NOW - H, guests: items.map((x) => x.item) });
+  const r = step(dir, { requests: [env] });
+  assert.equal(r.added, 3); assert.equal(readKeysFile(dir).slots.length, 3);
+  const kf = readKeysFile(dir);
+  assert.deepEqual(items.map((x) => openGuestSlot(kf, x.kek)).map((g) => [g.name, g.role]), [['Ada Mock', 'guest'], ['Bo Mock', 'guest'], ['Cy Mock', 'member']]);
+  // Ada's hard cap passes: her slot goes and the key rotates, but she stays on the list, expired, with her key kept
+  const v0 = vaultOf(dir);
+  const r2 = step(dir, { requests: [env], now: NOW + 2 * H });
+  assert.equal(r2.expired, 1); assert.ok(r2.rotated);
+  assert.equal(openGuestSlot(readKeysFile(dir), items[0].kek), null);
+  assert.ok(!opens(dir, 'live.json', v0.mdek));
+  let list = readWith(dir, 'guests.json', vaultOf(dir).aes).guests;
+  const ada = list.find((x) => x.n === 'Ada Mock');
+  assert.equal(ada.st, 'expired'); assert.ok(ada.kek, 'her key stays (owner-only file)');
+  // the owner upgrades her to a member: the same passphrase opens again, with the new role and no cap
+  const up = req({ lps: 'guest-update', id: hex(16), at: NOW + 3 * H, slot: items[0].slot, role: 'member', exp: null });
+  const r3 = step(dir, { requests: [env, up], now: NOW + 3 * H });
+  assert.equal(r3.updated, 1); assert.ok(!r3.rotated);
+  const back = openGuestSlot(readKeysFile(dir), guestKek(items[0].pass, kf.gsalt, kf.iter));
+  assert.ok(back && back.role === 'member' && back.exp === null && opens(dir, 'live.json', back.dek));
+  // an extension: a later cap, and the device's 30-day clock restarts from it
+  const ext = req({ lps: 'guest-update', id: hex(16), at: NOW + 4 * H, slot: items[1].slot, exp: NOW + 90 * 24 * H, ext: true });
+  step(dir, { requests: [env, up, ext], now: NOW + 4 * H });
+  const bo = openGuestSlot(readKeysFile(dir), items[1].kek);
+  assert.equal(bo.exp, NOW + 90 * 24 * H); assert.equal(bo.ext, NOW + 4 * H); assert.equal(bo.role, 'guest');
+  // removed for good: the key is forgotten, an update can't bring it back
+  const rm = req({ lps: 'guest-remove', id: hex(16), at: NOW + 5 * H, slot: items[1].slot });
+  const r4 = step(dir, { requests: [env, up, ext, rm], now: NOW + 5 * H });
+  assert.equal(r4.removed, 1); assert.ok(r4.rotated);
+  const again = req({ lps: 'guest-update', id: hex(16), at: NOW + 6 * H, slot: items[1].slot, role: 'member' });
+  assert.equal(step(dir, { requests: [again], now: NOW + 6 * H }).refused, 1);
+  list = readWith(dir, 'guests.json', vaultOf(dir).aes).guests;
+  assert.deepEqual(list.map((x) => [x.n, x.st, !!x.kek]), [['Ada Mock', 'active', true], ['Bo Mock', 'removed', false], ['Cy Mock', 'active', true]]);
+});
+
+test('the loop makes the passphrases for a sealed list of names: kept for the owner only, never in a public file or line', async () => {
+  const { sealInput } = await import('../scripts/seal-input.mjs');
+  const dir = legacyDir();
+  step(dir, { allowMigrate: true });
+  // anyone can seal it (scripts/seal-input.mjs, the inbox public key only); no id, no time, no passphrase in it
+  const pubDir = tmp();
+  fs.writeFileSync(path.join(pubDir, 'inbox.json'), JSON.stringify({ v: 1, x25519: PUB }));
+  const out = path.join(tmp(), 'inbox', 'made-up.json'), said = [];
+  sealInput({ text: JSON.stringify({ action: 'add-guests', names: ['Ada Mock', 'Bo Mock', 'Cy Mock'], role: 'guest', softDays: 30, hardDays: 45 }), out, pubDir, say: (l) => said.push(l) });
+  const env = JSON.parse(fs.readFileSync(out, 'utf8'));
+  const r = step(dir, { requests: [env] });
+  assert.equal(r.added, 3);
+  const line = guestLine(r, { read: true, files: 1 });
+  assert.match(line, /^guests: 3 active, 3 added, /);
+  const list = readWith(dir, 'guests.json', vaultOf(dir).aes).guests, kf = readKeysFile(dir);
+  assert.equal(list.length, 3);
+  for (const g of list) {
+    assert.match(g.pw, /^([a-z]{3,6}-){5}\d\d$/, 'five words and two digits');
+    const o = openGuestSlot(kf, guestKek(g.pw, kf.gsalt, kf.iter));
+    assert.ok(o && o.name === g.n && o.role === 'guest' && o.soft === 30 && Math.abs(o.exp - (NOW + 45 * 86400e3)) < 1000, 'its passphrase opens its own slot');
+  }
+  const pub = [fs.readFileSync(path.join(dir, KEYS_FILE), 'utf8'), line, ...said, JSON.stringify(env)].join('\n');
+  for (const g of list) assert.ok(!pub.includes(g.pw) && !pub.includes(g.pw.split('-')[0] + '-' + g.pw.split('-')[1]), 'never in keys.json, the public line or the sealed request');
+  assert.ok(!pub.includes('Ada Mock'));
+  // the same sealed file again is the same request: nothing is made twice
+  assert.equal(step(dir, { requests: [env] }).added, 0);
+  assert.equal(readKeysFile(dir).slots.length, 3);
+});
+
+test('one shared guest password: made by the loop or typed by the owner; ends by its date (the key rotates); a change replaces it; end now', async () => {
+  const { sealInput } = await import('../scripts/seal-input.mjs');
+  const dir = legacyDir();
+  step(dir, { allowMigrate: true });
+  const pubDir = tmp();
+  fs.writeFileSync(path.join(pubDir, 'inbox.json'), JSON.stringify({ v: 1, x25519: PUB }));
+  const out = path.join(tmp(), 'made-up-shared.json');
+  sealInput({ text: JSON.stringify({ action: 'add-shared-guest', label: 'friends', days: 30 }), out, pubDir, say: () => {} });
+  const env = JSON.parse(fs.readFileSync(out, 'utf8'));
+  // (a) the loop makes the password; the owner's file keeps it; the slot carries the label, never a person's name
+  const r = step(dir, { requests: [env], now: NOW });
+  assert.equal(r.added, 1);
+  let kf = readKeysFile(dir), list = readWith(dir, 'guests.json', vaultOf(dir).aes).guests;
+  const sh = list[0];
+  assert.ok(sh.sh && sh.n === 'friends' && /^([a-z]{3,6}-){5}\d\d$/.test(sh.pw) && sh.e === NOW + 30 * 86400e3);
+  const o = openGuestSlot(kf, guestKek(sh.pw, kf.gsalt, kf.iter));
+  assert.ok(o && o.shared && o.name === 'friends' && o.role === 'guest' && o.soft === 0 && o.exp === NOW + 30 * 86400e3);
+  assert.ok(!fs.readFileSync(path.join(dir, KEYS_FILE), 'utf8').includes(sh.pw));
+  // (b) the owner types a new one (a change): the old one stops and the market key rotates; everyone uses the new one
+  const v0 = vaultOf(dir), typed = 'a made-up shared password for the test 77', kek = guestKek(typed, kf.gsalt, kf.iter), slot = hex(8);
+  const change = req({ lps: 'shared-set', id: hex(16), at: NOW + H, label: 'friends', days: 30, slot, kek: kek.toString('base64'),
+    wrap: wrapSlot({ k: v0.mdek.toString('base64'), s: slot, n: 'friends', e: NOW + H + 30 * 86400e3, r: 'guest', sh: 1, g: v0.gen }, kek, 'guest') });
+  const r2 = step(dir, { requests: [env, change], now: NOW + H });
+  assert.ok(r2.rotated); assert.equal(r2.added, 1); assert.equal(r2.removed, 1);
+  kf = readKeysFile(dir);
+  assert.equal(kf.slots.length, 1);
+  assert.equal(openGuestSlot(kf, guestKek(sh.pw, kf.gsalt, kf.iter)), null, 'the old shared password opens nothing');
+  const n = openGuestSlot(kf, kek);
+  assert.ok(n && n.shared && opens(dir, 'live.json', n.dek) && !opens(dir, 'live.json', v0.mdek));
+  // its date passes: dropped, rotated, the record kept as expired
+  const r3 = step(dir, { requests: [env, change], now: NOW + H + 30 * 86400e3 });
+  assert.equal(r3.expired, 1); assert.ok(r3.rotated); assert.equal(readKeysFile(dir).slots.length, 0);
+  list = readWith(dir, 'guests.json', vaultOf(dir).aes).guests;
+  assert.deepEqual(list.map((x) => [x.n, x.st]), [['friends', 'removed'], ['friends', 'expired']]);
+  // a new one again, then "end shared access now"
+  const again = req({ lps: 'shared-set', id: hex(16), at: NOW + 31 * 86400e3, label: 'friends', days: 30 });
+  step(dir, { requests: [env, change, again], now: NOW + 31 * 86400e3 });
+  const cur = readWith(dir, 'guests.json', vaultOf(dir).aes).guests.find((x) => x.st === 'active');
+  const r4 = step(dir, { requests: [env, change, again, req({ lps: 'guest-remove', id: hex(16), at: NOW + 32 * 86400e3, slot: cur.s })], now: NOW + 32 * 86400e3 });
+  assert.equal(r4.removed, 1); assert.ok(r4.rotated); assert.equal(readKeysFile(dir).slots.length, 0);
 });

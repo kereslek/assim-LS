@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jQO6qp+MeDcBWaX9F0wCpePwbR70FGQUCL3ifSOkHhY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ncYWgKzhtAkJ1OjARAZ0TItJ35xc1SNEYjPKugEJjBA='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1368,7 +1368,16 @@ html.guest .gline{display:block}
 .fav .g-favmsg{display:flex;align-items:center;gap:10px;margin:4px 0 2px;color:var(--fg2);font:400 13px/1.45 var(--sans)}
 .fav .g-favmsg .glock{flex:none;width:22px;height:22px;border-radius:50%;background:var(--guest);color:var(--guest-ink);display:grid;place-items:center}
 .fav .g-favmsg .glock svg{width:12px;height:12px}
-html.guest #fav .devnote,html.guest #positions{display:none} /* positions are the owner's */
+html.guest #fav .devnote,html.guest #positions,html.member #positions{display:none} /* positions are the owner's */
+.gpill.mbr{background:transparent;border-color:var(--line3);color:var(--fg2);cursor:default;opacity:1}
+.guests .g-form textarea{min-height:96px;font:400 16px/1.4 var(--sans);padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:var(--bg);color:var(--fg);resize:vertical}
+.guests .g-row{flex-wrap:wrap;align-items:flex-start;padding:8px 10px;gap:6px 10px}
+.guests .g-who{display:flex;gap:8px;align-items:baseline;flex:1 1 100%;min-width:0}
+.guests .g-meta{display:flex;flex-wrap:wrap;gap:2px 12px;flex:1 1 100%;color:var(--muted);font:500 11px/1.4 var(--mono)}
+.guests .g-row .g-acts,.guests .g-pw{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.guests ul.g-plist{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.guests ul.g-plist li{display:grid;gap:6px;padding:10px 0;border-top:1px solid var(--line2)}
+.guests .g-pw .g-pass,.guests .g-plist .g-pass{font-size:clamp(14px,4vw,16px)}
 /* A's sheet and E's card: over everything but the top line; a bottom sheet on a phone, a card on a laptop */
 .gsheet,.gwel{position:fixed;inset:0;z-index:95;display:flex;align-items:flex-end;justify-content:center;background:rgba(3,8,12,.6)}
 .gsheet[hidden],.gwel[hidden],.gend[hidden]{display:none}
@@ -1600,16 +1609,23 @@ html.guest #fav .devnote,html.guest #positions{display:none} /* positions are th
     <section id="health" class="card health" aria-labelledby="health-h"></section>
     <section id="settings" class="card guests" aria-labelledby="settings-h" hidden>
       <div class="sec-head"><h2 id="settings-h">Settings</h2><span class="lbl">ONLY YOU SEE THIS</span></div>
-      <h3 class="g-h3">Guests <span class="lbl" id="guests-count"></span></h3>
-      <p class="g-sub">Friends with a guest passphrase see every market view: no favourites, no settings, nothing of yours. Removing one changes the data key, so their device stops getting new data. What they already saw can’t be recalled.</p>
+      <h3 class="g-h3">Shared guest password <span class="lbl" id="sh-state"></span></h3>
+      <p class="g-sub">One password for a group of friends: read-only, for 30 days from when it’s made. Change it (the old one stops) or end it any time.</p>
+      <div id="sh-body"></div>
+      <div class="g-acts"><button type="button" class="btn" id="sh-set" data-act="sh-set">Create a shared password</button><button type="button" class="linkbtn" id="sh-end" data-act="sh-end" hidden>End shared access now</button></div>
+      <div id="sh-out" hidden></div>
+      <h3 class="g-h3">Personal guests and members <span class="lbl" id="guests-count"></span></h3>
+      <p class="g-sub">A guest sees every market view, read-only, for 30 days from their first visit. A member also keeps favourites and notes on their own device. Neither sees anything of yours. Removing one changes the data key, so their device stops getting new data; what they already saw can’t be recalled.</p>
       <ul class="g-list" id="g-list"></ul>
-      <div class="g-acts"><button type="button" class="btn" data-act="g-add">Add guest</button><button type="button" class="linkbtn" id="g-reset" data-act="g-reset" hidden>Remove all guests</button></div>
+      <div class="g-acts"><button type="button" class="btn" data-act="g-add">Add guests</button><button type="button" class="linkbtn" id="g-reset" data-act="g-reset" hidden>Remove all guests</button></div>
       <div class="g-form" id="g-form" hidden>
-        <label class="lbl" for="g-name">Name (only you and they see it)</label><input id="g-name" maxlength="40" autocomplete="off" spellcheck="false">
-        <span class="lbl">Access ends</span>
-        <div class="g-days" id="g-days" role="group" aria-label="Access ends"><button type="button" data-act="g-days" data-d="7" aria-pressed="false">7 DAYS</button><button type="button" data-act="g-days" data-d="30" aria-pressed="true">30 DAYS</button><button type="button" data-act="g-days" data-d="90" aria-pressed="false">90 DAYS</button><button type="button" data-act="g-days" data-d="0" aria-pressed="false">NO END</button></div>
+        <label class="lbl" for="g-name">Names: one per line, or with commas (only you and they see them)</label><textarea id="g-name" rows="4" autocomplete="off" spellcheck="false"></textarea>
+        <span class="lbl">Role</span>
+        <div class="g-days" id="g-role" role="group" aria-label="Role"><button type="button" data-act="g-role" data-r="guest" aria-pressed="true">GUEST · READ-ONLY</button><button type="button" data-act="g-role" data-r="member" aria-pressed="false">MEMBER · FULL</button></div>
+        <span class="lbl">Outer limit (a guest’s own clock is 30 days from their first visit)</span>
+        <div class="g-days" id="g-days" role="group" aria-label="Outer limit"><button type="button" data-act="g-days" data-d="30" aria-pressed="false">30 DAYS</button><button type="button" data-act="g-days" data-d="45" aria-pressed="true">45 DAYS</button><button type="button" data-act="g-days" data-d="60" aria-pressed="false">60</button><button type="button" data-act="g-days" data-d="90" aria-pressed="false">90</button><button type="button" data-act="g-days" data-d="0" aria-pressed="false">NONE</button></div>
         <p class="g-msg" id="g-form-msg" role="status" aria-live="polite"></p>
-        <div class="g-acts"><button type="button" class="btn" data-act="g-create">Create guest passphrase</button><button type="button" class="linkbtn" data-act="g-cancel">Cancel</button></div>
+        <div class="g-acts"><button type="button" class="btn" data-act="g-create">Create the passphrases</button><button type="button" class="linkbtn" data-act="g-cancel">Cancel</button></div>
       </div>
       <div id="g-out" hidden></div>
       <p class="g-wait" id="g-wait" hidden></p>
@@ -1780,10 +1796,10 @@ function usd(x, o = {}) {
 const int = (n) => (isNum(n) ? Math.round(n).toLocaleString('en-US') : DASH);
 // "$ per day at the ticket" (v0.4.7): next to every APR the page shows, one formatter. perDay = APR × ticket ÷ 365, the
 // ticket from live.json; aprPd() is the APR with its $/day (data-apr carries the rate for the tests).
-const ticketUsd = () => (isGuest() ? GUEST_TICKET : S.live && isNum(S.live.ticket) && S.live.ticket > 0 ? S.live.ticket : null); // v0.7.0: a guest's is a public example
+const ticketUsd = () => (notOwner() ? GUEST_TICKET : S.live && isNum(S.live.ticket) && S.live.ticket > 0 ? S.live.ticket : null); // v0.7.0: a guest's is a public example
 // the backtests' ticket: theirs (older files), else the owner's; a guest's replay takes the backtest's own scale (net APR = (netUsd −
 // entryUsd) ÷ ticket × 365 ÷ days, lib/backtest.mjs) so its rate is the owner's to the digit, and no ticket is shown
-const btTicket = (b) => (isNum(S.bt && S.bt.ticket) ? S.bt.ticket : !isGuest() ? ticketUsd() : b && isNum(b.net) && b.net !== 0 && isNum(b.netUsd) && isNum(b.days) && b.days > 0 ? ((b.netUsd - (isNum(b.entryUsd) ? b.entryUsd : 0)) * 365) / (b.days * b.net) : null);
+const btTicket = (b) => (isNum(S.bt && S.bt.ticket) ? S.bt.ticket : !notOwner() ? ticketUsd() : b && isNum(b.net) && b.net !== 0 && isNum(b.netUsd) && isNum(b.days) && b.days > 0 ? ((b.netUsd - (isNum(b.entryUsd) ? b.entryUsd : 0)) * 365) / (b.days * b.net) : null);
 const perDay = (apr) => (isNum(apr) && ticketUsd() ? (apr * ticketUsd()) / 365 : null);
 const pdTxt = (apr) => { const v = perDay(apr); return isNum(v) ? usd(v) + '/day' : DASH; };
 const aprPd = (apr, o = {}) => (!isNum(apr) ? DASH : `<span class="apr-v" data-apr="${apr}">${pct(apr, o)}</span>`
@@ -2103,7 +2119,7 @@ async function refresh() {
     checkAlarm();
     // v0.7.0: the keys first (keys.json; before the loop's first run on key slots there is none and the owner key opens all)
     if ((await resolveKeys(ac.signal)) === 'ended') { await guestEnded(); return; }
-    const own = !isGuest() && S.keys ? ['owner', 'guests'] : []; // the owner's own files: never fetched for a guest
+    const own = isOwner() && S.keys ? ['owner', 'guests'] : []; // the owner's own files: never fetched for a guest or a member
     const got = await Promise.allSettled([...FILES, ...own].map((f) => fetchEnv(f + '.json', ac.signal)));
     if (got[0].status === 'rejected') { const e = got[0].reason; e.kind = 'fetch'; throw e; }
     let changed = false;
@@ -2133,7 +2149,7 @@ async function refresh() {
       if (!r || r.status !== 'fulfilled' || (r.value.t === S.t[name] && S[name])) continue;
       try { S[name] = JSON.parse(await openWith(r.value, S.pks)); S.t[name] = r.value.t; changed = true; } catch (e) { /* shown once they open */ }
     }
-    if (S.own && !isGuest()) mergeOwner(S.live, S.own);
+    if (S.own && isOwner()) mergeOwner(S.live, S.own);
     S.failing = null;
     if (changed || !S.rendered) renderAll();
     else applyRole();
@@ -2199,11 +2215,11 @@ async function onUnlock(ev) {
     const g = keys && gk ? await guestSlot(keys, gk) : null;
     if (g) {
       input.value = '';
-      const gi = { name: cleanName(g.n) || 'Guest', exp: isNum(g.e) ? g.e : null, slot: String(g.s || '') };
-      if (isNum(gi.exp) && gi.exp <= Date.now()) { showEnded(gi); return; } // a passphrase past its end date: the end, nothing kept
-      S.role = 'guest'; S.key = gk; S.gsalt = keys.gsalt; S.gi = gi;
+      const gi = slotInfo(g);
+      if (isNum(gi.exp) && gi.exp <= Date.now()) { showEnded({ ...gi, why: 'hard' }); return; } // past its outer limit: the end, nothing kept
+      S.role = gi.role; S.key = gk; S.gsalt = keys.gsalt; S.gi = gi;
       const kept = await idbPut('main', { key: gk, salt: keys.gsalt, iter: keys.iter, guest: 1 });
-      lockMsg(kept ? '' : 'Unlocked as a guest. This browser won’t keep the key, so you’ll be asked again next time.');
+      lockMsg(kept ? '' : 'Unlocked. This browser won’t keep the key, so you’ll be asked again next time.');
       await unlocked();
       gWelcome(true);
       return;
@@ -3018,7 +3034,7 @@ function renderBest() {
     + `<p class="sentence">${sentence(outside, tvl, w, lps, perDay)}</p>`
     + `<div class="chips">${termB('edge', `<span class="chip">EDGE ${times(w.edge)}</span>`)}${termB('sigma', `<span class="chip">σ ${pct(w.sigma, { dp: 1 })}/DAY</span>`)}`
     + `${termB('rerange', `<span class="chip">RE-RANGE ≈ ${isNum(w.rerangeDays) ? Math.round(w.rerangeDays) + ' D' : DASH}</span>`)}${termB('room', `<span class="chip">ROOM ≈ ${usd(w.inRangeUsd)}</span>`)}`
-    + `${isGuest() ? '' : termB('stop', `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>`)}${patternChip(p)}</div>`
+    + `${notOwner() ? '' : termB('stop', `<span class="chip">STOP ${isNum(L.stopLoss) ? MINUS + pct(L.stopLoss) : DASH} IN ${esc(quoteSym(p))}</span>`)}${patternChip(p)}</div>`
     + `</div><div class="best-x">${dailyStrip(p, w)}</div>${gemBox(p, w)}<div class="best-r chartbox" data-chartbox="liq-best"><div class="chart-head"><h3>Liquidity around the price</h3><span class="lbl">${term('logscale', 'LOG SCALE')} · <span class="pz-cap1">${liqCap('liq-best')}</span></span>${ztools('liq-best', p.id)}</div>${lq}</div></div>`
     + checksLine(p)
     + `<div class="btns"><button type="button" class="btn" disabled>Paper-trade · Phase 1</button><button type="button" class="btn" disabled>Propose live · Phase 2</button>`
@@ -4151,7 +4167,7 @@ function renderBt() {
     return;
   }
   const rows = btRows(), bHid = btRows(true).length - rows.length;
-  ctx.textContent = `Each pool replayed over the ${WIN_WORD[S.win]} window with a simulated ${isGuest() ? '' : usdFull(btTicket()) + ' '}position: a range of ±r around the price, re-centred when the price leaves it. Net = fees − LVR − costs, vs holding the starting tokens.`;
+  ctx.textContent = `Each pool replayed over the ${WIN_WORD[S.win]} window with a simulated ${notOwner() ? '' : usdFull(btTicket()) + ' '}position: a range of ±r around the price, re-centred when the price leaves it. Net = fees − LVR − costs, vs holding the starting tokens.`;
   if (!rows.length) {
     lead.innerHTML = bHid ? `<p class="empty">Every pool backtested over the ${WIN_WORD[S.win]} window is a stablecoin pair: ${hidTxt(bHid)}. <button type="button" class="linkbtn" data-act="stable-on">Show stablecoin pairs</button></p>`
       : `<p class="empty">No backtests for the ${WIN_WORD[S.win]} window yet.</p>`;
@@ -4286,7 +4302,7 @@ function renderReplay(row) {
   let inr = 0;
   for (let i = 1; i <= cut; i++) if (isNum(s.lo[i - 1]) && s.px[i] >= s.lo[i - 1] && s.px[i] <= s.hi[i - 1]) inr++;
   const re = recentres(s).filter((i) => i <= cut);
-  $('#rp-strip').innerHTML = `<div><span class="lbl">Net APR</span><span class="v acc">${aprPd(apr, { sign: true, block: true })}</span><span class="s">${isGuest() ? '' : usdFull(ticket) + ' · '}${entry == null ? 'incl. entry' : 'entry ' + usd(entry) + ' aside'}</span></div>`
+  $('#rp-strip').innerHTML = `<div><span class="lbl">Net APR</span><span class="v acc">${aprPd(apr, { sign: true, block: true })}</span><span class="s">${notOwner() ? '' : usdFull(ticket) + ' · '}${entry == null ? 'incl. entry' : 'entry ' + usd(entry) + ' aside'}</span></div>`
     + `<div><span class="lbl">vs holding</span><span class="v${net < 0 ? ' neg' : ''}">${usd(net, { sign: true })}</span><span class="s">${days.toFixed(days < 2 ? 1 : 0)} days</span></div>`
     + `<div><span class="lbl">In range</span><span class="v">${pct(inr / cut)}</span><span class="s">of ${int(cut)} steps</span></div>`
     + `<div><span class="lbl">Re-ranges</span><span class="v">${re.length}</span><span class="s">${usd(s.costs[cut])} swap + gas</span></div>`
@@ -4417,7 +4433,7 @@ function renderLab(row) {
   const strats = (Array.isArray(b.strategies) ? b.strategies : []).filter((x) => x && Array.isArray(x.series));
   const order = strats.slice().sort((a, c) => (c.netUsd ?? -Infinity) - (a.netUsd ?? -Infinity));
   const name = p ? p.pair : row.id;
-  let h = `<div class="sub-head"><div><h3 id="lab-h">Strategy lab · ${esc(name)}</h3><div class="lbl" style="margin-top:3px">${p ? metaTxt(p) : DASH} · ${dm(b.series.t[0])} → ${dm(b.series.t[n])}${isGuest() ? '' : ' · ' + usdFull(btTicket()) + ' each'}${row.id === S.replay ? '' : ' · tap a row above for another pool'}</div></div></div>`;
+  let h = `<div class="sub-head"><div><h3 id="lab-h">Strategy lab · ${esc(name)}</h3><div class="lbl" style="margin-top:3px">${p ? metaTxt(p) : DASH} · ${dm(b.series.t[0])} → ${dm(b.series.t[n])}${notOwner() ? '' : ' · ' + usdFull(btTicket()) + ' each'}${row.id === S.replay ? '' : ' · tap a row above for another pool'}</div></div></div>`;
   h += `<div class="lab"><div class="pane lab-chart chartbox" data-chartbox="lab"><div class="pane-title"><span class="lbl">Cumulative net $ vs holding, by strategy</span>${ztools('lab', row.id)}</div><div class="chart" id="lab-lines"></div></div>`;
   if (hl.lab && !strats.some((x) => x.id === hl.lab)) hl.lab = null;
   h += `<div class="pane lab-legend${hl.lab ? ' hl' : ''}" role="group" aria-label="Highlight one strategy on the chart"><div class="strat-h lbl"><span></span><span>Strategy · tap to highlight</span><span style="text-align:right">Net APR</span><span style="text-align:right">Re-rng · net</span></div>`
@@ -6591,7 +6607,8 @@ const INBOX_NEW = 'https://github.com/kereslek/assim-LS/new/claude/ecstatic-dira
 const SECRET_URL = 'https://github.com/kereslek/assim-LS/settings/secrets/actions/LOCK_PASSPHRASE';
 const ENC = new TextEncoder(), AAD = { owner: ENC.encode('lps-owner-slot'), recovery: ENC.encode('lps-recovery-slot'), master: ENC.encode('lps-master-slot'), guest: ENC.encode('lps-guest-slot') };
 const B64 = (u8) => { let s = ''; for (const c of u8) s += String.fromCharCode(c); return btoa(s); };
-const isGuest = () => S.role === 'guest';
+const isGuest = () => S.role === 'guest', isMember = () => S.role === 'member', isOwner = () => S.role === 'owner';
+const notOwner = () => isGuest() || isMember(); // a slot's holder: market data only, the owner's settings never
 const isKeys = (k) => !!k && k.keys === 2 && isNum(k.t) && typeof k.gsalt === 'string' && isNum(k.iter) && Array.isArray(k.owner) && !!k.mk && typeof k.mk.ct === 'string' && Array.isArray(k.slots);
 const sameKeys = (a, b) => !!a && !!b && a.t === b.t && a.mk.ct === b.mk.ct && a.owner.length === b.owner.length;
 const cleanName = (s) => String(s == null ? '' : s).replace(/[\x00-\x1f\x7f-\x9f]|\u2028|\u2029/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
@@ -6635,7 +6652,7 @@ async function resolveKeys(sig = null) {
   let k;
   try { k = await getKeys(sig); } catch (e) { if (S.dks) return 'ok'; throw e; } // a failed read is never an end: the last keys serve
   if (k && S.keys && k.t < S.keys.t) k = S.keys; // one source lagging behind another: the newer copy stands
-  if (!isGuest()) {
+  if (isOwner()) {
     if (!k) {
       if (!S.legacyOk && !(await keyOk(S.key))) { const x = new Error('this device’s key doesn’t open the lock'); x.kind = 'rekey'; throw x; }
       S.legacyOk = true; S.keys = null; S.dks = S.pks = [S.key]; return 'ok';
@@ -6652,15 +6669,30 @@ async function resolveKeys(sig = null) {
     S.mdekRaw = m.k; S.gen = m.g; S.keys = k;
     return 'ok';
   }
-  if (!k) return 'ended';
+  if (!k) { S.gi = { ...(S.gi || {}), why: 'gone' }; return 'ended'; }
   if (!sameKeys(k, S.keys) || !S.dks) {
     const g = k.gsalt === S.gsalt ? await guestSlot(k, S.key) : null;
-    if (!g) { S.gi = { ...(S.gi || {}), gone: true }; return 'ended'; }
-    S.gi = { name: cleanName(g.n) || 'Guest', exp: isNum(g.e) ? g.e : null, slot: String(g.s || '') };
+    if (!g) { S.gi = { ...(S.gi || {}), why: 'gone' }; return 'ended'; }
+    S.gi = slotInfo(g); S.role = S.gi.role;
     S.dks = [await aesKey(g.k)]; S.pks = []; S.keys = k;
   }
-  return isNum(S.gi.exp) && S.gi.exp <= Date.now() ? 'ended' : 'ok';
+  return softEnded() ? 'ended' : 'ok';
 }
+const slotInfo = (g) => ({ name: cleanName(g.n) || 'Guest', exp: isNum(g.e) ? g.e : null, slot: String(g.s || ''), role: g.r === 'member' ? 'member' : 'guest', x: isNum(g.x) ? g.x : null,
+  shared: g.sh === 1, d: g.sh === 1 ? 0 : Number.isInteger(g.d) && g.d > 0 ? g.d : 30 }); // a shared password: its label, never a name; its date is the rule
+// a guest's two clocks: the loop's hard cap (exp), and this device's own, d days (30) from its first unlock here or from the owner's
+// last extension. A member has no clock on the device: an upgrade clears it on the next load.
+function softEnded() {
+  const gi = S.gi, now = Date.now(), j = jget('lps.gfirst', {}), m = j && typeof j === 'object' && !Array.isArray(j) ? j : {};
+  if (isNum(gi.exp) && gi.exp <= now) { gi.why = 'hard'; return true; }
+  if (gi.shared) { gi.soft = null; return false; } // the shared password: its hard date only
+  if (gi.role === 'member') { if (gi.slot in m) { delete m[gi.slot]; store.set('lps.gfirst', JSON.stringify(m)); } gi.soft = null; return false; }
+  if (!isNum(m[gi.slot])) { m[gi.slot] = now; store.set('lps.gfirst', JSON.stringify(m)); }
+  gi.soft = Math.max(m[gi.slot], gi.x || 0) + gi.d * D;
+  if (now >= gi.soft) { gi.why = 'soft'; return true; }
+  return false;
+}
+const gEnd = (gi) => { const t = [gi && gi.exp, gi && gi.soft].filter(isNum); return t.length ? Math.min(...t) : null; };
 async function openWith(env, keys) {
   let err = null;
   for (const k of keys && keys.length ? keys : [S.key]) { try { return await openEnv(env, k); } catch (e) { err = e; } }
@@ -6674,19 +6706,20 @@ function mergeOwner(live, o) {
   if (Number.isInteger(o.ageDays)) for (const p of live.pools) for (const c of p.checks || []) if (c && c.id === 'token-age-rank' && c.label === 'tokens ranked and trading long enough') c.label = `tokens ranked and trading ${o.ageDays}+ days`;
 }
 const daysLeft = (t) => Math.max(0, Math.ceil((t - Date.now()) / D));
-const endsTxt = (gi) => (gi && isNum(gi.exp) ? `ENDS ${dm(gi.exp).toUpperCase()} · ${daysLeft(gi.exp)} DAY${daysLeft(gi.exp) === 1 ? '' : 'S'} LEFT` : 'NO END DATE');
+const endsTxt = (gi) => { const t = gEnd(gi); return isNum(t) ? `ENDS ${dm(t).toUpperCase()} · ${daysLeft(t)} DAY${daysLeft(t) === 1 ? '' : 'S'} LEFT` : 'NO END DATE'; };
 // everything that says "guest" (A, B and the parts guests don't get), after an unlock and with each pass
 function applyRole() {
-  const g = isGuest() && !!S.gi;
+  const g = isGuest() && !!S.gi, mb = isMember() && !!S.gi, end = g ? gEnd(S.gi) : null;
   document.documentElement.classList.toggle('guest', g);
+  document.documentElement.classList.toggle('member', mb);
   const pill = $('#gpill');
-  pill.hidden = !g;
+  pill.hidden = !g && !mb; pill.classList.toggle('mbr', mb); pill.disabled = mb; // a member's chip: quiet, no violet, nothing to tap
   if (g) {
-    pill.innerHTML = `${LOCK_SVG}<span class="gp-n">GUEST · ${esc(S.gi.name.toUpperCase())}</span><span class="gp-end">${isNum(S.gi.exp) ? ' · ENDS ' + esc(dm(S.gi.exp).toUpperCase()) : ''}</span>`;
-    pill.setAttribute('aria-label', `Guest access for ${S.gi.name}: what guests can do${isNum(S.gi.exp) ? ', and when it ends' : ''}`);
-  }
-  $('#needs').hidden = isGuest();
-  $('#settings').hidden = isGuest() || !S.keys || !S.key && !S.mk;
+    pill.innerHTML = `${LOCK_SVG}<span class="gp-n">${S.gi.shared ? 'GUEST' : `GUEST · ${esc(S.gi.name.toUpperCase())}`}</span><span class="gp-end">${isNum(end) ? ' · ENDS ' + esc(dm(end).toUpperCase()) : ''}</span>`;
+    pill.setAttribute('aria-label', `Guest access${S.gi.shared ? '' : ' for ' + S.gi.name}: what guests can do${isNum(end) ? ', and when it ends' : ''}`);
+  } else if (mb) { pill.innerHTML = `<span class="gp-n">MEMBER · ${esc(S.gi.name.toUpperCase())}</span>`; pill.setAttribute('aria-label', `Signed in as ${S.gi.name}, a member`); }
+  $('#needs').hidden = !isOwner();
+  $('#settings').hidden = !isOwner() || !S.keys || !S.key && !S.mk;
 }
 function guestStar(p, cls = '') {
   return `<button type="button" class="star glk${cls ? ' ' + cls : ''}" data-act="g-star" data-id="${esc(p.id)}" aria-haspopup="true" aria-expanded="false" aria-label="Favourites: saving isn’t on for guests" title="Saving isn’t on for guests">${STAR_SVG(false)}<span class="glock">${LOCK_SVG}</span></button>`;
@@ -6695,9 +6728,9 @@ function guestStar(p, cls = '') {
 function gSheet(open) {
   const sh = $('#gsheet');
   if (!open) { if (sh.hidden) return; sh.hidden = true; hlClosed('gsheet'); const p = $('#gpill'); if (p && !p.hidden) p.focus({ preventScroll: true }); return; }
-  if (!S.gi) return;
+  if (!S.gi || !isGuest()) return;
   popClose();
-  $('#gs-h').textContent = `${S.gi.name}’s guest access`;
+  $('#gs-h').textContent = S.gi.shared ? `Guest access · ${S.gi.name}` : `${S.gi.name}’s guest access`;
   $('#gs-meta').textContent = endsTxt(S.gi);
   sh.hidden = false; hlOpen('gsheet');
   $('#gs-done').focus({ preventScroll: true });
@@ -6712,11 +6745,12 @@ function gWelcome(open) {
     store.set('lps.gwel', JSON.stringify([...new Set([...(Array.isArray(seen) ? seen : []), S.gi ? S.gi.slot : ''])].slice(-20)));
     return;
   }
-  if (!isGuest() || !S.gi || SOLO) return;
+  if (!isGuest() || !S.gi || SOLO) return; // a member gets no welcome card
   const seen = jget('lps.gwel', []);
   if (Array.isArray(seen) && seen.includes(S.gi.slot)) return;
-  $('#gw-h').textContent = `Welcome, ${S.gi.name}`;
-  $('#gw-end').textContent = isNum(S.gi.exp) ? `Your access ends on ${dm(S.gi.exp)}. The owner can end it sooner.` : 'Your access has no end date. The owner can end it any time.';
+  $('#gw-h').textContent = S.gi.shared ? 'Welcome! You’re browsing as a guest' : `Welcome, ${S.gi.name}`;
+  const end = gEnd(S.gi);
+  $('#gw-end').textContent = isNum(end) ? `Your access ends on ${dm(end)}. The owner can end it sooner.` : 'Your access has no end date. The owner can end it any time.';
   w.hidden = false; hlOpen('gwel');
   $('#gw-ok').focus({ preventScroll: true });
 }
@@ -6725,7 +6759,9 @@ function showEnded(info = {}) {
   popClose();
   for (const s of ['#mstrip', '#lock-note', '#lockscreen', '#app', '#winseg', '#refresh', '#qfind', '#refresh-msg', '#lockbtn', '#loaderr', '#gsheet', '#gwel']) $(s).hidden = true;
   $('#totop').classList.remove('on');
-  $('#ge-msg').textContent = isNum(info.exp) && info.exp <= Date.now() ? `It reached its end date on ${dm(info.exp)}. Ask the owner if you need it again.` : 'The owner ended it. Ask them if you need it again.';
+  $('#ge-h').textContent = info.why === 'soft' ? `Your ${info.d || 30}-day guest access has ended` : 'Your guest access has ended';
+  $('#ge-msg').textContent = info.why === 'soft' ? 'Ask the admin to upgrade you to a full account.'
+    : info.why === 'hard' || (isNum(info.exp) && info.exp <= Date.now()) ? `It reached its end date on ${dm(info.exp)}. Ask the owner if you need it again.` : 'The owner ended it. Ask them if you need it again.';
   $('#gend').hidden = false;
   try { $('#ge-new').focus({ preventScroll: true }); } catch (e) { /* ignore */ }
 }
@@ -6752,7 +6788,7 @@ async function checkAlarm() {
 
 // ---------- the owner's Settings: guests, the recovery key, the passphrase (all through the sealed inbox) ----------
 const GDAYS = [7, 30, 90, 0];
-const GU = { days: 30, rm: null, sent: [] }; // the Guests panel's own state (G is the gestures')
+const GU = { days: 45, role: 'guest', rm: null, sent: [] }; // the Guests panel's own state (G is the gestures')
 async function inboxKey() {
   if (OVERRIDE) { const x = await getJson(BASES[0] + 'inbox.json?t=' + Date.now()); return x && x.x25519; }
   return (document.querySelector('meta[name="lps-inbox-key"]') || {}).content || null;
@@ -6792,14 +6828,42 @@ function genRecovery() {
 const normRecovery = (s) => String(s || '').toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, ''); // as typed: any case, spaces or dashes; O as 0, I or L as 1
 const inboxLink = (id, env) => `${INBOX_NEW}?filename=${encodeURIComponent('inbox/' + id + '.json')}&value=${encodeURIComponent(JSON.stringify(env))}`;
 async function sealAsk(req) { const id = rhex(16); return { id, env: await inboxSealWeb(JSON.stringify({ ...req, id, at: Date.now() })) }; }
-async function addGuest(name, days) {
+const splitNames = (t) => [...new Set(String(t || '').split(/[\n,;]+/).map(cleanName).filter(Boolean))];
+const dashLink = () => location.origin + location.pathname;
+const shareTxt = (name, pass, role) => `Hi ${name}! Your ${role === 'member' ? 'login' : 'guest access'} to the LP Shape Scanner: open ${dashLink()} and enter this passphrase once (it stays on that device): ${pass}${role === 'member' ? '' : '. Guest access lasts 30 days from your first visit.'}`;
+const sharedTxt = (pass, end) => `Hi! Guest access to the LP Shape Scanner: open ${dashLink()} and enter this password once (it stays on that device): ${pass}${isNum(end) ? `. It works until ${dm(end)}.` : ''}`;
+// one passphrase per friend (5 words and 2 digits), their slots wrapped here, ALL in one sealed request
+async function addGuests(names, role, days, progress = () => {}) {
   if (!S.keys || !S.mdekRaw) throw new Error('the keys aren’t read yet');
-  const pass = genPass(), slot = rhex(8), exp = days ? Date.now() + days * D : null;
+  const at = Date.now(), exp = days ? at + days * D : null, items = [], list = [];
+  for (let i = 0; i < names.length; i++) {
+    progress(i + 1, names.length);
+    const name = names[i], pass = genPass(), slot = rhex(8);
+    const g = await passKey(pass, S.keys.gsalt, S.keys.iter, ['encrypt']);
+    const wrap = await sealSlot({ k: S.mdekRaw, s: slot, n: name, e: exp, r: role, x: null, d: 30, g: S.gen }, g.key, 'guest');
+    items.push({ slot, kek: B64(g.raw), name, exp, role, wrap, soft: 30 });
+    g.raw.fill(0);
+    list.push({ name, pass, slot });
+  }
+  const r = await sealAsk({ lps: 'guest-add', guests: items });
+  return { ...r, exp, role, list };
+}
+// the shared guest password the owner typed: its slot wrapped here, sealed for the loop (which replaces any shared one before it)
+async function setShared(pass) {
+  if (!S.keys || !S.mdekRaw) throw new Error('the keys aren’t read yet');
+  const at = Date.now(), slot = rhex(8), e = at + 30 * D;
   const g = await passKey(pass, S.keys.gsalt, S.keys.iter, ['encrypt']);
-  const wrap = await sealSlot({ k: S.mdekRaw, s: slot, n: name, e: exp, g: S.gen }, g.key, 'guest');
-  const r = await sealAsk({ lps: 'guest-add', slot, kek: B64(g.raw), name, exp, wrap });
+  const wrap = await sealSlot({ k: S.mdekRaw, s: slot, n: 'friends', e, r: 'guest', x: null, d: 0, sh: 1, g: S.gen }, g.key, 'guest');
+  const r = await sealAsk({ lps: 'shared-set', label: 'friends', days: 30, slot, kek: B64(g.raw), wrap });
   g.raw.fill(0);
-  return { ...r, pass, name, exp, slot };
+  return r;
+}
+const sentSet = () => { const a = jget('lps.gsent', []); return new Set(Array.isArray(a) ? a : []); };
+function pwBlock(g, share) { // a passphrase the loop made: shown to the owner with Copy and the share text, until marked as sent
+  if (!g.pw) return '';
+  if (sentSet().has(g.s)) return `<div class="g-pw"><span class="lbl">SENT</span><button type="button" class="linkbtn" data-act="g-show" data-slot="${esc(g.s)}">Show the passphrase again</button></div>`;
+  return `<div class="g-pw"><span class="g-pass">${esc(g.pw)}</span><button type="button" class="btn sm" data-act="g-copy" data-copy="${esc(g.pw)}">Copy</button>`
+    + `<button type="button" class="btn sm" data-act="g-copy" data-copy="${esc(share)}">Copy share text</button><button type="button" class="linkbtn" data-act="g-sentok" data-slot="${esc(g.s)}">Mark as sent</button></div>`;
 }
 // the master key's bytes, for a new owner or recovery slot: from this device's passphrase key, else the one just typed
 async function mkRaw(pass = null) {
@@ -6808,7 +6872,6 @@ async function mkRaw(pass = null) {
   const o = key ? await mkFrom(S.keys, key, 'owner') : null;
   return o ? o.raw : null;
 }
-const gStatus = (g) => (g.st === 'active' ? (isNum(g.e) ? `ends ${dm(g.e)}` : 'no end date') : g.st === 'expired' ? `ended ${dm(g.end || g.e)}` : `removed ${dm(g.end)}`);
 function sendBlock(id, env, what) {
   const file = `inbox/${id}.json`;
   return `<ol class="g-steps"><li><a class="btn g-send" href="${esc(inboxLink(id, env))}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" data-act="g-send">Send to the loop ↗</a>`
@@ -6819,14 +6882,31 @@ const secretSteps = () => `<ol class="g-steps"><li><a class="btn g-send" href="$
   + '<li>Paste the <b>new</b> passphrase into <b>Value</b>, then tap <b>Update secret</b>.</li><li>Nothing else: the loop’s next run (within about 6 hours) uses it and retires the old passphrase. Both work until then.</li></ol>';
 function renderSettings() {
   const el = $('#settings');
-  if (isGuest() || !S.keys) { el.hidden = true; return; }
+  if (!isOwner() || !S.keys) { el.hidden = true; return; }
   el.hidden = false;
-  const list = (S.gl && Array.isArray(S.gl.guests) ? S.gl.guests : []).slice().sort((a, b) => (b.st === 'active') - (a.st === 'active') || (b.at || 0) - (a.at || 0)); // active first, newest first
+  const all = S.gl && Array.isArray(S.gl.guests) ? S.gl.guests : [];
+  // the shared guest password (the main path): the one in use, with its password when the loop made it
+  const sh = all.filter((g) => g.sh && g.st === 'active').sort((a, b) => (b.at || 0) - (a.at || 0))[0] || null;
+  $('#sh-state').textContent = sh ? `ACTIVE · ENDS ${dm(sh.e).toUpperCase()}` : 'NONE';
+  $('#sh-body').innerHTML = sh ? `<p class="g-hint">Made ${esc(dm(sh.at))} · ${esc(sh.n)} · works until ${esc(full(sh.e))}.${sh.pw ? '' : ' You set it on this page: it isn’t kept anywhere, so you have it.'}</p>${pwBlock(sh, sharedTxt(sh.pw, sh.e))}` : '';
+  $('#sh-set').textContent = sh ? 'Change the shared password' : 'Create a shared password';
+  $('#sh-end').hidden = !sh; if (sh) $('#sh-end').dataset.slot = sh.s;
+  // per-person guests and members
+  const list = all.filter((g) => !g.sh).sort((a, b) => (b.st === 'active') - (a.st === 'active') || (b.at || 0) - (a.at || 0)); // active first, newest first
   const active = list.filter((g) => g.st === 'active').length;
   $('#guests-count').textContent = `${active} ACTIVE · ${S.keys.slots.length} SLOT${S.keys.slots.length === 1 ? '' : 'S'}`;
-  $('#g-list').innerHTML = list.map((g) => `<li class="g-row ${g.st === 'active' ? 'on' : 'off'}"><span class="g-n">${esc(cleanName(g.n))}</span><span class="g-st">${esc(gStatus(g))}</span>`
-    + (g.st === 'active' ? `<button type="button" class="btn sm" data-act="g-rm" data-slot="${esc(g.s)}" data-name="${esc(cleanName(g.n))}">Remove</button>` : `<span class="lbl g-chip">${g.st === 'expired' ? 'EXPIRED' : 'REMOVED'}</span>`) + '</li>').join('') || '<li class="g-row empty">No guests yet.</li>';
-  $('#g-reset').hidden = !active;
+  $('#g-list').innerHTML = list.map((g) => {
+    const role = g.r === 'member' ? 'member' : 'guest', name = cleanName(g.n);
+    const st = g.st === 'active' ? `active · ${isNum(g.e) ? 'limit ' + dm(g.e) : 'no limit'}` : g.st === 'expired' ? `expired ${dm(g.end || g.e)}` : `removed ${dm(g.end)}`;
+    return `<li class="g-row ${g.st === 'active' ? 'on' : 'off'}" data-slot="${esc(g.s)}"><div class="g-who"><span class="g-n">${esc(name)}</span><span class="lbl g-chip">${role === 'member' ? 'MEMBER' : 'GUEST'}</span></div>`
+      + `<div class="g-meta"><span>created ${esc(dm(g.at))}</span><span>first login ${DASH}</span><span class="g-stat">${esc(st)}</span></div>`
+      + (g.st !== 'removed' ? pwBlock(g, shareTxt(name, g.pw, role)) : '')
+      + (g.st !== 'removed' ? `<div class="g-acts">${role === 'guest' ? `<button type="button" class="btn sm" data-act="g-up" data-slot="${esc(g.s)}" data-name="${esc(name)}">Upgrade to member</button>` : ''}`
+        + `<button type="button" class="btn sm" data-act="g-ext" data-slot="${esc(g.s)}" data-name="${esc(name)}" data-e="${isNum(g.e) ? g.e : ''}">Extend 30 days</button>`
+        + `<button type="button" class="linkbtn" data-act="g-rm" data-slot="${esc(g.s)}" data-name="${esc(name)}">Remove for good</button></div>` : '')
+      + '</li>';
+  }).join('') || '<li class="g-row empty">No personal guests or members yet.</li>';
+  $('#g-reset').hidden = !active && !sh;
   $('#g-wait').hidden = !GU.sent.length;
   if (GU.sent.length) $('#g-wait').textContent = `Sent from this device: ${GU.sent.length} request${GU.sent.length === 1 ? '' : 's'}. The lists update on the loop’s next pass.`;
   // the recovery key and the passphrase: what keys.json and the loop's own record say
@@ -6854,8 +6934,14 @@ async function newPassSlot(pass, raw) {
   store.set('lps.pchange', String(Date.now()));
   return r;
 }
-function passForm(sel, intro) { // the new passphrase, twice; 12 characters at least
-  gOut(sel, `<form class="g-form" data-pw="1" novalidate><p class="g-hint">${intro}</p><label class="lbl" for="pw-new">New passphrase (12 characters or more)</label><input id="pw-new" type="password" autocomplete="new-password" spellcheck="false">`
+// never weaker than a generated passphrase (56.6 bits): 16 characters at least, and its characters' variety times its length must
+// reach that too (a long run of one letter fails)
+function strongPass(p, bits = 57) {
+  const pool = (/[a-z]/.test(p) ? 26 : 0) + (/[A-Z]/.test(p) ? 26 : 0) + (/[0-9]/.test(p) ? 10 : 0) + (/[^a-zA-Z0-9]/.test(p) ? 33 : 0);
+  return p.length >= 16 && new Set(p).size >= 8 && p.length * Math.log2(Math.max(2, pool)) >= bits;
+}
+function passForm(sel, intro) { // the new passphrase, twice
+  gOut(sel, `<form class="g-form" data-pw="1" novalidate><p class="g-hint">${intro}</p><label class="lbl" for="pw-new">New passphrase (16 characters or more, e.g. 5 words)</label><input id="pw-new" type="password" autocomplete="new-password" spellcheck="false">`
     + '<label class="lbl" for="pw-new2">The same again</label><input id="pw-new2" type="password" autocomplete="new-password" spellcheck="false">'
     + `<p class="g-msg" id="pw-msg" role="status" aria-live="polite"></p><div class="g-acts"><button type="button" class="btn" data-act="pw-save">Save the new passphrase</button>${S.mkTyped ? '' : '<button type="button" class="linkbtn" data-act="pw-cancel">Cancel</button>'}</div></form>`);
   setTimeout(() => { try { $('#pw-new').focus(); } catch (e) { /* ignore */ } }, 0);
@@ -6875,27 +6961,80 @@ async function gClick(el) {
     case 'g-done': gSheet(false); return true;
     case 'g-welok': gWelcome(false); return true;
     case 'g-endnew': gEndNew(); return true;
-    case 'g-add': if (isGuest()) return true; $('#g-form').hidden = false; gOut('#g-out', ''); $('#g-name').value = ''; $('#g-name').focus(); return true;
-    case 'g-cancel': $('#g-form').hidden = true; GU.rm = null; gOut('#g-out', ''); return true;
+    case 'g-add': if (!isOwner()) return true; $('#g-form').hidden = false; gOut('#g-out', ''); $('#g-name').value = ''; $('#g-name').focus(); return true;
+    case 'g-cancel': $('#g-form').hidden = true; GU.rm = null; gOut('#g-out', ''); gOut('#sh-out', ''); return true;
     case 'g-days': GU.days = Number(el.dataset.d); for (const b of $$('#g-days button')) b.setAttribute('aria-pressed', String(b === el)); return true;
+    case 'g-role': GU.role = el.dataset.r === 'member' ? 'member' : 'guest'; for (const b of $$('#g-role button')) b.setAttribute('aria-pressed', String(b === el)); return true;
     case 'g-create': {
-      const name = cleanName($('#g-name').value);
-      if (!name) { $('#g-name').focus(); $('#g-form-msg').textContent = 'Give the guest a name (only you and they see it).'; return true; }
-      el.disabled = true; $('#g-form-msg').textContent = 'Making the passphrase and sealing the request…';
+      const names = splitNames($('#g-name').value), msg = $('#g-form-msg');
+      if (!names.length) { $('#g-name').focus(); msg.textContent = 'Type one name or more (labels only: only you and they see them).'; return true; }
+      if (names.length > 24) { msg.textContent = 'At most 24 at a time.'; return true; }
+      el.disabled = true;
       try {
-        const r = await addGuest(name, GU.days);
-        GU.sent.push(r.id); $('#g-form').hidden = true; $('#g-form-msg').textContent = '';
-        gOut('#g-out', `<div class="g-made"><div class="lbl">${esc(name.toUpperCase())}’S PASSPHRASE · SHOWN ONCE</div><div class="g-pass" id="g-pass">${esc(r.pass)}</div>`
-          + `<button type="button" class="btn sm" data-act="g-copy" data-copy="${esc(r.pass)}">Copy the passphrase</button>`
-          + `<p class="g-hint">Nothing keeps it: copy it now and send it to ${esc(name)} privately. ${isNum(r.exp) ? `Their access ends on ${esc(dm(r.exp))}.` : 'No end date.'}</p>`
-          + sendBlock(r.id, r.env, `${name} can unlock`) + '<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>');
+        const r = await addGuests(names, GU.role, GU.days, (i, n) => { msg.textContent = `Making passphrase ${i} of ${n}…`; });
+        GU.sent.push(r.id); $('#g-form').hidden = true; msg.textContent = '';
+        const n = r.list.length, who = r.role === 'member' ? 'MEMBER' : 'GUEST';
+        gOut('#g-out', `<div class="g-made"><div class="lbl">${n} ${who}${n === 1 ? '' : 'S'} · PASSPHRASES SHOWN ONCE</div><ul class="g-plist">`
+          + r.list.map((x) => `<li><span class="g-n">${esc(x.name)}</span><span class="g-pass">${esc(x.pass)}</span><span class="g-acts"><button type="button" class="btn sm" data-act="g-copy" data-copy="${esc(x.pass)}">Copy</button>`
+            + `<button type="button" class="btn sm" data-act="g-copy" data-copy="${esc(shareTxt(x.name, x.pass, r.role))}">Copy share text</button></span></li>`).join('')
+          + `</ul><p class="g-hint">Nothing keeps them: copy each one now and send it privately. ${isNum(r.exp) ? `Outer limit ${esc(dm(r.exp))}.` : 'No outer limit.'}</p>`
+          + sendBlock(r.id, r.env, n === 1 ? `${r.list[0].name} can unlock` : `All ${n} can unlock`) + '<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>');
         renderSettings();
-      } catch (e) { $('#g-form-msg').textContent = errTxt(e); } finally { el.disabled = false; }
+      } catch (e) { msg.textContent = errTxt(e); } finally { el.disabled = false; }
       return true;
     }
+    case 'g-up': case 'g-ext': {
+      const up = el.dataset.act === 'g-up', name = el.dataset.name, e = Number(el.dataset.e) || 0;
+      el.disabled = true;
+      try {
+        const q = await sealAsk(up ? { lps: 'guest-update', slot: el.dataset.slot, role: 'member', exp: null } : { lps: 'guest-update', slot: el.dataset.slot, exp: Math.max(Date.now(), e) + 30 * D, ext: true });
+        GU.sent.push(q.id);
+        gOut('#g-out', `<div class="g-made"><div class="lbl">${up ? 'UPGRADE' : 'EXTENSION'} SEALED</div>${sendBlock(q.id, q.env, up ? `${name} is a member (same passphrase)` : `${name} has 30 more days (same passphrase)`)}<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>`);
+        renderSettings();
+      } catch (er) { gOut('#g-out', `<p class="g-hint">${esc(errTxt(er))}</p>`); } finally { el.disabled = false; }
+      return true;
+    }
+    case 'g-sentok': case 'g-show': {
+      const s = sentSet();
+      if (el.dataset.act === 'g-sentok') s.add(el.dataset.slot); else s.delete(el.dataset.slot);
+      store.set('lps.gsent', JSON.stringify([...s].slice(-200)));
+      renderSettings();
+      return true;
+    }
+    // the shared guest password (the main path): typed here, or made by the loop
+    case 'sh-set':
+      gOut('#sh-out', `<form class="g-form" novalidate><p class="g-hint">One password for your friends, read-only, for 30 days from now.${S.gl && S.gl.guests && S.gl.guests.some((g) => g.sh && g.st === 'active') ? ' It replaces the one in use (that one stops working).' : ''}</p>`
+        + '<label class="lbl" for="sh-new">Shared password (16 characters or more, e.g. 5 words)</label><input id="sh-new" type="password" autocomplete="new-password" spellcheck="false">'
+        + '<label class="lbl" for="sh-new2">The same again</label><input id="sh-new2" type="password" autocomplete="new-password" spellcheck="false">'
+        + '<p class="g-msg" id="sh-msg" role="status" aria-live="polite"></p><div class="g-acts"><button type="button" class="btn" data-act="sh-save">Seal it for the loop</button>'
+        + '<button type="button" class="linkbtn" data-act="sh-loop">Let the loop make a strong one</button><button type="button" class="linkbtn" data-act="g-cancel">Cancel</button></div></form>');
+      setTimeout(() => { try { $('#sh-new').focus(); } catch (e) { /* ignore */ } }, 0);
+      return true;
+    case 'sh-save': case 'sh-loop': {
+      const m = $('#sh-msg');
+      let q;
+      el.disabled = true;
+      try {
+        if (el.dataset.act === 'sh-save') {
+          const a = $('#sh-new').value, b = $('#sh-new2').value;
+          if (!strongPass(a, 60)) { m.textContent = 'Too weak: at least 16 characters and about 60 bits, like 5 words and 2 digits.'; return true; }
+          if (a !== b) { m.textContent = 'The two don’t match.'; return true; }
+          m.textContent = 'Sealing (a few seconds)…';
+          q = await setShared(a);
+        } else q = await sealAsk({ lps: 'shared-set', label: 'friends', days: 30 });
+        GU.sent.push(q.id);
+        gOut('#sh-out', `<div class="g-made"><div class="lbl">SHARED PASSWORD SEALED</div>${sendBlock(q.id, q.env, el.dataset.act === 'sh-save' ? 'Your friends can unlock with it' : 'The password appears here')}<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>`);
+        renderSettings();
+      } catch (e) { m.textContent = errTxt(e); } finally { el.disabled = false; }
+      return true;
+    }
+    case 'sh-end': GU.rm = { slot: el.dataset.slot, name: 'the shared password' }; $('#g-form').hidden = true;
+      gOut('#sh-out', '<div class="g-made"><p>End shared access now? Every friend using the shared password loses access after the loop’s next pass: the data key changes. What they already saw can’t be recalled.</p>'
+        + '<div class="g-acts"><button type="button" class="btn danger" data-act="g-rmok" data-out="#sh-out">End shared access now</button><button type="button" class="linkbtn" data-act="g-cancel">Cancel</button></div></div>');
+      return true;
     case 'g-rm': GU.rm = { slot: el.dataset.slot, name: el.dataset.name }; $('#g-form').hidden = true;
-      gOut('#g-out', `<div class="g-made"><p>Remove <b>${esc(GU.rm.name)}</b>? Their device stops getting new data after the loop’s next pass: the data key changes. What they already saw can’t be recalled.</p>`
-        + `<div class="g-acts"><button type="button" class="btn danger" data-act="g-rmok">Remove ${esc(GU.rm.name)}</button><button type="button" class="linkbtn" data-act="g-cancel">Cancel</button></div></div>`);
+      gOut('#g-out', `<div class="g-made"><p>Remove <b>${esc(GU.rm.name)}</b> for good? Their passphrase stops working and their device stops getting new data after the loop’s next pass: the data key changes. What they already saw can’t be recalled.</p>`
+        + `<div class="g-acts"><button type="button" class="btn danger" data-act="g-rmok">Remove ${esc(GU.rm.name)} for good</button><button type="button" class="linkbtn" data-act="g-cancel">Cancel</button></div></div>`);
       return true;
     case 'g-reset': GU.rm = { reset: true }; $('#g-form').hidden = true;
       gOut('#g-out', '<div class="g-made"><p>Remove <b>every guest</b>? Their devices stop getting new data after the loop’s next pass. What they already saw can’t be recalled.</p>'
@@ -6908,7 +7047,7 @@ async function gClick(el) {
       try {
         const r = await sealAsk(rm.reset ? { lps: 'guest-reset' } : { lps: 'guest-remove', slot: rm.slot });
         GU.sent.push(r.id); GU.rm = null;
-        gOut('#g-out', `<div class="g-made"><div class="lbl">REMOVAL SEALED</div>${sendBlock(r.id, r.env, rm.reset ? 'Every guest is out' : `${rm.name} is out`)}<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>`);
+        gOut(el.dataset.out || '#g-out', `<div class="g-made"><div class="lbl">REMOVAL SEALED</div>${sendBlock(r.id, r.env, rm.reset ? 'Every guest is out' : `${rm.name} is out`)}<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>`);
         renderSettings();
       } catch (e) { gOut('#g-out', `<p class="g-hint">${esc(errTxt(e))}</p>`); } finally { el.disabled = false; }
       return true;
@@ -6950,7 +7089,7 @@ async function gClick(el) {
     case 'pw-cancel': gOut('#pw-out', ''); return true;
     case 'pw-save': {
       const a = $('#pw-new').value, b = $('#pw-new2').value, m = $('#pw-msg');
-      if (a.length < 12) { m.textContent = 'At least 12 characters (words with spaces are fine).'; return true; }
+      if (!strongPass(a)) { m.textContent = 'Too weak: at least 16 characters, as strong as the guest passphrases (5 words and 2 digits); words with spaces are fine.'; return true; }
       if (a !== b) { m.textContent = 'The two don’t match.'; return true; }
       el.disabled = true; m.textContent = 'Deriving the key and sealing (a few seconds)…';
       try {
@@ -7021,7 +7160,7 @@ document.addEventListener('click', (e) => {
   if (!el || el.disabled) return;
   if (S.fl && el.dataset.act !== 'flash') flEnd();
   if (el.dataset.act.startsWith('ws-') && wsClick(el, e)) return; // v0.6.0: History buttons and the workspace
-  if (/^(g|rk|pw|al)-/.test(el.dataset.act)) { gClick(el, e); return; } // v0.7.0: guests, the recovery key, the passphrase, the alarm
+  if (/^(g|rk|pw|al|sh)-/.test(el.dataset.act)) { gClick(el, e); return; } // v0.7.0: guests, the recovery key, the passphrase, the alarm
   switch (el.dataset.act) {
     case 'fav': toggleFav(el.dataset.id, el); break;
     case 'stable': setStable(!stableOn()); refocus('#' + (el.id || 'f-stab')); break;
