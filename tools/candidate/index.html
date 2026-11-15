@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+j6E23zbYykjTwm9zu/1Fie3SgLNOaFuy6/h4i6mAhc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SeN2fUt3s4LNUFYRlp1QSdjp+K8lCoT/X+pEKMkn2Lw='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -5068,7 +5068,7 @@ document.addEventListener('click', (e) => {
     case 'mc-scroll': mcScroll(el); break;
     case 'hl': hlToggle(el); break;
     case 'cell': cellToggle(el); break;
-    case 'q-pick': qPick(Number(el.dataset.i)); break;
+    case 'q-pick': if (Date.now() - (Q.picked || 0) > 700) qPick(Number(el.dataset.i)); break; // a finger's tap already picked it
     case 'ext': break; // a plain link: the browser opens the explorer in a new tab
     case 'win': setWin(el.dataset.w); break;
     case 'view': viewPress(el); break;
@@ -5147,8 +5147,21 @@ $('#unlock-form').addEventListener('submit', onUnlock);
 document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q') { qLiftT = Date.now(); qLift(); if (e.target.value) qUpdate(); } });
 document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q') && Date.now() - (Q.press || 0) > 900) qClose(); }, 120); });
 document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('#q-list')) Q.press = Date.now(); }, { capture: true, passive: true });
-document.addEventListener('touchstart', (e) => { if (e.target.closest && e.target.closest('#q-list')) Q.press = Date.now(); }, { capture: true, passive: true });
-document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list')) e.preventDefault(); });
+// a finger's tap on a chip picks it as the finger lifts (Safari may hold back or drop the click on a field it just
+// blurred); a swipe along the chips scrolls them and picks nothing; the click that may follow is then ignored
+document.addEventListener('touchstart', (e) => {
+  const inL = e.target.closest && e.target.closest('#q-list'), o = inL && e.target.closest('.qopt');
+  if (inL) Q.press = Q.touch = Date.now();
+  Q.tp = o && e.touches.length === 1 ? { o, x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+}, { capture: true, passive: true });
+document.addEventListener('touchmove', (e) => { const t = e.touches[0]; if (Q.tp && t && Math.hypot(t.clientX - Q.tp.x, t.clientY - Q.tp.y) > 10) Q.tp = null; }, { capture: true, passive: true });
+document.addEventListener('touchend', (e) => {
+  const t = Q.tp, c = e.changedTouches && e.changedTouches[0]; Q.tp = null;
+  if (!t || !t.o.isConnected || (c && Math.hypot(c.clientX - t.x, c.clientY - t.y) > 10)) return;
+  Q.picked = Date.now(); qPick(Number(t.o.dataset.i));
+}, { capture: true, passive: true });
+document.addEventListener('touchcancel', () => { Q.tp = null; }, { capture: true, passive: true });
+document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list') && Date.now() - (Q.touch || 0) > 800) e.preventDefault(); }); // a mouse keeps the field's focus
 // card strips: fades follow the scroll; a pop-up note follows its control
 document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); if (TIP.host || TIP.mini) tipScroll(); }, { capture: true, passive: true });
 for (const ev of ['wheel', 'touchstart', 'keydown', 'mousedown']) addEventListener(ev, () => { S.touched = true; cancelSettle(); }, { passive: true, capture: true });
