@@ -3768,6 +3768,27 @@ async function testIphone(browser) {
   ok(`iphone: every field is 16 px or more on a phone (${a.nFields} fields${a.small.length ? '; ' + a.small.join(', ') : ''})`, a.nFields >= 3 && a.small.length === 0, a.small.join(', '));
   ok(`iphone: every control takes a quick second tap as a tap, never a double-tap zoom (${a.nCtrl} controls)`, a.nCtrl > 40 && a.zoomy.length === 0, a.zoomy.join(', '));
   ok('iphone: pinch zoom stays allowed (the viewport neither fixes the scale nor turns zoom off)', a.pinch);
+  // v0.6.1 (owner, 15 Nov 2026: the iPhone opened the page zoomed in, cut off at the right; "show which version runs")
+  const v61 = await p.evaluate(async () => {
+    const small = [...document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea')]
+      .filter((e) => parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => e.id || e.className || e.tagName.toLowerCase());
+    const ver = document.querySelector('#ver'), r = ver && ver.getBoundingClientRect();
+    const verOk = !!ver && /^v\d+\.\d+\.\d+$/.test(ver.textContent.trim()) && ver.getClientRects().length > 0 && r.bottom <= innerHeight && r.right <= innerWidth;
+    // a made-up zoom: the page resets it once, then lifts the cap again so pinch-zoom still works
+    let zoom = false;
+    if (typeof window.__lpsFitZoom === 'function') {
+      const m = document.querySelector('meta[name="viewport"]'), c0 = m.getAttribute('content');
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: { scale: 1.3 } });
+      const did = window.__lpsFitZoom(), capped = /maximum-scale=1/.test(m.getAttribute('content'));
+      await new Promise((res) => setTimeout(res, 600));
+      zoom = did && capped && m.getAttribute('content') === c0;
+      delete window.visualViewport; // the browser's own again for the checks that follow
+    }
+    return { small, verOk, zoom };
+  });
+  ok(`iphone: every field, hidden ones too (the Compare picker), is 16 px or more, so a tap never zooms in${v61.small.length ? ' (' + v61.small.join(', ') + ')' : ''}`, v61.small.length === 0, v61.small.join(', '));
+  ok('iphone: the running version shows small at the top of the first screen', v61.verOk);
+  ok('iphone: a page that opens zoomed in fits the screen again, and pinch-zoom stays allowed afterwards', v61.zoom);
   // tap into the search, then double-tap the bar's switches, the map's zoom, its arrows and the best find's tabs, as a quick finger does
   const dbl = async (sel) => { const l = p.locator(sel).first(); if (!(await l.isVisible().catch(() => false))) return 0; await l.scrollIntoViewIfNeeded().catch(() => {}); if (touch) { await l.tap({ timeout: 5000 }).catch(() => {}); await l.tap({ timeout: 5000 }).catch(() => {}); } else await l.dblclick({ timeout: 5000 }).catch(() => {}); return 1; };
   if (touch) await p.tap('#f-q').catch(() => {}); else await p.click('#f-q');
