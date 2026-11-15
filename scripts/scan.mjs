@@ -627,9 +627,9 @@ async function writeOutputs() {
       const budget = eth ? {} : { maxBatches: bfc?.batches ?? 60 };
       const deadline = eth ? BACKFILL.deadlineMs : bfc?.ms ?? 40e3;
       const deepMax = keepChains.has(X.CH.id) ? (eth ? FEEHIST.deep.batches : bfc?.deep ?? 0) : 0;
-      // the deep moments: the fee history's, and the days a v3-style pool's TVL is missing (back to the chain's archive
-      // reach), newest first, at most FEEHIST.deep.perPool a pool
-      const deepOf = (s, o, p) => unionMoments(deepMoments(s, { ...o, perPool: FEEHIST.deep.perPool }),
+      // the deep moments: the fee history's and the days a v3-style pool's TVL is missing, both back to the chain's
+      // archive reach (Base), newest first, at most FEEHIST.deep.perPool a pool
+      const deepOf = (s, o, p) => unionMoments(deepMoments(s, { ...o, reachMs, perPool: FEEHIST.deep.perPool }),
         p?.v === 3 ? tvlMoments(s, { ...o, have: tvAt.get(p.id), reachMs, perPool: FEEHIST.deep.perPool }) : null, FEEHIST.deep.perPool);
       let plan = { jobs: [], wanted: 0, planned: 0 }, deep = { jobs: [], wanted: 0, planned: 0 }, jobs = [], run = { results: [], started: 0, skipped: 0, retried: 0 };
       await timed(X.CH.prefix + 'backfill', async () => {
@@ -1037,7 +1037,9 @@ async function writeOutputs() {
       const pools = out.filter((x) => x.chain === X.CH.id).map((x) => mById.get(x.id)).map((p) => ({ id: p.id, v: p.v, dex: p.dex, fee: p.fee, createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
       // a chain whose own 24 h swap read got no answer at all this pass waits (its log nodes are not serving); one
       // its swaps cap cut short still reads within its own cap
-      const r = await exactFeesChain({ chain: X.CH.id, pools, cache: sxCache, now: X.passT, io: chainIo(X.CH, { budget, head: X.block }), budget, hold: X.swapGroups && X.unreadGroups === X.swapGroups ? 'swaps unread' : null });
+      // Base: no day past its archive nodes' reach (lib/chains.mjs archiveDays); those days stay null
+      const reachMs = isNum(X.CH.archiveDays) ? X.CH.archiveDays * DAY : null;
+      const r = await exactFeesChain({ chain: X.CH.id, pools, cache: sxCache, now: X.passT, reachMs, io: chainIo(X.CH, { budget, head: X.block }), budget, hold: X.swapGroups && X.unreadGroups === X.swapGroups ? 'swaps unread' : null });
       return { ...r, ms: budget.elapsed(), calls: budget.used() };
     } catch (e) { console.error(e); return { chain: X.CH.id, broke: errWord(e), changed: false }; }
   }))) : [];
@@ -1047,7 +1049,7 @@ async function writeOutputs() {
     const s2 = snaps2.get(p.id), t0 = p.X.tok.get(p.t0) || {}, t1 = p.X.tok.get(p.t1) || {};
     if (!s2) continue;
     const x = out.find((o) => o.id === p.id), rate = x.feeTier && x.lpKeeps ? x.feeTier * x.lpKeeps : null;
-    fyOf.set(p.id, feeYear({ series: s2, gt: gtCache.get(p.id) ?? null, sx: sxCache.p.get(p.id) ?? null, now: passT,
+    fyOf.set(p.id, feeYear({ series: s2, gt: gtCache.get(p.id) ?? null, sx: sxCache.p.get(p.id) ?? null, now: passT, reachMs: isNum(p.X.CH.archiveDays) ? p.X.CH.archiveDays * DAY : null,
       pool: { d0: t0.decimals, d1: t1.decimals, rate, dyn: !!x.dynamicFee, usd0: t0.usd ?? null, usd1: t1.usd ?? null, pxNow: x.price ?? null, createdAt: x.createdAt } }));
   }
   if (exRuns.length) {

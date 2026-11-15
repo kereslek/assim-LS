@@ -112,7 +112,7 @@ test('exact overrides estimated; estimated = volume × fee tier × the LP share;
   for (const [t, f] of es.slice(0, 20)) assert.ok(Math.abs(f / c.perDay(t / DAY) - 1) < 1e-3, `${t}: ${f}`);
   // exact days at that day's prices: token1's price from the close of token0 (GeckoTerminal's base) and the pool's price
   for (const [t, f] of xs) { const k = 1 + (t / DAY % 3) / 10; assert.ok(Math.abs(f / (c.perDay(t / DAY) * k) - 1) < 2e-3, `${t}: ${f} vs ${c.perDay(t / DAY) * k}`); }
-  assert.deepEqual(yp, { exact: 30, est: 335, age: 365, dyn: false, sw: 0 });
+  assert.deepEqual(yp, { exact: 30, est: 335, age: 365, dyn: false, sw: 0, lim: null, from: null });
   // the sanity ratio: estimated ÷ exact on days with both (the made-up close moves, so it is the close's factor back)
   assert.equal(xc.length, 30);
   // planted fault: the estimate allowed to override an exact day → a different row, caught
@@ -385,3 +385,51 @@ test('dayRows keeps fee-read rows only, the earliest of each day', () => {
   const m = dayRows([r1, r2, { ...r2, t: TODAY - DAY + 60e3, fg0: null }]);
   assert.equal(m.get(Math.floor((TODAY - DAY) / DAY)).t, r2.t);
 });
+
+test('Base archive reach: the deep backfill asks no day past it; those days stay estimated or null and yp says why (planted fault: a reach ignored)', () => {
+  // a pool watched 90 days (two of them by a pass at 13:00 only) on a chain whose archive keeps 90 days: the year's
+  // older days can't be read there
+  const c = chain(), mis = [Math.floor(NOW / DAY) - 50, Math.floor(NOW / DAY) - 51];
+  const s = watchedSeries(c, { watched: 90, misaligned: mis });
+  const reachMs = 90 * DAY, oldest = NOW - reachMs;
+  const asked = (o) => [...deepMoments(s, { now: NOW, perPool: 400, ...o }).keys()];
+  const within = asked({ reachMs });
+  for (const d of mis) assert.ok(within.includes(d * DAY + BACKFILL.at), `day ${d} (within the reach) still asked`);
+  assert.ok(within.every((T) => T >= oldest), 'no moment older than the reach');
+  // planted fault: the same plan without the reach asks the older days (the calls that would only fail)
+  const all = asked({});
+  assert.ok(all.filter((T) => T < oldest).length > 250, 'the fault asks the year past the reach');
+  assert.deepEqual(all.filter((T) => T >= oldest), within, 'within the reach, the same moments');
+  assert.deepEqual(asked({ reachMs: null }), all, 'a chain without a reach (Ethereum) is unchanged');
+  // pass after pass with the reach: it fills what the archive serves and then asks nothing more
+  let x = s;
+  for (let i = 0; i < 40; i++) {
+    const ms = deepMoments(x, { now: NOW, reachMs });
+    if (!ms.size) break;
+    const got = [...ms.keys()].map((T) => c.read(T).row);
+    const next = merge(x, got, { now: NOW });
+    const y = foldDeep(next, [...rawRowsOf(x), ...got], { now: NOW });
+    if (y) next.y = y;
+    x = next;
+  }
+  assert.equal(deepMoments(x, { now: NOW, reachMs }).size, 0, 'done: nothing more is asked within the reach');
+  const old = { ...POOL, createdAt: NOW - 400 * DAY }; // a pool older than the year
+  const fy = feeYear({ series: x, gt: null, pool: old, now: NOW, reachMs });
+  const from = Math.ceil((oldest - BACKFILL.at) / DAY) * DAY;
+  assert.equal(fy.yp.lim, 'archive');
+  assert.equal(fy.yp.from, from);
+  assert.ok(fy.y.filter((r) => r[0] >= from).every((r) => r[2] === 'x'), 'every readable day exact');
+  const past = fy.y.filter((r) => r[0] < from);
+  assert.equal(past.length, 365 - Math.round((TODAY - from) / DAY));
+  // a day read while it was still in reach stays exact (here the daily tier's oldest row); the rest are null, never 0
+  assert.ok(past.every((r) => r[2] === 'x' || (r[1] === null && r[2] === null)), 'older days exact from rows held, else null');
+  assert.ok(past.filter((r) => r[2] === null).length >= past.length - 1, 'no older day read after the reach');
+  // with candles, those days are estimated instead
+  const gt = gtEntry(candles(366));
+  assert.ok(feeYear({ series: x, gt, pool: old, now: NOW, reachMs }).y.filter((r) => r[0] < from).every((r) => r[2] === 'e' || r[2] === 'x'));
+  // no reach: lim and from are null
+  const eth = feeYear({ series: x, gt: null, pool: old, now: NOW });
+  assert.equal(eth.yp.lim, null);
+  assert.equal(eth.yp.from, null);
+});
+const rawRowsOf = (s) => [...(s?.h || []), ...(s?.d || []), ...(s?.y?.r || [])];

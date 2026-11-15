@@ -11,7 +11,7 @@ import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 import { makeBudget } from '../lib/budget.mjs';
 import { feeYear } from '../lib/feehist.mjs';
 import { feeSpikes, swapEvidence } from '../lib/spikes.mjs';
-import { EXACT, SETTING_TOPICS, decodeSetting, filterOf, eventsByPool, dayFees, readStates, firstBlockAt, emptyCache, packSx, unpackSx, planDays, exactFeesChain, exactLine } from '../lib/exactfees.mjs';
+import { EXACT, SETTING_TOPICS, decodeSetting, filterOf, eventsByPool, dayFees, readStates, firstBlockAt, emptyCache, packSx, unpackSx, planDays, exactFeesChain, exactLine, reachFirstDay } from '../lib/exactfees.mjs';
 
 const DAY = 86400e3;
 const W = (v) => BigInt.asUintN(256, BigInt(v)).toString(16).padStart(64, '0');
@@ -392,4 +392,26 @@ test('the public line: counts, one ratio and seconds only; the check needs 20 da
   assert.equal(exactLine(runs, { xs: Array(30).fill(1.01) }).ok, true);
   assert.equal(exactLine(runs, { xs: Array(30).fill(1.3) }).ok, false, 'swaps and counters a third apart: fails');
   assert.equal(EXACT.settleMs, 30 * 60e3);
+});
+
+test('Base archive reach: no day whose start state the archive no longer serves is asked; those days stay null, counted past (planted fault: the reach ignored)', async () => {
+  const reachMs = 3 * DAY; // NOW is 09:00: the day before yesterday's start is within 3 days, the day before that's is not
+  const oldest = (NOW - reachMs) / 1000;
+  const watch = (w) => { const seen = [], state = w.io.state; w.io.state = async (pools, b, range) => { seen.push(w.ts[b]); return state(pools, b, range); }; return seen; };
+  const w = world(), cache = emptyCache(), seen = watch(w);
+  const s = await exactFeesChain({ chain: 'base', pools: w.pools, cache, now: NOW, io: w.io, days: 5, reachMs });
+  assert.equal(reachFirstDay(NOW, reachMs), TODAY / DAY - 2);
+  assert.ok(seen.length > 0 && seen.every((t) => t >= oldest), 'every state read within the reach');
+  for (const p of w.pools) assert.deepEqual([...cache.p.get(p.id).d.keys()].sort(), [TODAY - 2 * DAY, TODAY - DAY].sort(), 'only the days in reach');
+  assert.equal(s.past, 3 * 3, 'the days past the reach, never asked (no creation time known for any pool here)');
+  assert.equal(s.possible, 2 * 3, 'coverage counts the readable days');
+  assert.equal(s.covered, s.possible);
+  assert.equal(s.unread, 0, 'nothing asked that would only fail');
+  assert.match(exactLine([{ ...s, ms: 0, calls: 0 }]).line, /coverage 6 of 6 pool-days \(9 past the archive's reach\)/);
+  // planted fault: the reach ignored reads the older days' start states
+  const f = world(), fseen = watch(f);
+  const fs0 = await exactFeesChain({ chain: 'base', pools: f.pools, cache: emptyCache(), now: NOW, io: f.io, days: 5 });
+  assert.ok(fseen.some((t) => t < oldest), 'the fault reads past the reach');
+  assert.equal(fs0.past, 0);
+  assert.equal(reachFirstDay(NOW, null), null, 'no reach (Ethereum): read back to the year\'s start, as before');
 });
