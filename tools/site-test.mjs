@@ -5165,7 +5165,7 @@ async function testTools(browser) {
           for (const s of document.querySelectorAll('#ws .hs-stack svg[data-k]')) {
             const sr = s.getBoundingClientRect(), k = sr.width / +s.getAttribute('width'), X = (xc - sr.left) / k;
             const segs = [...s.querySelectorAll('path.hs-b')].flatMap((pa) => [...pa.getAttribute('d').matchAll(/M([\d.]+) [\d.]+h([\d.]+)/g)].map((m) => [+m[1], +m[2]]));
-            const seg = segs.find((g) => g[0] - 0.5 <= X && X <= g[0] + g[1] + 0.5);
+            const seg = segs.filter((g) => g[0] - 0.5 <= X && X <= g[0] + g[1] + 0.5).sort((g, h) => Math.abs(g[0] + g[1] / 2 - X) - Math.abs(h[0] + h[1] / 2 - X))[0]; // its own day's (a year on a phone: bars under 1 px)
             if (seg) out.push([s.dataset.k, +((X - (seg[0] + seg[1] / 2)) * k).toFixed(2)]);
           }
           return out;
