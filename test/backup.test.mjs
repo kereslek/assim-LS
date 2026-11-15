@@ -9,7 +9,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { newLockFile, seal } from '../lib/lock.mjs';
 import { inboxSeal } from '../lib/inbox.mjs';
-import { stampOf, stampTime, planPrune, makeBackup, rehearse, fileProblem } from '../scripts/backup.mjs';
+import { execFileSync } from 'node:child_process';
+import { stampOf, stampTime, planPrune, makeBackup, rehearse, fileProblem, planRetention, RETENTION, dayKey, weekKey, pushDaily, BACKUP_BRANCH } from '../scripts/backup.mjs';
 
 const NOW = Date.parse('2026-11-07T03:17:00Z');
 const STAMP = '2026-11-07T0317Z';
@@ -177,4 +178,112 @@ test('the backup never decrypts: no passphrase, no key derivation, no open()', (
   const imports = src.split('\n').filter((l) => /^import /.test(l)).join('\n');
   assert.ok(!/\b(open|deriveKeys|unlock|openLock|inboxOpen|inboxKeys|openStore)\b/.test(imports));
   assert.ok(!/LOCK_PASSPHRASE|passphraseFrom/.test(src));
+});
+
+// ---- retention: 48 hours of every copy, the day's first for 90 days, the week's first for a year ----------------
+const H = 3600e3, D = 86400e3;
+// a year and a half of copies: about every 50 minutes for the last 3 days, before that 3 a day (00:10, 09:00, 17:30)
+function copies(now = NOW) {
+  const out = [];
+  for (let t = now - 3 * D; t <= now; t += 50 * 60e3) out.push(stampOf(t));
+  for (let d = 3; d < 540; d++) { const day = Math.floor((now - d * D) / D) * D; for (const m of [10, 540, 1050]) out.push(stampOf(day + m * 60e3)); }
+  return [...new Set(out)].sort();
+}
+
+test('retention: every copy of the last 48 hours, each day\'s first for 90 days, each week\'s first for a year, the newest', () => {
+  const all = copies(), p = planRetention(all, NOW);
+  assert.deepEqual([...p.keep, ...p.drop].sort(), all, 'every folder is kept or dropped');
+  assert.ok(p.keep.every((s) => !p.drop.includes(s)));
+  const firstDay = new Map(), firstWeek = new Map();
+  for (const s of all) { const t = stampTime(s); if (!firstDay.has(dayKey(t))) firstDay.set(dayKey(t), s); if (!firstWeek.has(weekKey(t))) firstWeek.set(weekKey(t), s); }
+  for (const s of all) {
+    const t = stampTime(s), age = NOW - t;
+    const dayFirst = firstDay.get(dayKey(t)) === s, weekFirst = firstWeek.get(weekKey(t)) === s;
+    const want = age <= 48 * H || (dayFirst && age <= 90 * D) || (weekFirst && age <= 365 * D) || s === all.at(-1);
+    assert.equal(p.keep.includes(s), want, s);
+  }
+  // about 58 copies of the last 48 hours, 90 days, 39-40 weeks past the 90 days
+  assert.ok(p.hourly.length >= 57 && p.hourly.length <= 59, String(p.hourly.length));
+  assert.ok(p.daily.length >= 90 && p.daily.length <= 91);
+  const weeksOnly = p.weekly.filter((s) => !p.daily.includes(s) && !p.hourly.includes(s));
+  assert.ok(weeksOnly.length >= 38 && weeksOnly.length <= 41, String(weeksOnly.length));
+  assert.ok(p.keep.every((s) => NOW - stampTime(s) <= 365 * D), 'nothing older than a year');
+  // weeks start on Monday 00:00 UTC
+  assert.equal(weekKey(Date.parse('2026-11-16T00:00:00Z')), weekKey(Date.parse('2026-11-22T23:59:00Z')));
+  assert.notEqual(weekKey(Date.parse('2026-11-15T23:59:00Z')), weekKey(Date.parse('2026-11-16T00:00:00Z')));
+});
+
+test('retention only ever lets folders go: what one plan drops, a later plan never keeps', () => {
+  const all = copies();
+  let kept = new Set(all);
+  for (let t = NOW; t <= NOW + 400 * D; t += 31 * H) {
+    const p = planRetention([...kept], t);
+    for (const s of p.keep) assert.ok(kept.has(s));
+    const again = planRetention(all, t);   // the plan over everything ever made agrees with the plan over what was kept
+    assert.deepEqual(again.keep, p.keep, new Date(t).toISOString());
+    kept = new Set(p.keep);
+  }
+  assert.deepEqual([...kept], [all.at(-1)], 'after a year without new copies only the newest stays');
+  assert.throws(() => planRetention(all, NOW, { ...RETENTION, weeklyDays: 30 }), /bad retention/);
+  assert.deepEqual(planRetention(['README.md', 'monthly'], NOW).keep, [], 'other entries are not the plan\'s');
+});
+
+test('make --no-prune stages a copy and deletes nothing', () => {
+  const dirs = setup({ backups: { [stampOf(NOW - 400 * D)]: { 'live.json': j(seal('x', AES, { t: NOW - 400 * D })) } } });
+  const r = make(dirs, { prune: false, say: () => {} });
+  assert.equal(r.pruned, 0);
+  assert.ok(fs.existsSync(path.join(dirs.out, stampOf(NOW - 400 * D))));
+});
+
+// ---- the day's first copy on the backup branch, from git objects only ------------------------------------------
+const G = (cwd, ...a) => execFileSync('git', a, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid', GIT_CONFIG_NOSYSTEM: '1', HOME: os.tmpdir() } }).trim();
+function branchWorld(stamps) {
+  const root = tmp(), bare = path.join(root, 'remote.git'), w = path.join(root, 'w');
+  G(root, 'init', '-q', '--bare', '-b', 'main', bare);
+  G(root, 'init', '-q', '-b', 'backup', w);
+  fs.writeFileSync(path.join(w, 'README.md'), 'made-up backups\n');
+  for (const s of stamps) { writeAll(path.join(w, s, 'lock'), { 'lock.json': '{"made":"up"}' }); fs.writeFileSync(path.join(w, s, 'live.json'), j(seal(s, AES, { t: stampTime(s) }))); }
+  G(w, 'add', '-A'); G(w, 'commit', '-q', '-m', 'made-up backups');
+  G(w, 'push', '-q', bare, 'backup');
+  const clone = path.join(root, 'clone');
+  G(root, 'clone', '-q', '--depth=1', '--branch', 'backup', 'file://' + bare, clone);
+  return { root, bare, clone };
+}
+const stageAt = (stamp) => { const dirs = setup(); makeBackup({ dataDir: dirs.data, lockDir: dirs.lock, outDir: dirs.out, stamp, prune: false, say: () => {} }); return dirs.out; };
+
+test('the day\'s first copy lands on the backup branch as one commit; the plan\'s drops go; kept folders are the same objects', () => {
+  const old = ['2025-10-01T0010Z', '2026-07-01T0010Z', '2026-07-01T0900Z', '2026-11-04T0010Z', '2026-11-04T0900Z', '2026-11-06T0010Z', '2026-11-06T0300Z'];
+  const W = branchWorld(old), before = G(W.bare, 'rev-parse', BACKUP_BRANCH), q = quiet();
+  const objs = Object.fromEntries(old.map((s) => [s, G(W.bare, 'rev-parse', `${BACKUP_BRANCH}:${s}`)]));
+  const r = pushDaily({ repo: W.clone, stageDir: stageAt(STAMP), stamp: STAMP, say: q.say });
+  assert.equal(r.added, true, q.lines.join('\n'));
+  assert.equal(G(W.bare, 'rev-parse', `${BACKUP_BRANCH}^`), before, 'a normal commit on the old tip');
+  const top = G(W.bare, 'ls-tree', '--name-only', BACKUP_BRANCH).split('\n');
+  assert.deepEqual(top.sort(), ['2026-07-01T0010Z', '2026-11-04T0010Z', '2026-11-06T0010Z', '2026-11-06T0300Z', STAMP, 'README.md'].sort());
+  for (const s of ['2026-07-01T0010Z', '2026-11-04T0010Z', '2026-11-06T0010Z', '2026-11-06T0300Z']) assert.equal(G(W.bare, 'rev-parse', `${BACKUP_BRANCH}:${s}`), objs[s]);
+  assert.equal(G(W.bare, 'cat-file', '-p', `${BACKUP_BRANCH}:${STAMP}/lock/lock.json`), JSON.stringify(LOCK, null, 1));
+  assert.ok(q.lines.every((l) => !/\.json/.test(l) && !l.includes(SECRET)), 'counts and dates only');
+  // a second copy the same UTC day is not put on the branch (it is the hourly tier's)
+  const later = stampOf(NOW + 3 * H), q2 = quiet();
+  assert.equal(pushDaily({ repo: W.clone, stageDir: stageAt(later), stamp: later, say: q2.say }).added, false);
+  assert.equal(G(W.bare, 'ls-tree', '--name-only', BACKUP_BRANCH).split('\n').length, 6);
+});
+
+test('planted faults: a push that came first is never overwritten; a dry run pushes nothing; no staged copy refuses', () => {
+  const W = branchWorld(['2026-11-05T0010Z']);
+  const other = path.join(W.root, 'other');
+  G(W.root, 'clone', '-q', '--branch', 'backup', W.bare, other);
+  writeAll(path.join(other, '2026-11-06T0010Z'), { 'live.json': '{"lock":1}' });
+  G(other, 'add', '-A'); G(other, 'commit', '-q', '-m', 'made-up'); G(other, 'push', '-q', 'origin', 'backup');
+  const mid = G(W.bare, 'rev-parse', BACKUP_BRANCH);
+  // the clone's own tip is stale: pushDaily fetches the newest tip first and builds on it
+  const r = pushDaily({ repo: W.clone, stageDir: stageAt(STAMP), stamp: STAMP, say: () => {}, waitMs: 1 });
+  assert.equal(r.added, true);
+  assert.equal(G(W.bare, 'rev-parse', `${BACKUP_BRANCH}^`), mid, 'built on the newer tip');
+  assert.ok(G(W.bare, 'ls-tree', '--name-only', BACKUP_BRANCH).includes('2026-11-06T0010Z'));
+  const W2 = branchWorld(['2026-11-05T0010Z']), tip2 = G(W2.bare, 'rev-parse', BACKUP_BRANCH);
+  assert.equal(pushDaily({ repo: W2.clone, stageDir: stageAt(STAMP), stamp: STAMP, dryRun: true, say: () => {} }).dryRun, true);
+  assert.equal(G(W2.bare, 'rev-parse', BACKUP_BRANCH), tip2);
+  assert.throws(() => pushDaily({ repo: W2.clone, stageDir: tmp(), stamp: STAMP, say: () => {} }), /missing staged copy/);
 });

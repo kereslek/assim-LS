@@ -1,10 +1,12 @@
 name: backup-trim
-# Monthly (owner-approved): rewrite ONLY the `backup` branch's history so it keeps the last 30 days of dated
-# folders (what the daily backup job keeps, always today's) plus each month's first backup under monthly/.
+# Monthly (owner-approved): rewrite ONLY the `backup` branch's history so it keeps exactly what the backup job
+# keeps (scripts/backup.mjs planRetention: every folder of the last 48 hours, the first of each UTC day for 90
+# days, the first of each ISO week for a year, the newest; the owner's 1-year plan, 15 Nov 2026).
 # Before anything is rewritten the old tip is pushed as tag backup-pre-trim-YYYYMMDD and read back; then only
-# refs/heads/backup is pushed, with --force-with-lease on the old tip (tools/backup-trim.mjs refuses any other
-# ref). A dispatch is a dry run unless dry_run is unticked: it plans, builds and checks the new commit and
-# pushes nothing. Public log: counts, dates and pass/fail only.
+# refs/heads/backup is pushed, with --force-with-lease on the old tip; then all but the newest 2 pre-trim tags
+# are deleted (they hold only folders past the retention). tools/backup-trim.mjs refuses any other ref. A
+# dispatch is a dry run unless dry_run is unticked: it plans, builds and checks the new commit and pushes
+# nothing. Public log: counts, dates and pass/fail only.
 on:
   schedule:
     - cron: '47 3 1 * *'   # the 1st of each month, 03:47 UTC (30 min after the daily backup)
@@ -31,7 +33,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Trim and backup tests first (planted faults, e.g. today's folder dropped, a push to another branch)
+      - name: Trim and backup tests first (planted faults, e.g. a day's first folder dropped, a push to another branch)
         run: node --test tools/backup-trim.test.mjs test/backup.test.mjs
       - name: Fetch the backup branch's whole history (commits and trees; file contents only on demand)
         uses: actions/checkout@v5

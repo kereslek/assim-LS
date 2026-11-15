@@ -1,0 +1,92 @@
+name: restore
+# Restore the data branch from one sealed backup (docs/RESTORE.md). Never scheduled. A dispatch is a DRY RUN
+# unless dry_run is unticked AND confirm is exactly "RESTORE <stamp>": it finds the backup (a folder on the backup
+# branch, else the hourly copy backup-<stamp>), decrypts and checks every file, rebuilds the set as the data
+# branch holds it, and says what it would do. A real run also refuses while a loop run is queued or in progress;
+# it tags the data branch's tip as data-pre-restore-<now> and reads it back, then replaces the data branch with
+# the backup (one commit with no parent, a lease on the tagged tip) and reads it back with the lock.
+# Running it for real needs the owner's explicit yes. Public log: pass/fail, counts and dates only.
+on:
+  workflow_dispatch:
+    inputs:
+      stamp:
+        description: 'backup stamp, YYYY-MM-DDTHHMMZ'
+        required: true
+      confirm:
+        description: 'to restore for real: type RESTORE <stamp> exactly, and untick dry run'
+        default: ''
+      dry_run:
+        description: 'Dry run: check and build only, push nothing'
+        type: boolean
+        default: true
+permissions:
+  contents: write   # the pre-restore tag and the data branch (a real run only)
+  actions: read     # the hourly copies, and whether a loop run is active
+concurrency:
+  group: restore
+  cancel-in-progress: false
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the scripts and the lock files
+        uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Restore tests first (planted faults, e.g. a wrong confirmation, a branch that moved)
+        run: node --test test/restore.test.mjs test/backup.test.mjs
+      - name: Which mode
+        id: mode
+        env:
+          STAMP: ${{ inputs.stamp }}
+          CONFIRM: ${{ inputs.confirm }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          if ! [[ "$STAMP" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4}Z$ ]]; then echo 'stamp is YYYY-MM-DDTHHMMZ: no'; exit 1; fi
+          if [ "$DRY" = false ]; then
+            if [ "$CONFIRM" != "RESTORE $STAMP" ]; then echo 'confirmation matches: no; nothing restored'; exit 1; fi
+            echo 'mode: RESTORE (confirmed)'; echo 'apply=yes' >> "$GITHUB_OUTPUT"
+          else
+            echo 'mode: dry run'; echo 'apply=no' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check out the backup branch, trees only
+        uses: actions/checkout@v5
+        with:
+          ref: backup
+          path: backup-branch
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: README.md
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Find the backup
+        env:
+          STAMP: ${{ inputs.stamp }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git -C backup-branch ls-tree --name-only HEAD | grep -qx "$STAMP"; then
+            git -C backup-branch sparse-checkout set --no-cone README.md "/$STAMP/"
+            mkdir -p chosen && cp -r "backup-branch/$STAMP" "chosen/$STAMP"
+            echo 'backup found: on the backup branch'
+            exit 0
+          fi
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=backup-$STAMP" --jq '[.artifacts[] | select(.expired | not)] | first | .workflow_run.id // empty')
+          if [ -z "$run" ]; then echo 'backup found: no (neither a folder on the backup branch nor an hourly copy)'; exit 1; fi
+          gh run download "$run" --repo "$GITHUB_REPOSITORY" -n "backup-$STAMP" -D "chosen/$STAMP"
+          echo 'backup found: an hourly copy'
+      - name: Restore (or the dry run)
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+          GH_TOKEN: ${{ github.token }}
+          STAMP: ${{ inputs.stamp }}
+          CONFIRM: ${{ inputs.confirm }}
+          APPLY: ${{ steps.mode.outputs.apply }}
+        run: |
+          if [ "$APPLY" = yes ]; then
+            node scripts/restore.mjs restore --backup "chosen/$STAMP" --stamp "$STAMP" --lock lock --remote origin --apply --confirm "$CONFIRM"
+          else
+            node scripts/restore.mjs restore --backup "chosen/$STAMP" --stamp "$STAMP" --lock lock --remote origin
+          fi

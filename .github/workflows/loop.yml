@@ -66,6 +66,24 @@ jobs:
       - name: Unit tests first (the pinned code; a broken check never reads real data)
         working-directory: pinned
         run: node --test test/*.test.mjs
+      - name: Start the hourly sealed copies (backup.yml now and every 50 minutes while the loop runs)
+        # docs/RESTORE.md: the newest copy stays under an hour old while the loop runs; GitHub's cron alone
+        # fires a few times a day. A background timer only: it never touches the pass, and a failure here never
+        # stops the loop (continue-on-error). The token reaches the timer only, not the pass.
+        if: env.MODE == 'live'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          nohup setsid bash -c '
+            end=$(( $(date +%s) + 6 * 3600 ))
+            while [ "$(date +%s)" -lt "$end" ]; do
+              if gh workflow run backup.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" -f by=loop >/dev/null 2>&1; then echo "yes $(date -u +%H:%M)"; s=3000
+              else echo "no $(date -u +%H:%M)"; s=300; fi
+              sleep "$s"
+            done' > "$RUNNER_TEMP/hourly-copies.log" 2>&1 < /dev/null &
+          echo $! > "$RUNNER_TEMP/hourly-copies.pid"
+          echo 'hourly copies: started (backup.yml now, then every 50 minutes while the loop runs)'
       - name: Loop
         working-directory: pinned
         env:
@@ -78,6 +96,15 @@ jobs:
           else
             node scripts/loop.mjs --mode live --by "$BY" --pass "$LIVE_PASS" --spacing 360 --deadline-min 320 --pass-timeout-min 50
           fi
+      - name: Stop the hourly sealed copies
+        if: always() && env.MODE == 'live'
+        continue-on-error: true
+        run: |
+          pid=$(cat "$RUNNER_TEMP/hourly-copies.pid" 2>/dev/null || true)
+          if [ -n "$pid" ]; then kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true; fi
+          log="$RUNNER_TEMP/hourly-copies.log"
+          yes=$(grep -c '^yes ' "$log" 2>/dev/null || true); no=$(grep -c '^no ' "$log" 2>/dev/null || true)
+          echo "hourly copies dispatched by this run: ${yes:-0} yes, ${no:-0} no; last: $(tail -n 1 "$log" 2>/dev/null || echo none)"
       - name: Publish the loop's own sealed log
         if: always()
         working-directory: pinned

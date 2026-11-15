@@ -1,0 +1,89 @@
+name: restore-drill
+# The real restore drill, weekly and on dispatch (read-only; docs/RESTORE.md). With the lock's passphrase, as
+# the loop has it, on the newest hourly copy (the artifact backup-<stamp>) and on the newest folder of the
+# backup branch: every file decrypted and checked against docs/DATA.md, times sane, the set rebuilt as the data
+# branch would hold it in a temp folder, restored and started by the loop's own code (a dry-run pass), and its
+# counts compared with the live data branch's. Nothing is pushed anywhere.
+# Public log: pass/fail, counts and ages only (scripts/restore.mjs).
+on:
+  schedule:
+    - cron: '29 5 * * 0'   # Sundays 05:29 UTC (best-effort)
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read     # find and download the hourly copies
+concurrency:
+  group: restore-drill
+  cancel-in-progress: false
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the scripts and the lock files
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Drill tests first (planted faults, e.g. a corrupt envelope, the wrong key, a missing file)
+        run: node --test test/restore.test.mjs test/backup.test.mjs
+      - name: Check out the live data branch (for the counts)
+        uses: actions/checkout@v5
+        with:
+          ref: data
+          path: data-branch
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch the newest hourly copy
+        id: hourly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pick=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.expired | not) | select(.name | test("^backup-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4}Z$"))] | sort_by(.name) | last | if . == null then "" else "\(.name) \(.workflow_run.id)" end')
+          if [ -z "$pick" ]; then echo 'hourly copies: none'; echo "stamp=" >> "$GITHUB_OUTPUT"; exit 0; fi
+          name=${pick% *}; run=${pick#* }; stamp=${name#backup-}
+          gh run download "$run" --repo "$GITHUB_REPOSITORY" -n "$name" -D "hourly/$stamp"
+          echo "hourly copy: $stamp"
+          echo "stamp=$stamp" >> "$GITHUB_OUTPUT"
+      - name: Check out the backup branch, trees only
+        uses: actions/checkout@v5
+        with:
+          ref: backup
+          path: backup-branch
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: README.md
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Fetch the newest folder of the backup branch
+        id: daily
+        working-directory: backup-branch
+        run: |
+          set -euo pipefail
+          stamp=$(git ls-tree --name-only HEAD | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4}Z$' | sort | tail -n 1 || true)
+          echo "dated folders on the branch: $(git ls-tree --name-only HEAD | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{4}Z$' || true); newest: ${stamp:-none}"
+          if [ -n "$stamp" ]; then git sparse-checkout set --no-cone README.md "/$stamp/"; fi
+          echo "stamp=$stamp" >> "$GITHUB_OUTPUT"
+      - name: Drill the newest hourly copy
+        if: steps.hourly.outputs.stamp != ''
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+          STAMP: ${{ steps.hourly.outputs.stamp }}
+        run: node scripts/restore.mjs drill --label hourly --backup "hourly/$STAMP" --stamp "$STAMP" --lock lock --live data-branch --max-age-h 2
+      - name: Drill the newest daily folder
+        if: always() && steps.daily.outputs.stamp != ''
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+          STAMP: ${{ steps.daily.outputs.stamp }}
+        run: node scripts/restore.mjs drill --label daily --backup "backup-branch/$STAMP" --stamp "$STAMP" --lock lock --live data-branch --max-age-h 30
+      - name: Both drills ran
+        if: always()
+        env:
+          H: ${{ steps.hourly.outputs.stamp }}
+          D: ${{ steps.daily.outputs.stamp }}
+        run: |
+          if [ -z "$H" ] || [ -z "$D" ]; then echo "drilled: hourly ${H:-none}, daily ${D:-none}: FAIL (a tier has no copy)"; exit 1; fi
+          echo "drilled: hourly $H, daily $D"

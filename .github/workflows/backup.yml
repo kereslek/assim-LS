@@ -1,18 +1,27 @@
 name: backup
-# Sealed, dated copies of the published data, kept apart from the `data` branch that every pass overwrites.
-# Copies the data branch's *.json and the repo's lock/*.json into <YYYY-MM-DDTHHMMZ>/ (data files) and
-# <stamp>/lock/ on the `backup` branch, refusing if any data file other than lock.json and inbox.json is
-# not a sealed envelope. Keeps 30 days: older dated folders are deleted in the same commit. Normal pushes
-# only (the branch keeps its history; the monthly backup-trim.yml trims it to 30 days plus monthly/).
-# Then a restore rehearsal on the newest folder as pushed: envelopes
-# parse, t is sane, the lock files equal the repo's. Nothing is ever decrypted: no secret is used here.
+# Sealed, dated copies of the published data, kept apart from the `data` branch that every pass overwrites
+# (docs/RESTORE.md). Each run copies the data branch's *.json and the repo's lock/*.json into <stamp>/ and
+# <stamp>/lock/, refusing if any data file other than lock.json and inbox.json is not a sealed envelope, then:
+#   - uploads it as the artifact backup-<stamp>, kept 2 days: the hourly tier. The live loop dispatches this
+#     workflow when it starts and every 50 minutes (loop.yml), so the newest copy is under an hour old while the
+#     loop runs; the hourly cron below is only a fallback (GitHub fires it a few times a day);
+#   - when the backup branch holds no folder of this UTC day yet, puts the copy there too (the day's first), in
+#     a normal commit that also drops what scripts/backup.mjs planRetention lets go (48 hours, the day's first
+#     for 90 days, the week's first for a year, the newest). Only the branch's trees are fetched, never its files.
+# Then a structural rehearsal of the copy (no decryption; the weekly restore-drill.yml decrypts).
 # Public log: dates, counts and pass/fail only.
 on:
   schedule:
-    - cron: '17 3 * * *'   # daily 03:17 UTC
+    - cron: '17 * * * *'   # hourly fallback (best-effort)
   workflow_dispatch:
+    inputs:
+      by:
+        description: 'who started this run'
+        type: choice
+        options: [manual, loop]
+        default: manual
 permissions:
-  contents: write   # push to the backup branch
+  contents: write   # the day's first copy on the backup branch
 concurrency:
   group: backup
   cancel-in-progress: false
@@ -28,8 +37,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Backup tests first (planted faults, e.g. an unsealed file must be refused; the monthly trim's rules)
-        run: node --test test/backup.test.mjs tools/backup-trim.test.mjs
+      - name: Backup tests first (planted faults, e.g. an unsealed file must be refused; the retention's rules)
+        run: node --test test/backup.test.mjs
       - name: Check out the data branch (as published)
         uses: actions/checkout@v5
         with:
@@ -37,37 +46,35 @@ jobs:
           path: data-branch
           fetch-depth: 1
           persist-credentials: false
-      - name: Check out the backup branch
+      - name: Copy and check the seals
+        id: stage
+        env:
+          BY: ${{ inputs.by || 'schedule' }}
+        run: |
+          set -euo pipefail
+          stamp=$(date -u +%Y-%m-%dT%H%MZ)
+          echo "started by $BY; stamp $stamp"
+          node scripts/backup.mjs make --data data-branch --lock lock --out stage --stamp "$stamp" --no-prune
+          echo "stamp=$stamp" >> "$GITHUB_OUTPUT"
+      - name: Upload the hourly copy (kept 2 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ steps.stage.outputs.stamp }}
+          path: stage/${{ steps.stage.outputs.stamp }}
+          retention-days: 2
+          if-no-files-found: error
+      - name: Rehearse the copy (never decrypts; pass/fail and counts only)
+        run: node scripts/backup.mjs rehearse --backups stage --lock lock --max-age-h 1
+      - name: Check out the backup branch, trees only
         uses: actions/checkout@v5
         with:
           ref: backup
           path: backup-branch
           fetch-depth: 1
-      - name: Back up, check the seals, keep 30 days, push
-        run: |
-          set -euo pipefail
-          cd backup-branch
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          for attempt in 1 2 3; do
-            stamp=$(date -u +%Y-%m-%dT%H%MZ)
-            node ../scripts/backup.mjs make --data ../data-branch --lock ../lock --out . --stamp "$stamp" --keep-days 30
-            git add -A
-            git commit -q -m "Backup $stamp (sealed, automated)"
-            if git push -q origin HEAD:backup; then echo "pushed: yes (attempt $attempt)"; exit 0; fi
-            echo "pushed: no (attempt $attempt); starting again from the newest backup branch"
-            git fetch -q --depth=1 origin backup
-            git reset -q --hard FETCH_HEAD
-            sleep $((attempt * 15))
-          done
-          echo 'pushed: no'
-          exit 1
-      - name: Check out the backup branch as pushed
-        uses: actions/checkout@v5
-        with:
-          ref: backup
-          path: restore
-          fetch-depth: 1
-          persist-credentials: false
-      - name: Restore rehearsal (never decrypts; pass/fail and counts only)
-        run: node scripts/backup.mjs rehearse --backups restore --lock lock --max-age-h 2
+          filter: blob:none
+          sparse-checkout: README.md
+          sparse-checkout-cone-mode: false
+      - name: The day's first copy on the backup branch (and what the retention lets go)
+        env:
+          STAMP: ${{ steps.stage.outputs.stamp }}
+        run: node scripts/backup.mjs daily --repo backup-branch --stage stage --stamp "$STAMP"

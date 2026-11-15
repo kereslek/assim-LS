@@ -1,0 +1,29 @@
+name: site-check
+# The weekly live check of the site's headers and TLS (owner-approved, read-only; scripts/site-headers.mjs):
+# the dashboard page and the project site's root, each with its status, header names and pass/fail for the
+# HTTPS redirect, HSTS, content-type and nosniff, cache-control, the referrer policy, the CSP meta and robots
+# noindex; then the TLS version and the certificate's expiry date. Never anything else from the page.
+on:
+  schedule:
+    - cron: '41 6 * * 1'   # Mondays 06:41 UTC (best-effort)
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: site-check
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the script
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Headers and TLS
+        run: node scripts/site-headers.mjs

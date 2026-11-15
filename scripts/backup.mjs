@@ -1,21 +1,34 @@
 // Sealed backups of the published data (.github/workflows/backup.yml). The `data` branch is an orphan that
-// every pass overwrites; this keeps dated copies of it on the `backup` branch, apart from it.
+// every pass overwrites; this keeps dated copies of it apart from it (docs/RESTORE.md):
+//   - every copy (about every 50 minutes: the live loop dispatches backup.yml) as an Actions artifact
+//     backup-<stamp>, kept 2 days: the hourly tier;
+//   - the day's first copy also as a dated folder on the `backup` branch, which keeps what planRetention keeps:
+//     every folder of the last 48 hours, the first of each UTC day for 90 days, the first of each ISO week for
+//     365 days, and always the newest (tools/backup-trim.mjs folds the branch's history to the same set monthly).
 //
-//   node scripts/backup.mjs make --data <data branch checkout> --lock <repo lock dir> --out <backup branch checkout>
-//        --stamp YYYY-MM-DDTHHMMZ [--keep-days 30]
-//   node scripts/backup.mjs rehearse --backups <backup branch checkout> --lock <repo lock dir> [--max-age-h 48]
+//   node scripts/backup.mjs make --data <data branch checkout> --lock <repo lock dir> --out <dir>
+//        --stamp YYYY-MM-DDTHHMMZ [--keep-days 30 | --no-prune]
+//   node scripts/backup.mjs daily --repo <backup branch clone, trees only is enough> --stage <dir holding <stamp>/>
+//        --stamp YYYY-MM-DDTHHMMZ [--remote origin] [--dry-run]
+//   node scripts/backup.mjs rehearse --backups <dir of dated folders> --lock <repo lock dir> [--max-age-h 48]
 //
 // make: copies the data branch's *.json to <stamp>/ and the repo's lock/*.json to <stamp>/lock/, after
 //   checking that every data file except lock.json and inbox.json is a sealed envelope ("lock":1), that
 //   lock.json is a lock file equal to the repo's, and that inbox.json is a public key only. Anything else
 //   (plaintext, a stray field, unparsable JSON) refuses the whole backup and writes nothing. Dated folders
-//   older than --keep-days are deleted in the same change; other entries (README.md) are never touched.
-// rehearse: the restore rehearsal on the newest folder: every envelope parses, every t is sane (after
+//   older than --keep-days are deleted in the same change (none with --no-prune: a staging folder);
+//   other entries (README.md) are never touched.
+// daily: puts a staged copy on the backup branch as one new commit on its tip when the tip holds no folder of
+//   that UTC day yet, and drops the folders planRetention no longer keeps. Built from git objects only (the
+//   branch's files are never checked out or downloaded); every kept folder is the same object as before;
+//   a normal push (never a force), started again from the new tip if another push came first.
+// rehearse: the structural rehearsal on the newest folder: every envelope parses, every t is sane (after
 //   2026-01-01, not after the backup was taken, not in the future), and the backed-up lock files equal the
-//   repo's. It never decrypts: there is no passphrase here.
+//   repo's. It never decrypts: there is no passphrase here (the restore drill, scripts/restore.mjs, does).
 // Public output: dates, counts and pass/fail only (never a file's content, and no file names).
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { isEnvelope, isLockFile } from '../lib/lock.mjs';
 
@@ -96,10 +109,35 @@ export function planPrune(entries, now, keepDays = 30, keep = null) {
   return entries.filter((e) => e !== keep && stampTime(e) != null && stampTime(e) < now - keepDays * DAY).sort();
 }
 
-export function makeBackup({ dataDir, lockDir, outDir, stamp, keepDays = 30, say = console.log }) {
+// ---- retention (the owner's 1-year plan, 15 Nov 2026) --------------------------------------------------
+// Which dated folders stay: every folder of the last `hours`; the first folder of each UTC day for `dailyDays`;
+// the first folder of each ISO week (Monday 00:00 UTC) for `weeklyDays`; always the newest. A day's or week's
+// first is taken over every folder given (never only the recent ones), so a folder that is not its day's
+// first is never kept again once it leaves the 48 hours: the plan only ever lets folders go.
+export const RETENTION = Object.freeze({ hours: 48, dailyDays: 90, weeklyDays: 365 });
+const HOUR_MS = 3600e3;
+export const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+export const weekKey = (t) => Math.floor((t - 4 * DAY) / (7 * DAY));   // 1970-01-05 was a Monday
+
+export function planRetention(entries, now, policy = RETENTION) {
+  if (!Number.isFinite(now)) throw new Error('bad now');
+  const { hours, dailyDays, weeklyDays } = policy;
+  if (!(hours >= 1 && dailyDays >= 1 && weeklyDays >= dailyDays)) throw new Error('bad retention: hours ≥ 1, days ≥ 1, weeks ≥ days');
+  const at = new Map();
+  for (const e of entries) if (!at.has(e)) { const t = stampTime(e); if (t != null) at.set(e, t); }
+  const all = [...at.keys()].sort();
+  const firsts = (key) => { const m = new Map(); for (const s of all) { const k = key(at.get(s)); if (!m.has(k)) m.set(k, s); } return [...m.values()]; };
+  const hourly = all.filter((s) => at.get(s) >= now - hours * HOUR_MS);
+  const daily = firsts(dayKey).filter((s) => at.get(s) >= now - dailyDays * DAY);
+  const weekly = firsts(weekKey).filter((s) => at.get(s) >= now - weeklyDays * DAY);
+  const keep = new Set([...hourly, ...daily, ...weekly, ...(all.length ? [all.at(-1)] : [])]);
+  return { keep: all.filter((s) => keep.has(s)), drop: all.filter((s) => !keep.has(s)), hourly, daily, weekly };
+}
+
+export function makeBackup({ dataDir, lockDir, outDir, stamp, keepDays = 30, prune = true, say = console.log }) {
   const now = stampTime(stamp);
   if (now == null) throw new Error('bad stamp: YYYY-MM-DDTHHMMZ');
-  if (!(keepDays >= 1)) throw new Error('bad keep days: at least 1');
+  if (prune && !(keepDays >= 1)) throw new Error('bad keep days: at least 1');
   for (const d of [dataDir, lockDir, outDir]) if (!d || !fs.existsSync(d)) throw new Error('missing folder');
   const read = (dir) => Object.fromEntries(jsonFiles(dir).map((n) => [n, fs.readFileSync(path.join(dir, n), 'utf8')]));
   const set = { data: read(dataDir), lock: read(lockDir) };
@@ -112,12 +150,99 @@ export function makeBackup({ dataDir, lockDir, outDir, stamp, keepDays = 30, say
   fs.mkdirSync(path.join(dest, 'lock'), { recursive: true });
   for (const [n, t] of Object.entries(set.data)) fs.writeFileSync(path.join(dest, n), t);
   for (const [n, t] of Object.entries(set.lock)) fs.writeFileSync(path.join(dest, 'lock', n), t);
-  const old = planPrune(fs.readdirSync(outDir), now, keepDays, stamp);
+  const old = prune ? planPrune(fs.readdirSync(outDir), now, keepDays, stamp) : [];
   for (const f of old) fs.rmSync(path.join(outDir, f), { recursive: true, force: true });
   const kept = fs.readdirSync(outDir).filter((e) => stampTime(e) != null).length;
   say(`backup ${stamp}: ${c.dataFiles} data files (${c.sealed} sealed), ${c.lockFiles} lock files; seal check: pass`);
-  say(`backup: folders older than ${keepDays} days deleted: ${old.length}; dated folders kept: ${kept}`);
+  if (prune) say(`backup: folders older than ${keepDays} days deleted: ${old.length}; dated folders kept: ${kept}`);
   return { stamp, dataFiles: c.dataFiles, sealed: c.sealed, lockFiles: c.lockFiles, pruned: old.length, kept };
+}
+
+// ---- the day's first copy on the backup branch (git objects only) -----------------------------------------
+export const BACKUP_BRANCH = 'refs/heads/backup';
+const BOT = { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' };
+const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || BOT.name, GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || BOT.email,
+  GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || BOT.name, GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || BOT.email, GIT_TERMINAL_PROMPT: '0' };
+export const gitIn = (repo) => (args, input) => execFileSync('git', args, { cwd: repo, env: GIT_ENV, encoding: 'utf8', input, maxBuffer: 1 << 28, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+export const lsTree = (git, tree) => (git(['ls-tree', tree]) || '').split('\n').filter(Boolean).map((l) => {
+  const [meta, name] = l.split('\t'); const [mode, type, sha] = meta.split(' '); return { mode, type, sha, name };
+});
+export const mkTree = (git, entries) => git(['mktree'], entries.map((e) => `${e.mode} ${e.type} ${e.sha}\t${e.name}`).join('\n') + (entries.length ? '\n' : ''));
+
+// A folder on disk as git objects (files and sub-folders only); returns its tree id.
+export function folderTree(git, dir) {
+  const entries = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const p = path.resolve(dir, e.name);
+    if (e.isDirectory()) entries.push({ mode: '040000', type: 'tree', sha: folderTree(git, p), name: e.name });
+    else if (e.isFile()) entries.push({ mode: '100644', type: 'blob', sha: git(['hash-object', '-w', p]), name: e.name });
+  }
+  return mkTree(git, entries);
+}
+
+// The new commit on `tip` that adds the staged <stamp>/ folder and drops what planRetention lets go, or
+// { skip } when the tip already holds a folder of that UTC day. Checked before it is returned.
+export function buildDaily({ git, tip, stageDir, stamp, policy = RETENTION }) {
+  const now = stampTime(stamp);
+  if (now == null) throw new Error('bad stamp: YYYY-MM-DDTHHMMZ');
+  const src = path.join(stageDir, stamp);
+  if (!fs.existsSync(path.join(src, 'lock', 'lock.json'))) throw new Error('missing staged copy: no <stamp>/lock/lock.json');
+  const top = lsTree(git, `${tip}^{tree}`);
+  const stamps = top.filter((e) => e.type === 'tree' && stampTime(e.name) != null).map((e) => e.name);
+  if (stamps.includes(stamp)) return { skip: 'this stamp is there already' };
+  const today = stamps.filter((s) => dayKey(stampTime(s)) === dayKey(now)).sort();
+  if (today.length) return { skip: "the day's first copy is there already", first: today[0] };
+  const plan = planRetention([...stamps, stamp], now, policy);
+  const keep = new Set(plan.keep);
+  const folder = folderTree(git, src);
+  const entries = top.filter((e) => stampTime(e.name) == null || keep.has(e.name));
+  entries.push({ mode: '040000', type: 'tree', sha: folder, name: stamp });
+  const tree = mkTree(git, entries);
+  // the checks: every entry kept is the same object, the new folder is the staged copy, nothing else changed
+  const after = new Map(lsTree(git, tree).map((e) => [e.name, e]));
+  const probs = [];
+  for (const e of top) if ((stampTime(e.name) == null || keep.has(e.name)) && after.get(e.name)?.sha !== e.sha) probs.push('a kept entry changed');
+  if (after.get(stamp)?.sha !== folder) probs.push('the new folder is not the staged copy');
+  if ([...after.keys()].filter((n) => stampTime(n) != null).length !== plan.keep.length) probs.push('the top holds other folders than the plan keeps');
+  if (!after.has(plan.keep.at(-1))) probs.push('the newest folder is not kept');
+  if (probs.length) throw new Error(`refusing: the new commit fails ${probs.length} check(s): ${[...new Set(probs)].join('; ')}`);
+  const commit = git(['commit-tree', tree, '-p', tip, '-m', `Backup ${stamp} (sealed, automated; the day's first copy)`]);
+  const dropped = stamps.filter((s) => !keep.has(s));
+  return { commit, folder, dropped, kept: plan.keep.length, tiers: { hourly: plan.hourly.length, daily: plan.daily.length, weekly: plan.weekly.length } };
+}
+
+const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// Fetch the branch's tip (trees only where the clone is partial), build, push; again from the new tip if a
+// push came first. Never a force push, never another ref.
+export function pushDaily({ repo, remote = 'origin', stageDir, stamp, policy = RETENTION, dryRun = false, tries = 3, waitMs = 5000, say = console.log }) {
+  const git = gitIn(repo);
+  let partial = false;
+  try { partial = git(['config', `remote.${remote}.promisor`]) === 'true'; } catch { partial = false; }
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    const line = git(['ls-remote', '--heads', remote, BACKUP_BRANCH]);
+    if (!line) throw new Error('missing branch: the backup branch is not on the remote');
+    git(['fetch', '-q', '--no-tags', '--depth=1', ...(partial ? ['--filter=blob:none'] : []), remote, `+${BACKUP_BRANCH}:refs/lps/backup-tip`]);
+    const tip = git(['rev-parse', '--verify', 'refs/lps/backup-tip^{commit}']);
+    const b = buildDaily({ git, tip, stageDir, stamp, policy });
+    if (b.skip) {
+      say(`daily copy on the backup branch: not needed (${b.skip}${b.first ? `: ${b.first}` : ''})`);
+      return { added: false, skip: b.skip };
+    }
+    say(`daily copy on the backup branch: ${stamp}; folders kept ${b.kept} (last 48 h ${b.tiers.hourly}, days ${b.tiers.daily}, weeks ${b.tiers.weekly}), dropped ${b.dropped.length}; checks: pass`);
+    if (dryRun) { say('daily copy: dry run; pushed: no'); return { added: false, dryRun: true, ...b }; }
+    let pushed = true;
+    try { git(['push', '--porcelain', remote, `${b.commit}:${BACKUP_BRANCH}`]); } catch { pushed = false; }
+    if (pushed) {
+      const now2 = git(['ls-remote', '--heads', remote, BACKUP_BRANCH]).split(/\s+/)[0];
+      if (now2 !== b.commit) throw new Error('bad push: the backup branch does not point at the new commit');
+      say(`daily copy: pushed: yes (attempt ${attempt})`);
+      return { added: true, attempts: attempt, ...b };
+    }
+    say(`daily copy: pushed: no (attempt ${attempt}); starting again from the newest tip`);
+    if (attempt < tries) sleepMs(waitMs * attempt);
+  }
+  throw new Error(`bad push: the backup branch push failed ${tries} times`);
 }
 
 // ---- the restore rehearsal ---------------------------------------------------------------------------
@@ -172,12 +297,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const arg = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
   try {
     if (argv[0] === 'make') {
-      makeBackup({ dataDir: arg('--data'), lockDir: arg('--lock', 'lock'), outDir: arg('--out'), stamp: arg('--stamp'), keepDays: Number(arg('--keep-days', 30)) });
+      const outDir = arg('--out');
+      if (argv.includes('--no-prune') && outDir) fs.mkdirSync(outDir, { recursive: true });
+      makeBackup({ dataDir: arg('--data'), lockDir: arg('--lock', 'lock'), outDir, stamp: arg('--stamp'), keepDays: Number(arg('--keep-days', 30)), prune: !argv.includes('--no-prune') });
+    } else if (argv[0] === 'daily') {
+      pushDaily({ repo: arg('--repo'), remote: arg('--remote', 'origin'), stageDir: arg('--stage'), stamp: arg('--stamp'), dryRun: argv.includes('--dry-run') });
     } else if (argv[0] === 'rehearse') {
       const r = rehearse({ backupsDir: arg('--backups'), lockDir: arg('--lock', 'lock'), maxAgeH: Number(arg('--max-age-h', 48)) });
       process.exitCode = r.ok ? 0 : 1;
     } else {
-      throw new Error('bad command: make or rehearse');
+      throw new Error('bad command: make, daily or rehearse');
     }
   } catch (e) {
     const m = String(e?.message || '');

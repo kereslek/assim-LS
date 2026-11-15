@@ -16,7 +16,9 @@ parameters and results log live in their private strategy doc.
   - `backtest`: daily at 04:41 UTC; seals `backtest.json`.
   - `site`: the dashboard's tests in Actions (WebKit as an iPhone 15, Chromium as a Pixel 7) on made-up data.
   - `loop` and `watchdog`: the always-on loop, live; the watchdog runs every 10 minutes (:07, :17, ...) and starts the loop only when none is queued or running and `live.json` is over 20 minutes old.
-  - `backup`: daily at 03:17 UTC; sealed, dated copies of the `data` branch and `lock/` on the `backup` branch (`scripts/backup.mjs`), 30 days kept, unsealed files refused, then a restore rehearsal (no decryption).
+  - `backup`: sealed, dated copies of the `data` branch and `lock/` (`scripts/backup.mjs`; unsealed files refused). The live loop dispatches it when it starts and every 50 minutes, with an hourly cron as a fallback. Every copy is an Actions artifact `backup-<stamp>` kept 2 days. The day's first copy also goes on the `backup` branch, which keeps 48 hours, the day's first for 90 days, the week's first for a year, and the newest. `backup-trim` (monthly) folds its history and keeps the newest 2 pre-trim tags (15 Nov 2026).
+  - `restore-drill` (Sundays and on dispatch): decrypts the newest hourly and daily copy, checks the shapes, rebuilds the data branch in a temp folder, and has the loop's code restore it and start a dry-run pass; counts compared with live. `restore` (dispatch only, dry run by default, a real run needs the typed `RESTORE <stamp>` and the owner's yes): see `docs/RESTORE.md`.
+  - `site-check` (Mondays and on dispatch): the site's headers and TLS, read-only, pass/fail only.
 - **Lock:** `lock/lock.json` (salt, rounds, check), `lock/inbox.json` (public key), `lock/config.sealed.json` (the owner's settings, sealed). `scripts/seal-input.mjs` seals new private inputs.
 - **Data contract:** `docs/DATA.md`.
 - **Dashboard:** `site/app/index.html` (single file); fixtures in `tools/fixtures/`, browser tests in `tools/site-test.mjs` (after editing the page's script, run `node tools/site-test.mjs --fix-csp`).
