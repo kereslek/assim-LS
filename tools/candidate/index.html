@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SeN2fUt3s4LNUFYRlp1QSdjp+K8lCoT/X+pEKMkn2Lw='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-7hkfSFQCKVrkxwF5yeEpSv6Oj/Zz7CJ1ZyurWj1IfZM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -5152,9 +5152,9 @@ document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.targ
 document.addEventListener('touchstart', (e) => {
   const inL = e.target.closest && e.target.closest('#q-list'), o = inL && e.target.closest('.qopt');
   if (inL) Q.press = Q.touch = Date.now();
-  Q.tp = o && e.touches.length === 1 ? { o, x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+  Q.tp = o && e.touches && e.touches.length === 1 ? { o, x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
 }, { capture: true, passive: true });
-document.addEventListener('touchmove', (e) => { const t = e.touches[0]; if (Q.tp && t && Math.hypot(t.clientX - Q.tp.x, t.clientY - Q.tp.y) > 10) Q.tp = null; }, { capture: true, passive: true });
+document.addEventListener('touchmove', (e) => { const t = Q.tp && e.touches && e.touches[0]; if (t && Math.hypot(t.clientX - Q.tp.x, t.clientY - Q.tp.y) > 10) Q.tp = null; }, { capture: true, passive: true });
 document.addEventListener('touchend', (e) => {
   const t = Q.tp, c = e.changedTouches && e.changedTouches[0]; Q.tp = null;
   if (!t || !t.o.isConnected || (c && Math.hypot(c.clientX - t.x, c.clientY - t.y) > 10)) return;
