@@ -863,7 +863,14 @@ async function zoomAllOut(p, id, root = '') {
 async function openPool(p, sel) { // a pool's detail panel through the table's search (a pair name or the start of its id)
   await fillQ(p, sel); await sleep(250);
   await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#all tbody tr.row td:nth-child(3)').click(); });
-  await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+  // a tap, as a finger makes it, if a synthetic click alone didn't open it (a drag just before leaves the page reading the next click as its end)
+  if (!(await p.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => null))) {
+    const st = await p.evaluate(() => ({ rows: document.querySelectorAll('#all tbody tr.row').length, q: document.querySelector('#f-q').value.length }));
+    console.log(`  openPool: a second try (${st.rows} rows, ${st.q} characters searched)`);
+    await p.locator('#all tbody tr.row td:nth-child(3)').first().click();
+    await p.waitForSelector('#sheet:not([hidden])');
+  }
+  await sleep(300);
 }
 async function closePool(p) { await p.click('#sheet-close'); await sleep(120); await fillQ(p, ''); }
 async function testDepth(browser) {
@@ -4060,7 +4067,7 @@ const CLOSE_OK = (sel) => { // a close control: there, visible, 44 px, labelled,
   const el = document.querySelector(sel);
   if (!el || el.closest('[hidden]')) return 'missing';
   const r = el.getBoundingClientRect();
-  if (r.width < 44 || r.height < 44) return `small ${Math.round(r.width)}x${Math.round(r.height)}`;
+  if (r.width < 43.5 || r.height < 43.5) return `small ${Math.round(r.width)}x${Math.round(r.height)}`; // 44 px, give or take a device pixel
   if (r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) return 'off screen';
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   if (!hit || !(el === hit || el.contains(hit))) return 'covered';

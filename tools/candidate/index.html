@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-X2lezQ7zsObt/oiF1ScFEJP18DCwxGPv+gabUKpDBi8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+j6E23zbYykjTwm9zu/1Fie3SgLNOaFuy6/h4i6mAhc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -608,8 +608,19 @@ footer .btn{font-family:var(--sans)}
 }
 @media (max-width:400px){.top .fw{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}} /* the dot's colour and the label say it */
 @media (max-width:340px){.top .brand{display:none}}
-@media (max-width:480px){body:not(.solo) .top .brand{display:none}.top{gap:6px}}
-@media (max-width:380px){.top .seg.pills button>span{padding-left:5px;padding-right:5px}}
+/* a phone's bar holds the 🔍 too (v0.5.1): no brand mark, the short "updated" chip, slimmer edges and window pills; the
+   buttons keep their size and the chip gives way (an ellipsis) before anything spills past the screen */
+@media (max-width:480px){
+  body:not(.solo) .top .brand{display:none}
+  .top{gap:6px;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  .top .fw{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .top #fresh{flex:0 1 auto;min-width:0;overflow:hidden}
+  .top #fresh-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .top #qfind{width:40px}
+  .top #qfind,.top #refresh,.top #winseg{flex:none}
+  .top #winseg button>span{padding-left:6px;padding-right:6px}
+}
+@media (max-width:340px){.top{gap:4px}.top #winseg button>span{padding-left:4px;padding-right:4px}.top #refresh{display:none}} /* pull to refresh */
 
 /* pop-up notes: why a pool stands out, the gas range */
 .pop{position:fixed;z-index:70;max-width:min(320px,calc(100vw - 24px));padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:rgba(17,23,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2)}
@@ -5134,7 +5145,9 @@ document.addEventListener('input', (e) => {
 $('#unlock-form').addEventListener('submit', onUnlock);
 // the search's suggestions: open while its box has the focus; a press on one keeps the focus in the box
 document.addEventListener('focusin', (e) => { if (e.target.id === 'f-q') { qLiftT = Date.now(); qLift(); if (e.target.value) qUpdate(); } });
-document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q')) qClose(); }, 120); });
+document.addEventListener('focusout', (e) => { if (e.target.id === 'f-q') setTimeout(() => { if (document.activeElement !== $('#f-q') && Date.now() - (Q.press || 0) > 900) qClose(); }, 120); });
+document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('#q-list')) Q.press = Date.now(); }, { capture: true, passive: true });
+document.addEventListener('touchstart', (e) => { if (e.target.closest && e.target.closest('#q-list')) Q.press = Date.now(); }, { capture: true, passive: true });
 document.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('#q-list')) e.preventDefault(); });
 // card strips: fades follow the scroll; a pop-up note follows its control
 document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('mc-track')) mcEdges(t); if (S.popFor) popPlace(); if (TIP.host || TIP.mini) tipScroll(); }, { capture: true, passive: true });
