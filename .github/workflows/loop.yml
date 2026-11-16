@@ -103,7 +103,8 @@ jobs:
         working-directory: pinned
         env:
           GH_TOKEN: ${{ github.token }}
-        run: if [ -f scripts/alarm.mjs ]; then node scripts/alarm.mjs; else echo 'alarm: not in this pinned code'; fi
+        run: |
+          if [ -f scripts/alarm.mjs ]; then node scripts/alarm.mjs; else echo 'alarm: not in this pinned code'; fi
       - name: Stop the hourly sealed copies
         if: always() && env.MODE == 'live'
         continue-on-error: true
