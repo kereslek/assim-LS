@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ZccqaF49Eh8HCFAzefnIzGVFv0Q1NeP4r8HxmmMSnaE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9XDG6YTCcEiTB0EtAHCq6s4jmIO9Dzh2PLin1t892z0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -3091,7 +3091,7 @@ function dailyStrip(p, w, id = 'daily-best') {
   // v0.6.0 (the owner, 15 Nov 2026): over its left end the strip says why it stops: 30 days here, the year in History; a pool
   // born inside the window: when, and that nothing came before (never bars of 0). In its title row (room the zoom buttons leave
   // free), never over the bars
-  const born = isNum(p.createdAt) && p.createdAt > d[0].t - D, endMark = born
+  const born = isNum(p.createdAt) && (p.createdAt > d[0].t - D || p.createdAt > d[d.length - 1].t - 30 * D), endMark = born // born inside the 30-day window, even when its first rows start a day or two later (v0.7.0)
     ? `<span class="pz-born">Pool created ${dm(p.createdAt)} · no earlier history</span>`
     : `<button type="button" class="pz-hist" data-act="ws-hist" data-id="${esc(p.id)}" aria-label="30-day view: older days are in this pool's History"><span>30-day view · older days in History ›</span></button>`;
   const P = pzTime(id, p.id, N, {
