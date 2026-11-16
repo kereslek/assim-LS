@@ -5671,7 +5671,12 @@ async function testHistBtn(browser) {
   const looks = MODE && !(BROWSER === 'webkit' && MODE === '2d') ? [MODE] : ['3d', '2d']; // the WebKit 3D job leaves both looks to its 2D job
   for (const look of looks) for (const [tag, c, o] of [['phone', 'stress', { phone: true }], ['w1440', 'long', { width: 1440, height: 900 }]]) {
     const t = await openUnlocked(browser, c, { ...o, mode: look, mg: true }), p = t.page, touch = tag === 'phone', T = `${look} ${tag} ${c}`;
-    const bad = [], clicks = {}, A = async (name, root, layer) => { for (const f of await p.evaluate(HB_AUDIT, { root, layer, touch, cap: 4 })) bad.push(`${name} ${f.where} ${f.el}: ${f.probs.join('; ')}`); };
+    const bad = [], clicks = {}, A = async (name, root, layer) => {
+      // a panel sliding in or a tab fading over (3D, a slow WebKit) is not seen yet: wait for one History control to show
+      await p.waitForFunction((root) => [...document.querySelectorAll(`${root} [data-act="ws-hist"]`)].some((e) => !e.closest('[hidden]') && e.getClientRects().length && (!e.checkVisibility || e.checkVisibility({ opacityProperty: true, visibilityProperty: true }))), root, { timeout: 6000 }).catch(() => {});
+      await sleep(250);
+      for (const f of await p.evaluate(HB_AUDIT, { root, layer, touch, cap: 4 })) bad.push(`${name} ${f.where} ${f.el}: ${f.probs.join('; ')}`);
+    };
     if (!(await p.$('#best [data-act="ws-hist"]'))) { await p.evaluate(() => document.querySelector('#best [role="tab"]').click()); await sleep(400); } // the stress case's best waits for a tab
     await A('main', '#app', 'body');
     for (const s of ['#best .fmlink', '#best .ctools [data-act="ws-hist"]', '#best .pz-hist', '#disc [data-act="ws-hist"]']) clicks[s] = await hbPress(p, s);
