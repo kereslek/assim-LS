@@ -569,10 +569,14 @@ async function part5(page, run, skip, press) {
     for (const tb of document.querySelectorAll('table')) { const hs = [...(tb.tHead ? tb.tHead.rows[0].cells : [])].map((c) => c.textContent); hs.forEach((h, i) => { if (/APR/.test(h) && !/forecast/.test(h)) for (const tr of tb.tBodies[0] ? tb.tBodies[0].rows : []) has(tr.cells[i]); }); }
     for (const e of document.querySelectorAll('.apr, #bench .big')) has(e);
     const lead = [...document.querySelectorAll('#best [data-lead]')].some((e) => /At \$[\d,]+: fees ≈ .*\/day · LVR .*\/day · net ≈ .*\/day \(.*% a year\)/.test(e.textContent));
-    return { n, bad, lead, leadAny: !!document.querySelector('#best [data-lead]') };
+    // a window where no pool reaches the gem bar shows no best pool ("No verified pool reaches a gem score …"): no lead line is due then
+    const noBest = !!document.querySelector('#best') && !document.querySelector('#best .best-body');
+    return { n, bad, lead, leadAny: !!document.querySelector('#best [data-lead]'), noBest };
   });
-  if (!(apr.n >= 5 && apr.bad === 0 && apr.lead)) console.log(`part 5: APRs seen ${apr.n}, without $/day ${apr.bad}, best-find lead line ${apr.lead ? 'yes' : 'no'}${apr.leadAny ? '' : ' (no lead line on the page)'}`);
-  run('part 5: every APR on the home page carries its $ a day at the ticket, and the best find leads with it', apr.n >= 5 && apr.bad === 0 && apr.lead);
+  const leadOk = apr.lead || apr.noBest; // no gem in this window: the best find shows no pool, so it has no lead line to check
+  if (apr.noBest) console.log('part 5: no pool reaches the gem bar in this window, so the best find shows none (its lead line is not checked)');
+  if (!(apr.n >= 5 && apr.bad === 0 && leadOk)) console.log(`part 5: APRs seen ${apr.n}, without $/day ${apr.bad}, best-find lead line ${apr.lead ? 'yes' : 'no'}${apr.leadAny ? '' : ' (no lead line on the page)'}`);
+  run('part 5: every APR on the home page carries its $ a day at the ticket, and the best find leads with it (when a window has one)', apr.n >= 5 && apr.bad === 0 && leadOk);
   if (!(await press('#best [data-act="detail"]'))) { skip(); skip(); skip(); return; }
   await page.waitForSelector('#sheet:not([hidden])', { timeout: 5000 }).catch(() => {}); await sleep(600);
   const fc = () => page.evaluate(() => { const b = document.querySelector('[data-chartbox="d-day"]'); if (!b) return null; const v = b.querySelector('[data-pz="d-day"]').dataset.view.split(',').map(Number);
