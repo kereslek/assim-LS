@@ -5788,7 +5788,9 @@ const APR_ROLL = (o) => new Promise((res) => { // click (or not) and record the 
 });
 const rollOk = (r, k = 1) => { // it moved (3+ distinct texts) and reached its last text by 1 s, then stayed
   const xs = r.seen.map((s) => s[k]), last = xs[xs.length - 1], i = xs.findIndex((x, j) => xs.slice(j).every((y) => y === last)), s0 = xs.findIndex((x) => x !== xs[0]);
-  const from = s0 > 0 ? r.seen[s0 - 1][0] : 0, at = i >= 0 ? r.seen[i][0] - from : null; // timed from the last frame before it moved
+  // timed in frames from the last one before it moved, each gap counted up to 120 ms as the page's own clock does: a test
+  // runner's stalled main thread (WebKit in Actions stalls 0.3 to 0.8 s after a window switch) is not the roll's length
+  let at = null; if (i >= 0) { at = 0; for (let j = Math.max(1, s0); j <= i; j++) at += Math.min(120, r.seen[j][0] - r.seen[j - 1][0]); }
   return { moved: new Set(xs).size >= 3, at, ok: new Set(xs).size >= 3 && i >= 0 && at < 1000 && /%$/.test(last) };
 };
 function aprPools() { // made-up fixtures: a pair with two pools or more, and a pool with days whose fees or TVL weren't read
