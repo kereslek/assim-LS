@@ -37,7 +37,7 @@ concurrency:
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60 # the WebKit 3D job grew past 45 min with the v0.7.0 groups (16 Nov 2026)
     strategy:
       fail-fast: false
       matrix:
