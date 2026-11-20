@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-7r4KUKBkqTpl+DE2P6J5wFjHwEpy9shdFDPmoNseTHM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-RJLnuHDd0FNLQbF4QW+ipLj/NvQrX7bCqTEVhiIVSU8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1932,15 +1932,17 @@ const ROLL = { sig: null, last: {}, raf: 0 };
 function aprRoll() {
   const sig = WS.open && !WS.dead && WS.id != null ? WS.id + '|' + S.win : null, to = {};
   for (const e of $$('#ws [data-roll]')) to[e.dataset.roll] = e.dataset.to === '' ? null : +e.dataset.to;
-  if (sig === ROLL.sig) { Object.assign(ROLL.last, to); return; }
+  if (sig === ROLL.sig) { Object.assign(ROLL.last, to); if (ROLL.raf && ROLL.put) ROLL.put(); return; } // a redraw mid-roll keeps rolling
   const from = ROLL.last; ROLL.sig = sig; ROLL.last = { ...from, ...to };
   if (ROLL.raf) { cancelAnimationFrame(ROLL.raf); ROLL.raf = 0; }
   const keys = Object.keys(to).filter((k) => isNum(to[k]));
   if (!sig || reduced() || !keys.length) return;
   const f0 = {}; for (const k of keys) f0[k] = isNum(from[k]) ? from[k] : 0;
-  const t0 = performance.now(), dur = 600;
+  let t0 = null; const dur = 600; // the clock starts at the first frame: a slow redraw after the switch can't eat the roll
   const put = (q) => { for (const e of $$('#ws [data-roll]')) { const k = e.dataset.roll; if (!(k in f0) || e.dataset.to === '' || +e.dataset.to !== to[k]) continue; e.textContent = (e.dataset.pre || '') + pct(q >= 1 ? to[k] : f0[k] + (to[k] - f0[k]) * q); } };
-  const frame = (t) => { const q = Math.min(1, Math.max(0, (t - t0) / dur)); put(1 - Math.pow(1 - q, 3)); if (q < 1) ROLL.raf = requestAnimationFrame(frame); else ROLL.raf = 0; };
+  let e = 0;
+  const frame = () => { const t = performance.now(); if (t0 == null) t0 = t; const q = Math.min(1, Math.max(0, (t - t0) / dur)); e = 1 - Math.pow(1 - q, 3); put(e); if (q < 1) ROLL.raf = requestAnimationFrame(frame); else ROLL.raf = 0; };
+  ROLL.put = () => put(e);
   put(0); ROLL.raf = requestAnimationFrame(frame);
 }
 function aprRollReset() { if (ROLL.raf) cancelAnimationFrame(ROLL.raf); ROLL.raf = 0; ROLL.sig = null; ROLL.last = {}; }
