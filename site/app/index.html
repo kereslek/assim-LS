@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-mzAG9hbc/H5QOdVfyET2xLnAHeGJAxx/cz762QgDdys='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9XDG6YTCcEiTB0EtAHCq6s4jmIO9Dzh2PLin1t892z0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1450,57 +1450,6 @@ html.guest #fav .devnote,html.guest #positions,html.member #positions{display:no
 .guests .g-h3{margin:18px 0 6px;font:700 14px/1.3 var(--sans);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .gsheet .g-scrim,.gwel .g-scrim{position:absolute;inset:0}
 .gs-card,.gw-card{position:relative}
-/* v071-css: the APR package (the owner's A+B+C+E+F, 20 Nov 2026) */
-.ws-aprrow{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;padding:0 max(10px,env(safe-area-inset-right)) 6px 10px;min-width:0}
-.ws-aprrow[hidden]{display:none}
-.termb.aprchip{display:inline-flex;align-items:center;gap:8px;min-height:40px;margin:0;padding:4px 12px 4px 10px;border-radius:12px;background:rgba(232,184,74,.1);border:1px solid rgba(232,184,74,.5);color:var(--fg);cursor:pointer;text-align:left;font:inherit}
-.aprchip .v{font:700 20px/1 var(--mono);color:var(--gold);font-variant-numeric:tabular-nums;white-space:nowrap}
-.aprchip .v.neg{color:var(--bad)}.aprchip .v.est{color:var(--fg2)}.aprchip .v.nr{color:var(--muted)}
-.aprchip .k{font:600 9.5px/1.25 var(--mono);color:var(--fg2);letter-spacing:.06em;white-space:nowrap}
-.aprchip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.ws-aprx{font:500 11px/1.3 var(--mono);color:var(--muted);min-width:0}
-@media (max-width:700px){.ws-aprx{display:none}}
-.aprh{display:grid;gap:8px;border-color:rgba(232,184,74,.42)!important}
-.aprh-l,.aprh-r{display:grid;gap:8px;min-width:0;align-content:start}
-.aprh-big{display:flex;align-items:baseline;gap:6px 10px;flex-wrap:wrap}
-.aprh-big .v{font:700 44px/1 var(--mono);letter-spacing:-.02em;color:var(--gold);font-variant-numeric:tabular-nums;white-space:nowrap}
-.aprh-big .v.neg{color:var(--bad)}.aprh-big .v.est{color:var(--fg2)}.aprh-big .v.nr{color:var(--muted)}
-.aprh-big small{font:600 13px/1.2 var(--sans);color:var(--fg2);white-space:nowrap}
-.aprh-tr{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font:600 12px/1.25 var(--mono);color:var(--fg2)}
-.aprh-tr.up{color:var(--pos)}.aprh-tr.dn{color:var(--neg)}
-.aprh-tr svg{width:44px;height:16px;flex:none}
-.aprh-bar{display:flex;height:22px;border-radius:6px;overflow:hidden;background:var(--surface2);font:600 10px/22px var(--mono);color:var(--fg)}
-.aprh-bar span{padding-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.aprh-bar .n{background:rgba(22,199,132,.38)}.aprh-bar .l{background:rgba(226,102,76,.5)}.aprh-bar .c{background:rgba(211,154,44,.5)}
-.aprh-cap{font:500 11px/1.35 var(--mono);color:var(--muted)}
-.aprh-mini{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.aprh-mini div{background:var(--raised);border-radius:10px;padding:7px 9px;display:grid;gap:2px;min-width:0}
-.aprh-mini b{font:700 15px/1.1 var(--mono);color:var(--fg);font-variant-numeric:tabular-nums;white-space:nowrap}
-.aprh-mini b.neg{color:var(--bad)}.aprh-mini b.est{color:var(--fg2)}
-@media (min-width:900px){.aprh{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);align-items:center;column-gap:24px}}
-.aprb{display:inline-grid;grid-template-areas:"x v a" "d d d";justify-items:end;align-items:baseline;column-gap:3px;text-align:right;vertical-align:middle;font:700 14px/1.1 var(--mono);font-variant-numeric:tabular-nums}
-.aprb .apx{grid-area:x;color:var(--fg2);font-weight:600}.aprb .apr-v{grid-area:v;color:var(--gold)}.aprb .atr{grid-area:a}.aprb .pd{grid-area:d}
-.aprb.neg .apr-v{color:var(--bad)}.aprb.est .apr-v{color:var(--fg2);font-weight:600}.aprb.nr .apr-v{color:var(--muted);font-weight:600}
-.atr{font-style:normal;font-size:10px;line-height:1}.atr.up{color:var(--pos)}.atr.dn{color:var(--neg)}
-.aprm{display:inline-flex;align-items:baseline;gap:2px;font:700 11.5px/1 var(--mono);color:var(--gold);font-variant-numeric:tabular-nums;white-space:nowrap}
-.aprm.neg{color:var(--bad)}.aprm.est{color:var(--fg2);font-weight:600}.aprm.nr{color:var(--muted);font-weight:600}
-.qopt .aprm{order:1}
-.tab .aprm{margin-left:6px}
-.ws-cc .aprm,.ws-sug .aprm{margin-left:4px}
-.mc.dc .nt{display:flex;align-items:flex-end;justify-content:space-between;gap:6px}
-.mc.dc .nt .aprb{font-size:13px}
-.mc-v .aprb{font-size:inherit}
-.liq-apr{color:var(--fg2)}.liq-apr b{color:var(--gold);font-family:var(--mono)}
-.hs-aprh{font:600 11px/1.3 var(--mono);color:var(--fg2)}
-.hs-aprh b{color:var(--gold)}
-@media (max-width:430px){.hs-aprh{flex-basis:100%}}
-.hs-ca{color:var(--gold);font-weight:700}
-.hs-best{font:700 8.5px/1 var(--mono);color:#201400;background:var(--gold);border-radius:4px;padding:3px 4px;letter-spacing:.04em}
-.hs-a7{font:600 10px/1 var(--mono);color:var(--gold);white-space:nowrap}
-.hs-a7::before{content:"";display:inline-block;width:12px;height:2px;margin-right:4px;vertical-align:3px;background:var(--gold)}
-.hs-avg{stroke:var(--gold)}
-.hs-dv b.apr-d{color:var(--gold)}
-/* /v071-css */
 </style>
 </head>
 <body>
@@ -1734,7 +1683,6 @@ html.guest #fav .devnote,html.guest #positions,html.member #positions{display:no
           <button type="button" class="iconbtn ws-hk" data-act="ws-help" aria-expanded="false" aria-controls="pop" aria-label="Keyboard shortcuts and gestures" title="Shortcuts (?)">?</button></div>
         <button type="button" class="btn ws-x" id="ws-close" data-act="ws-close" aria-label="Close the workspace" title="Close (Esc)">Close</button>
       </div>
-      <div class="ws-aprrow" id="ws-apr" hidden></div>
       <div class="ws-tabs" role="tablist" aria-label="Workspace views" id="ws-tabs"></div>
     </div>
     <div class="ws-body" id="ws-body"></div>
@@ -1772,7 +1720,7 @@ html.guest #fav .devnote,html.guest #positions,html.member #positions{display:no
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.7.1';
+const BUILD = 'v0.7.0';
 // the version, shown small at the top and on the lock screen (the owner can tell at a glance which one runs)
 document.querySelectorAll('#ver, .ver-t').forEach((e) => { e.textContent = BUILD; });
 // iOS Safari keeps a page's zoom (a pinch, or a tap into a small field in an older version) and opens it zoomed in
@@ -1870,82 +1818,6 @@ const aprPd = (apr, o = {}) => (!isNum(apr) ? DASH : `<span class="apr-v" data-a
   + (o.block ? `<span class="pd blk">${isNum(perDay(apr)) ? `${usd(perDay(apr))}<span class="pdu">/day</span><span class="pds">/d</span>` : DASH}</span>` : `<span class="pd"> (${pdTxt(apr)})</span>`)); // a narrow phone's table: "/d"
 // the lead line: what the example ticket earns a day, then the yearly rate
 const leadLine = (w) => (w ? `At ${usdFull(ticketUsd())}: fees ≈ <b>${pdTxt(w.feeApr)}</b> · ${term('lvr', 'LVR')} <b>${pdTxt(isNum(w.lvr) ? -w.lvr : null)}</b> · net ≈ <b class="${w.net < 0 ? 'neg' : ''}">${pdTxt(w.net)}</b> (${pct(w.net)} a year)` : '');
-// ---------- v0.7.1 · APR up front (the owner's A+B+C+E+F, 20 Nov 2026) ----------
-// Net APR (fee APR − LVR − swaps − gas, at the example ticket) is the headline number wherever a pool shows. Missing is a dash,
-// never 0%; a young pool's partial window is an estimate (pale, "≈"); ▲ ▼ compare it with the next longer window (24H with
-// its 7-day average, 7D with the 30-day); the $/day is perDay() at ticketUsd() (a guest's is the public $1,000).
-const APR_BASE = { '24h': '7d', '7d': '30d', '30d': null };
-const aprOf = (p, wk = S.win) => { const w = W(p, wk); return w && isNum(w.net) ? w.net : null; };
-const aprTrend = (p, wk = S.win) => { const b = APR_BASE[wk], v = aprOf(p, wk), v0 = b ? aprOf(p, b) : null; return isNum(v) && isNum(v0) ? v - v0 : null; };
-const aprArrow = (tr, wk = S.win) => (isNum(tr) && Math.abs(tr) >= 0.005 && APR_BASE[wk] ? `<i class="atr ${tr > 0 ? 'up' : 'dn'}" title="${esc(`${pts(tr)} vs its ${WIN_WORD[APR_BASE[wk]]} average`)}">${tr > 0 ? '▲' : '▼'}</i>` : '');
-function aprBadge(p, wk = S.win, inner = null, v0) { // F: a pool row's or card's right-aligned APR (inner: the surface's own figure, kept)
-  const w = W(p, wk), v = v0 !== undefined ? (isNum(v0) ? v0 : null) : aprOf(p, wk);
-  if (v == null) return `<span class="aprb nr" data-aprb="" title="net APR not read yet"><span class="apr-v">${DASH}</span></span>`;
-  const est = !!(w && w.partial === true);
-  return `<span class="aprb${est ? ' est' : ''}${v < 0 ? ' neg' : ''}" data-aprb="${v}"${est ? ' title="an estimate: the pool is younger than the window"' : ''}>${est ? '<span class="apx">≈</span>' : ''}${inner != null ? inner : aprPd(v, { block: true })}${aprArrow(aprTrend(p, wk), wk)}</span>`;
-}
-const aprMini = (p, wk = S.win) => { // pills and tabs: the rate and its arrow (the $/day in its title)
-  const w = W(p, wk), v = aprOf(p, wk), est = !!(w && w.partial === true);
-  return v == null ? `<span class="aprm nr" data-aprb="" title="net APR not read yet">${DASH}</span>`
-    : `<span class="aprm${est ? ' est' : ''}${v < 0 ? ' neg' : ''}" data-aprb="${v}" title="${esc(`net APR ${WIN_LABEL[wk]} · ${pdTxt(v)}`)}">${est ? '≈ ' : ''}${pct(v)}${aprArrow(aprTrend(p, wk), wk)}</span>`;
-};
-const aprBest = (v) => (isNum(v) ? `<span class="aprm${v < 0 ? ' neg' : ''}" data-aprb="${v}" title="${esc(`best net APR of its pools · ${pdTxt(v)}`)}">${pct(v)}</span>` : `<span class="aprm nr" data-aprb="" title="net APR not read yet">${DASH}</span>`);
-const aprMax = (a, w) => (w && isNum(w.net) && !(isNum(a) && a >= w.net) ? w.net : a);
-const rollEl = (k, v, est, cls = '') => `<span class="v${cls}${v == null ? ' nr' : v < 0 ? ' neg' : est ? ' est' : ''}" data-roll="${k}" data-to="${v == null ? '' : v}" data-pre="${est ? '≈ ' : ''}">${v == null ? DASH : (est ? '≈ ' : '') + pct(v)}</span>`;
-function aprChipHtml(p) { // A: under the pool's name on every tab; the head sits outside the scrolling body, so it stays pinned
-  const wk = S.win, w = W(p, wk), v = aprOf(p, wk), est = !!(w && w.partial === true), pd = perDay(v);
-  const chip = termB('netApr', `${rollEl('a', v, est)}<span class="k">NET APR · ${WIN_LABEL[wk]}<br>${isNum(pd) ? '≈ ' + usd(pd) + '/DAY' : v == null ? 'NOT READ YET' : DASH}</span>`, 'aprchip');
-  const x = w && isNum(w.feeApr) ? `fee APR ${pct(w.feeApr)} − LVR ${pct(w.lvr)} − swaps ${pct(w.swapCost)} − gas ${pct(w.gas)} = net ${pct(v)}` : '';
-  return chip + (x ? `<span class="ws-aprx">${x}</span>` : '');
-}
-function aprSpark(p) { // the last two weeks of daily net APR (p.daily), if there are three or more
-  const d = (Array.isArray(p.daily) ? p.daily : []).slice(-14).map((x) => (x && isNum(x.net) ? x.net : null)), ok = d.filter(isNum);
-  if (ok.length < 3) return '';
-  const lo = Math.min(...ok), hi = Math.max(...ok), sp = hi - lo || 1, n = d.length;
-  let path = '', on = false;
-  d.forEach((v, i) => { if (!isNum(v)) { on = false; return; } path += `${on ? 'L' : 'M'}${((i / Math.max(1, n - 1)) * 42 + 1).toFixed(1)} ${(14 - ((v - lo) / sp) * 12).toFixed(1)}`; on = true; });
-  return `<svg viewBox="0 0 44 16" aria-hidden="true" data-spark="${ok.length}"><path d="${path}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
-}
-function aprHeroHtml(p) { // B: Overview opens with it
-  const wk = S.win, w = W(p, wk), v = aprOf(p, wk), est = !!(w && w.partial === true), b = APR_BASE[wk], tr = aprTrend(p, wk);
-  const trend = !b ? `<span class="aprh-tr">the longest window: nothing longer to compare</span>`
-    : isNum(tr) ? `<span class="aprh-tr ${tr >= 0 ? 'up' : 'dn'}">${tr >= 0 ? '▲' : '▼'} ${pts(tr)} vs its ${WIN_WORD[b]} average${aprSpark(p)}</span>`
-      : `<span class="aprh-tr">vs its ${WIN_WORD[b]} average ${DASH}</span>`;
-  const f = w && isNum(w.feeApr) ? w.feeApr : null, l = w && isNum(w.lvr) ? Math.max(0, w.lvr) : null;
-  const c = w && (isNum(w.swapCost) || isNum(w.gas)) ? Math.max(0, (isNum(w.swapCost) ? w.swapCost : 0) + (isNum(w.gas) ? w.gas : 0)) : null;
-  let bar = '';
-  if (isNum(f) && f > 0 && isNum(l) && isNum(v)) {
-    const lost = l + (c || 0), n = Math.max(0, v), tot = Math.max(f, n + lost) || 1, wd = (x) => ((x / tot) * 100).toFixed(1) + '%';
-    bar = `<div class="aprh-bar" role="img" aria-label="${esc(`Where the fee APR of ${pct(f)} goes: net ${pct(v)}, LVR ${pct(l)}, costs ${pct(c)}`)}" data-aprbar="${f}">`
-      + [['n', n, `Net ${pct(v)}`], ['l', l, `LVR ${pct(l)}`], ['c', c, 'Costs']].map(([k, x, t]) => (x > 0 ? `<span class="${k}" style="width:${wd(x)}" title="${esc(t)}">${x / tot >= 0.16 ? esc(t) : ''}</span>` : '')).join('') + '</div>' // a thin part: named in the line below
-      + `<span class="aprh-cap">fee APR ${pct(f)} → ${term('lvr', 'LVR')} ${MINUS}${pct(l)} · swaps + gas ${MINUS}${pct(c)} · net ${pct(v)}</span>`;
-  }
-  const tile = (k, label, x, e) => `<div><span class="lbl">${label}</span><b class="${isNum(x) && x < 0 ? 'neg' : e ? 'est' : ''}" data-roll="${k}" data-to="${isNum(x) ? x : ''}" data-pre="${e ? '≈ ' : ''}">${isNum(x) ? (e ? '≈ ' : '') + pct(x) : DASH}</b></div>`;
-  const w7 = W(p, '7d'), w30 = W(p, '30d');
-  return `<div class="card aprh" data-aprhero><div class="aprh-l"><span class="lbl">${termB('netApr', 'Net APR')} · ${WIN_LABEL[wk]} · at ${usdFull(ticketUsd())}</span>`
-    + `<div class="aprh-big">${rollEl('b', v, est)}<small>${isNum(perDay(v)) ? '≈ ' + usd(perDay(v)) + '/day' : v == null ? 'not read yet' : DASH}</small></div>${trend}</div>`
-    + `<div class="aprh-r">${bar}<div class="aprh-mini">${tile('b1', `Fee APR ${WIN_LABEL[wk]}`, f, est)}${tile('b2', '7D net', aprOf(p, '7d'), !!(w7 && w7.partial === true))}${tile('b3', '30D net', aprOf(p, '30d'), !!(w30 && w30.partial === true))}</div></div></div>`;
-}
-// C: the numbers in A and B roll from the old value to the new one (~0.6 s, ease-out) on open, on a window switch and on a pool
-// switch; once, never looping; a redraw of the same pool and window (a tab, a data refresh) draws them final; reduced motion: at once
-const ROLL = { sig: null, last: {}, raf: 0 };
-function aprRoll() {
-  const sig = WS.open && !WS.dead && WS.id != null ? WS.id + '|' + S.win : null, to = {};
-  for (const e of $$('#ws [data-roll]')) to[e.dataset.roll] = e.dataset.to === '' ? null : +e.dataset.to;
-  if (sig === ROLL.sig) { Object.assign(ROLL.last, to); if (ROLL.raf && ROLL.put) ROLL.put(); return; } // a redraw mid-roll keeps rolling
-  const from = ROLL.last; ROLL.sig = sig; ROLL.last = { ...from, ...to };
-  if (ROLL.raf) { cancelAnimationFrame(ROLL.raf); ROLL.raf = 0; }
-  const keys = Object.keys(to).filter((k) => isNum(to[k]));
-  if (!sig || reduced() || !keys.length) return;
-  const f0 = {}; for (const k of keys) f0[k] = isNum(from[k]) ? from[k] : 0;
-  let last = null, q = 0; const dur = 600; // ~0.6 s of frames: a stalled frame (a slow redraw after the switch) advances it at most 120 ms, so it never skips the roll
-  const put = (q) => { for (const e of $$('#ws [data-roll]')) { const k = e.dataset.roll; if (!(k in f0) || e.dataset.to === '' || +e.dataset.to !== to[k]) continue; e.textContent = (e.dataset.pre || '') + pct(q >= 1 ? to[k] : f0[k] + (to[k] - f0[k]) * q); } };
-  let e = 0;
-  const frame = () => { const t = performance.now(); if (last != null) q = Math.min(1, q + Math.min(120, Math.max(0, t - last)) / dur); last = t; e = 1 - Math.pow(1 - q, 3); put(e); if (q < 1) ROLL.raf = requestAnimationFrame(frame); else ROLL.raf = 0; };
-  ROLL.put = () => put(e);
-  put(0); ROLL.raf = requestAnimationFrame(frame);
-}
-function aprRollReset() { if (ROLL.raf) cancelAnimationFrame(ROLL.raf); ROLL.raf = 0; ROLL.sig = null; ROLL.last = {}; }
 const usdFull = (x) => (isNum(x) ? '$' + int(x) : DASH); // the ticket reads "$1,000", never "$1.0K"
 const times = (x) => (isNum(x) ? x.toFixed(2) + '×' : DASH);
 const rangeTxt = (r) => (isNum(r) ? '±' + (r >= 0.0995 ? Math.round(r * 100) : +(r * 100).toFixed(1)) + '%' : DASH);
@@ -2090,8 +1962,6 @@ const GLOSS = {
   watchdog: ['Watchdog last restart', 'The last time the watchdog started a new scanner loop (it does when the loop has stopped). A dash: it hasn’t had to.'],
   gas: ['Gas', 'What Ethereum charges to run a transaction. Opening or re-centring a position pays it, so cheap gas is a better time.'],
   // v0.6.0 · History's three charts (the same notes the hold-to-explain cards will read)
-  netApr: ['Net APR', 'Net APR = fee APR − LVR − re-centre swaps − gas: the yearly return the example ticket would keep after arbitrage (LVR) and the position’s own costs. ▲ ▼ compare it with the next longer window (24H with its 7-day average, 7D with the 30-day); ≈ marks an estimate (the pool is younger than the window); a dash is not read yet, never zero.'],
-  hsapr: ['Fee APR a day', 'Each UTC day’s LP fees ÷ the pool’s TVL at the day’s end × 365: what the whole pool’s money earned that day, as a yearly rate (before LVR and costs; inside a tight range it is higher). The gold line is its 7-day average. A day with its fees or TVL not read is a gap, never 0%.'],
   hsfees: ['LP fees a day', 'What the pool’s LPs earned each UTC day. s: summed from the day’s own swaps (exact); x: the pool’s fee counters (exact); e: estimated as the day’s volume × the fee (pale, marked ≈). A day not read is a gap, never 0.'],
   hsvol: ['Volume a day', 'What traded through the pool each UTC day. s: summed from the day’s own swaps; g: GeckoTerminal’s day candle. A day not read is a gap, never 0.'],
   hstvl: ['TVL at the day’s end', 'What the pool held at the end of each UTC day, at that day’s prices. b: its token balances at an archive block; r: its balances read by the scanner’s own pass; m: a v4 pool’s liquidity map (the positions’ principal). Past v4 days, and Base days past its archive (about 90 days), can’t be read: “—”.'],
@@ -2911,7 +2781,7 @@ function liqChart(p, w, id) {
   }
   const mgUnread = mg.some((m) => m.v.some((v) => v === null));
   return (peers.length ? mgChips(p, peers) : '') + (id === 'liq-detail' || id === 'liq-best' || id === 'liq-ws' ? cmpHtml(p, id, cmpOf(p)) : '') + pzShell(id, 'liq') + mgl
-    + `<div class="legend" style="margin-top:8px">${termB('range', `<span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span>`)}${w && isNum(w.feeApr) ? `<span class="liq-apr" data-liqapr="${w.feeApr}">In the suggested ${rangeTxt(r)} range: fee APR <b>${pct(w.feeApr)}</b></span>` : ''}${termB('parked', '<span><i class="sw" style="background:#4B5563"></i>Parked, outside it</span>')}`
+    + `<div class="legend" style="margin-top:8px">${termB('range', `<span><i class="sw" style="background:#16C784"></i>In the suggested range ${rangeTxt(r)}</span>`)}${termB('parked', '<span><i class="sw" style="background:#4B5563"></i>Parked, outside it</span>')}`
     + `${termB('price', '<span><i class="sw" style="background:#E6EDF3;width:2px;height:12px"></i>Price now</span>')}${isNum(walls.below) || isNum(walls.above) ? termB('walls', '<span><i class="sw" style="background:#FAB219;width:2px;height:12px"></i>Wall</span>') : ''}`
     + (fr ? termB('fullrange', `<span><i class="sw fr"></i>Full range ${usd(fr.v)}</span>`) : '')
     + (ghost ? termB('ghost', `<span><i class="sw gh"></i>Whole pair · ${every.length + 1} pools</span>`) : '')
@@ -3146,7 +3016,7 @@ function renderBest() {
   if (!p) p = best;
   if (p && !list.includes(p)) list.unshift(p); // opened from the pair view: it gets a tab of its own
   const tabs = list.length ? `<div class="tabs" role="tablist" aria-label="Top ${list.length} pools, ${WIN_LABEL[wk]}">`
-    + list.map((x, i) => `<button type="button" role="tab" class="tab" data-act="tab" data-id="${esc(x.id)}" aria-selected="${x === p}" tabindex="${x === p || (!p && i === 0) ? 0 : -1}"><span class="tp">${chainMark(x.chain)}<span class="tn">${esc(x.pair)}</span>${tabTags(x)}${aprMini(x, wk)}</span></button>`).join('')
+    + list.map((x, i) => `<button type="button" role="tab" class="tab" data-act="tab" data-id="${esc(x.id)}" aria-selected="${x === p}" tabindex="${x === p || (!p && i === 0) ? 0 : -1}"><span class="tp">${chainMark(x.chain)}<span class="tn">${esc(x.pair)}</span>${tabTags(x)}</span></button>`).join('')
     + '</div>' : '';
   el.classList.toggle('chs', !!p);
   if (p) el.style.setProperty('--cc', chainOf(p.chain).c); else el.style.removeProperty('--cc');
@@ -4080,7 +3950,7 @@ function renderNext() {
   const rows = ranked.map((p) => {
     const w = W(p, wk);
     return `<div class="nb-row chs" style="${chainCol(p.chain)}" role="button" tabindex="0" data-act="detail" data-id="${esc(p.id)}">${shapeSpark(p, w)}<span class="nb-main"><span class="pn">${esc(p.pair)}</span>`
-      + `<span class="nb-meta"><span class="lbl">${chainMark(p.chain)}${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${feeMini(p)}${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprBadge(p, wk, aprPd(w && w.net, { block: true }))}</span></div>`;
+      + `<span class="nb-meta"><span class="lbl">${chainMark(p.chain)}${metaTxt(p)}</span>${tagsHtml(p, wk)}</span></span>${feeMini(p)}${gemPill(p, wk)}<span class="apr${w && w.net < 0 ? ' neg' : ''}">${aprPd(w && w.net, { block: true })}</span></div>`;
   }).join('');
   $('#next').innerHTML = `<div class="sec-head"><h2 id="next-h">Next best</h2><span class="sub" style="margin:0">${int(gems)} gem${gems === 1 ? '' : 's'} ≥ ${gemAt()} · ${int(watch)} on watch · ${WIN_WORD[wk]} net at ${usdFull(ticketUsd())}${hid ? `<span class="hidn"> · ${hidTxt(hid)}</span>` : ''}</span></div>`
     + (rows || `<p class="empty" style="margin:0 12px 12px">No other scored pool in the ${WIN_WORD[wk]} window.</p>`)
@@ -4122,7 +3992,7 @@ function dlCard(k, p, L, i) {
   const meta = `${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}${extra ? ' · ' + extra : ''}${keptStable(p) ? ` · <b class="stkm" title="${KEPT_T}">★ STABLE</b>` : ''}`;
   return `<div class="dcw chs${p.verified === false ? ' uv' : ''}" style="--i:${i};${chainCol(p.chain)}"><button type="button" class="mc dc chs${p.verified === false ? ' uv' : ''}" data-act="detail" data-id="${esc(p.id)}" style="${chainCol(p.chain)}" aria-label="Open ${esc(p.pair)}">`
     + `<span class="n">${esc(p.pair)}</span><span class="m">${meta}</span>${rest.join('')}`
-    + `<span class="nt${isNum(net) && net < 0 ? ' neg' : ''}"><span class="ntk">${WIN_LABEL[S.win] || ''} net </span>${aprBadge(p, S.win)}</span></button>${histBtn(p, { list: 'disc-' + k })}</div>`; // v0.6.0: its History under it, in the same frame
+    + `<span class="nt${isNum(net) && net < 0 ? ' neg' : ''}">${WIN_LABEL[S.win] || ''} net ${aprPd(net)}</span></button>${histBtn(p, { list: 'disc-' + k })}</div>`; // v0.6.0: its History under it, in the same frame
 }
 function renderDisc() {
   const el = $('#disc'), L = S.live, d = L && L.discovery;
@@ -4209,7 +4079,7 @@ function renderTable() {
   $('#all-tbl tbody').innerHTML = shown.map(({ p, w }) => `<tr class="row" data-act="detail" data-id="${esc(p.id)}" tabindex="0">`
     + `<td class="pool chs" style="${chainCol(p.chain)}"><div class="pcell">${starBtn(p)}<div class="pcm"><span class="pn2" title="${esc(p.pair)}">${isNew(p) ? '<i class="newdot" role="img" aria-label="New since your last visit" title="New since your last visit"></i>' : ''}${qHi(p.pair)}</span><span class="pm">${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}</span><span class="tags">${tagsHtml(p, wk, true)}</span>${histBtn(p, { list: 'all', cls: 'sm pch' })}</div></div></td>`
     + `<td>${gemPill(p, wk)}</td>`
-    + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; if (c.k === 'fees') return `<td class="fees">${feeMini(p)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.k === 'net' ? aprBadge(p, S.win, c.f(v), v) : c.f(v)}</td>`; }).join('') + '</tr>').join('')
+    + COLS.slice(2).map((c) => { if (c.k === 'why') return `<td class="why">${whyCell(p, w)}</td>`; if (c.k === 'fees') return `<td class="fees">${feeMini(p)}</td>`; const v = c.v(p, w); return `<td${c.k === 'net' && isNum(v) && v < 0 ? ' class="neg"' : ''}>${c.f(v)}</td>`; }).join('') + '</tr>').join('')
     || `<tr><td colspan="${COLS.length}" style="position:static;white-space:normal;padding:14px">No pool matches these filters.</td></tr>`;
   $('#ch-key').innerHTML = chainKey(L.pools);
   $('#all-count').textContent = `${WIN_LABEL[wk]} · SHOWING ${shown.length} OF ${rows.length}${rows.length !== vis.length ? ' (' + vis.length + ' IN ALL)' : ''}${fresh ? ` · ${fresh} NEW` : ''}${hid ? ' · ' + hidTxt(hid, true) : ''}`;
@@ -4779,7 +4649,7 @@ function renderPair() {
     + rows.map((r) => `<tr class="row${r === best ? ' gold' : ''}" data-act="pair-row" data-id="${esc(r.p.id)}" tabindex="0"><td><span class="pn2">${label(r.p)}</span><span class="tags">${r === best ? '<span class="tag gold">BEST TO ENTER</span>' : ''}${tagsHtml(r.p, wk)}</span>${histBtn(r.p, { list: 'pair', cls: 'sm pch' })}</td>`
       + `<td><span class="share"><i style="width:${isNum(r.share) ? Math.max(2, Math.round(r.share * 60)) : 0}px"></i>${pct(r.share, { dp: 0 })}</span></td>`
       + `<td>${usd(r.perDay)}</td><td>${usd(r.w && r.w.inRangeUsd)}</td><td>${isNum(r.per1k) ? '$' + r.per1k.toFixed(2) : DASH}</td>`
-      + `<td class="${r.net < 0 ? 'neg' : ''}">${aprBadge(r.p, wk, aprPd(r.net, { block: true }), r.net)}</td><td>${shapeSpark(r.p, r.w)}</td></tr>`).join('') + '</tbody></table></div>';
+      + `<td class="${r.net < 0 ? 'neg' : ''}">${aprPd(r.net, { block: true })}</td><td>${shapeSpark(r.p, r.w)}</td></tr>`).join('') + '</tbody></table></div>';
   const hidNote = hid ? `<p class="caption hidnote">${hid} pool${hid === 1 ? '' : 's'} of this pair ${hid === 1 ? 'is' : 'are'} hidden: stablecoin pairs are off. <button type="button" class="linkbtn" data-act="stable-on">Show stablecoin pairs</button></p>` : '';
   if (!rows.length) { $('#sheet-main').innerHTML = `<div class="dsec">${hidNote}</div>`; return; }
   $('#sheet-main').innerHTML = hidNote + `<div class="dsec"><span class="lbl">Where the ${WIN_WORD[wk]} volume trades</span>${bar}</div>`
@@ -5306,7 +5176,6 @@ function wsClose(quiet = false) {
   if (!WS.open) return;
   popClose(); tipHide();
   WS.open = false; WS.lvl = null; WS.dead = null; WS.drag = null;
-  aprRollReset();
   hlClosed('ws');
   wsFull(false);
   wsRelease();
@@ -5421,7 +5290,6 @@ function wsRender(fresh = false) {
   $('#ws-cg').innerHTML = p ? chainMark(p.chain) : '';
   $('#ws-chips').innerHTML = p ? `<span class="tag">${esc(chainOf(p.chain).name)}</span><span class="tag">${esc(dexV(p, true))}</span><span class="tag">${feeTxt(p.feeTier)}${p.dynamicFee ? ' · dyn' : ''}</span>` : '';
   $('#ws-gem').innerHTML = p ? termB('gem', gemPill(p, wk)) : '';
-  $('#ws-apr').innerHTML = p ? aprChipHtml(p) : ''; $('#ws-apr').hidden = !p; // v0.7.1 · A
   $('#ws-star').innerHTML = p ? starBtn(p) : '';
   $('#ws-tools').hidden = !p;
   $('#ws-nav').hidden = !p || n < 2;
@@ -5456,7 +5324,6 @@ function wsRender(fresh = false) {
   if (PZ['liq-ws']) liqDeclutter('liq-ws');
   if ($('#ws .hs-stack')) hsMount();
   body.scrollTop = keep;
-  aprRoll(); // v0.7.1 · C
   if (afSig && !$('#ws').contains(document.activeElement)) { // a redraw keeps the keyboard where it was
     const css = `#ws [data-act="${afSig.act}"]` + (afSig.chart ? `[data-chart="${afSig.chart}"]` : '');
     const tw = $$(css).find((b) => (b.dataset.id || '') === afSig.id) || $(css);
@@ -5499,7 +5366,7 @@ function wsTiers(p) { // the pair's tiers, this one first: each with its History
 }
 function wsOverview(p) {
   const w = W(p), hd = S.hist && S.hist.pools && S.hist.pools[p.id], lq = liqChart(p, w, 'liq-ws');
-  return aprHeroHtml(p) + `<p class="ws-sum" data-ws-sum>${wsSummary(p, w)}</p><div class="ws-ov"><div class="ws-ovl">`
+  return `<p class="ws-sum" data-ws-sum>${wsSummary(p, w)}</p><div class="ws-ov"><div class="ws-ovl">`
     + `<div class="card chartbox" data-chartbox="liq-ws"><div class="pane-title"><span class="lbl">Liquidity around the price · ${term('logscale', 'log')} · <span class="pz-cap1">${liqCap('liq-ws')}</span></span>${ztools('liq-ws', p.id)}</div>${lq}</div>`
     + `<div class="card">${dailyStrip(p, w, 'daily-ws')}</div>`
     + (hd && Array.isArray(hd.h) ? `<div class="card ws-hr">${feeChart(p, 'ws-hr')}</div>` : '')
@@ -5515,8 +5382,7 @@ function wsLiquidity(p) {
 // A pool's days from history.json: y (fees, src s/x/e), yv (volume, s/g) and yt (TVL, b/r/m), row for row; a pool with no
 // fee history yet has its daily rows' fees only. null = not read (never 0); a day before the pool existed has no row.
 const HSC = { h: null, m: new Map() };
-const HS_NR = Object.freeze({ f: null, fs: null, fu: false, v: null, vs: null, tv: null, ts: null, a: null, nr: true });
-const hsAprOf = (f, tv) => (isNum(f) && isNum(tv) && tv > 0 ? (f / tv) * 365 : null); // a day's fee APR: unread fees or TVL is a gap, never 0%
+const HS_NR = Object.freeze({ f: null, fs: null, fu: false, v: null, vs: null, tv: null, ts: null, nr: true });
 function hsDays(q) {
   if (HSC.h !== S.hist) { HSC.h = S.hist; HSC.m = new Map(); }
   if (HSC.m.has(q.id)) return HSC.m.get(q.id);
@@ -5530,11 +5396,11 @@ function hsDays(q) {
         if (!Array.isArray(r) || !isNum(r[0])) return;
         const a = yv && Array.isArray(yv[i]) ? yv[i] : null, b = yt && Array.isArray(yt[i]) ? yt[i] : null;
         const f = ok(r[1]) ? r[1] : null, v = a && ok(a[0]) ? a[0] : null, tv = b && ok(b[0]) ? b[0] : null;
-        m.set(r[0], { f, fs: f == null ? null : r[2] === 'e' ? 'e' : r[2] === 's' ? 's' : 'x', fu: f != null && fcUnconf(h, 'y', r[0]), v, vs: v == null ? null : a[1] === 's' ? 's' : 'g', tv, ts: tv == null ? null : ['b', 'r', 'm'].includes(b[1]) ? b[1] : 'b', a: hsAprOf(f, tv) });
+        m.set(r[0], { f, fs: f == null ? null : r[2] === 'e' ? 'e' : r[2] === 's' ? 's' : 'x', fu: f != null && fcUnconf(h, 'y', r[0]), v, vs: v == null ? null : a[1] === 's' ? 's' : 'g', tv, ts: tv == null ? null : ['b', 'r', 'm'].includes(b[1]) ? b[1] : 'b' });
       });
     } else if (Array.isArray(h.d)) {
       const fd = fcDays(q);
-      if (fd) for (const [t, x] of fd.m) m.set(t, { f: isNum(x.v) ? x.v : null, fs: isNum(x.v) ? x.s : null, fu: !!x.u, v: null, vs: null, tv: null, ts: null, a: null });
+      if (fd) for (const [t, x] of fd.m) m.set(t, { f: isNum(x.v) ? x.v : null, fs: isNum(x.v) ? x.s : null, fu: !!x.u, v: null, vs: null, tv: null, ts: null });
     }
     if (m.size) {
       const ks = [...m.keys()].sort((a, b) => a - b);
@@ -5559,7 +5425,7 @@ const HS_SRC = {
   v: { s: ['s', 'swaps', 'the day’s own swaps'], g: ['g', 'candles', 'GeckoTerminal’s day candle'] },
   tv: { b: ['b', 'balances', 'token balances at an archive block'], r: ['r', 'recorded', 'token balances read by the pass'], m: ['m', 'map', 'the liquidity map: the positions’ principal'] },
 };
-const HS_CH = [['f', 'Fees', 'LP fees a day', 'F'], ['v', 'Volume', 'Volume a day', 'V'], ['tv', 'TVL', 'TVL at the day’s end', 'T'], ['a', 'Fee APR', 'Fee APR a day', 'A']]; // v0.7.1 · E: the fourth, fees ÷ TVL × 365
+const HS_CH = [['f', 'Fees', 'LP fees a day', 'F'], ['v', 'Volume', 'Volume a day', 'V'], ['tv', 'TVL', 'TVL at the day’s end', 'T']];
 function hsTierList(p) {
   const out = [];
   const d0 = hsDays(p); if (d0) out.push({ q: p, col: wsSelf(), d: d0 });
@@ -5607,13 +5473,6 @@ function hsModel(p) {
       xs.forEach((x, j) => { if (x) (isNum(x[k]) ? kn : miss).push(j); });
       if (kn.length) (r.p ||= {})[k] = { v: sum(kn.map((j) => xs[j][k])), n: kn.length, of: kn.length + miss.length, miss: miss.map((j) => hsMissTxt(tiers[j], t, k)) };
     }
-    // v0.7.1 · E: the day's fee APR, fees ÷ TVL × 365 of the tiers shown; combined, a day some tiers weren't read is partial (the read ones)
-    r.a = r.pre ? undefined : hsAprOf(r.f, r.tv);
-    if (comb && r.a === null) {
-      const kn = [], miss = [];
-      xs.forEach((x, j) => { if (x) (isNum(x.f) && isNum(x.tv) && x.tv > 0 ? kn : miss).push(j); });
-      if (kn.length && miss.length) (r.p ||= {}).a = { v: hsAprOf(sum(kn.map((j) => xs[j].f)), sum(kn.map((j) => xs[j].tv))), n: kn.length, of: kn.length + miss.length, miss: miss.map((j) => hsMissTxt(tiers[j], t, isNum(xs[j].f) ? 'tv' : 'f')) };
-    }
     return r;
   });
   return out;
@@ -5634,8 +5493,7 @@ function hsScale(vals, Ht) {
   for (let v = 0; v <= top + step * 1e-6; v += step) ticks.push({ v, y: Y(v) });
   return { Y, ticks, top };
 }
-function hsBars(m, k, Wd, Ht, kind, fr = null) {
-  if (k === 'a') return hsAprSvg(m, Wd, Ht); // v0.7.1 · E // one chart: bars (fees, volume) or a stepped area (TVL), stacked by pool when combined; fr: each pool's share while it builds up
+function hsBars(m, k, Wd, Ht, kind, fr = null) { // one chart: bars (fees, volume) or a stepped area (TVL), stacked by pool when combined; fr: each pool's share while it builds up
   const rows = m.rows, n = rows.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), base = Ht - 1;
   let pre = '', preN = 0, preA = null, preB = null, naA = null, naB = null;
   const val = (r) => (hsPart(r, k) ? r.p[k].v : r[k]); // a partial day's known part counts for the scale
@@ -5678,68 +5536,6 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) {
   g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${base + 0.5}" y2="${base + 0.5}" stroke="#3B4756" stroke-width="1"/>`;
   return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" data-part="${partN}" aria-hidden="true">${g}</svg>`;
 }
-// v0.7.1 · E: "Fee APR a day": each day's fees ÷ TVL × 365 as a bar on its own % axis from 0, with a 7-day average line; a day
-// with its fees or TVL not read is a hatched gap labelled "not read" (never 0%); a partial combined day carries the same cap
-function hsAprSvg(m, Wd, Ht) {
-  const rows = m.rows, n = rows.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), base = Ht - 1;
-  const val = (r) => { const pt = hsPart(r, 'a'); return pt ? pt.v : r.a; };
-  const vals = rows.map(val), pos = vals.filter((v) => isNum(v) && v > 0).sort((a, b) => a - b);
-  const cap = pos.length ? Math.min(pos[pos.length - 1], pos[Math.floor((pos.length - 1) * 0.95)] * 1.6) : 0; // a one-day spike runs off the top
-  const sc = hsScale(pos.length ? [cap] : [], Ht), Y = sc.Y;
-  let pre = '', preN = 0, nr = '', nrN = 0, na = '', naN = 0, bars = '', est = '', part = '', capd = '', partN = 0, runs = [], run = null;
-  const bw = Math.max(0.6, slot - Math.min(1.2, slot * 0.24));
-  rows.forEach((r, i) => {
-    const x0 = HS_AX + i * slot, v = vals[i], pt = hsPart(r, 'a'), box = `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`;
-    const gap = v === null && !(r.tvNa || r.fNa);
-    if (gap) { if (!run) run = [x0, x0]; run[1] = x0 + slot; } else if (run) { runs.push(run); run = null; }
-    if (v === undefined) { if (r.pre) { pre += box; preN++; } return; }
-    if (v === null) { if (gap) { nr += box; nrN++; } else { na += box; naN++; } return; }
-    const xb = x0 + (slot - bw) / 2, y1 = Y(v), d = `M${xb.toFixed(2)} ${y1.toFixed(2)}h${bw.toFixed(2)}V${base}H${xb.toFixed(2)}z`;
-    if (pt) { part += d; capd += `M${xb.toFixed(2)} ${(y1 - 4).toFixed(2)}h${bw.toFixed(2)}v4H${xb.toFixed(2)}z`; partN++; } else if (r.fe) est += d; else bars += d;
-  });
-  if (run) runs.push(run);
-  let line = '', on = false, avgN = 0;
-  rows.forEach((r, i) => { // the 7-day average: days read in full only, four of the seven at least
-    const w = rows.slice(Math.max(0, i - 6), i + 1).map((x) => x.a).filter(isNum);
-    if (w.length < 4 || !isNum(r.a)) { on = false; return; }
-    const y = Y(w.reduce((a, b) => a + b, 0) / w.length);
-    line += `${on ? 'L' : 'M'}${(HS_AX + (i + 0.5) * slot).toFixed(2)} ${y.toFixed(2)}`; on = true; avgN++;
-  });
-  const col = m.tiers.length === 1 ? m.tiers[0].col : '#E6EDF3';
-  let g = `<defs><pattern id="hs-nr-a" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.34)"/></pattern><pattern id="hs-na-a" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r=".8" fill="rgba(139,150,163,.38)"/></pattern></defs>`;
-  for (const t of sc.ticks) g += `<line class="grid" x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${t.y.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke-width="1"/><text x="${HS_AX - 6}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="end">${pct(t.v)}</text>`;
-  if (pre) g += `<path class="hs-pre" d="${pre}" fill="rgba(139,150,163,.07)"/>`;
-  if (nr) g += `<path class="hs-nr" d="${nr}" fill="url(#hs-nr-a)"/>`;
-  if (na) g += `<path class="hs-na" d="${na}" fill="url(#hs-na-a)"/>`;
-  for (const [a, b] of runs) if (b - a >= 52) g += `<text class="hs-bl hs-nrl" x="${((a + b) / 2).toFixed(1)}" y="${(HS_PT + 14).toFixed(1)}" text-anchor="middle">not read</text>`;
-  if (bars) g += `<path class="hs-b" d="${bars}" fill="${col}" fill-opacity=".62"/>`;
-  if (est) g += `<path class="hs-b e" d="${est}" fill="${col}" fill-opacity=".3"/>`;
-  if (part) g += `<path class="hs-b p" d="${part}" fill="${col}" fill-opacity=".45"/><path class="hs-pt" d="${capd}" fill="url(#hs-nr-a)" stroke="rgba(230,237,243,.45)" stroke-width=".6"/>`;
-  if (line) g += `<path class="hs-avg" d="${line}" fill="none" stroke-width="1.8" stroke-linejoin="round"/>`;
-  g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${base + 0.5}" y2="${base + 0.5}" stroke="#3B4756" stroke-width="1"/>`;
-  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="a" data-n="${n}" data-gaps="${nrN}" data-na="${naN}" data-pre="${preN}" data-part="${partN}" data-avg="${avgN}" data-top="${sc.top}" aria-hidden="true">${g}</svg>`;
-}
-function hsTierApr(m) { // each tier's fee APR over the days in view: Σ fees ÷ Σ TVL × 365 over its days with both read
-  if (m.ta) return m.ta;
-  const v = new Map();
-  for (const e of m.all) { let f = 0, tv = 0, n = 0; for (const r of m.rows) { const x = hsAt(e, r.t); if (x && isNum(x.f) && isNum(x.tv) && x.tv > 0) { f += x.f; tv += x.tv; n++; } } v.set(e.q.id, n ? hsAprOf(f, tv) : null); }
-  const nums = [...v.values()].filter(isNum), top = nums.length > 1 ? Math.max(...nums) : null;
-  m.ta = { v, best: top == null ? null : [...v].find(([, x]) => x === top)[0] };
-  return m.ta;
-}
-function hsAprHead(m) { // the range header: "<range> avg fee APR x% · now y% ▲"
-  const ok = m.rows.filter((r) => isNum(r.a)), agg = (rs) => (rs.length ? hsAprOf(sum(rs.map((r) => r.f)), sum(rs.map((r) => r.tv))) : null);
-  const last = m.rows.length ? m.rows[m.rows.length - 1].t : 0, avg = agg(ok), now = agg(ok.filter((r) => r.t > last - 7 * D)), tr = isNum(avg) && isNum(now) ? now - avg : null;
-  const lab = WS.zoom ? `${m.rows.length}D zoom` : (WS_RANGES.find(([d]) => d === m.R) || [0, 'All'])[1];
-  return `<span class="hs-aprh" data-aprh title="avg: Σ fees ÷ Σ TVL × 365 over the days in view with both read; now: the last 7 of them">${lab} avg fee APR <b>${pct(avg)}</b> · now <b>${pct(now)}</b>${isNum(tr) && Math.abs(tr) >= 0.005 ? ` <i class="atr ${tr > 0 ? 'up' : 'dn'}">${tr > 0 ? '▲' : '▼'}</i>` : ''}</span>`;
-}
-function hsAprDv(m, r) { // the day card's Fee APR
-  const pt = hsPart(r, 'a');
-  if (pt) return `<span class="hs-dv pt" data-k="a"><span class="lbl">Fee APR</span><b class="pt">${pct(pt.v)}</b><span class="q" title="${esc('Partial: only the tiers read that day; ' + hsPartTxt(pt))}">${esc(hsPartTxt(pt))}</span></span>`;
-  const v = r.a, na = !r.pre && v === null && (r.tvNa || r.fNa);
-  const q = r.pre ? '' : v === null ? (na ? 'not readable' : 'gap: fees or TVL not read') : 'fees ÷ TVL × 365';
-  return `<span class="hs-dv" data-k="a"><span class="lbl">Fee APR</span><b class="${isNum(v) ? 'apr-d' : 'nr'}">${r.pre || na || v === undefined ? DASH : isNum(v) ? (r.fe ? '≈ ' : '') + pct(v) : 'not read'}</b><span class="q">${esc(q)}</span></span>`;
-}
 function hsAxis(ts, Wd) { // the one date axis under the three charts
   const n = ts.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), most = Math.max(2, Math.floor(PW / 74));
   const step = [1, 2, 3, 5, 7, 10, 14, 15, 30, 61, 91, 122, 183].find((s) => Math.ceil(n / s) <= most) || Math.ceil(n / most);
@@ -5756,7 +5552,7 @@ function hsLines(series, rows, k, Wd, Ht) { // Compare and Pair: one line per po
   for (const s of series) for (const t of rows) { const x = s.at(t); if (x && isNum(x[k])) { all.push(x[k]); if (!(k === 'f' && x.fu)) conf.push(x[k]); } }
   const sc = hsScale(conf.some((v) => v > 0) ? conf : all, Ht), Y = sc.Y; // a day the scanner couldn't confirm runs off the top
   let g = '';
-  for (const t of sc.ticks) g += `<line class="grid" x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${t.y.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke-width="1"/><text x="${HS_AX - 6}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="end">${(k === 'a' ? pct(t.v) : fcAx(t.v))}</text>`;
+  for (const t of sc.ticks) g += `<line class="grid" x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${t.y.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke-width="1"/><text x="${HS_AX - 6}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="end">${fcAx(t.v)}</text>`;
   let gaps = 0;
   for (const s of series) {
     let d = '', on = false, dots = '';
@@ -5777,7 +5573,7 @@ function hsLines(series, rows, k, Wd, Ht) { // Compare and Pair: one line per po
 const hsHt = (k) => { const ph = innerWidth < 700, b = ph ? 92 : 128; return WS.big ? (WS.big === k ? Math.round(b * 2.3) : Math.round(b * 0.62)) : b; };
 function hsStackHtml(label, n) {
   return `<div class="hs-stack" tabindex="0" role="group" aria-label="${esc(label)}: ← → steps a day, F V T makes one chart big; drag across the dates to zoom, double-click to reset" data-n="${n}">`
-    + HS_CH.map(([k, name, long, key]) => `<div class="hs-ch" data-k="${k}"><div class="hs-ct"><span class="lbl">${termB({ f: 'hsfees', v: 'hsvol', tv: 'hstvl', a: 'hsapr' }[k], esc(long))}</span>${k === 'a' ? '<span class="hs-a7">7-day avg</span>' : ''}<span class="tgrp hs-bg"><button type="button" class="tbtn hs-big" data-act="ws-big" data-v="${k}" aria-pressed="${WS.big === k}" aria-label="${WS.big === k ? 'Back to three equal charts' : 'Make the ' + name + ' chart big'} (${key})" title="${WS.big === k ? 'Back to three equal charts' : name + ' big'} (${key})">${tbIco(WS.big === k ? 'shrink' : 'open')}</button></span></div><div class="hs-svg" data-svg="${k}"></div></div>`).join('')
+    + HS_CH.map(([k, name, long, key]) => `<div class="hs-ch" data-k="${k}"><div class="hs-ct"><span class="lbl">${termB({ f: 'hsfees', v: 'hsvol', tv: 'hstvl' }[k], esc(long))}</span><span class="tgrp hs-bg"><button type="button" class="tbtn hs-big" data-act="ws-big" data-v="${k}" aria-pressed="${WS.big === k}" aria-label="${WS.big === k ? 'Back to three equal charts' : 'Make the ' + name + ' chart big'} (${key})" title="${WS.big === k ? 'Back to three equal charts' : name + ' big'} (${key})">${tbIco(WS.big === k ? 'shrink' : 'open')}</button></span></div><div class="hs-svg" data-svg="${k}"></div></div>`).join('')
     + '<div class="hs-ax" data-svg="ax"></div><div class="hs-x" hidden></div><div class="hs-sel" hidden></div></div>';
 }
 function hsRangeSeg() {
@@ -5789,7 +5585,7 @@ function hsHtml(p) {
   if (!S.hist) return `<div class="hs-empty" role="status"><b>History isn’t read yet.</b> ${S.missing && S.missing.hist ? 'The history file isn’t published yet.' : 'The history file hasn’t loaded; it is read again every minute.'} <button type="button" class="linkbtn" data-act="ws-tab" data-v="overview">Overview</button></div>`;
   const m = hsModel(p);
   if (!m.tiers.length) return `<div class="hs-empty" role="status"><b>No history read for this pool yet.</b> The scanner hasn’t recorded a day of it. <button type="button" class="linkbtn" data-act="ws-tab" data-v="overview">Overview</button> · <button type="button" class="linkbtn" data-act="ws-close">Go to the dashboard</button></div>`;
-  const chips = m.all.length > 1 ? `<div class="hs-tiers" role="group" aria-label="The pair's tiers: tap one to switch it off or on, double-click to keep it alone">${m.all.map((e) => `<button type="button" class="hs-chip" data-act="ws-tier" data-v="${esc(e.q.id)}" style="--c:${e.col}" aria-pressed="${m.tiers.includes(e)}" aria-label="${esc(poolWord(e.q))}${e.q.id === p.id ? ' (this pool)' : ''}: ${m.tiers.includes(e) ? 'on, tap to switch off' : 'off, tap to switch on'}"><span><i class="sq"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}${e.q.id === p.id ? ' · this' : ''}<span class="hs-ca" data-ca="${isNum(hsTierApr(m).v.get(e.q.id)) ? hsTierApr(m).v.get(e.q.id) : ''}" title="fee APR over the days in view">${pct(hsTierApr(m).v.get(e.q.id))}</span>${hsTierApr(m).best === e.q.id ? '<span class="hs-best">BEST</span>' : ''}</span></button>`).join('')}`
+  const chips = m.all.length > 1 ? `<div class="hs-tiers" role="group" aria-label="The pair's tiers: tap one to switch it off or on, double-click to keep it alone">${m.all.map((e) => `<button type="button" class="hs-chip" data-act="ws-tier" data-v="${esc(e.q.id)}" style="--c:${e.col}" aria-pressed="${m.tiers.includes(e)}" aria-label="${esc(poolWord(e.q))}${e.q.id === p.id ? ' (this pool)' : ''}: ${m.tiers.includes(e) ? 'on, tap to switch off' : 'off, tap to switch on'}"><span><i class="sq"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}${e.q.id === p.id ? ' · this' : ''}</span></button>`).join('')}`
     + `<button type="button" class="hs-chip" data-act="ws-tier" data-v="all" style="--c:#E6EDF3" aria-pressed="${m.tiers.length === m.all.length}" aria-label="${m.tiers.length === m.all.length ? 'All tiers combined, on: tap to show only this pool' : 'All tiers combined, off: tap to show every tier stacked'}" title="${m.tiers.length === m.all.length ? 'Show only this pool' : 'Show all tiers combined'}"><span><i class="sq" style="background:linear-gradient(90deg,${m.all.map((e) => e.col).join(',')})"></i>All combined${m.tiers.length === m.all.length ? ' ✓' : ''}</span></button></div>` : '';
   const one = m.comb ? null : m.tiers[0], dd = m.tiers.map((e) => e.d);
   const notes = [];
@@ -5807,7 +5603,7 @@ function hsHtml(p) {
   const leg = `<div class="hs-leg">${m.comb ? m.tiers.map((e) => `<span><i style="background:${e.col}"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}</span>`).join('') + (m.rows.some((r) => r.p) ? '<span class="hs-ptk"><i class="pt"></i>partial: only the tiers read</span>' : '') : `<span><i style="background:${one.col}"></i>exact</span><span><i class="e" style="background:${one.col}"></i>≈ estimated</span>`}<span><i class="nr"></i>not read (never 0)</span>${m.rows.some((r) => r.tvNa) ? '<span><i class="na"></i>not readable</span>' : ''}</div>`;
   WS.mod = m;
   return `<div class="hs" data-ms="" data-rows="${m.rows.length}" data-mode="${m.comb ? (m.tiers.length === m.all.length ? 'all' : 'some') : 'one'}" data-ph="end"><div class="hs-main">`
-    + `<div class="hs-ctl">${hsRangeSeg()}${hsAprHead(m)}${chips}</div>`
+    + `<div class="hs-ctl">${hsRangeSeg()}${chips}</div>`
     + `<div class="hs-card" id="hs-card" aria-live="polite"></div>`
     + hsStackHtml(`Fees, volume and TVL a day, ${m.comb ? 'all tiers combined' : poolWord(one.q)}`, m.rows.length)
     + leg + (notes.length ? `<p class="hs-note">${notes.map((x) => esc(plain(x))).join(' · ')}</p>` : '') + (prog ? `<p class="hs-note">${prog}</p>` : '')
@@ -5863,7 +5659,7 @@ function hsCardHtml(m, r) {
     return `<span class="hs-dv" data-k="${k}"><span class="lbl">${label}</span><b class="${isNum(v) ? '' : 'nr'}">${naV ? DASH : hsMoney(v, k === 'f' && r.fe)}</b><span class="q${naV ? ' na' : ''}" title="${esc(tt || q)}">${esc(q)}</span></span>`;
   };
   return `<span class="hs-dd">${hsDayTxt(r.t)}<small>${m.comb ? `${m.tiers.length} tiers combined` : esc(feeTxt(m.tiers[0].q.feeTier) + ' · ' + chainOf(m.tiers[0].q.chain).name)}</small></span>`
-    + dv('f', 'Fees') + dv('v', 'Volume') + dv('tv', 'TVL') + hsAprDv(m, r) + `<span class="hs-dv" data-k="r"><span class="lbl">Fee ÷ vol</span><b>${hsRate(r)}</b><span class="q">${isNum(r.f) && isNum(r.v) ? 'the fee the LPs kept' : DASH}</span></span>`
+    + dv('f', 'Fees') + dv('v', 'Volume') + dv('tv', 'TVL') + `<span class="hs-dv" data-k="r"><span class="lbl">Fee ÷ vol</span><b>${hsRate(r)}</b><span class="q">${isNum(r.f) && isNum(r.v) ? 'the fee the LPs kept' : DASH}</span></span>`
     + (r.pre ? `<span class="hs-pre">${(() => { const bt = hsBorn(m); return bt ? `before the pool existed (created ${dm(bt)}): nothing to read, never 0` : 'before the pool existed: nothing to read, never 0'; })()}</span>` : '')
     + `<button type="button" class="linkbtn hs-dc" data-act="ws-day" data-t="${r.t}" aria-label="Every pool of the pair on ${hsDayTxt(r.t)}">Day detail ▸</button>`;
 }
@@ -6059,8 +5855,8 @@ function lnModel(pools, cols) {
 }
 function lnCardHtml(lm, i) {
   const t = lm.rows[i];
-  const one = (s) => { const x = s.at(t); const f = (k) => (x === undefined ? DASH : !isNum(x[k]) ? (k === 'tv' && s.e && hsTvNote(s.e, t) ? DASH : 'not read') : (k === 'f' && x.fs === 'e' ? '≈ ' : '') + usd(x[k])); return `<span class="hs-dv"><span class="lbl"><i class="sq" style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;background:${s.col}"></i>${esc(s.q.pair)} ${feeTxt(s.q.feeTier)}</span><b>${f('f')}</b><span class="q">vol ${f('v')} · TVL ${f('tv')} · fee APR ${x === undefined ? DASH : isNum(x.a) ? pct(x.a) : 'not read'}</span></span>`; };
-  return `<span class="hs-dd">${hsDayTxt(t)}<small>fees · volume · TVL · fee APR</small></span>` + lm.series.map(one).join('');
+  const one = (s) => { const x = s.at(t); const f = (k) => (x === undefined ? DASH : !isNum(x[k]) ? (k === 'tv' && s.e && hsTvNote(s.e, t) ? DASH : 'not read') : (k === 'f' && x.fs === 'e' ? '≈ ' : '') + usd(x[k])); return `<span class="hs-dv"><span class="lbl"><i class="sq" style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;background:${s.col}"></i>${esc(s.q.pair)} ${feeTxt(s.q.feeTier)}</span><b>${f('f')}</b><span class="q">vol ${f('v')} · TVL ${f('tv')}</span></span>`; };
+  return `<span class="hs-dd">${hsDayTxt(t)}<small>fees · volume · TVL</small></span>` + lm.series.map(one).join('');
 }
 function lnBlock(lm, label) {
   WS.lmod = lm;
@@ -6072,7 +5868,7 @@ function wsCompare(p) {
   WS.cmp = WS.cmp.filter((id) => poolById(id)).slice(0, 3);
   if (!WS.cmp.length) WS.cmp = [p.id];
   const pools = WS.cmp.map(poolById), cols = CMP_COL();
-  const chips = pools.map((q, i) => `<span class="ws-cc" style="--c:${cols[i]}"><i class="sq"></i>${chainMark(q.chain)}<span class="n">${esc(q.pair)}</span><span class="m">${feeTxt(q.feeTier)} · ${esc(dexV(q))}</span>${aprMini(q)}${histBtn(q, { list: 'wscmp', cls: 'sm' })}${pools.length > 1 ? `<button type="button" class="ws-rm" data-act="ws-cmp-rm" data-id="${esc(q.id)}" aria-label="${esc('Remove ' + poolWord(q) + ' from the comparison')}" title="Remove">✕</button>` : ''}</span>`).join('');
+  const chips = pools.map((q, i) => `<span class="ws-cc" style="--c:${cols[i]}"><i class="sq"></i>${chainMark(q.chain)}<span class="n">${esc(q.pair)}</span><span class="m">${feeTxt(q.feeTier)} · ${esc(dexV(q))}</span>${histBtn(q, { list: 'wscmp', cls: 'sm' })}${pools.length > 1 ? `<button type="button" class="ws-rm" data-act="ws-cmp-rm" data-id="${esc(q.id)}" aria-label="${esc('Remove ' + poolWord(q) + ' from the comparison')}" title="Remove">✕</button>` : ''}</span>`).join('');
   const add = pools.length < 3 ? `<button type="button" class="btn" data-act="ws-cmp-add" aria-label="Add a pool to compare">+ Add a pool</button>` : '<span class="lbl">3 of 3 pools</span>';
   WS.mod = null;
   return `<div class="ws-cmp" role="group" aria-label="Pools compared">${chips}${add}</div>` + lnBlock(lnModel(pools, cols), `Fees, volume and TVL a day: ${pools.map((q) => q.pair).join(', ')}`);
@@ -6088,7 +5884,7 @@ function wsSugHtml(p, q0) {
   list.sort((a, b) => ((peer.has(b.id) - peer.has(a.id)) || ((gemOf(b) ?? -1) - (gemOf(a) ?? -1)) || ((W(b) && isNum(W(b).volUsd) ? W(b).volUsd : -1) - (W(a) && isNum(W(a).volUsd) ? W(a).volUsd : -1))));
   list = list.slice(0, 8);
   if (!list.length) return `<li role="presentation"><span class="pk" style="cursor:default">No pool matches “${esc(q0)}”.</span></li>`;
-  return list.map((x) => `<li role="option" aria-selected="false"><button type="button" class="pk" data-act="ws-cmp-pick" data-id="${esc(x.id)}" aria-label="${esc('Compare ' + poolWord(x))}">${chainMark(x.chain)}${qMatch(x, q) && q ? esc(x.pair) : esc(x.pair)}<span class="m">${feeTxt(x.feeTier)} · ${esc(dexV(x))} · gem ${gemOf(x) ?? DASH}${peer.has(x.id) ? ' · same pair' : ''}</span>${aprMini(x)}</button>${histBtn(x, { list: 'wssug', cls: 'sm' })}</li>`).join('');
+  return list.map((x) => `<li role="option" aria-selected="false"><button type="button" class="pk" data-act="ws-cmp-pick" data-id="${esc(x.id)}" aria-label="${esc('Compare ' + poolWord(x))}">${chainMark(x.chain)}${qMatch(x, q) && q ? esc(x.pair) : esc(x.pair)}<span class="m">${feeTxt(x.feeTier)} · ${esc(dexV(x))} · gem ${gemOf(x) ?? DASH}${peer.has(x.id) ? ' · same pair' : ''}</span></button>${histBtn(x, { list: 'wssug', cls: 'sm' })}</li>`).join('');
 }
 function wsPair(p) {
   const key = pairKey(p), wk = S.win, pools = [p, ...mgPeers(p)], pr = PAIRS() && PAIRS()[key];
@@ -6100,12 +5896,12 @@ function wsPair(p) {
   });
   const tot = sum(rows.map((r) => r.vol)), cols = [wsSelf(), ...MG_COL];
   const tbl = `<div class="tbl-box" style="margin:0"><table class="ws-pt"><thead><tr><th>Pool</th><th>Volume share</th><th>LP fees / day</th><th>Per $1k / day</th><th>Net APR</th><th>TVL</th><th>History</th></tr></thead><tbody>`
-    + rows.map((r) => `<tr class="${r.q.id === p.id ? 'self' : ''}"><td><i class="sq" style="--c:${cols[r.i % cols.length]}"></i>${chainMark(r.q.chain)}${feeTxt(r.q.feeTier)} · ${esc(dexV(r.q))}${r.q.id === p.id ? ' · this' : ''}</td><td>${tot > 0 && r.vol != null ? pct(r.vol / tot, { dp: 0 }) : DASH}</td><td>${usd(r.perDay)}</td><td>${isNum(r.per1k) ? '$' + r.per1k.toFixed(2) : DASH}</td><td class="${r.net < 0 ? 'neg' : ''}">${aprBadge(r.q, wk, aprPd(r.net, { block: true }), r.net)}</td><td>${usd(r.q.tvlUsd)}</td><td>${histBtn(r.q, { list: 'wspair', cls: 'sm' })}</td></tr>`).join('') + '</tbody></table></div>';
+    + rows.map((r) => `<tr class="${r.q.id === p.id ? 'self' : ''}"><td><i class="sq" style="--c:${cols[r.i % cols.length]}"></i>${chainMark(r.q.chain)}${feeTxt(r.q.feeTier)} · ${esc(dexV(r.q))}${r.q.id === p.id ? ' · this' : ''}</td><td>${tot > 0 && r.vol != null ? pct(r.vol / tot, { dp: 0 }) : DASH}</td><td>${usd(r.perDay)}</td><td>${isNum(r.per1k) ? '$' + r.per1k.toFixed(2) : DASH}</td><td class="${r.net < 0 ? 'neg' : ''}">${aprPd(r.net)}</td><td>${usd(r.q.tvlUsd)}</td><td>${histBtn(r.q, { list: 'wspair', cls: 'sm' })}</td></tr>`).join('') + '</tbody></table></div>';
   WS.mod = null;
   return `<div class="card"><span class="lbl">${esc(pairName(key))} · every pool of the pair · ${WIN_LABEL[wk]}</span><div style="margin-top:8px">${tbl}</div></div>` + lnBlock(lnModel(pools, cols), `Fees, volume and TVL a day: every pool of ${pairName(key)}`);
 }
 function wsHelpHtml() {
-  const k = [['Esc', 'close the top view (a day, the picker, then the workspace)'], ['[  ]', 'previous / next pool of the list'], ['← →', 'step the crosshair a day'], ['F V T A', 'make Fees, Volume, TVL or Fee APR big'], ['tap a tier', 'switch it off or on (double-click: keep it alone)'], ['drag', 'across the dates: zoom into them'], ['double-click', 'reset the zoom'], ['hold + slide', 'on a phone: scrub the days'], ['swipe ↓', 'on a phone, on the header: close'], ['swipe ← →', 'on a phone, on the header: next or previous pool'], ['⌘ / Ctrl-click', 'History, ⤢ or ⧉ opens a new tab']];
+  const k = [['Esc', 'close the top view (a day, the picker, then the workspace)'], ['[  ]', 'previous / next pool of the list'], ['← →', 'step the crosshair a day'], ['F V T', 'make Fees, Volume or TVL big'], ['tap a tier', 'switch it off or on (double-click: keep it alone)'], ['drag', 'across the dates: zoom into them'], ['double-click', 'reset the zoom'], ['hold + slide', 'on a phone: scrub the days'], ['swipe ↓', 'on a phone, on the header: close'], ['swipe ← →', 'on a phone, on the header: next or previous pool'], ['⌘ / Ctrl-click', 'History, ⤢ or ⧉ opens a new tab']];
   return `<span class="lbl">Shortcuts and gestures</span><div class="ws-help">${k.map(([a, b]) => `<kbd>${esc(a)}</kbd><span>${esc(b)}</span>`).join('')}</div>`;
 }
 // the keyboard inside the workspace (called first by the page's key handler)
@@ -6136,7 +5932,7 @@ function wsKey(e) {
   }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && WS.v && !(tg && tg.closest && tg.closest('.pz, .seg'))) { e.preventDefault(); hsCursor((WS.v.i || 0) + (e.key === 'ArrowRight' ? 1 : -1)); return true; }
   if (e.key === '[' || e.key === ']') { e.preventDefault(); wsNav(e.key === ']' ? 1 : -1); return true; }
-  const big = { f: 'f', v: 'v', t: 'tv', a: 'a' }[String(e.key).toLowerCase()];
+  const big = { f: 'f', v: 'v', t: 'tv' }[String(e.key).toLowerCase()];
   if (big && $('#ws .hs-stack')) { e.preventDefault(); WS.big = WS.big === big ? null : big; wsRender(); const s = $('#ws .hs-stack'); if (s) s.focus({ preventScroll: true }); return true; }
   if (e.key === '?') { e.preventDefault(); const b = $('#ws [data-act="ws-help"]'); if (b) popOpen(b, wsHelpHtml()); return true; }
   if (tg && tg.matches && tg.matches('tr[data-act], [role="button"][data-act]') && (e.key === 'Enter' || e.key === ' ')) return false;
@@ -6596,7 +6392,7 @@ const simM = () => { const i = S.simM != null ? S.simM : Number(store.get('lps.s
 function mcVal(p, mi) {
   const [k, get, fmt] = SIM_M[mi], v = get(p, W(p));
   const cls = mi === 0 && isNum(v) && v < 0 ? ' neg' : mi === 2 && isGem(p) ? ' gold' : '';
-  return `<span class="v${cls}">${mi === 0 ? aprBadge(p, S.win, fmt(v), v) : fmt(v)}</span><span class="k">${k}</span>`;
+  return `<span class="v${cls}">${fmt(v)}</span><span class="k">${k}</span>`;
 }
 const mcMeta = (p) => `${chainMark(p.chain)}${feeTxt(p.feeTier)} · ${dexV(p)}${keptStable(p) ? ` · <b class="stkm" title="${KEPT_T}">★ STABLE</b>` : ''}`;
 function miniCard(p, { mode = 'sim', self = false, rel = null, mi = 0, i = 0 } = {}) {
@@ -6737,8 +6533,8 @@ function suggest(q0) {
     if (hideStable(p)) continue;
     const w = W(p), vol = w && isNum(w.volUsd) && w.days > 0 ? w.volUsd / w.days : 0, g = p.verified === false ? -1 : gemOf(p) ?? -1, sy = pairSyms(p).map(disp);
     const label = sy.join('/'), key = label.toUpperCase(), a = pairs.get(key) || { k: 'pair', label, n: 0, vol: 0, gem: -1 };
-    a.n++; a.vol += vol; a.gem = Math.max(a.gem, g); a.apr = aprMax(a.apr, w); pairs.set(key, a);
-    for (const t of new Set(sy)) { const b = toks.get(t.toUpperCase()) || { k: 'token', label: t, n: 0, vol: 0, gem: -1 }; b.n++; b.vol += vol; b.gem = Math.max(b.gem, g); b.apr = aprMax(b.apr, w); toks.set(t.toUpperCase(), b); }
+    a.n++; a.vol += vol; a.gem = Math.max(a.gem, g); pairs.set(key, a);
+    for (const t of new Set(sy)) { const b = toks.get(t.toUpperCase()) || { k: 'token', label: t, n: 0, vol: 0, gem: -1 }; b.n++; b.vol += vol; b.gem = Math.max(b.gem, g); toks.set(t.toUpperCase(), b); }
     const hex = q.startsWith('0x') ? q : '0x' + q;
     if (/^0x[0-9a-f]{3,}$/.test(hex) && String(p.id).toLowerCase().startsWith(hex)) out.push({ k: 'pool', id: p.id, label: shortHex(p.id) + ' · ' + p.pair, p, n: 1, vol, gem: g, s: 3 });
   }
@@ -6758,7 +6554,7 @@ function qRender() {
     inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); qBar(); return;
   }
   ul.innerHTML = Q.items.map((it, i) => `<li role="option" id="qo-${i}" class="qopt" data-act="q-pick" data-i="${i}" aria-selected="${i === Q.act}"><span class="qk">${it.k === 'pair' ? 'PAIR' : it.k === 'token' ? 'TOKEN' : 'POOL'}</span>`
-    + `<span class="qt">${it.k === 'pool' ? esc(it.label) : hiMatch(it.label, Q.q)}</span>${it.k === 'pool' ? aprMini(it.p) : aprBest(it.apr)}<span class="qm">${it.k === 'pool' ? `${feeTxt(it.p.feeTier)} · ${chainShort(it.p.chain)}` : `${it.n} pool${it.n === 1 ? '' : 's'}${it.vol > 0 ? ' · ' + usd(it.vol) + '/d' : ''}`}</span></li>`).join('')
+    + `<span class="qt">${it.k === 'pool' ? esc(it.label) : hiMatch(it.label, Q.q)}</span><span class="qm">${it.k === 'pool' ? `${feeTxt(it.p.feeTier)} · ${chainShort(it.p.chain)}` : `${it.n} pool${it.n === 1 ? '' : 's'}${it.vol > 0 ? ' · ' + usd(it.vol) + '/d' : ''}`}</span></li>`).join('')
 ;
   ul.hidden = false; inp.setAttribute('aria-expanded', 'true');
   if (Q.act >= 0) { inp.setAttribute('aria-activedescendant', 'qo-' + Q.act); const o = $('#qo-' + Q.act); if (o) o.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
