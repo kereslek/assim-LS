@@ -14,6 +14,7 @@
 //                                                    tools (v0.6.2: the chart toolbar everywhere, the replay's labels, quiet hours)
 //                                                    guest member guestend guestadmin recovery passchange mismatch (v0.7.0: key slots, the alarm)
 //                                                    histbtn (every History button clear of its neighbours; All combined a toggle)
+//                                                    apr (v0.7.1: APR up front: the workspace chip, the Overview hero, the count-up, History's fee APR chart, every pool row)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -3234,7 +3235,7 @@ async function testDisc(browser) {
     // each card: pair, chain mark and edge, fee and venue, the lane's evidence, net with its $/day at the ticket; missing reads —
     const cards = await p.evaluate(() => [...document.querySelectorAll('#disc .mc.dc')].map((c) => ({ id: c.dataset.id, lane: c.closest('.lane').dataset.lane, n: c.querySelector('.n').textContent, m: c.querySelector('.m').textContent,
       mark: !!c.querySelector('.m .cg[aria-label]'), cc: getComputedStyle(c).getPropertyValue('--cc').trim(), stripe: /inset 3px/.test(getComputedStyle(c).boxShadow) || /3px 0px 0px/.test(getComputedStyle(c).boxShadow), txt: c.innerText, h: c.getBoundingClientRect().height })));
-    const bad = cards.filter((c) => { const q = poolOf(c.id); return !q || c.n !== q.pair || !c.mark || !c.cc || !c.stripe || !/v[34]/.test(c.m) || !/net (—|−?[\d.,]+%.*\/day)/.test(c.txt) || /NaN|undefined|null/.test(c.txt) || c.h < 44; });
+    const bad = cards.filter((c) => { const q = poolOf(c.id); return !q || c.n !== q.pair || !c.mark || !c.cc || !c.stripe || !/v[34]/.test(c.m) || !/net\s+(—|(≈\s*)?−?[\d.,]+%[\s\S]*\/day)/.test(c.txt) || /NaN|undefined|null/.test(c.txt) || c.h < 44; });
     ok(`disc ${tag}: ${cards.length} cards carry pair, chain mark + edge, fee · venue, net with $/day, nothing junk, ≥ 44 px`, cards.length >= 15 && !bad.length, String(JSON.stringify(bad[0])).slice(0, 160));
     const c1 = cards.find((c) => c.lane === 'newPools'), q1 = c1 && poolOf(c1.id), age = q1 && Math.round((L.t - q1.createdAt) / 3600e3);
     ok(`disc ${tag}: a new pool's card reads its age in hours and its swaps · distinct traders (senders)`, c1 && new RegExp(age + ' h old').test(c1.m.replace(/\s+/g, ' ')) && new RegExp(`${q1.w['24h'].swaps.toLocaleString('en-US')} swaps · ${q1.w['24h'].flow.senders} traders`).test(c1.txt), c1 && c1.txt.replace(/\n/g, ' | '));
@@ -4407,7 +4408,7 @@ async function testWorkspace(browser) {
           : v === 'liquidity' ? !!q('.ws-liqtab [data-pz="liq-ws"]') && q('.ws-liqtab .liq').getBoundingClientRect().height >= 200
             : v === 'pair' ? document.querySelectorAll('#ws .ws-pt tbody tr').length >= 1 && !!q('.hs-stack')
               : v === 'compare' ? document.querySelectorAll('#ws .ws-cc').length === 1 && !!q('.hs-stack')
-                : document.querySelectorAll('#ws .hs-stack svg[data-k]').length === 3;
+                : document.querySelectorAll('#ws .hs-stack svg[data-k]:not([data-k="a"])').length === 3;
         return okv && hashOk;
       }, v);
     }
@@ -4633,7 +4634,7 @@ async function testCompare(browser) {
     const best = await bestId(p), bh = FXD.history.pools[best];
     await p.evaluate(() => document.querySelector('#best [data-act="ws-hist"]').click()); await wsWait(p);
     await p.click('#ws-tabs [data-v="compare"]'); await sleep(300);
-    const c0 = await p.evaluate(() => ({ chips: document.querySelectorAll('#ws .ws-cc').length, lines: [...document.querySelectorAll('#ws .hs-stack svg[data-k]')].map((s) => +s.dataset.lines), lv: history.state && history.state.lps ? history.state.lv : 0 }));
+    const c0 = await p.evaluate(() => ({ chips: document.querySelectorAll('#ws .ws-cc').length, lines: [...document.querySelectorAll('#ws .hs-stack svg[data-k]:not([data-k="a"])')].map((s) => +s.dataset.lines), lv: history.state && history.state.lps ? history.state.lv : 0 }));
     await p.click('#ws [data-act="ws-cmp-add"]'); await sleep(350);
     const pk = await p.evaluate(() => ({ lvl: window.__lpsHooks.ws().lvl, focus: document.activeElement && document.activeElement.id, back: !document.querySelector('#ws-back').hidden, lv: history.state && history.state.lps ? history.state.lv : 0 }));
     ok(`compare ${tag}: + Add a pool opens the picker one level deeper (‹ Back), the search ready to type`, c0.chips === 1 && pk.lvl === 'pick' && pk.focus === 'ws-q' && pk.back && pk.lv === c0.lv + 1, JSON.stringify({ c0, pk }));
@@ -4649,7 +4650,7 @@ async function testCompare(browser) {
     ok(`compare ${tag}: a pick returns to Compare with it added; the browser's Back closes only the picker`, c1.lvl === null && c1.chips === 2 && c1.lv === c0.lv && c2.open && c2.lvl === null && c2.chips === 2, JSON.stringify({ c1, c2 }));
     await p.click('#ws [data-act="ws-cmp-add"]'); await sleep(300);
     await p.evaluate(() => document.querySelector('#ws .ws-sug [data-act="ws-cmp-pick"]').click()); await sleep(450);
-    const c3 = await p.evaluate(() => ({ chips: document.querySelectorAll('#ws .ws-cc').length, add: !!document.querySelector('#ws [data-act="ws-cmp-add"]'), svgs: [...document.querySelectorAll('#ws .hs-stack svg[data-k]')].map((s) => ({ k: s.dataset.k, lines: +s.dataset.lines, gaps: +s.dataset.gaps, zero: [...s.querySelectorAll('text')].some((x) => x.textContent === '$0') })), card: document.querySelectorAll('#ln-card .hs-dv').length, rm: [...document.querySelectorAll('#ws [data-act="ws-cmp-rm"]')].every((b) => /^Remove /.test(b.getAttribute('aria-label'))) }));
+    const c3 = await p.evaluate(() => ({ chips: document.querySelectorAll('#ws .ws-cc').length, add: !!document.querySelector('#ws [data-act="ws-cmp-add"]'), svgs: [...document.querySelectorAll('#ws .hs-stack svg[data-k]:not([data-k="a"])')].map((s) => ({ k: s.dataset.k, lines: +s.dataset.lines, gaps: +s.dataset.gaps, zero: [...s.querySelectorAll('text')].some((x) => x.textContent === '$0') })), card: document.querySelectorAll('#ln-card .hs-dv').length, rm: [...document.querySelectorAll('#ws [data-act="ws-cmp-rm"]')].every((b) => /^Remove /.test(b.getAttribute('aria-label'))) }));
     const nullV = bh && bh.yv ? bh.yv.slice(-90).filter((r) => r[0] === null).length : 0;
     ok(`compare ${tag}: three pools at most: Fees, Volume and TVL each one chart with a line per pool on the same axes from $0, one day card for all`, c3.chips === 3 && !c3.add && c3.svgs.length === 3 && c3.svgs.every((s) => s.lines === 3 && s.zero) && c3.card === 3 && c3.rm, JSON.stringify(c3).slice(0, 220));
     ok(`compare ${tag}: a day not read breaks its line (never a 0): volume gaps ≥ the first pool's (${nullV})`, c3.svgs.find((s) => s.k === 'v').gaps >= nullV, String(c3.svgs.find((s) => s.k === 'v').gaps));
@@ -4657,7 +4658,7 @@ async function testCompare(browser) {
     ok(`compare ${tag}: ✕ removes a pool`, (await p.evaluate(() => document.querySelectorAll('#ws .ws-cc').length)) === 2);
     // the Pair tab: every tier, today's numbers and their History lines together
     await p.click('#ws-tabs [data-v="pair"]'); await sleep(350);
-    const pr = await p.evaluate(() => ({ rows: document.querySelectorAll('#ws .ws-pt tbody tr').length, hb: document.querySelectorAll('#ws .ws-pt [data-act="ws-hist"]').length, lines: [...document.querySelectorAll('#ws .hs-stack svg[data-k]')].map((s) => +s.dataset.lines) }));
+    const pr = await p.evaluate(() => ({ rows: document.querySelectorAll('#ws .ws-pt tbody tr').length, hb: document.querySelectorAll('#ws .ws-pt [data-act="ws-hist"]').length, lines: [...document.querySelectorAll('#ws .hs-stack svg[data-k]:not([data-k="a"])')].map((s) => +s.dataset.lines) }));
     ok(`compare ${tag}: Pair lists every pool of the pair with its History, and draws each as a line (${pr.rows})`, pr.rows >= 2 && pr.hb === pr.rows && pr.lines.length === 3 && pr.lines.every((x) => x === pr.rows), JSON.stringify(pr));
     // Esc: the picker first, then the workspace
     await p.click('#ws-tabs [data-v="compare"]'); await sleep(250); await p.click('#ws [data-act="ws-cmp-add"]'); await sleep(300);
@@ -5318,7 +5319,7 @@ async function testGuest(browser) {
     const views = {};
     for (const v of ['history', 'compare']) {
       await p.click(`#ws-tabs [data-v="${v}"]`); await sleep(400);
-      views[v] = await p.evaluate((v) => (v === 'compare' ? document.querySelectorAll('#ws .ws-cc').length === 1 && !!document.querySelector('#ws-body .hs-stack') : document.querySelectorAll('#ws .hs-stack svg[data-k]').length === 3), v);
+      views[v] = await p.evaluate((v) => (v === 'compare' ? document.querySelectorAll('#ws .ws-cc').length === 1 && !!document.querySelector('#ws-body .hs-stack') : document.querySelectorAll('#ws .hs-stack svg[data-k]:not([data-k="a"])').length === 3), v);
     }
     const ws = await p.evaluate(GLOOK);
     ok(`guest ${tag}: the workspace opens with History and Compare drawn, the violet line still on top and its ★ locked`, views.history && views.compare && ws.line && (await p.evaluate(() => !!document.querySelector('#ws-star .star.glk'))), JSON.stringify(views));
@@ -5748,10 +5749,205 @@ async function testHistBtn(browser) {
   }
 }
 
+// ---------- v0.7.1: APR up front (the owner's A+B+C+E+F, 20 Nov 2026) ----------
+// A: a net APR chip under the pool's name on every workspace tab, pinned while the body scrolls, following the window, its tap
+// explaining it; B: Overview opens with an APR hero; C: A's and B's numbers roll to their value in under a second (at once under
+// reduced motion); E: History's fourth synced chart "Fee APR a day" (fees ÷ TVL × 365, % axis from 0%, gaps for days not read),
+// the tiers' APR chips with one BEST, the day card's Fee APR and the range header; the liquidity legend's in-range fee APR;
+// F: an APR on every pool row and card. Missing is a dash or "not read", never 0%.
+const APR_SURF = () => { // the home page's pool rows and cards, each with an APR
+  const q = (s) => [...document.querySelectorAll(s)].filter((e) => e.getClientRects().length);
+  return { next: q('#next .nb-row [data-aprb]').length, nextRows: q('#next .nb-row').length, disc: q('#disc .dcw [data-aprb]').length, discCards: q('#disc .dcw').length,
+    all: q('#all tbody tr [data-aprb]').length, allRows: q('#all tbody tr').length, tabs: q('#best .tabs .tab [data-aprb]').length, tabN: q('#best .tabs .tab').length,
+    fav: q('#fav .mc [data-aprb]').length, favN: q('#fav .mc').length };
+};
+const APR_ZERO = (root) => { // a figure marked unread that reads 0%, or a dash-less unread figure: never
+  const bad = [];
+  for (const e of document.querySelectorAll(`${root} [data-aprb]`)) {
+    const t = e.textContent.replace(/\s+/g, ' ').trim();
+    if (e.dataset.aprb === '' && t !== '—') bad.push('unread ' + t.slice(0, 20));
+    if (e.dataset.aprb !== '' && !/%/.test(t)) bad.push('no % ' + t.slice(0, 20));
+    if (e.dataset.aprb !== '' && Math.abs(+e.dataset.aprb) >= 0.001 && /(^|[^\d.,])0%/.test(t)) bad.push('0% ' + t.slice(0, 20));
+  }
+  return bad;
+};
+const APR_FIT = () => { // no sideways scroll on the page or in the workspace body
+  const b = document.querySelector('#ws-body'), d = document.documentElement;
+  return { page: d.scrollWidth - innerWidth, ws: b && !document.querySelector('#ws').hidden ? b.scrollWidth - b.clientWidth : 0 };
+};
+const APR_ROLL = (o) => new Promise((res) => { // click (or not) and record the chip's and hero's text every frame for 1.1 s
+  const el = o.sel ? document.querySelector(o.sel) : null;
+  if (el) el.click();
+  const t0 = performance.now(), seen = [];
+  const f = () => {
+    const t = performance.now() - t0, a = document.querySelector('#ws-apr [data-roll="a"]'), b = document.querySelector('#ws [data-roll="b"]');
+    seen.push([Math.round(t), a ? a.textContent : null, b ? b.textContent : null]);
+    if (t < 1100) requestAnimationFrame(f); else res({ seen, to: a ? a.dataset.to : null, fin: a ? a.textContent : null, finB: b ? b.textContent : null });
+  };
+  requestAnimationFrame(f);
+});
+const rollOk = (r, k = 1) => { // it moved (3+ distinct texts) and reached its last text by 1 s, then stayed
+  const xs = r.seen.map((s) => s[k]), last = xs[xs.length - 1], i = xs.findIndex((x, j) => xs.slice(j).every((y) => y === last));
+  return { moved: new Set(xs).size >= 3, at: i >= 0 ? r.seen[i][0] : null, ok: new Set(xs).size >= 3 && i >= 0 && r.seen[i][0] < 1000 && /%$/.test(last) };
+};
+function aprPools() { // made-up fixtures: a pair with two pools or more, and a pool with days whose fees or TVL weren't read
+  const live = FXD.live.pools, H = FXD.history.pools, key = (q) => String(q.pair).toUpperCase().split('/').map((x) => (x === 'ETH' ? 'WETH' : x)).sort().join('/');
+  const by = new Map(); for (const q of live) { if (!H[q.id]) continue; const k = key(q); if (!by.has(k)) by.set(k, []); by.get(k).push(q); }
+  const multi = [...by.values()].find((g) => g.length >= 2);
+  const gap = live.find((q) => { const h = H[q.id]; if (!h || !Array.isArray(h.y) || !Array.isArray(h.yt) || (h.ytp && h.ytp.lim) || (h.yp && h.yp.lim)) return false; const n = h.y.length; for (let i = Math.max(0, n - 80); i < n; i++) if (h.y[i][1] == null || !h.yt[i] || h.yt[i][0] == null) return true; return false; });
+  return { multi: multi ? multi[0] : null, gap: gap || null };
+}
+async function wsHashOpen(p, id, v) { await p.evaluate(([id, v]) => { location.hash = `p=${id}&v=${v}`; }, [id, v]); await wsWait(p); }
+async function testApr(browser) {
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440 }]];
+  const { multi, gap } = aprPools();
+  for (const [tag, o] of SETS) {
+    const favIds = FXD.live.pools.slice(0, 3).map((q) => q.id);
+    const t = await openUnlocked(browser, 'default', { ...o, win: '24h', storage: { 'lps.fav': JSON.stringify(favIds) } }), p = t.page;
+    // F: the home page
+    await p.click('[data-act="more"]').catch(() => {}); await sleep(200);
+    const h = await p.evaluate(APR_SURF);
+    ok(`apr ${tag}: F · every home row and card carries an APR: Next best ${h.next}/${h.nextRows}, Discovery ${h.disc}/${h.discCards}, All pools ${h.all}/${h.allRows}, top-10 tabs ${h.tabs}/${h.tabN}, Favourites ${h.fav}/${h.favN}`,
+      h.nextRows > 0 && h.next === h.nextRows && h.discCards > 0 && h.disc === h.discCards && h.allRows > 0 && h.all === h.allRows && h.tabN > 0 && h.tabs === h.tabN && h.favN > 0 && h.fav === h.favN, JSON.stringify(h));
+    const z0 = await p.evaluate(APR_ZERO, 'body');
+    ok(`apr ${tag}: F · an unread APR is a dash, never 0%, and every read one has its %`, z0.length === 0 && (await p.evaluate(() => document.querySelectorAll('[data-aprb]').length)) > 0, z0.slice(0, 4).join(' | '));
+    await p.focus('#f-q'); await p.keyboard.type(String(FXD.live.pools[0].pair).split('/')[0].slice(0, 3), { delay: 20 }); await sleep(300);
+    const qs = await p.evaluate(() => ({ n: document.querySelectorAll('#q-list .qopt').length, a: document.querySelectorAll('#q-list .qopt [data-aprb]').length }));
+    ok(`apr ${tag}: F · each search suggestion carries an APR (${qs.a}/${qs.n})`, qs.n > 0 && qs.a === qs.n, JSON.stringify(qs));
+    await fillQ(p, ''); await p.keyboard.press('Escape').catch(() => {}); await sleep(150);
+    // the pool panel: Similar pools, the in-range fee APR beside the range legend, the pair view's rows
+    await p.click('#best [data-act="detail"]'); await p.waitForSelector('#sheet:not([hidden])'); await sleep(350);
+    const sh = await p.evaluate(() => ({ sim: document.querySelectorAll('#sim .mc[data-id] [data-aprb]').length, simN: document.querySelectorAll('#sim .mc[data-id]').length, liq: [...document.querySelectorAll('#sheet [data-liqapr]')].map((e) => e.textContent) }));
+    ok(`apr ${tag}: F + E · the pool panel: every Similar pools card has an APR (${sh.sim}/${sh.simN}); the range legend says "In the suggested ±x% range: fee APR y%"`, sh.simN > 0 && sh.sim === sh.simN && sh.liq.length >= 1 && /^In the suggested ±[\d.]+% range: fee APR [\d.,]+%$/.test(sh.liq[0]), JSON.stringify(sh));
+    await p.click('#sheet-pair'); await sleep(300);
+    const pv = await p.evaluate(() => ({ rows: document.querySelectorAll('#sheet table.pv tbody tr').length, a: document.querySelectorAll('#sheet table.pv tbody tr [data-aprb]').length }));
+    ok(`apr ${tag}: F · the pair view: an APR on every row (${pv.a}/${pv.rows})`, pv.rows > 0 && pv.a === pv.rows, JSON.stringify(pv));
+    await p.click('#sheet-close'); await sleep(200);
+    const fit0 = await p.evaluate(APR_FIT), ov0 = [...await OVL(p, '#next'), ...await OVL(p, '#best .tabs')];
+    ok(`apr ${tag}: the home page: no sideways scroll, no text on text in Next best and the top-10 tabs`, fit0.page <= 1 && ov0.length === 0, JSON.stringify([fit0, ov0.slice(0, 2)]));
+    if (SHOTS) { await p.evaluate(() => document.querySelector('#next').scrollIntoView({ block: 'start' })); await sleep(250); await snap(p, `apr-${tag}-lists`); await p.evaluate(() => scrollTo(0, 0)); await sleep(150); }
+    // A + C: the workspace on the best find; the chip rolls on open
+    const r0 = await p.evaluate(APR_ROLL, { sel: '#best [data-act="ws-hist"]' }); await wsWait(p);
+    const ro = rollOk(r0);
+    ok(`apr ${tag}: C · on open the chip's net APR rolls to its value in under 1 s (${ro.at} ms, ${new Set(r0.seen.map((s) => s[1])).size} steps) and stays`, ro.ok, JSON.stringify([ro, r0.seen.slice(0, 3), r0.fin]));
+    const tabs = {};
+    for (const v of ['overview', 'history', 'liquidity', 'pair', 'compare']) {
+      await p.click(`#ws-tabs [data-v="${v}"]`); await sleep(300);
+      tabs[v] = await p.evaluate(() => {
+        const c = document.querySelector('#ws-apr .aprchip'), b = document.querySelector('#ws-body'), r0 = c && c.getBoundingClientRect();
+        if (!c) return null;
+        b.scrollTop = 600; const r1 = c.getBoundingClientRect(), hd = document.querySelector('#ws-head').getBoundingClientRect(), bt = b.getBoundingClientRect();
+        const v = c.querySelector('[data-roll="a"]'), k = c.querySelector('.k').textContent;
+        const out = { v: v.textContent, to: v.dataset.to, k, pinned: Math.abs(r1.top - r0.top) < 0.5 && r1.bottom <= bt.top + 0.5 && r1.top >= hd.top - 0.5 && r0.height >= 30, scrolled: b.scrollTop };
+        b.scrollTop = 0; return out;
+      });
+    }
+    const tv = Object.values(tabs);
+    ok(`apr ${tag}: A · the chip under the pool's name on all five tabs, pinned while the body scrolls: ${tv.filter((x) => x && x.pinned).length}/5`, tv.every((x) => x && x.pinned && /^(≈ )?−?[\d.,]+%$|^—$/.test(x.v) && /NET APR · 24H/.test(x.k)), JSON.stringify(tabs).slice(0, 300));
+    const pd = await p.evaluate(() => { const c = document.querySelector('#ws-apr [data-roll="a"]'); return { to: +c.dataset.to, k: document.querySelector('#ws-apr .k').textContent }; });
+    const want = (pd.to * FXD.live.ticket) / 365, got = (/≈ (−)?\$([\d.,]+)(K?)\/DAY/.exec(pd.k) || []);
+    ok(`apr ${tag}: A · its $/day is the rate at the example ticket (${pd.k.replace(/^.*\n?/, '').slice(-16)})`, got.length && Math.abs((got[1] ? -1 : 1) * +got[2].replace(/,/g, '') * (got[3] ? 1e3 : 1) - want) <= Math.max(0.006, Math.abs(want) * 0.06), JSON.stringify(pd));
+    await p.click('#ws-apr .aprchip'); await sleep(250);
+    const pop = await p.evaluate(() => { const e = document.querySelector('#pop'); return e && !e.hidden ? e.textContent.replace(/\s+/g, ' ') : ''; });
+    ok(`apr ${tag}: A · a tap on the chip explains it (net APR = fee APR − LVR − swaps − gas)`, /fee APR − LVR − re-centre swaps − gas/.test(pop), pop.slice(0, 120));
+    await p.keyboard.press('Escape').catch(() => {}); await sleep(150);
+    if (!(await p.isVisible('#ws'))) { await p.click('#best [data-act="ws-hist"]'); await wsWait(p); }
+    // B: the Overview hero
+    await p.click('#ws-tabs [data-v="overview"]'); await sleep(300);
+    const hero = await p.evaluate(() => {
+      const e = document.querySelector('#ws-body [data-aprhero]'), first = document.querySelector('#ws-body .ws-in').firstElementChild;
+      return e && { first: first === e, big: e.querySelector('.aprh-big [data-roll="b"]').textContent, day: e.querySelector('.aprh-big small').textContent, tr: e.querySelector('.aprh-tr').textContent, bar: !!e.querySelector('.aprh-bar'), mini: [...e.querySelectorAll('.aprh-mini div')].map((d) => d.textContent), chip: document.querySelector('#ws-apr [data-roll="a"]').textContent };
+    });
+    ok(`apr ${tag}: B · Overview opens with the APR hero: big net APR ${hero && hero.big} with $/day, the trend vs its 7-day average, where the fee APR goes, Fee APR · 7D net · 30D net`,
+      !!hero && hero.first && hero.big === hero.chip && /\/day$|not read yet|—/.test(hero.day) && /vs its 7-day average/.test(hero.tr) && hero.mini.length === 3 && /^Fee APR 24H/.test(hero.mini[0]) && /^7D net/.test(hero.mini[1]) && /^30D net/.test(hero.mini[2]), JSON.stringify(hero));
+    await snap(p, `apr-${tag}-overview`);
+    const ovB = await OVL(p, '[data-aprhero]'), ovA = await OVL(p, '#ws-head');
+    ok(`apr ${tag}: A + B · no text on text in the workspace head or the hero`, ovA.length === 0 && ovB.length === 0, JSON.stringify([...ovA, ...ovB].slice(0, 3)));
+    // C: a window switch rolls both from the old value to the new one
+    const r1 = await p.evaluate(APR_ROLL, { sel: '#ws-win [data-w="7d"]' }), ra = rollOk(r1), rb = rollOk(r1, 2);
+    ok(`apr ${tag}: C · 24H → 7D rolls the chip and the hero to the new value in under 1 s (${ra.at} / ${rb.at} ms), once`, (ra.ok || r1.seen[0][1] === r1.fin) && rb.ok && r1.fin === r1.finB && /NET APR · 7D/.test(await p.textContent('#ws-apr .k')), JSON.stringify([ra, rb, r1.fin, r1.finB]));
+    const r2 = await p.evaluate(APR_ROLL, { sel: '#ws-tabs [data-v="liquidity"]' });
+    ok(`apr ${tag}: C · a tab switch (same pool and window) draws it final: no roll`, new Set(r2.seen.map((s) => s[1])).size === 1, JSON.stringify(r2.seen.slice(0, 3)));
+    await p.click('#ws-win [data-w="24h"]'); await sleep(900);
+    // E: History's fourth chart (on a pool whose TVL is read day by day: a v4 pool's comes from its map, a few days only)
+    if (gap) await wsHashOpen(p, gap.id, 'history'); else { await p.click('#ws-tabs [data-v="history"]'); await sleep(450); }
+    const e1 = await p.evaluate(() => {
+      const s = document.querySelector('#ws .hs-stack svg[data-k="a"]'), f = document.querySelector('#ws .hs-stack svg[data-k="f"]'), x = document.querySelector('#ws .hs-x');
+      if (!s || !f) return null;
+      const sr = s.getBoundingClientRect(), xr = x.getBoundingClientRect(), ax = [...s.querySelectorAll(':scope > text')].map((e) => e.textContent);
+      return { n: +s.dataset.n, fn: +f.dataset.n, w: s.getAttribute('width'), fw: f.getAttribute('width'), ax, avg: +s.dataset.avg, bars: s.querySelectorAll('path.hs-b').length,
+        cross: !x.hidden && xr.top <= sr.top + 0.5 && xr.bottom >= sr.bottom - 0.5, title: s.closest('.hs-ch').querySelector('.hs-ct').textContent, head: (document.querySelector('#ws [data-aprh]') || {}).textContent || '',
+        card: (document.querySelector('#hs-card .hs-dv[data-k="a"]') || {}).textContent || '' };
+    });
+    ok(`apr ${tag}: E · a fourth synced chart "Fee APR a day" on the same days and width, its own % axis from 0% (${e1 && e1.ax.join(' ')}), a 7-day average line, the crosshair through it`,
+      !!e1 && e1.n === e1.fn && e1.w === e1.fw && e1.ax[0] === '0%' && e1.ax.length >= 3 && e1.ax.every((a) => /%$/.test(a)) && e1.avg > 0 && e1.bars >= 1 && e1.cross && /Fee APR a day/.test(e1.title) && /7-day avg/.test(e1.title), JSON.stringify(e1));
+    ok(`apr ${tag}: E · the range header "${e1 && e1.head}" and the day card's Fee APR`, !!e1 && /^(30D|90D|1Y|All|\d+D zoom) avg fee APR (—|[\d.,]+%) · now (—|[\d.,]+%)( [▲▼])?$/.test(e1.head) && /^Fee APR/.test(e1.card), JSON.stringify(e1 && [e1.head, e1.card]));
+    if (SHOTS) { await p.evaluate(() => { const c = document.querySelector('#ws .hs-ch[data-k="a"]'); if (c && innerWidth < 700) c.scrollIntoView({ block: 'end' }); }); await sleep(250); await snap(p, `apr-${tag}-history`); await p.evaluate(() => { document.querySelector('#ws-body').scrollTop = 0; }); }
+    const fit1 = await p.evaluate(APR_FIT), ov1 = [...await OVL(p, '#ws .hs-ctl'), ...await OVL(p, '#hs-card')];
+    ok(`apr ${tag}: E · History: no sideways scroll, no text on text in the header or the day card`, fit1.page <= 1 && fit1.ws <= 1 && ov1.length === 0, JSON.stringify([fit1, ov1.slice(0, 2)]));
+    // E: a pool with days not read: each is a gap labelled "not read", never 0%
+    if (gap) {
+      await wsHashOpen(p, gap.id, 'history');
+      await p.click('#ws [data-act="ws-range"][data-v="90"]').catch(() => {}); await sleep(300);
+      await p.focus('#ws .hs-stack'); await p.keyboard.press('End'); await sleep(80);
+      const g = await p.evaluate(() => {
+        const s = document.querySelector('#ws .hs-stack svg[data-k="a"]'), out = { gaps: s ? +s.dataset.gaps + +s.dataset.na : -1, lab: s ? s.querySelectorAll('text.hs-nrl').length : 0, days: 0, unread: 0, bad: [] };
+        const st = document.querySelector('#ws .hs-stack'), n = +st.dataset.n;
+        for (let i = 0; i < n; i++) {
+          const v = (k) => { const e = document.querySelector(`#hs-card .hs-dv[data-k="${k}"] b`); return e ? e.textContent : null; };
+          const f = v('f'), tv = v('tv'), a = v('a');
+          if (f !== '—' || tv !== '—') {
+            out.days++;
+            const un = f === 'not read' || tv === 'not read' || tv === '—' || f === '—';
+            if (un) { out.unread++; if (a !== 'not read' && a !== '—') out.bad.push(`${f}|${tv}|${a}`); } else if (!/%$/.test(a || '')) out.bad.push(`${f}|${tv}|${a}`);
+          }
+          st.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+        }
+        return out;
+      });
+      ok(`apr ${tag}: E · a day with its fees or TVL not read is a gap (${g.gaps} in the chart, ${g.lab} labelled "not read"), its card "not read", never 0% (${g.unread} of ${g.days} days)`, g.gaps >= 1 && g.unread >= 1 && g.days >= 30 && g.bad.length === 0, JSON.stringify(g).slice(0, 240));
+    } else ok(`apr ${tag}: E · the fixtures hold a pool with a day not read`, false);
+    // E: the tiers' chips: each with its fee APR over the range, one BEST
+    if (multi) {
+      await wsHashOpen(p, multi.id, 'history');
+      const ch = await p.evaluate(() => ({ chips: [...document.querySelectorAll('#ws .hs-chip[data-act="ws-tier"]:not([data-v="all"])')].map((b) => ({ a: (b.querySelector('.hs-ca') || {}).textContent || null, best: !!b.querySelector('.hs-best'), v: b.querySelector('.hs-ca') ? b.querySelector('.hs-ca').dataset.ca : '' })) }));
+      await snap(p, `apr-${tag}-tiers`);
+      const nums = ch.chips.filter((c) => c.v !== '').map((c) => +c.v), top = Math.max(...nums), bests = ch.chips.filter((c) => c.best);
+      ok(`apr ${tag}: E · each tier chip shows its fee APR over the range (${ch.chips.map((c) => c.a).join(', ')}), the top one tagged BEST`, ch.chips.length >= 2 && ch.chips.every((c) => c.a && (/%$/.test(c.a) || c.a === '—')) && (nums.length < 2 ? bests.length === 0 : bests.length === 1 && +bests[0].v === top), JSON.stringify(ch));
+      // F: Compare's chips and the Pair table
+      await p.click('#ws-tabs [data-v="pair"]'); await sleep(300);
+      const pr = await p.evaluate(() => ({ rows: document.querySelectorAll('#ws .ws-pt tbody tr').length, a: document.querySelectorAll('#ws .ws-pt tbody tr [data-aprb]').length, ln: document.querySelectorAll('#ws .hs-stack svg[data-k="a"]').length }));
+      await p.click('#ws-tabs [data-v="compare"]'); await sleep(300);
+      const cp = await p.evaluate(() => ({ chips: document.querySelectorAll('#ws .ws-cc').length, a: document.querySelectorAll('#ws .ws-cc [data-aprb]').length, ln: document.querySelectorAll('#ws .hs-stack svg[data-k="a"]').length }));
+      ok(`apr ${tag}: F · Pair rows (${pr.a}/${pr.rows}) and Compare chips (${cp.a}/${cp.chips}) carry an APR; both draw the fee APR line chart`, pr.rows >= 2 && pr.a === pr.rows && cp.chips >= 1 && cp.a === cp.chips && pr.ln === 1 && cp.ln === 1, JSON.stringify({ pr, cp }));
+      const z1 = await p.evaluate(APR_ZERO, '#ws');
+      ok(`apr ${tag}: no 0% for an unread APR in the workspace`, z1.length === 0, z1.slice(0, 3).join(' | '));
+    } else ok(`apr ${tag}: E · the fixtures hold a pair with two pools`, false);
+    ok(`apr ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
+    await t.ctx.close();
+  }
+  // C under reduced motion: the numbers appear at once
+  const t = await openUnlocked(browser, 'default', { width: 1440, reducedMotion: 'reduce', win: '24h' }), p = t.page;
+  const r = await p.evaluate(APR_ROLL, { sel: '#best [data-act="ws-hist"]' }); await wsWait(p);
+  const r2 = await p.evaluate(APR_ROLL, { sel: '#ws-win [data-w="7d"]' });
+  ok('apr reduced: C · under reduced motion the chip and the hero show their value at once (no roll) on open and on a window switch',
+    new Set(r.seen.map((s) => s[1])).size === 1 && /%$|—/.test(r.fin) && new Set(r2.seen.map((s) => s[1])).size === 1 && /NET APR · 7D/.test(await p.textContent('#ws-apr .k')), JSON.stringify([r.seen.slice(0, 2), r2.seen.slice(0, 2)]));
+  await t.ctx.close();
+  // guests: the same APRs (market data), the $/day at the public $1,000
+  const g = await unlockAs(browser, 'keyed', SHARED_PASS, { width: 1440 }), gp = g.page;
+  await waitApp(gp); await gp.click('#gw-ok').catch(() => {}); await sleep(200);
+  const gs = await gp.evaluate(() => { const e = document.querySelector('#next .aprb[data-aprb]:not([data-aprb=""])'); return e ? { v: +e.dataset.aprb, t: e.textContent } : null; });
+  await gp.click('#best [data-act="ws-hist"]'); await wsWait(gp);
+  const gc = await gp.evaluate(() => ({ chip: !!document.querySelector('#ws-apr .aprchip'), k: (document.querySelector('#ws-apr .k') || {}).textContent || '' }));
+  const gm = gs && /(−)?\$([\d.,]+)\/day/.exec(gs.t), gw = gs ? (gs.v * 1000) / 365 : null;
+  ok('apr guest: the APR badges and the chip work for a guest, the $/day at the public $1,000', !!gs && !!gm && Math.abs((gm[1] ? -1 : 1) * +gm[2].replace(/,/g, '') - gw) <= Math.max(0.006, Math.abs(gw) * 0.06) && gc.chip && /NET APR/.test(gc.k), JSON.stringify([gs, gc]));
+  await g.ctx.close();
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
