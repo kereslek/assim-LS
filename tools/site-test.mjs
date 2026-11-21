@@ -6435,10 +6435,10 @@ async function rfTapRun(p, { delay = 700, slow = false, change = false } = {}) {
   await p.click('#refresh', { force: true, timeout: 1000 }).catch(() => {}); // a double tap
   await sleep(1000);
   const mid = await p.evaluate(RF_NOW);
-  await p.waitForFunction(() => { const l = window.__rf || []; const d = l.findIndex((x) => x.s === 'done' || x.s === 'fail'); return d >= 0 && l.slice(d).some((x) => x.s === 'wait'); }, null, { timeout: 20000 }).catch(() => {});
+  await p.waitForFunction(() => { const l = window.__rf || []; const d = l.findIndex((x) => x.s === 'done' || x.s === 'fail'); return d >= 0 && l.slice(d).some((x) => ['wait', 'due', 'late', 'none'].includes(x.s)); }, null, { timeout: 20000 }).catch(() => {});
   const log = await p.evaluate(() => ({ l: window.__rf, tap: window.__rfTap }));
   p.off('request', onReq); await p.unroute('**/live.json*');
-  const tap = log.tap, busy = log.l.filter((x) => x.s === 'busy'), done = log.l.find((x) => x.s === 'done' || x.s === 'fail'), back = done && log.l.find((x) => x.t > done.t && x.s === 'wait');
+  const tap = log.tap, busy = log.l.filter((x) => x.s === 'busy'), done = log.l.find((x) => x.s === 'done' || x.s === 'fail'), back = done && log.l.find((x) => x.t > done.t && ['wait', 'due', 'late', 'none'].includes(x.s)); // the countdown again (a new pass brings its own next: late on an old fixture)
   return { n, mid, busy, done, back, tap, firstBusy: busy[0] ? Math.round(busy[0].t - tap) : null, doneAt: done ? Math.round(done.t - tap) : null, held: done && back ? Math.round(back.t - done.t) : null, texts: [...new Set(busy.map((x) => x.x))], slow };
 }
 async function testRefreshCd(browser) {
