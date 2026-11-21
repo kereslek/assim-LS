@@ -4,8 +4,13 @@
 // Prints yes/no lines only.
 //   node scripts/lock-init.mjs [--dir lock] [--verify]                 production (600k rounds)
 //   node scripts/lock-init.mjs --dir <tmp> --iter 1000 --throwaway      tests and rehearsals only
+//   --keys-dir <dir>: read keys.json from there instead of copying it from the data branch into out/data first
+import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ITERATIONS, LOCK_DIR, initLock, passphraseFrom } from '../lib/lock.mjs';
+import { OUT_DIR } from '../lib/store.mjs';
+import { restoreKeysFile } from './publish-data.mjs';
 
 const yn = (b) => (b ? 'yes' : 'no');
 
@@ -15,8 +20,15 @@ export function main(argv = process.argv.slice(2), env = process.env, say = cons
   const iter = arg('--iter') ? Number(arg('--iter')) : ITERATIONS;
   if (!Number.isInteger(iter) || iter < 1000) throw new Error('bad --iter: a whole number ≥ 1000');
   if (iter < ITERATIONS && !argv.includes('--throwaway')) throw new Error(`refusing: fewer than ${ITERATIONS} rounds is for throwaway locks only (add --throwaway)`);
-  const r = initLock({ dir, passphrase: passphraseFrom(env), iterations: iter, verifyOnly: argv.includes('--verify') });
+  const passphrase = passphraseFrom(env);
+  // key slots: keys.json is readable, so it comes first (as in the loop); the passphrase may then open an owner slot
+  let keysDir = arg('--keys-dir') || null;
+  if (!keysDir && fs.existsSync(path.join(dir, 'lock.json'))) {
+    try { restoreKeysFile(); keysDir = OUT_DIR; } catch (e) { say(`keys file not read (${reason(e).split(/[^A-Za-z]/)[0] || 'Error'}); the lock's own check decides`); }
+  }
+  const r = initLock({ dir, passphrase, iterations: iter, verifyOnly: argv.includes('--verify'), keysDir });
   say(`lock existed before: ${yn(r.existed)}`);
+  if (r.existed) say(`key slots (keys.json) read: ${yn(r.slots)}`);
   say(`lock created now: ${yn(r.created)}`);
   say(`passphrase opens the lock: ${yn(r.opens)}`);
   if (r.opens) say(`inbox public key ${r.inboxWritten ? 'written' : 'present'} and matches the lock: ${yn(r.inboxMatches)}`);

@@ -11,6 +11,8 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { CONFIG_FILE, leakStrings, loadConfig } from '../lib/config.mjs';
+import { OUT_DIR } from '../lib/store.mjs';
+import { restoreKeysFile } from './publish-data.mjs';
 import { githubApi, listRuns } from './prune-runs.mjs';
 
 export const MIN_LEN = 6;
@@ -123,10 +125,12 @@ export async function scanRunLogs({ api, repo, needles, maxRuns = 300, fetchFn =
   return res;
 }
 
-export async function leakCheck({ repo = '.', lockDir = 'lock', env = process.env, logs = true, maxRuns = 300, api = null, fetchFn, say = console.log } = {}) {
+// keysDir: where keys.json is (main() copies it there from the data branch first, as the loop does): after a passphrase
+// change the new passphrase opens an owner slot, not the lock's own check. No keys.json: the lock's check, as before.
+export async function leakCheck({ repo = '.', lockDir = 'lock', keysDir = path.join(repo, OUT_DIR), env = process.env, logs = true, maxRuns = 300, api = null, fetchFn, say = console.log } = {}) {
   let leakSensitive = [], sealed = false;
   if (fs.existsSync(path.join(repo, lockDir, CONFIG_FILE))) {
-    ({ config: { leakSensitive }, sealed } = loadConfig({ dir: path.join(repo, lockDir), env })); // wrong passphrase: throws
+    ({ config: { leakSensitive }, sealed } = loadConfig({ dir: path.join(repo, lockDir), env, keysDir })); // wrong passphrase: throws
   }
   let secrets = {};
   if (env.ALL_SECRETS) { try { secrets = JSON.parse(env.ALL_SECRETS); } catch { throw new Error('bad ALL_SECRETS: not JSON'); } }
@@ -159,6 +163,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const argv = process.argv.slice(2);
   const arg = (name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
   try {
+    try { const k = restoreKeysFile(); console.log(`keys file from the data branch: ${k.keys ? 'yes' : 'no'}`); } catch (e) { console.log(`keys file not read (${String(e?.message || '').split(/[^A-Za-z]/)[0] || 'Error'}); the lock's own check decides`); }
     const r = await leakCheck({ logs: !argv.includes('--no-logs'), maxRuns: Number(arg('--logs') || 300) });
     process.exitCode = r.found || !r.complete ? 1 : 0;
   } catch (e) {
