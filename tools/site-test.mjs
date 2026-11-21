@@ -15,6 +15,7 @@
 //                                                    guest member guestend guestadmin recovery passchange mismatch (v0.7.0: key slots, the alarm)
 //                                                    histbtn (every History button clear of its neighbours; All combined a toggle)
 //                                                    apr (v0.7.1: APR up front: the workspace chip, the Overview hero, the count-up, History's fee APR chart, every pool row)
+//                                                    errbadge (v0.7.2: a page error shows a calm badge by the version; its sheet sanitized, Copy, Close, Dismiss)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -56,7 +57,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -5923,6 +5924,9 @@ async function testApr(browser) {
       await p.click('#ws-tabs [data-v="compare"]'); await sleep(300);
       const cp = await p.evaluate(() => ({ chips: document.querySelectorAll('#ws .ws-cc').length, a: document.querySelectorAll('#ws .ws-cc [data-aprb]').length, ln: document.querySelectorAll('#ws .hs-stack svg[data-k="a"]').length }));
       ok(`apr ${tag}: F · Pair rows (${pr.a}/${pr.rows}) and Compare chips (${cp.a}/${cp.chips}) carry an APR; both draw the fee APR line chart`, pr.rows >= 2 && pr.a === pr.rows && cp.chips >= 1 && cp.a === cp.chips && pr.ln === 1 && cp.ln === 1, JSON.stringify({ pr, cp }));
+      await p.click('#ws-tabs [data-v="overview"]'); await sleep(300); // v0.7.2: Similar tiers wear the same badge, once a row
+      const st = await p.evaluate(() => { const r = [...document.querySelectorAll('#ws-body .ws-tr')]; return { n: r.length, a: r.filter((x) => x.querySelectorAll('[data-aprb]').length === 1).length, twice: r.filter((x) => x.querySelectorAll('.apr-v').length > 1).length, net: r.filter((x) => /\bnet \S/.test(x.textContent)).length }; });
+      ok(`apr ${tag}: F · Similar tiers: every row carries the APR badge, once (${st.a}/${st.n})`, st.n >= 2 && st.a === st.n && st.twice === 0 && st.net === 0, JSON.stringify(st));
       const z1 = await p.evaluate(APR_ZERO, '#ws');
       ok(`apr ${tag}: no 0% for an unread APR in the workspace`, z1.length === 0, z1.slice(0, 3).join(' | '));
     } else ok(`apr ${tag}: E · the fixtures hold a pair with two pools`, false);
@@ -5947,10 +5951,86 @@ async function testApr(browser) {
   await g.ctx.close();
 }
 
+// ---------- v0.7.2 · F11: the error badge (a page error shows calmly by the version; its sheet lists them sanitized) ----------
+const EB_PLANT = () => { // made-up values that must never reach the badge: an address, an amount, a long number, a URL query
+  setTimeout(() => { throw new TypeError('pool 0x1234567890abcdef broke at $12,345 for 987654 units via https://example.test/a?pool=XYZ123&k=1'); }, 0);
+  Promise.reject(new RangeError('second fault in the test'));
+};
+const EB_LEAK = /0x1234567890abcdef|\$12,345|12,345|987654|XYZ123|pool=/;
+const EB_BADGE = () => {
+  const w = document.querySelector('#ebw');
+  if (!w) return { el: false };
+  const r = w.getBoundingClientRect(), vis = !w.hidden && w.getClientRects().length > 0;
+  const ctl = [...document.querySelectorAll('header button, header input, header a, #subhead button, #subhead a, #subhead [data-act]')].filter((e) => !w.contains(e) && e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
+  const box = (e) => { const g = document.createRange(); g.selectNodeContents(e); const q = g.getBoundingClientRect(); return q.width > 0 && q.height > 0 ? q : e.getBoundingClientRect(); }; // what shows (a control's tap box may reach past it, as the page's do)
+  const hit = vis ? ctl.filter((e) => { const q = box(e); return q.width > 0 && q.height > 0 && q.left < r.right - 0.5 && q.right > r.left + 0.5 && q.top < r.bottom - 0.5 && q.bottom > r.top + 0.5; }).map((e) => e.id || e.className || e.tagName) : [];
+  const cover = vis ? ctl.filter((e) => { const q = box(e); if (!q.width || q.top < 0 || q.top > innerHeight) return false; const x = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return x && w.contains(x); }).map((e) => e.id || e.className) : [];
+  return { el: true, vis, text: w.textContent.replace(/\s+/g, ' ').trim(), right: Math.round(r.right), vw: innerWidth, h: Math.round(r.height), hit, cover, sx: document.documentElement.scrollWidth - innerWidth };
+};
+const EB_SHEET = () => {
+  const sh = document.querySelector('#ebsheet'), li = [...sh.querySelectorAll('#eb-list li')], c = document.querySelector('#eb-close').getBoundingClientRect(), k = document.querySelector('.eb-card').getBoundingClientRect();
+  return { open: !sh.hidden, n: li.length, kinds: li.map((l) => l.querySelector('.eb-k').textContent), areas: li.map((l) => l.querySelector('.eb-a').textContent), msgs: li.map((l) => l.querySelector('.eb-m').textContent),
+    txt: sh.textContent, close: [Math.round(c.width), Math.round(c.height)], fit: k.left >= -0.5 && k.right <= innerWidth + 0.5, focus: (document.activeElement || {}).id || '' };
+};
+const ebOk = (b) => b.vis && /Something went wrong · details/.test(b.text) && b.hit.length === 0 && b.cover.length === 0 && b.right <= b.vw && b.sx <= 1;
+async function testErrBadge(browser) {
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true, mode: '3d' }], ['w1440', { width: 1440, mode: '2d' }]] : [['w393', { width: 393, height: 852, mode: '2d' }], ['w1440', { width: 1440, mode: '3d' }]];
+  for (const [tag, o] of SETS) {
+    const look = o.mode.toUpperCase(), t = await openUnlocked(browser, 'default', o), p = t.page;
+    const b0 = await p.evaluate(EB_BADGE);
+    ok(`errbadge ${tag} ${look}: a normal load shows no error badge`, b0.el && !b0.vis, JSON.stringify(b0));
+    await p.evaluate(EB_PLANT); await sleep(300);
+    const b1 = await p.evaluate(EB_BADGE);
+    ok(`errbadge ${tag} ${look}: an uncaught error and a rejection show "⚠ Something went wrong · details" by the version, covering no control, inside the screen`, ebOk(b1), JSON.stringify(b1));
+    await snap(p, `errbadge-${tag}-badge`);
+    await p.click('#eb-open'); await sleep(250);
+    const s1 = await p.evaluate(EB_SHEET);
+    ok(`errbadge ${tag} ${look}: the sheet lists both (${s1.kinds.join(', ')}) with the time, the kind, the area and a short message`, s1.open && s1.n === 2 && s1.kinds.includes('TypeError') && s1.kinds.includes('RangeError') && s1.areas.every((a) => a.length > 0) && s1.msgs.every((m) => m.length > 0 && m.length <= 120) && s1.fit, JSON.stringify(s1));
+    ok(`errbadge ${tag} ${look}: the planted address, amount, long number and URL query never show`, !EB_LEAK.test(s1.txt) && /0x…/.test(s1.txt) && /\$…/.test(s1.txt), s1.msgs.join(' | ').slice(0, 160));
+    ok(`errbadge ${tag} ${look}: Close is 44 px or more and takes the focus`, s1.close[0] >= 44 && s1.close[1] >= 44 && s1.focus === 'eb-close', JSON.stringify([s1.close, s1.focus]));
+    await snap(p, `errbadge-${tag}-sheet`);
+    await p.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (x) => { window.__ebCopied = String(x); } } }); });
+    await p.click('#eb-copy'); await sleep(150);
+    const cp = await p.evaluate(() => ({ t: window.__ebCopied || '', b: document.querySelector('#eb-copy').textContent }));
+    ok(`errbadge ${tag} ${look}: "Copy for the admin" copies the sanitized list`, cp.b === 'Copied' && /TypeError/.test(cp.t) && /RangeError/.test(cp.t) && !EB_LEAK.test(cp.t) && cp.t.split('\n').length === 3, JSON.stringify({ b: cp.b, n: cp.t.split('\n').length, leak: EB_LEAK.test(cp.t) }));
+    await p.keyboard.press('Escape'); await sleep(150);
+    const esc1 = await p.evaluate(() => document.querySelector('#ebsheet').hidden);
+    await p.click('#eb-open'); await sleep(200); await p.evaluate(() => history.back()); await sleep(450);
+    const back = await p.evaluate(() => ({ hid: document.querySelector('#ebsheet').hidden, app: !document.querySelector('#app').hidden, badge: !document.querySelector('#ebw').hidden }));
+    await p.click('#eb-open'); await sleep(200); await p.mouse.click(4, 4); await sleep(200);
+    const scrim = await p.evaluate(() => document.querySelector('#ebsheet').hidden);
+    await p.click('#eb-open'); await sleep(200); await p.click('#eb-close'); await sleep(200);
+    const cl = await p.evaluate(() => document.querySelector('#ebsheet').hidden);
+    ok(`errbadge ${tag} ${look}: the sheet closes with Esc, the browser's Back (staying on the dashboard), the dimmed background and Close`, esc1 && back.hid && back.app && back.badge && scrim && cl, JSON.stringify({ esc1, back, scrim, cl }));
+    await p.click('#ebw .ebx'); await sleep(150);
+    const d1 = await p.evaluate(EB_BADGE);
+    await p.evaluate(() => { setTimeout(() => { throw new Error('a third fault'); }, 0); }); await sleep(250);
+    const d2 = await p.evaluate(EB_BADGE);
+    ok(`errbadge ${tag} ${look}: dismissed, it goes; a new error brings it back`, !d1.vis && ebOk(d2), JSON.stringify([d1.vis, d2.vis]));
+    // no loops: a fault inside the badge's own code switches it off; later errors don't recurse or pile up
+    await p.evaluate(() => { const l = document.querySelector('#eb-list'); l.remove(); });
+    await p.click('#eb-open').catch(() => {}); await sleep(150);
+    await p.evaluate(() => { for (let i = 0; i < 5; i++) setTimeout(() => { throw new Error('fault ' + i); }, 0); }); await sleep(300);
+    const lp = await p.evaluate(() => ({ badge: !document.querySelector('#ebw').hidden, sheet: !document.querySelector('#ebsheet').hidden, alive: 1 + 1 }));
+    ok(`errbadge ${tag} ${look}: a fault inside the badge turns it off quietly (no loop, the page keeps working)`, !lp.badge && !lp.sheet && lp.alive === 2, JSON.stringify(lp));
+    await t.ctx.close();
+  }
+  // a guest sees it the same way
+  const g = await unlockAs(browser, 'keyed', SHARED_PASS, { width: 393, height: 852 }), gp = g.page;
+  await waitApp(gp); await gp.click('#gw-ok').catch(() => {}); await sleep(200);
+  const g0 = await gp.evaluate(EB_BADGE);
+  await gp.evaluate(EB_PLANT); await sleep(300);
+  const g1 = await gp.evaluate(EB_BADGE);
+  await gp.click('#eb-open'); await sleep(250);
+  const gs = await gp.evaluate(EB_SHEET);
+  ok('errbadge guest: no badge on a normal load; an error shows the same badge and sanitized sheet', !g0.vis && ebOk(g1) && gs.open && gs.n === 2 && !EB_LEAK.test(gs.txt), JSON.stringify([g0.vis, g1, gs.n]));
+  await g.ctx.close();
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
