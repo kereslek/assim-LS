@@ -16,6 +16,7 @@
 //                                                    histbtn (every History button clear of its neighbours; All combined a toggle)
 //                                                    apr (v0.7.1: APR up front: the workspace chip, the Overview hero, the count-up, History's fee APR chart, every pool row)
 //                                                    errbadge (v0.7.2: a page error shows a calm badge by the version; its sheet sanitized, Copy, Close, Dismiss)
+//                                                    spike (v0.7.4: a confirmed fee spike sets every chart's scale; an unconfirmed one is drawn, hatched and marked)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -31,7 +32,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures, makeData, oldDepth, tinyCase, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR, GUEST_PASS, EXPIRED_PASS, GUEST_NAME, NEW_PASS, RECOVERY_KEY, OWNER_TICKET, SHARED_PASS, MEMBER_PASS, MEMBER_NAME, ELI_PASS } from './fixtures/make-fixture.mjs';
+import { writeFixtures, makeData, oldDepth, tinyCase, spikeCase, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR, GUEST_PASS, EXPIRED_PASS, GUEST_NAME, NEW_PASS, RECOVERY_KEY, OWNER_TICKET, SHARED_PASS, MEMBER_PASS, MEMBER_NAME, ELI_PASS } from './fixtures/make-fixture.mjs';
 import { TEXT_OVERLAP } from './overlap.mjs';
 import { FINGERS, HOST_BOX, STILL_BOX, pinchPts } from './gestures.mjs';
 
@@ -57,7 +58,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -4571,7 +4572,7 @@ async function testWsHistory(browser) {
       let csv = '';
       if (dl) { const f = await dl.path().catch(() => null); if (f) csv = fs.readFileSync(f, 'utf8'); }
       const lines = csv.trim().split('\n'), row = lines.find((l) => l.startsWith(new Date(h.y[iv][0]).toISOString().slice(0, 10)));
-      ok(`history ws ${tag}: CSV saves the ${n90} days in view, a volume not read is an empty cell`, lines[0] === 'day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume' && lines.length === n90 + 1 && !!row && row.split(',')[3] === '', `${lines.length} lines · ${row ? row.split(',').slice(3, 5).join('|') : 'no row'}`);
+      ok(`history ws ${tag}: CSV saves the ${n90} days in view, a volume not read is an empty cell`, lines[0] === 'day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume,fees_unconfirmed' && lines.length === n90 + 1 && !!row && row.split(',')[3] === '', `${lines.length} lines · ${row ? row.split(',').slice(3, 5).join('|') : 'no row'}`);
     } else {
       // a finger: hold, then slide: the crosshair follows, the page doesn't scroll
       const before = await p.evaluate(() => ({ cur: window.__lpsHooks.ws().cur, sb: document.querySelector('#ws-body').scrollTop }));
@@ -6067,9 +6068,101 @@ async function testErrBadge(browser) {
   await g.ctx.close();
 }
 
+// ---------- v0.7.4 · a fee spike is seen (the owner, 21 Nov 2026: "why is there no spike in fees and APR on 29 Oct?") ----------
+// The spike case (made up): on one day 23 days back a lone pool's fees at 70× its median with the volume behind it (confirmed),
+// another lone pool's 70× with no volume behind it (history.json u: unconfirmed), and four tiers of one pair each at 70× with one
+// tier unconfirmed and the v4's TVL not recorded. A confirmed spike must set every chart's scale (fees and fee APR, one tier or
+// combined); an unconfirmed one must be drawn, hatched and marked (▲ with its value where it runs off the top, ⚠ in the table and
+// the card), never silently clamped to look like an ordinary day.
+const SPK = spikeCase(makeData({ now: Date.now() })), SPD = SPK.spike;
+const SPK_SVG = (k) => {
+  const s = document.querySelector(`#ws .hs-stack svg[data-k="${k}"]`), st = document.querySelector('#ws .hs-stack');
+  if (!s || !st) return null;
+  const R = st.getBoundingClientRect(), H = +s.getAttribute('height'), ph = H - 6 - 1;
+  const tick = (e) => { const m = /([\d.,]+)\s*([KMB%]?)$/.exec(e.textContent.replace(/^\$/, '')); return m ? +m[1].replace(/,/g, '') * ({ K: 1e3, M: 1e6, B: 1e9, '%': 0.01 }[m[2]] || 1) : null; };
+  const ax = [...s.querySelectorAll(':scope > text:not(.hs-offl):not(.hs-bl)')].map(tick).filter((v) => v != null); // the axis's top tick (an older page has no data-top)
+  return { top: s.dataset.top ? +s.dataset.top : ax.length ? Math.max(...ax) : null, off: +(s.dataset.off || 0), u: +(s.dataset.u || 0), avg: +(s.dataset.avg || 0), H, ph, n: +s.dataset.n,
+    lab: [...s.querySelectorAll('text.hs-offl')].map((e) => e.textContent),
+    tri: [...s.querySelectorAll('path.hs-off')].map((e) => { const b = e.getBoundingClientRect(); return { w: Math.round(b.width), h: Math.round(b.height), in: b.left >= R.left - 0.5 && b.right <= R.right + 0.5 && b.top >= R.top - 0.5 && b.bottom <= R.bottom + 0.5 }; }),
+    uf: [...s.querySelectorAll('path.hs-b.u')].map((e) => ({ f: e.getAttribute('fill'), d: e.getAttribute('d') })),
+    bars: [...s.querySelectorAll('path.hs-b:not(.u)')].map((e) => e.getAttribute('d')).join('') };
+};
+const SPK_ROW = (t) => { const r = document.querySelector(`#ws tr[data-t="${t}"]`); return r ? [...r.cells].map((c) => c.textContent.trim()) : null; };
+const spkRects = (d) => [...String(d || '').matchAll(/M([\d.]+) ([\d.]+)h([\d.]+)V([\d.]+)H[\d.]+z/g)].map((m) => ({ x: +m[1], y: +m[2], w: +m[3], y0: +m[4] }));
+const spkY = (v, s) => 6 + s.ph - Math.min(1, Math.max(0, v / s.top)) * s.ph; // hsScale's Y
+async function spkHist(p, id, alone = false) { await wsHashOpen(p, id, 'history'); await p.click('#ws [data-act="ws-range"][data-v="30"]').catch(() => {}); await sleep(300); if (alone) await wsOnly(p, id); await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, SPD.t); await sleep(120); }
+async function testSpike(browser) {
+  const H = SPK.history.pools, t = SPD.t, ok0 = SPD.conf && SPD.unconf && SPD.pair.length === 4 && SPD.uTier;
+  if (!ok('spike: the fixtures plant a confirmed spike, an unconfirmed one and a four-tier pair with one tier unconfirmed', ok0, JSON.stringify({ conf: !!SPD.conf, unconf: !!SPD.unconf, pair: SPD.pair.length, u: !!SPD.uTier }))) return;
+  const at = (id) => { const h = H[id], i = h.y.findIndex((r) => r[0] === t); return { f: h.y[i][1], tv: h.yt && h.yt[i] ? h.yt[i][0] : null, u: !!(h.u && h.u.y && h.u.y.includes(t)) }; };
+  const c1 = SPD.pair.find((id) => id.endsWith('c1'));
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440 }]];
+  for (const [tag, o] of SETS) {
+    const tt = await openUnlocked(browser, 'spike', { ...o, win: '24h' }), p = tt.page;
+    // 1 · a confirmed spike, one pool: the fee chart and the fee APR chart both reach it
+    await spkHist(p, SPD.conf);
+    const cf = at(SPD.conf), ca = (cf.f / cf.tv) * 365, f1 = await p.evaluate(SPK_SVG, 'f'), a1 = await p.evaluate(SPK_SVG, 'a');
+    ok(`spike ${tag}: a confirmed 70× day sets the fee chart's scale (top ${f1 && f1.top} ≥ ${Math.round(cf.f)}) and the fee APR chart's (top ${a1 && a1.top} ≥ ${ca.toFixed(4)}), nothing off the top`,
+      !!f1 && !!a1 && f1.top >= cf.f && f1.top < cf.f * 2.6 && a1.top >= ca * 0.999 && a1.top < ca * 2.6 && f1.off === 0 && a1.off === 0 && a1.lab.length === 0, JSON.stringify({ f: f1 && [f1.top, f1.off], a: a1 && [a1.top, a1.off], ca }));
+    // 2 · an unconfirmed spike, one pool: drawn hatched to the top, a ▲ with its value, ⚠ in the table, the card and the legend
+    await spkHist(p, SPD.unconf);
+    const uf = at(SPD.unconf), f2 = await p.evaluate(SPK_SVG, 'f'), a2 = await p.evaluate(SPK_SVG, 'a'), row = await p.evaluate(SPK_ROW, t), cd = await p.evaluate(CARD);
+    const leg = await p.evaluate(() => (document.querySelector('#ws .hs-leg') || {}).textContent || '');
+    ok(`spike ${tag}: an unconfirmed 70× day is hatched, never sets the scale (top ${f2 && f2.top} < ${Math.round(uf.f)}) and runs off under a visible ▲ "${f2 && f2.lab[0]}"`,
+      !!f2 && f2.top < uf.f && f2.off === 1 && f2.u === 1 && f2.uf.length === 1 && /^url\(#hs-uc-f-/.test(f2.uf[0].f) && f2.tri.length === 1 && f2.tri[0].w >= 7 && f2.tri[0].h >= 5 && f2.tri[0].in && f2.lab.length === 1 && /^⚠ \$/.test(f2.lab[0]) && Math.abs(money(f2.lab[0]) - uf.f) <= uf.f * 0.051, JSON.stringify(f2 && { top: f2.top, off: f2.off, tri: f2.tri, lab: f2.lab, uf: f2.uf.map((x) => x.f) }));
+    ok(`spike ${tag}: its fee APR runs off the top the same way ("${a2 && a2.lab[0]}") and the table, the card and the legend say ⚠ unconfirmed (${row && row[1]} · ${cd && cd.f && cd.f.q})`,
+      !!a2 && a2.off === 1 && /^⚠ [\d.,]+%$/.test(a2.lab[0] || '') && !!row && /^⚠ \$/.test(row[1]) && !!cd && !!cd.f && /⚠ unconfirmed/.test(cd.f.q) && /⚠ unconfirmed/.test(leg) && /▲/.test(leg), JSON.stringify({ a: a2 && a2.lab, row, card: cd && cd.f, leg: leg.slice(-90) }));
+    // 3 · the whole pair, one tier unconfirmed: the day's confirmed tiers still set the scale; the unconfirmed piece sits on top
+    await spkHist(p, c1);
+    const xs = SPD.pair.map(at), conf = xs.filter((x) => !x.u).reduce((s, x) => s + x.f, 0), tot = xs.reduce((s, x) => s + x.f, 0);
+    const kn = xs.filter((x) => typeof x.tv === 'number' && x.tv > 0), tvk = kn.reduce((s, x) => s + x.tv, 0), vc = (kn.filter((x) => !x.u).reduce((s, x) => s + x.f, 0) / tvk) * 365;
+    const f3 = await p.evaluate(SPK_SVG, 'f'), a3 = await p.evaluate(SPK_SVG, 'a'), mode = await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode);
+    const ur = f3 && f3.uf.length === 1 ? spkRects(f3.uf[0].d)[0] : null, under = ur && f3 ? spkRects(f3.bars).filter((r) => Math.abs(r.x - ur.x) < 0.01) : [];
+    ok(`spike ${tag}: whole pair (${mode}): one unconfirmed tier no longer drops the day from the fee scale (top ${f3 && f3.top} ≥ the confirmed ${Math.round(conf)} of ${Math.round(tot)})`,
+      mode === 'all' && !!f3 && f3.top >= conf && f3.top < tot * 2.6 && f3.u === 1, JSON.stringify(f3 && { top: f3.top, u: f3.u, off: f3.off, conf, tot }));
+    ok(`spike ${tag}: whole pair: the unconfirmed piece is hatched and stacked on top of the confirmed ones (its foot at ${ur && ur.y0.toFixed(1)}, the confirmed top at ${f3 && spkY(conf, f3).toFixed(1)})`,
+      !!ur && /^url\(#hs-uc-f-/.test(f3.uf[0].f) && Math.abs(ur.y0 - spkY(conf, f3)) < 0.6 && under.length >= 3 && under.every((r) => r.y >= ur.y0 - 0.6), JSON.stringify({ ur, under: under.slice(0, 4) }));
+    ok(`spike ${tag}: whole pair: the fee APR axis reaches the day's confirmed share (top ${a3 && a3.top} ≥ ${vc.toFixed(3)}), the unconfirmed share hatched above it`,
+      !!a3 && a3.top >= vc * 0.999 && a3.top < vc * 2.6 && a3.uf.length === 1 && /^url\(#hs-uc-a-/.test(a3.uf[0].f), JSON.stringify(a3 && { top: a3.top, uf: a3.uf.length, off: a3.off, vc }));
+    ok(`spike ${tag}: whole pair with a v4 tier whose TVL is rarely recorded: the 7-day average line still draws (${a3 && a3.avg} days), partial days with the tiers read`, !!a3 && a3.avg >= 10, JSON.stringify(a3 && a3.avg));
+    // the range header: Σ fees ÷ Σ TVL over each tier's days with both read, unconfirmed fees left out (a model from the data)
+    const head = await p.evaluate(() => (document.querySelector('#ws [data-aprh]') || {}).textContent || ''), rs = await p.evaluate(() => [...document.querySelectorAll('#ws button.rb[data-t]')].map((b) => +b.dataset.t));
+    let F = 0, TV = 0; for (const id of SPD.pair) { const h = H[id]; for (const d of rs) { const i = h.y.findIndex((r) => r[0] === d); if (i < 0) continue; const f = h.y[i][1], tv = h.yt && h.yt[i] ? h.yt[i][0] : null, u = !!(h.u && h.u.y && h.u.y.includes(d)); if (typeof f === 'number' && typeof tv === 'number' && tv > 0 && !u) { F += f; TV += tv; } } }
+    const want = (F / TV) * 365, got = (/avg fee APR ([\d.,]+)%/.exec(head) || [])[1];
+    ok(`spike ${tag}: whole pair: the range header's average reads every tier's days with both read, unconfirmed fees left out ("${head}" vs ${(want * 100).toPrecision(3)}%)`, rs.length === 30 && got != null && Math.abs(+got.replace(/,/g, '') / 100 - want) <= want * 0.06 + 0.0006, JSON.stringify({ head, want, n: rs.length }));
+    // 4 · the pool panel's "LP fees per day": the same rules (an unconfirmed bar off the top has its ▲; stacked, it goes on top)
+    await p.keyboard.press('Escape'); await sleep(250); if (await p.isVisible('#ws')) { await p.keyboard.press('Escape'); await sleep(250); }
+    await openPool(p, SPD.unconf.slice(0, 12)); await fcPick(p, 'fzc', '90');
+    const pu = await p.evaluate(() => { const c = document.querySelector('#sheet-body [data-chartbox="d-day"]'); if (!c) return null; const k = c.querySelector('.pz-c').getBoundingClientRect(); return { off: [...c.querySelectorAll('.fc-off')].map((e) => { const r = e.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), in: r.left >= k.left - 4 && r.right <= k.right + 4 }; }), lab: [...c.querySelectorAll('.fc-offl')].map((e) => e.textContent), fm: document.querySelectorAll('#sheet-fee rect.fm-u').length }; });
+    ok(`spike ${tag}: the panel's fee chart puts a ▲ over the unconfirmed bar that runs off the top ("${pu && pu.lab[0]}"), and its header bar draws that day amber`,
+      !!pu && pu.off.length === 1 && pu.off[0].w >= 7 && pu.off[0].h >= 5 && pu.off[0].in && pu.lab.length === 1 && /^⚠ \$/.test(pu.lab[0]) && Math.abs(money(pu.lab[0]) - uf.f) <= uf.f * 0.051 && pu.fm >= 1, JSON.stringify(pu));
+    await closePool(p); await openPool(p, c1.slice(0, 12)); await fcPick(p, 'fzc', '90'); await fcPick(p, 'fmode', 'pair');
+    const pp = await p.evaluate(() => { const svg = document.querySelector('#sheet-body [data-chartbox="d-day"] .pz-c svg'); const rs = [...svg.querySelectorAll('rect[class^="b-"]')].map((r) => ({ x: +r.getAttribute('x'), y: +r.getAttribute('y'), h: +r.getAttribute('height'), u: / uc/.test(r.getAttribute('class')) })); return rs; });
+    const big = pp.filter((r) => r.u).sort((a, b) => a.y - b.y)[0], col = big ? pp.filter((r) => Math.abs(r.x - big.x) < 0.01) : [];
+    ok(`spike ${tag}: the panel's whole-pair bars stack an unconfirmed piece on top of its day's confirmed ones (${col.length} pieces in the column)`, !!big && col.length >= 3 && col.every((r) => r.u || r.y >= big.y + big.h - 0.05), JSON.stringify({ big, col: col.slice(0, 5) }));
+    await closePool(p);
+    // 5 · the chip's $/day says on what: "≈ −$x/DAY AT $1K" (the example ticket), as the Overview hero says "at $1,000"
+    await wsHashOpen(p, SPD.conf, 'overview');
+    const chip = await p.evaluate(() => ({ k: (document.querySelector('#ws-apr .k') || {}).textContent || '', hero: (document.querySelector('#ws-body [data-aprhero] .lbl') || {}).textContent || '' }));
+    ok(`spike ${tag}: the chip's $/day names its base ("${chip.k.replace(/\s+/g, ' ')}"), the hero's label too ("${chip.hero}")`, /≈ −?\$[\d.,]+K?\/DAY AT \$1K$/.test(chip.k) && /at \$1,000$/.test(chip.hero), JSON.stringify(chip));
+    // the day card and the header on the spike day (the card's longest: a partial day with an unconfirmed tier)
+    const ovs = {};
+    for (const [k, id] of [['pair', c1], ['unconf', SPD.unconf]]) {
+      await spkHist(p, id);
+      const fit = await p.evaluate(APR_FIT), ov = [...await OVL(p, '#ws .hs-ctl'), ...await OVL(p, '#hs-card'), ...await OVL(p, '#ws-head'), ...await OVL(p, '#ws .hs-leg')];
+      ovs[k] = { fit, ov: ov.slice(0, 2), card: await p.evaluate(() => { const c = document.querySelector('#hs-card'); return c ? Math.round(c.getBoundingClientRect().height) : -1; }) };
+      await snap(p, `spike-${tag}-${k}`);
+    }
+    ok(`spike ${tag}: on the spike day: no sideways scroll, no text on text in History's header, the day card, the legend or the workspace head`, Object.values(ovs).every((x) => x.fit.page <= 1 && x.fit.ws <= 1 && x.ov.length === 0 && x.card > 0), JSON.stringify(ovs));
+    const junk = (/.{0,40}(\bNaN\b|\bundefined\b|\bInfinity\b|\[object |— of the —).{0,40}/.exec(await bodyText(p)) || [])[0]; // ($1.0K is a real day's fees here, not a rounded ticket)
+    ok(`spike ${tag}: no page errors, no NaN`, tt.errors.length === 0 && !junk, tt.errors[0] || junk);
+    await tt.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
 const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {

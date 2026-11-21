@@ -28,6 +28,8 @@
 //            8-letter quotes, long venue names, about 1,500 pools (v0.5.2: what the live iPhone audit met)
 //   tiny     the default data with what the live audit of 15 Nov 2026 met on real data (v0.6.2): sub-cent prices in the
 //            backtest replay (0.00000xyz: the widest y-axis labels) and hourly fees that are $0 three hours in four (a $0 median)
+//   spike    the tiny case with one day 23 days back at 70× its median (v0.7.4): a confirmed lone pool, an unconfirmed one, and
+//            the four tiers with one unconfirmed and the v4's TVL not recorded (see spikeCase)
 //   keyed, keyedgone, keyedchange, keyedup, mismatch: v0.7.0 key slots (guests, members, the shared guest password, the recovery
 //            key, a passphrase change, the alarm): see below
 import fs from 'node:fs';
@@ -39,7 +41,7 @@ import { inboxKeys } from '../../lib/inbox.mjs';
 import { buildKeysFile, guestKek, splitPrivate, wrapSlot } from '../../lib/keyring.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'keyed', 'keyedgone', 'keyedchange', 'keyedup', 'mismatch'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'spike', 'keyed', 'keyedgone', 'keyedchange', 'keyedup', 'mismatch'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -722,6 +724,47 @@ export function tinyCase(data) {
   return { live, history: hist, backtest: bt };
 }
 
+// spike (v0.7.4, the owner's question of 21 Nov 2026: "why is there no spike in fees and APR on 29 Oct?"): the tiny case, and
+// on one UTC day 23 days back (SPIKE_AGO) fees at SPIKE_X times the day's 30-day median, with the volume behind them:
+//   conf    one pool with no other tier: its spike is backed (confirmed)
+//   unconf  another lone pool: the same spike with no volume behind it, so the scanner couldn't back it (history.json u.y, u.d)
+//   pair    the tiny case's four tiers, every one at SPIKE_X; one of them (uTier, the 0.01%) unconfirmed that day, and the
+//           v4's TVL not recorded (combined: "3 of 4 tiers", the owner's UNI/WETH)
+// Both the fee history (y, yv) and the daily rows (d, the "LP fees · 30 d" bar) carry the spike. Returns the data and `spike`
+// (the day and the pools' ids) for the tests; sealCase only seals live, history and backtest.
+export const SPIKE_X = 70, SPIKE_AGO = 23;
+export function spikeCase(data) {
+  const T = tinyCase(data), live = T.live, hist = T.history, t = Math.floor(live.t / D) * D - SPIKE_AGO * D;
+  const symK = (q) => [q.t0.sym, q.t1.sym].map((s) => (String(s).toUpperCase() === 'ETH' ? 'WETH' : String(s).toUpperCase())).sort().join('/');
+  const tierN = new Map(); for (const q of live.pools) tierN.set(symK(q), (tierN.get(symK(q)) || 0) + 1);
+  const yRow = (h) => (h && Array.isArray(h.y) ? h.y.findIndex((r) => r[0] === t) : -1);
+  const plain = (q) => { // a lone pool whose day t is an exact counters' day with its volume and TVL read, and no limits
+    const h = hist.pools[q.id], i = yRow(h);
+    return tierN.get(symK(q)) === 1 && !/[<>]/.test(q.pair) && q.verified !== false && h && !h.u && i >= 30 && h.y.length - i > 15 && h.y[i][2] === 'x' && isNum(h.y[i][1]) && h.y[i][1] > 0
+      && Array.isArray(h.yv) && h.yv[i] && isNum(h.yv[i][0]) && Array.isArray(h.yt) && h.yt[i] && isNum(h.yt[i][0]) && !(h.ytp && h.ytp.lim) && !(h.yp && h.yp.lim) && Array.isArray(h.d) && h.d.some((r) => r[0] === t + D && isNum(r[2]));
+  };
+  const lone = live.pools.filter(plain).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const pairIds = live.pools.filter((q) => q.id.endsWith('c1')).flatMap((c) => live.pools.filter((q) => symK(q) === symK(c) && q.chain === c.chain)).map((q) => q.id);
+  const plant = (id, unconf) => {
+    const h = hist.pools[id], i = yRow(h);
+    if (i < 0 || !isNum(h.y[i][1])) return false;
+    const around = h.y.filter((r) => r !== h.y[i] && Math.abs(r[0] - t) <= 15 * D && isNum(r[1])).map((r) => r[1]).sort((a, b) => a - b);
+    const med = around.length ? around[Math.floor(around.length / 2)] : h.y[i][1], k = (SPIKE_X * med) / h.y[i][1];
+    h.y[i] = [t, sig(SPIKE_X * med, 4), 'x'];
+    if (!unconf && Array.isArray(h.yv) && h.yv[i] && isNum(h.yv[i][0])) h.yv[i] = [sig(h.yv[i][0] * k, 4), 'g']; // the volume behind it (none behind an unconfirmed one)
+    const j = Array.isArray(h.d) ? h.d.findIndex((r) => r[0] === t + D) : -1; // the daily row that covers day t (it ends at t + 1 day)
+    if (j > 0) { const r = h.d[j]; h.d[j] = [r[0], r[1], isNum(r[2]) ? sig(r[2] * k, 4) : r[2], isNum(r[3]) && !unconf ? Math.round(r[3] * k) : r[3], r[4]]; }
+    if (unconf) h.u = { y: [...new Set([...((h.u && h.u.y) || []), t])].sort((a, b) => a - b), d: [...new Set([...((h.u && h.u.d) || []), ...(j > 0 ? [t + D] : [])])].sort((a, b) => a - b) };
+    return true;
+  };
+  const conf = lone[0] || null, unconf = lone[1] || null, uTier = pairIds.find((id) => id.endsWith('c2')) || null;
+  if (conf) plant(conf.id, false);
+  if (unconf) plant(unconf.id, true);
+  for (const id of pairIds) plant(id, id === uTier);
+  for (const id of pairIds) { const h = hist.pools[id], i = yRow(h); if (h.ytp && h.ytp.lim === 'v4' && i >= 0 && Array.isArray(h.yt)) h.yt[i] = [null, null]; } // v4: not recorded that day
+  return { ...T, spike: { t, x: SPIKE_X, conf: conf && conf.id, unconf: unconf && unconf.id, pair: pairIds, uTier } };
+}
+
 // stress (v0.5.2): data as wide and as many as live data gets (the live iPhone audit of 15 Nov 2026 scrolled sideways
 // after a click, on data the fixtures never had): the long case, plus eleven copies of every pool on every chain the page
 // knows, with 12-letter symbols, 8-letter quotes and long venue names, in the discovery lanes beside their originals
@@ -1108,6 +1151,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'long'), keys, longCase(data), now);
   sealCase(path.join(outDir, 'stress'), keys, stressCase(data), now);
   sealCase(path.join(outDir, 'tiny'), keys, tinyCase(data), now);
+  sealCase(path.join(outDir, 'spike'), keys, spikeCase(data), now);
   sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
   sealCase(path.join(outDir, 'nodisc'), keys, noDiscovery(data), now);
   sealCase(path.join(outDir, 'oddlanes'), keys, { ...data, live: { ...data.live, discovery: { newPools: [], cexLed: ['0x' + 'f'.repeat(40)], crossChain: [] } } }, now);

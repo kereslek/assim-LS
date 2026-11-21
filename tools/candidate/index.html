@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-18WRWj/tvZPfnaUHd1WfFDzsh56mo6VEWgHqYrOpUng='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Vweh2KUt4PI1Q7X2Zm4HUFDl6EfqUo6ts1IEW5YTQ/8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -988,6 +988,10 @@ td.fees{width:96px}
 .yax>span{position:absolute;right:0;transform:translateY(-50%);font:500 10px/1 var(--mono);color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .yax>span.t{transform:none}.yax>span.b{transform:translateY(-100%)}
 .fc .pz-c>svg{display:block}
+/* v0.7.4: an unconfirmed bar that runs off the top: a ▲ over it, the tallest with its value */
+.fc .pz-c .fc-off{position:absolute;top:0;width:0;height:0;margin-left:-4px;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:6px solid var(--warn);pointer-events:none;z-index:1}
+.fc .pz-c .fc-offl{position:absolute;top:7px;margin-left:5px;padding:0 3px;border-radius:3px;background:rgba(11,17,24,.78);font:700 10px/1.3 var(--mono);color:var(--warn);white-space:nowrap;pointer-events:none;z-index:1}
+.fc .pz-c .fc-offl.r{transform:translateX(-100%);margin-left:-5px}
 .fc-ctl{display:flex;flex-wrap:wrap;gap:0 12px;align-items:center;margin:-6px 0 -4px}
 .fc-t b{color:var(--fg2);font-weight:600}
 .sw.fc-x{background:#16C784}.sw.fc-e{background:rgba(22,199,132,.38)}
@@ -1314,6 +1318,14 @@ html.m3d .hs-x{border-left-color:rgba(255,181,71,.9)}
 .hs-leg i.e{opacity:.4}
 .hs-leg i.nr{background:repeating-linear-gradient(45deg,rgba(139,150,163,.45) 0 2px,transparent 2px 5px)}
 .hs-leg i.na{background:repeating-linear-gradient(90deg,rgba(139,150,163,.35) 0 1px,transparent 1px 4px)}
+/* v0.7.4: an unconfirmed day (history.json u): hatched in its tier's colour, ⚠ in the table and the card, and a ▲ with its value
+   where it runs off the top (it never sets the scale; a confirmed spike always does) */
+.hs svg .hs-off,.ln svg .hs-off{fill:var(--warn)}
+.hs svg text.hs-offl,.ln svg text.hs-offl{fill:var(--warn);font-weight:700;paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round}
+.ln svg .ln-u{fill:none;stroke:var(--warn);stroke-width:1.4}
+.hs-leg i.uc{background:repeating-linear-gradient(-45deg,var(--fg2) 0 2px,transparent 2px 4px);box-shadow:0 0 0 1px var(--fg2)}
+.hs-leg .hs-uk b{color:var(--warn)}
+.hst td .uw,.hs-dv.uc .q,.hs-dv .uw,.hs-day td .uw{color:var(--warn)}
 .hs-side{display:grid;gap:8px;min-width:0}
 @media (min-width:1100px){.hs-side{position:sticky;top:0}}
 .hs-tw{border:1px solid var(--line);border-radius:10px;background:var(--surface);min-width:0;overflow:hidden}
@@ -1803,7 +1815,7 @@ html.guest #fav .devnote,html.guest #positions,html.member #positions{display:no
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.7.3';
+const BUILD = 'v0.7.4';
 // the version, shown small at the top and on the lock screen (the owner can tell at a glance which one runs)
 document.querySelectorAll('#ver, .ver-t').forEach((e) => { e.textContent = BUILD; });
 // iOS Safari keeps a page's zoom (a pinch, or a tap into a small field in an older version) and opens it zoomed in
@@ -2006,7 +2018,8 @@ const aprMax = (a, w) => (w && isNum(w.net) && !(isNum(a) && a >= w.net) ? w.net
 const rollEl = (k, v, est, cls = '') => `<span class="v${cls}${v == null ? ' nr' : v < 0 ? ' neg' : est ? ' est' : ''}" data-roll="${k}" data-to="${v == null ? '' : v}" data-pre="${est ? '≈ ' : ''}">${v == null ? DASH : (est ? '≈ ' : '') + pct(v)}</span>`;
 function aprChipHtml(p) { // A: under the pool's name on every tab; the head sits outside the scrolling body, so it stays pinned
   const wk = S.win, w = W(p, wk), v = aprOf(p, wk), est = !!(w && w.partial === true), pd = perDay(v);
-  const chip = termB('netApr', `${rollEl('a', v, est)}<span class="k">NET APR · ${WIN_LABEL[wk]}<br>${isNum(pd) ? '≈ ' + usd(pd) + '/DAY' : v == null ? 'NOT READ YET' : DASH}</span>`, 'aprchip');
+  // v0.7.4: the $/day says on what (the example ticket), as the Overview hero does ("at $1,000"): "≈ −$1.12/DAY AT $1K"
+  const chip = termB('netApr', `${rollEl('a', v, est)}<span class="k">NET APR · ${WIN_LABEL[wk]}<br>${isNum(pd) ? '≈ ' + usd(pd) + '/DAY AT ' + usdT(ticketUsd()) : v == null ? 'NOT READ YET' : DASH}</span>`, 'aprchip');
   const x = w && isNum(w.feeApr) ? `fee APR ${pct(w.feeApr)} − LVR ${pct(w.lvr)} − swaps ${pct(w.swapCost)} − gas ${pct(w.gas)} = net ${pct(v)}` : '';
   return chip + (x ? `<span class="ws-aprx">${x}</span>` : '');
 }
@@ -2202,9 +2215,9 @@ const GLOSS = {
   watchdog: ['Watchdog last restart', 'The last time the watchdog started a new scanner loop (it does when the loop has stopped). A dash: it hasn’t had to.'],
   gas: ['Gas', 'What Ethereum charges to run a transaction. Opening or re-centring a position pays it, so cheap gas is a better time.'],
   // v0.6.0 · History's three charts (the same notes the hold-to-explain cards will read)
-  netApr: ['Net APR', 'Net APR = fee APR − LVR − re-centre swaps − gas: the yearly return the example ticket would keep after arbitrage (LVR) and the position’s own costs. ▲ ▼ compare it with the next longer window (24H with its 7-day average, 7D with the 30-day); ≈ marks an estimate (the pool is younger than the window); a dash is not read yet, never zero.'],
-  hsapr: ['Fee APR a day', 'Each UTC day’s LP fees ÷ the pool’s TVL at the day’s end × 365: what the whole pool’s money earned that day, as a yearly rate (before LVR and costs; inside a tight range it is higher). The gold line is its 7-day average. A day with its fees or TVL not read is a gap, never 0%.'],
-  hsfees: ['LP fees a day', 'What the pool’s LPs earned each UTC day. s: summed from the day’s own swaps (exact); x: the pool’s fee counters (exact); e: estimated as the day’s volume × the fee (pale, marked ≈). A day not read is a gap, never 0.'],
+  netApr: ['Net APR', 'Net APR = fee APR − LVR − re-centre swaps − gas: the yearly return the example ticket would keep after arbitrage (LVR) and the position’s own costs. ▲ ▼ compare it with the next longer window (24H with its 7-day average, 7D with the 30-day); ≈ marks an estimate (the pool is younger than the window); a dash is not read yet, never zero. It goes below 0 when arbitrage (LVR) and the costs take more than the fees earned in the window. The $/day is that rate on the example ticket: APR × ticket ÷ 365.'],
+  hsapr: ['Fee APR a day', 'Each UTC day’s LP fees ÷ the pool’s TVL at the day’s end × 365: what the whole pool’s money earned that day, as a yearly rate (before LVR and costs; inside a tight range it is higher). The gold line is its 7-day average (a partial day counts with the tiers read). A day with its fees or TVL not read is a gap, never 0%. A day whose fees the scanner couldn’t confirm is hatched and marked ⚠: it never sets the axis or the average, and when it is higher it runs off the top under a ▲ with its value.'],
+  hsfees: ['LP fees a day', 'What the pool’s LPs earned each UTC day. s: summed from the day’s own swaps (exact); x: the pool’s fee counters (exact); e: estimated as the day’s volume × the fee (pale, marked ≈). A day not read is a gap, never 0. ⚠ unconfirmed: the scanner found no trading volume or swaps to back a day’s fees yet; it is hatched, stacked on top and never sets the scale, so a big one runs off the top under a ▲ with its value.'],
   hsvol: ['Volume a day', 'What traded through the pool each UTC day. s: summed from the day’s own swaps; g: GeckoTerminal’s day candle. A day not read is a gap, never 0.'],
   hstvl: ['TVL at the day’s end', 'What the pool held at the end of each UTC day, at that day’s prices. b: its token balances at an archive block; r: its balances read by the scanner’s own pass; m: a v4 pool’s liquidity map (the positions’ principal). Past v4 days, and Base days past its archive (about 90 days), can’t be read: “—”.'],
 };
@@ -5049,24 +5062,24 @@ function feeHist(p) {
     if (isNum(t1) && bars.some((b) => isNum(b.v))) {
       const per = (a, b) => { let f = 0, d = 0; for (const x of bars) { if (!isNum(x.v)) continue; const ov = Math.min(b, x.b) - Math.max(a, x.a); if (ov > 0) { f += (x.v * ov) / D; d += ov / D; } } return d >= 3 - 1e-9 ? f / d : null; };
       const day = per(t1 - 7 * D, t1), prev = per(t1 - 14 * D, t1 - 7 * D);
-      out = { t1, bars: bars.filter((x) => x.b > t1 - 30 * D), day, ch: isNum(day) && isNum(prev) && prev > 0 ? day / prev - 1 : null };
+      out = { t1, bars: bars.filter((x) => x.b > t1 - 30 * D).map((x) => ({ ...x, u: fcUnconf(h, 'd', x.b) })), day, ch: isNum(day) && isNum(prev) && prev > 0 ? day / prev - 1 : null };
     }
   }
   FH.m.set(p.id, out);
   return out;
 }
-function feeSvg(fh, Wd, Ht) {
-  const t0 = fh.t1 - 30 * D, X = (t) => ((Math.max(t0, t) - t0) / (30 * D)) * Wd, mx = Math.max(...fh.bars.map((x) => x.v).filter(isNum)) || 1;
+function feeSvg(fh, Wd, Ht) { // v0.7.4: a row the scanner couldn't confirm (history.json u.d) is amber and never sets the scale (a real spike does)
+  const t0 = fh.t1 - 30 * D, X = (t) => ((Math.max(t0, t) - t0) / (30 * D)) * Wd, top = (u) => Math.max(...fh.bars.filter((x) => u || !x.u).map((x) => x.v).filter(isNum), 0), mx = top(false) || top(true) || 1;
   let g = '';
   fh.bars.forEach((x, i) => {
     const x0 = X(x.a), full = X(x.b) - x0, bw = Math.max(0.6, full - Math.min(1, full * 0.3)), last = i === fh.bars.length - 1;
     if (!isNum(x.v)) g += `<rect class="nr" x="${x0.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${Ht}" fill="rgba(139,150,163,.22)"/>`;
-    else if (x.v > 0) { const h = Math.max(0.8, (x.v / mx) * Ht); g += `<rect x="${x0.toFixed(1)}" y="${(Ht - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="#16C784" opacity="${last ? 1 : 0.55}"/>`; }
+    else if (x.v > 0) { const h = clamp(Math.max(0.8, (x.v / mx) * Ht), 0.8, Ht); g += `<rect${x.u ? ' class="fm-u"' : ''} x="${x0.toFixed(1)}" y="${(Ht - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="${x.u ? '#FAB219' : '#16C784'}" opacity="${last || x.u ? 1 : 0.55}"/>`; }
   });
   return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true">${g}<rect x="0" y="${Ht - 0.6}" width="${Wd}" height="0.6" fill="#2B3542"/></svg>`;
 }
 const feeTxt2 = (fh) => (!fh ? DASH : `${usd(fh.day)}/d${isNum(fh.ch) ? ` · <span class="${fh.ch >= 0 ? 'up' : 'dn'}">${fh.ch >= 0 ? '▲' : '▼'} ${Math.round(Math.abs(fh.ch) * 100)}%</span>` : ''}`);
-const feeAria = (fh) => (!fh ? 'LP fees a day: no history yet' : `LP fees a day over the last 30 days, ${dm(fh.t1 - 30 * D)} to ${dm(fh.t1)}: ${usd(fh.day)} a day over the last 7${isNum(fh.ch) ? `, ${fh.ch >= 0 ? 'up' : 'down'} ${Math.round(Math.abs(fh.ch) * 100)}% on the 7 before` : ''}`);
+const feeAria = (fh) => (!fh ? 'LP fees a day: no history yet' : `LP fees a day over the last 30 days, ${dm(fh.t1 - 30 * D)} to ${dm(fh.t1)}: ${usd(fh.day)} a day over the last 7${isNum(fh.ch) ? `, ${fh.ch >= 0 ? 'up' : 'down'} ${Math.round(Math.abs(fh.ch) * 100)}% on the 7 before` : ''}${fh.bars.some((x) => x.u) ? '; a day the scanner couldn’t confirm is amber' : ''}`);
 function feeMini(p, Wd = 90, Ht = 22, fit = false) { // fit: the svg may be drawn narrower by CSS (the header on a small phone)
   const fh = feeHist(p), pa = fit ? ' preserveAspectRatio="none"' : '';
   return `<span class="fmini" role="img" aria-label="${esc(feeAria(fh))}" data-fid="${esc(p.id)}" data-fm="${fh ? fh.bars.length : 0}">${fh ? feeSvg(fh, Wd, Ht).replace('<svg ', `<svg${pa} `) : `<svg${pa} width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" aria-hidden="true"><rect x="0" y="${Ht - 0.6}" width="${Wd}" height="0.6" fill="#2B3542"/></svg>`}<span class="fm-t" aria-hidden="true">${feeTxt2(fh)}</span></span>`;
@@ -5135,16 +5148,23 @@ function fcScale(vals, log, Ht) { // the y-axis for the values in view: Y(v) in 
     if (hi <= lo) hi = lo + 1;
     const Y = (v) => (v > 0 ? Ht - clamp((Math.log10(v) - lo) / (hi - lo), 0, 1) * Ht : Ht), ticks = [];
     for (let k = lo; k <= hi; k++) { ticks.push(Math.pow(10, k)); if (hi - lo <= 2 && k < hi) ticks.push(3 * Math.pow(10, k)); }
-    return { Y, ticks: ticks.map((v) => ({ v, y: Y(v) })), log: true };
+    return { Y, ticks: ticks.map((v) => ({ v, y: Y(v) })), log: true, top: Math.pow(10, hi) };
   }
   const step = fcNice((mx || 1) / 3), top = Math.max(step, Math.ceil(mx / step - 1e-9) * step), Y = (v) => Ht - clamp(v / top, 0, 1) * Ht, ticks = [];
   for (let v = 0; v <= top + step * 1e-6; v += step) ticks.push({ v, y: Y(v) });
-  return { Y, ticks, log: false };
+  return { Y, ticks, log: false, top };
 }
 const usdT = (v) => usd(v).replace(/\.0(?=[KMB]$)/, ''); // "$1K", never "$1.0K" (that reads as a rounded ticket)
 const fcAx = (v) => (v === 0 ? '$0' : usdT(v));
 const fcMed = (vals) => { const s = vals.filter(isNum).sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 const fcSrc = (x) => (!x || !isNum(x.v) ? 'not read' : x.s === 'e' ? 'estimated' : x.s === 'g' ? 'a gap’s average' : 'exact');
+// v0.7.4: a bar the scanner couldn't confirm that runs off the top (it never sets the scale): a ▲ over it, the tallest with its value
+function fcOffs(offs, Wd, word) {
+  if (!offs.length) return '';
+  const big = offs.reduce((a, o) => (o.v > a.v ? o : a)), at = (o) => ((o.c / Wd) * 100).toFixed(2);
+  return offs.map((o) => `<i class="fc-off" style="left:${at(o)}%" aria-hidden="true"></i>`).join('')
+    + `<span class="fc-offl${big.c > Wd * 0.6 ? ' r' : ''}" style="left:${at(big)}%" title="${esc(`Unconfirmed: the scanner found no trading volume to back this ${word}'s fees yet; it runs off the top of the scale`)}">⚠ ${usdT(big.v)}</span>`;
+}
 function feeChart(p, id) {
   const hr = id === 'd-hr' || id === 'ws-hr', unit = hr ? H : D, hd = S.hist && S.hist.pools && S.hist.pools[p.id], word = hr ? 'hour' : 'day';
   const peers = hr ? [] : fcPools(p, 'pair').filter((e) => e.q.id !== p.id), mode = hr || !peers.length ? 'this' : S.fmode || 'this';
@@ -5196,7 +5216,7 @@ function feeChart(p, id) {
     caps: () => { const z = seen(); return [null, `max ${usdT(z.sv.length ? z.hi : null)}`, `typical ${word} (median) ${usdT(z.med)}`]; },
     inner: () => {
       const [a, b] = P.vw(), len = b - a, X = (u) => ((u - a) / len) * Wd, z = seen(), sc = scaleOf(z.sv), Y = sc.Y;
-      let g = '', nr = '', grid = '', uc = new Set();
+      let g = '', nr = '', grid = '', uc = new Set(), offs = [];
       for (const k of sc.ticks) grid += `<line class="grid" x1="0" x2="${Wd}" y1="${k.y.toFixed(1)}" y2="${k.y.toFixed(1)}" stroke="#1E2731" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
       const rect = (x0, w, y1, y0, col, s, u) => { // one bar or stack piece from y0 (lower) up to y1
         if (!(y0 - y1 > 0.05)) return '';
@@ -5206,19 +5226,24 @@ function feeChart(p, id) {
       for (const sl of z.sv) {
         const x0 = X(U(sl.a)), full = X(U(sl.b)) - x0, bw = Math.max(0.4, full - Math.min(1, full * 0.25));
         if (mode === 'pair') { // stacked: each pool's piece on the ones before it; a pool not read hatches the rest of the column
-          let cum = 0, un = false;
-          sl.x.forEach((x, k) => {
-            if (!x) return;
-            if (!isNum(x.v)) { un = true; return; }
-            if (x.v > 0) { const y0 = cum > 0 ? Y(cum) : Ht; cum += x.v; g += rect(x0, bw, Y(cum), y0, pools[k].col, x.s, x.u); }
-          });
+          let cum = 0, un = false, hu = false;
+          const ord = sl.x.map((x, k) => k).sort((a, b) => !!(sl.x[a] && sl.x[a].u) - !!(sl.x[b] && sl.x[b].u) || a - b); // v0.7.4: an unconfirmed piece on top
+          for (const k of ord) {
+            const x = sl.x[k];
+            if (!x) continue;
+            if (!isNum(x.v)) { un = true; continue; }
+            if (x.v > 0) { const y0 = cum > 0 ? Y(cum) : Ht; cum += x.v; if (x.u) hu = true; g += rect(x0, bw, Y(cum), y0, pools[k].col, x.s, x.u); }
+          }
+          if (hu && cum > sc.top * (1 + 1e-6)) offs.push({ c: x0 + bw / 2, v: cum });
           if (un) nr += `<rect class="unread" x="${x0.toFixed(2)}" y="0" width="${Math.max(0.6, full).toFixed(2)}" height="${(cum > 0 ? Y(cum) : Ht).toFixed(2)}" fill="url(#nr-${id})"/>`;
         } else {
           const k = sl.x.length, sw = bw / k;
           sl.x.forEach((x, i) => {
             if (!x) return;
             if (!isNum(x.v)) { nr += `<rect class="unread" x="${(x0 + i * sw).toFixed(2)}" y="0" width="${Math.max(0.6, k === 1 ? full : sw).toFixed(2)}" height="${Ht}" fill="url(#nr-${id})"/>`; return; }
-            if (x.v > 0) g += rect(x0 + i * sw, Math.max(0.3, k === 1 ? bw : sw - Math.min(0.6, sw * 0.15)), Y(x.v), Ht, pools[i].col, x.s, x.u);
+            const w = Math.max(0.3, k === 1 ? bw : sw - Math.min(0.6, sw * 0.15));
+            if (x.v > 0) g += rect(x0 + i * sw, w, Y(x.v), Ht, pools[i].col, x.s, x.u);
+            if (x.u && x.v > sc.top * (1 + 1e-6)) offs.push({ c: x0 + i * sw + w / 2, v: x.v });
           });
         }
       }
@@ -5227,7 +5252,7 @@ function feeChart(p, id) {
         + [...uc].map((c) => `<pattern id="uc-${id}-${c.slice(1)}" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="5" height="5" fill="${c}" fill-opacity=".18"/><rect width="2" height="5" fill="${c}"/></pattern>`).join('');
       return `<svg viewBox="0 0 ${Wd} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" aria-hidden="true"><defs>${defs}</defs>${grid}${nr}${g}`
         + (my != null ? `<line class="median" x1="0" x2="${Wd}" y1="${my.toFixed(1)}" y2="${my.toFixed(1)}" stroke="#E6EDF3" stroke-dasharray="4 3" stroke-width="1" vector-effect="non-scaling-stroke"/>` : '') + '</svg>'
-        + pzEnds(-a / len, (b - N) / len, 'START', 'NOW');
+        + fcOffs(offs.filter((o) => o.c >= 0 && o.c <= Wd), Wd, word) + pzEnds(-a / len, (b - N) / len, 'START', 'NOW');
     },
   });
   P.label = `LP fees per ${word}, ${plain(ttl)}: bars over ${Math.max(1, Math.round((T1 - T0) / D))} days on a ${fcLog() ? 'log' : 'linear'} dollar scale, the median dashed`;
@@ -5697,6 +5722,21 @@ function hsMissTxt(e, t, k) { // why a tier's value is missing on day t (a parti
 }
 const hsPart = (r, k) => (r[k] === null && r.p && r.p[k]) || null;
 const hsPartTxt = (pt) => `${pt.n} of ${pt.of} tiers · ${pt.miss.length > 2 ? pt.miss.slice(0, 2).join(', ') + ' …' : pt.miss.join(', ')}`;
+// v0.7.4 (the owner, 21 Nov 2026: "why no spike in fees and APR on 29 Oct?"): a tier's fees the scanner couldn't confirm that day
+// (history.json u) are drawn, hatched and marked ⚠, but never set a chart's scale or an average; the day's confirmed tiers still
+// do, so a real spike always sets the scale (one unconfirmed tier used to drop the whole day's stack from it, and the fee APR
+// chart cut every spike at 1.6× its 95th percentile)
+const hsUf = (x) => !!(x && x.fu && isNum(x.f)); // this tier's fees that day are unconfirmed
+const hsUn = (r) => r.xs.filter(hsUf).length; // how many of the day's tiers are
+const hsUa = (r) => { const pt = hsPart(r, 'a'); return r.xs.some((x) => hsUf(x) && (!pt || (isNum(x.tv) && x.tv > 0))); }; // the day's fee APR reads unconfirmed fees
+const HS_UTXT = 'unconfirmed: the scanner found no trading volume or swaps to back these fees yet (drawn hatched, never setting the scale or an average)';
+const hsOffs = (offs, Wd, fmt) => { // ▲ over each column that runs off the top (unconfirmed), the tallest three with their value
+  if (!offs.length) return '';
+  let g = `<path class="hs-off" d="${offs.map((o) => `M${(o.cx - 4).toFixed(2)} ${HS_PT + 1}L${o.cx.toFixed(2)} ${HS_PT - 6}L${(o.cx + 4).toFixed(2)} ${HS_PT + 1}z`).join('')}"/>`;
+  for (const o of offs.slice().sort((a, b) => b.v - a.v).slice(0, 3)) { const r = o.cx + 64 < Wd - HS_PR; g += `<text class="hs-offl" x="${(r ? o.cx + 6 : o.cx - 6).toFixed(1)}" y="${HS_PT + 9}" text-anchor="${r ? 'start' : 'end'}">⚠ ${fmt(o.v)}</text>`; }
+  return g;
+};
+const hsUcDefs = (k, cols) => [...cols].map((c) => `<pattern id="hs-uc-${k}-${c.slice(1)}" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="5" height="5" fill="${c}" fill-opacity=".18"/><rect width="2" height="5" fill="${c}"/></pattern>`).join('');
 function hsModel(p) {
   const all = hsTierList(p), onSet = WS.tiers ? new Set(WS.tiers) : null;
   let tiers = onSet ? all.filter((e) => onSet.has(e.q.id)) : all;
@@ -5758,29 +5798,37 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) {
   const rows = m.rows, n = rows.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), base = Ht - 1;
   let pre = '', preN = 0, preA = null, preB = null, naA = null, naB = null;
   const val = (r) => (hsPart(r, k) ? r.p[k].v : r[k]); // a partial day's known part counts for the scale
-  const conf = rows.map((r) => (r.xs.some((x) => x && x.fu) && k === 'f' ? null : val(r)));
+  // v0.7.4: the scale reads each day's confirmed fees (an unconfirmed tier left out, the others in): a real spike sets it
+  const conf = rows.map((r) => { const v = val(r); return k === 'f' && isNum(v) && hsUn(r) ? sum(r.xs.filter((x) => x && isNum(x.f) && !hsUf(x)).map((x) => x.f)) : v; });
   const sc = hsScale(conf.some((v) => isNum(v) && v > 0) ? conf : rows.map(val), Ht), Y = sc.Y;
-  const paths = new Map(), add = (key, d) => paths.set(key, (paths.get(key) || '') + d);
-  let nr = '', na = '', line = '', prevEnd = null, cap = '', partN = 0;
+  const paths = new Map(), add = (key, d) => paths.set(key, (paths.get(key) || '') + d), offs = [], ucc = new Set();
+  let nr = '', na = '', line = '', prevEnd = null, cap = '', partN = 0, uN = 0;
   rows.forEach((r, i) => {
     const x0 = HS_AX + i * slot, pt = hsPart(r, k), v = pt ? pt.v : r[k];
     if (v === undefined) { if (r.pre) { pre += `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; preN++; if (preA == null) preA = x0; preB = x0 + slot; } prevEnd = null; return; }
     if (v === null) { const dd = `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; if ((k === 'tv' && r.tvNa) || (k === 'f' && r.fNa)) { na += dd; if (naA == null) naA = x0; naB = x0 + slot; } else nr += dd; prevEnd = null; return; }
     const bw = kind === 'area' ? slot : Math.max(0.6, slot - Math.min(1.2, slot * 0.24)), xb = x0 + (slot - bw) / 2; // centred on the day
-    let cum = 0;
-    r.xs.forEach((x, j) => {
-      if (!x || !isNum(x[k]) || x[k] <= 0) return;
+    let cum = 0, hasU = false;
+    const ord = r.xs.map((x, j) => j); // v0.7.4: an unconfirmed piece goes on top, so it is the one that runs off (never a confirmed one)
+    if (k === 'f' && hsUn(r)) ord.sort((a, b) => hsUf(r.xs[a]) - hsUf(r.xs[b]) || a - b);
+    for (const j of ord) {
+      const x = r.xs[j];
+      if (!x || !isNum(x[k]) || x[k] <= 0) continue;
       const sh = fr ? fr[j] : 1;
-      if (!(sh > 1e-3)) return;
-      const y0 = Y(cum); cum += x[k] * sh; const y1 = Y(cum);
-      if (y0 - y1 < 0.05) return;
-      const col = m.tiers[j].col, key = col + (k === 'f' && x.fs === 'e' ? '|e' : '') + (k === 'f' && x.fu ? '|u' : '') + (pt ? '|p' : '');
+      if (!(sh > 1e-3)) continue;
+      const y0 = Y(cum); cum += x[k] * sh; const y1 = Y(cum), u = k === 'f' && hsUf(x);
+      if (u) hasU = true;
+      if (y0 - y1 < 0.05) continue;
+      const col = m.tiers[j].col, key = col + (k === 'f' && x.fs === 'e' ? '|e' : '') + (u ? '|u' : '') + (pt ? '|p' : '');
+      if (u) ucc.add(col);
       add(key, `M${xb.toFixed(2)} ${y1.toFixed(2)}h${bw.toFixed(2)}V${y0.toFixed(2)}H${xb.toFixed(2)}z`);
-    });
+    }
+    if (hasU) uN++;
+    if (hasU && cum > sc.top * (1 + 1e-6)) offs.push({ cx: xb + bw / 2, v: cum });
     if (pt && cum > 0) { const yc = Y(cum); cap += `M${xb.toFixed(2)} ${(yc - 4).toFixed(2)}h${bw.toFixed(2)}v4H${xb.toFixed(2)}z`; partN++; } // partial: a hatched cap
     if (kind === 'area' && cum > 0) { const y = Y(cum).toFixed(2); line += prevEnd === i ? `V${y}H${(x0 + slot).toFixed(2)}` : `M${x0.toFixed(2)} ${y}H${(x0 + slot).toFixed(2)}`; prevEnd = i + 1; } else if (kind === 'area') prevEnd = null;
   });
-  let g = `<defs><pattern id="hs-nr-${k}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.34)"/></pattern><pattern id="hs-na-${k}" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r=".8" fill="rgba(139,150,163,.38)"/></pattern></defs>`;
+  let g = `<defs><pattern id="hs-nr-${k}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.34)"/></pattern><pattern id="hs-na-${k}" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r=".8" fill="rgba(139,150,163,.38)"/></pattern>${hsUcDefs(k, ucc)}</defs>`;
   for (const t of sc.ticks) g += `<line class="grid" x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${t.y.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke-width="1"/><text x="${HS_AX - 6}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="end">${fcAx(t.v)}</text>`;
   if (pre) g += `<path class="hs-pre" d="${pre}" fill="rgba(139,150,163,.07)"/>`;
   if (nr) g += `<path class="hs-nr" d="${nr}" fill="url(#hs-nr-${k})"/>`;
@@ -5790,42 +5838,53 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) {
   if (na && naB - naA >= 120) g += band(naA, naB, k === 'tv' && m.tiers.some((e) => e.d.ytp && e.d.ytp.lim === 'v4') ? 'v4: TVL before recording · not readable' : 'older than Base’s 90-day archive · not readable');
   for (const [key, d] of paths) {
     const [col, ...fl] = key.split('|'), e = fl.includes('e'), u = fl.includes('u'), pp = fl.includes('p');
-    g += `<path class="hs-b${e ? ' e' : ''}${u ? ' u' : ''}${pp ? ' p' : ''}" d="${d}" fill="${col}"${kind === 'area' ? ` fill-opacity="${pp ? '.2' : '.34'}"` : e ? ' fill-opacity=".38"' : u ? ' fill-opacity=".3"' : pp ? ' fill-opacity=".55"' : ''}${u ? ` stroke="${col}" stroke-width="1"` : ''}/>`;
+    g += `<path class="hs-b${e ? ' e' : ''}${u ? ' u' : ''}${pp ? ' p' : ''}" d="${d}" fill="${u ? `url(#hs-uc-${k}-${col.slice(1)})` : col}"${kind === 'area' ? ` fill-opacity="${pp ? '.2' : '.34'}"` : e ? ' fill-opacity=".38"' : u ? '' : pp ? ' fill-opacity=".55"' : ''}${u ? ` stroke="${col}" stroke-width="1"` : ''}/>`;
   }
   if (cap) g += `<path class="hs-pt" d="${cap}" fill="url(#hs-nr-${k})" stroke="rgba(230,237,243,.45)" stroke-width=".6"/>`;
+  g += hsOffs(offs, Wd, fcAx);
   if (line) g += `<path class="hs-l" d="${line}" fill="none" stroke="${m.tiers.length === 1 ? m.tiers[0].col : '#E6EDF3'}" stroke-width="1.6"/>`;
   g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${base + 0.5}" y2="${base + 0.5}" stroke="#3B4756" stroke-width="1"/>`;
-  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" data-part="${partN}" aria-hidden="true">${g}</svg>`;
+  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" data-part="${partN}" data-top="${sc.top}" data-u="${uN}" data-off="${offs.length}" aria-hidden="true">${g}</svg>`;
 }
 // v0.7.1 · E: "Fee APR a day": each day's fees ÷ TVL × 365 as a bar on its own % axis from 0, with a 7-day average line; a day
-// with its fees or TVL not read is a hatched gap labelled "not read" (never 0%); a partial combined day carries the same cap
+// with its fees or TVL not read is a hatched gap labelled "not read" (never 0%); a partial combined day carries the same cap.
+// v0.7.4: the axis reaches the highest confirmed day in view (it used to stop at 1.6× the 95th percentile, so a real one-day spike
+// was cut to look like any busy day); a day whose fees the scanner couldn't confirm is hatched and doesn't set the axis: when it
+// is higher it runs off the top under a ▲ with its value. Combined, its confirmed tiers' share of the bar is solid and sets the
+// axis, the unconfirmed share is hatched above it (one TVL under both, so the two add up). The 7-day average reads each day's
+// confirmed tiers (a partial day: those read, as its bar shows); a day with none of them confirmed is left out.
 function hsAprSvg(m, Wd, Ht) {
   const rows = m.rows, n = rows.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), base = Ht - 1;
   const val = (r) => { const pt = hsPart(r, 'a'); return pt ? pt.v : r.a; };
-  const vals = rows.map(val), pos = vals.filter((v) => isNum(v) && v > 0).sort((a, b) => a - b);
-  const cap = pos.length ? Math.min(pos[pos.length - 1], pos[Math.floor((pos.length - 1) * 0.95)] * 1.6) : 0; // a one-day spike runs off the top
-  const sc = hsScale(pos.length ? [cap] : [], Ht), Y = sc.Y;
-  let pre = '', preN = 0, nr = '', nrN = 0, na = '', naN = 0, bars = '', est = '', part = '', capd = '', partN = 0, runs = [], run = null;
-  const bw = Math.max(0.6, slot - Math.min(1.2, slot * 0.24));
+  const kn = (r) => { const pt = hsPart(r, 'a'); return r.xs.filter((x) => x && isNum(x.f) && (!pt || (isNum(x.tv) && x.tv > 0))); }; // the tiers the day's APR reads
+  const vals = rows.map(val), us = rows.map((r, i) => isNum(vals[i]) && hsUa(r));
+  const vcs = rows.map((r, i) => { if (!us[i]) return vals[i]; const xs = kn(r), F = sum(xs.map((x) => x.f)); return F > 0 ? vals[i] * (sum(xs.filter((x) => !hsUf(x)).map((x) => x.f)) / F) : 0; }); // the confirmed share
+  const pos = (a) => a.filter((v) => isNum(v) && v > 0), top = pos(vcs).length ? Math.max(...pos(vcs)) : pos(vals).length ? Math.max(...pos(vals)) : null;
+  const sc = hsScale(top != null ? [top] : [], Ht), Y = sc.Y;
+  let pre = '', preN = 0, nr = '', nrN = 0, na = '', naN = 0, bars = '', est = '', part = '', capd = '', ub = '', partN = 0, uN = 0, runs = [], run = null;
+  const bw = Math.max(0.6, slot - Math.min(1.2, slot * 0.24)), offs = [];
   rows.forEach((r, i) => {
     const x0 = HS_AX + i * slot, v = vals[i], pt = hsPart(r, 'a'), box = `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`;
     const gap = v === null && !(r.tvNa || r.fNa);
     if (gap) { if (!run) run = [x0, x0]; run[1] = x0 + slot; } else if (run) { runs.push(run); run = null; }
     if (v === undefined) { if (r.pre) { pre += box; preN++; } return; }
     if (v === null) { if (gap) { nr += box; nrN++; } else { na += box; naN++; } return; }
-    const xb = x0 + (slot - bw) / 2, y1 = Y(v), d = `M${xb.toFixed(2)} ${y1.toFixed(2)}h${bw.toFixed(2)}V${base}H${xb.toFixed(2)}z`;
-    if (pt) { part += d; capd += `M${xb.toFixed(2)} ${(y1 - 4).toFixed(2)}h${bw.toFixed(2)}v4H${xb.toFixed(2)}z`; partN++; } else if (r.fe) est += d; else bars += d;
+    const xb = x0 + (slot - bw) / 2, y1 = Y(v), yc = us[i] ? Y(vcs[i]) : y1, seg = (ya, yb) => (yb - ya > 0.05 ? `M${xb.toFixed(2)} ${ya.toFixed(2)}h${bw.toFixed(2)}V${yb.toFixed(2)}H${xb.toFixed(2)}z` : ''), d = seg(yc, base);
+    if (pt) { capd += `M${xb.toFixed(2)} ${(y1 - 4).toFixed(2)}h${bw.toFixed(2)}v4H${xb.toFixed(2)}z`; partN++; }
+    if (us[i]) { ub += seg(y1, yc); uN++; if (v > sc.top * (1 + 1e-6)) offs.push({ cx: xb + bw / 2, v }); }
+    if (pt) part += d; else if (r.fe) est += d; else bars += d;
   });
   if (run) runs.push(run);
   let line = '', on = false, avgN = 0;
-  rows.forEach((r, i) => { // the 7-day average: days read in full only, four of the seven at least
-    const w = rows.slice(Math.max(0, i - 6), i + 1).map((x) => x.a).filter(isNum);
-    if (w.length < 4 || !isNum(r.a)) { on = false; return; }
+  const av = rows.map((r, i) => { if (!us[i]) return isNum(vals[i]) ? vals[i] : null; const xs = kn(r).filter((x) => !hsUf(x) && isNum(x.tv) && x.tv > 0); return xs.length ? hsAprOf(sum(xs.map((x) => x.f)), sum(xs.map((x) => x.tv))) : null; }); // a day's confirmed tiers
+  rows.forEach((r, i) => { // the 7-day average: four of the seven days at least, partial days with the tiers read, unconfirmed days left out
+    const w = av.slice(Math.max(0, i - 6), i + 1).filter(isNum);
+    if (w.length < 4 || !isNum(av[i])) { on = false; return; }
     const y = Y(w.reduce((a, b) => a + b, 0) / w.length);
     line += `${on ? 'L' : 'M'}${(HS_AX + (i + 0.5) * slot).toFixed(2)} ${y.toFixed(2)}`; on = true; avgN++;
   });
   const col = m.tiers.length === 1 ? m.tiers[0].col : '#E6EDF3';
-  let g = `<defs><pattern id="hs-nr-a" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.34)"/></pattern><pattern id="hs-na-a" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r=".8" fill="rgba(139,150,163,.38)"/></pattern></defs>`;
+  let g = `<defs><pattern id="hs-nr-a" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="6" fill="rgba(139,150,163,.34)"/></pattern><pattern id="hs-na-a" width="7" height="7" patternUnits="userSpaceOnUse"><circle cx="3.5" cy="3.5" r=".8" fill="rgba(139,150,163,.38)"/></pattern>${ub ? hsUcDefs('a', [col]) : ''}</defs>`;
   for (const t of sc.ticks) g += `<line class="grid" x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${t.y.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke-width="1"/><text x="${HS_AX - 6}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="end">${pct(t.v)}</text>`;
   if (pre) g += `<path class="hs-pre" d="${pre}" fill="rgba(139,150,163,.07)"/>`;
   if (nr) g += `<path class="hs-nr" d="${nr}" fill="url(#hs-nr-a)"/>`;
@@ -5833,31 +5892,36 @@ function hsAprSvg(m, Wd, Ht) {
   for (const [a, b] of runs) if (b - a >= 52) g += `<text class="hs-bl hs-nrl" x="${((a + b) / 2).toFixed(1)}" y="${(HS_PT + 14).toFixed(1)}" text-anchor="middle">not read</text>`;
   if (bars) g += `<path class="hs-b" d="${bars}" fill="${col}" fill-opacity=".62"/>`;
   if (est) g += `<path class="hs-b e" d="${est}" fill="${col}" fill-opacity=".3"/>`;
-  if (part) g += `<path class="hs-b p" d="${part}" fill="${col}" fill-opacity=".45"/><path class="hs-pt" d="${capd}" fill="url(#hs-nr-a)" stroke="rgba(230,237,243,.45)" stroke-width=".6"/>`;
+  if (part) g += `<path class="hs-b p" d="${part}" fill="${col}" fill-opacity=".45"/>`;
+  if (ub) g += `<path class="hs-b u" d="${ub}" fill="url(#hs-uc-a-${col.slice(1)})" stroke="${col}" stroke-width="1"/>`;
+  if (capd) g += `<path class="hs-pt" d="${capd}" fill="url(#hs-nr-a)" stroke="rgba(230,237,243,.45)" stroke-width=".6"/>`;
   if (line) g += `<path class="hs-avg" d="${line}" fill="none" stroke-width="1.8" stroke-linejoin="round"/>`;
+  g += hsOffs(offs, Wd, (v) => pct(v));
   g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${base + 0.5}" y2="${base + 0.5}" stroke="#3B4756" stroke-width="1"/>`;
-  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="a" data-n="${n}" data-gaps="${nrN}" data-na="${naN}" data-pre="${preN}" data-part="${partN}" data-avg="${avgN}" data-top="${sc.top}" aria-hidden="true">${g}</svg>`;
+  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="a" data-n="${n}" data-gaps="${nrN}" data-na="${naN}" data-pre="${preN}" data-part="${partN}" data-avg="${avgN}" data-top="${sc.top}" data-u="${uN}" data-off="${offs.length}" aria-hidden="true">${g}</svg>`;
 }
 function hsTierApr(m) { // each tier's fee APR over the days in view: Σ fees ÷ Σ TVL × 365 over its days with both read
   if (m.ta) return m.ta;
   const v = new Map();
-  for (const e of m.all) { let f = 0, tv = 0, n = 0; for (const r of m.rows) { const x = hsAt(e, r.t); if (x && isNum(x.f) && isNum(x.tv) && x.tv > 0) { f += x.f; tv += x.tv; n++; } } v.set(e.q.id, n ? hsAprOf(f, tv) : null); }
+  for (const e of m.all) { let f = 0, tv = 0, n = 0; for (const r of m.rows) { const x = hsAt(e, r.t); if (x && isNum(x.f) && isNum(x.tv) && x.tv > 0 && !hsUf(x)) { f += x.f; tv += x.tv; n++; } } v.set(e.q.id, n ? hsAprOf(f, tv) : null); } // v0.7.4: unconfirmed days left out
   const nums = [...v.values()].filter(isNum), top = nums.length > 1 ? Math.max(...nums) : null;
   m.ta = { v, best: top == null ? null : [...v].find(([, x]) => x === top)[0] };
   return m.ta;
 }
 function hsAprHead(m) { // the range header: "<range> avg fee APR x% · now y% ▲"
-  const ok = m.rows.filter((r) => isNum(r.a)), agg = (rs) => (rs.length ? hsAprOf(sum(rs.map((r) => r.f)), sum(rs.map((r) => r.tv))) : null);
-  const last = m.rows.length ? m.rows[m.rows.length - 1].t : 0, avg = agg(ok), now = agg(ok.filter((r) => r.t > last - 7 * D)), tr = isNum(avg) && isNum(now) ? now - avg : null;
+  // v0.7.4: Σ fees ÷ Σ TVL over every tier's days with both read (a day with one tier's TVL not recorded still counts its other
+  // tiers: a pair with a v4 tier used to average only the few days its map was read), unconfirmed fees left out
+  const agg = (rs) => { let f = 0, tv = 0, k = 0; for (const r of rs) for (const x of r.xs) if (x && isNum(x.f) && isNum(x.tv) && x.tv > 0 && !hsUf(x)) { f += x.f; tv += x.tv; k++; } return k ? hsAprOf(f, tv) : null; };
+  const last = m.rows.length ? m.rows[m.rows.length - 1].t : 0, rs = m.rows.filter((r) => !r.pre), avg = agg(rs), now = agg(rs.filter((r) => r.t > last - 7 * D)), tr = isNum(avg) && isNum(now) ? now - avg : null;
   const lab = WS.zoom ? `${m.rows.length}D zoom` : (WS_RANGES.find(([d]) => d === m.R) || [0, 'All'])[1];
-  return `<span class="hs-aprh" data-aprh title="avg: Σ fees ÷ Σ TVL × 365 over the days in view with both read; now: the last 7 of them">${lab} avg fee APR <b>${pct(avg)}</b> · now <b>${pct(now)}</b>${isNum(tr) && Math.abs(tr) >= 0.005 ? ` <i class="atr ${tr > 0 ? 'up' : 'dn'}">${tr > 0 ? '▲' : '▼'}</i>` : ''}</span>`;
+  return `<span class="hs-aprh" data-aprh title="avg: Σ fees ÷ Σ TVL × 365 over the days in view, each tier’s days with both read, unconfirmed fees left out; now: the last 7 days">${lab} avg fee APR <b>${pct(avg)}</b> · now <b>${pct(now)}</b>${isNum(tr) && Math.abs(tr) >= 0.005 ? ` <i class="atr ${tr > 0 ? 'up' : 'dn'}">${tr > 0 ? '▲' : '▼'}</i>` : ''}</span>`;
 }
 function hsAprDv(m, r) { // the day card's Fee APR
-  const pt = hsPart(r, 'a');
-  if (pt) return `<span class="hs-dv pt" data-k="a"><span class="lbl">Fee APR</span><b class="pt">${pct(pt.v)}</b><span class="q" title="${esc('Partial: only the tiers read that day; ' + hsPartTxt(pt))}">${esc(hsPartTxt(pt))}</span></span>`;
+  const pt = hsPart(r, 'a'), u = hsUa(r); // v0.7.4: it reads unconfirmed fees: said so
+  if (pt) return `<span class="hs-dv pt${u ? ' uc' : ''}" data-k="a"${u ? ` title="${esc(HS_UTXT)}"` : ''}><span class="lbl">Fee APR</span><b class="pt">${u ? '<span class="uw">⚠ </span>' : ''}${pct(pt.v)}</b><span class="q" title="${esc('Partial: only the tiers read that day; ' + hsPartTxt(pt) + (u ? '; ' + HS_UTXT : ''))}">${esc(hsPartTxt(pt))}</span></span>`;
   const v = r.a, na = !r.pre && v === null && (r.tvNa || r.fNa);
-  const q = r.pre ? '' : v === null ? (na ? 'not readable' : 'gap: fees or TVL not read') : 'fees ÷ TVL × 365';
-  return `<span class="hs-dv" data-k="a"><span class="lbl">Fee APR</span><b class="${isNum(v) ? 'apr-d' : 'nr'}">${r.pre || na || v === undefined ? DASH : isNum(v) ? (r.fe ? '≈ ' : '') + pct(v) : 'not read'}</b><span class="q">${esc(q)}</span></span>`;
+  const q = r.pre ? '' : v === null ? (na ? 'not readable' : 'gap: fees or TVL not read') : u ? '⚠ unconfirmed fees' : 'fees ÷ TVL × 365';
+  return `<span class="hs-dv${isNum(v) && u ? ' uc' : ''}" data-k="a"><span class="lbl">Fee APR</span><b class="${isNum(v) ? 'apr-d' : 'nr'}">${r.pre || na || v === undefined ? DASH : isNum(v) ? (r.fe ? '≈ ' : '') + pct(v) : 'not read'}</b><span class="q">${esc(q)}</span></span>`;
 }
 function hsAxis(ts, Wd) { // the one date axis under the three charts
   const n = ts.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), most = Math.max(2, Math.floor(PW / 74));
@@ -5872,8 +5936,9 @@ function hsAxis(ts, Wd) { // the one date axis under the three charts
 function hsLines(series, rows, k, Wd, Ht) { // Compare and Pair: one line per pool on the same axes; a gap breaks its line
   const n = rows.length, PW = Wd - HS_AX - HS_PR, slot = PW / Math.max(1, n), all = [];
   const conf = [];
-  for (const s of series) for (const t of rows) { const x = s.at(t); if (x && isNum(x[k])) { all.push(x[k]); if (!(k === 'f' && x.fu)) conf.push(x[k]); } }
-  const sc = hsScale(conf.some((v) => v > 0) ? conf : all, Ht), Y = sc.Y; // a day the scanner couldn't confirm runs off the top
+  const uP = (x) => (k === 'f' || k === 'a') && hsUf(x); // v0.7.4: its fees unconfirmed (the fee APR too: it reads them)
+  for (const s of series) for (const t of rows) { const x = s.at(t); if (x && isNum(x[k])) { all.push(x[k]); if (!uP(x)) conf.push(x[k]); } }
+  const sc = hsScale(conf.some((v) => v > 0) ? conf : all, Ht), Y = sc.Y, offs = []; // a day the scanner couldn't confirm runs off the top: a ▲ and its value
   let g = '';
   for (const t of sc.ticks) g += `<line class="grid" x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${t.y.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke-width="1"/><text x="${HS_AX - 6}" y="${(t.y + 3.5).toFixed(1)}" text-anchor="end">${(k === 'a' ? pct(t.v) : fcAx(t.v))}</text>`;
   let gaps = 0;
@@ -5886,12 +5951,14 @@ function hsLines(series, rows, k, Wd, Ht) { // Compare and Pair: one line per po
       d += `${on ? 'L' : 'M'}${cx.toFixed(2)} ${y}`;
       const nx = i + 1 < n ? s.at(rows[i + 1]) : null;
       if (!on && !(nx && isNum(nx[k]))) dots += `<circle cx="${cx.toFixed(2)}" cy="${y}" r="2" fill="${s.col}"/>`;
+      if (uP(x)) { dots += `<circle class="ln-u" cx="${cx.toFixed(2)}" cy="${y}" r="3.5"/>`; if (v > sc.top * (1 + 1e-6)) offs.push({ cx, v }); }
       on = true;
     });
     g += `<path class="ln-l" d="${d}" fill="none" stroke="${s.col}" stroke-width="1.7" stroke-linejoin="round"/>${dots}`;
   }
+  g += hsOffs(offs, Wd, k === 'a' ? (v) => pct(v) : fcAx);
   g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${Ht - 0.5}" y2="${Ht - 0.5}" stroke="#3B4756" stroke-width="1"/>`;
-  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-lines="${series.length}" data-gaps="${gaps}" aria-hidden="true">${g}</svg>`;
+  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-lines="${series.length}" data-gaps="${gaps}" data-top="${sc.top}" data-off="${offs.length}" aria-hidden="true">${g}</svg>`;
 }
 const hsHt = (k) => { const ph = innerWidth < 700, b = ph ? 92 : 128; return WS.big ? (WS.big === k ? Math.round(b * 2.3) : Math.round(b * 0.62)) : b; };
 function hsStackHtml(label, n) {
@@ -5923,7 +5990,7 @@ function hsHtml(p) {
     }
   }
   const prog = one && one.d.yp ? (() => { const yp = one.d.yp, vp = one.d.yvp, tp = one.d.ytp; return `exact fees <b>${int(yp.exact)}</b>${isNum(yp.age) ? ` of <b>${int(yp.age)}</b>` : ''} days${yp.est ? ` · ${int(yp.est)} estimated` : ''}${vp ? ` · volume ${int((vp.s || 0) + (vp.g || 0))} days (${int(vp.s || 0)} swaps, ${int(vp.g || 0)} candles)` : ''}${tp ? ` · TVL ${int((tp.b || 0) + (tp.r || 0) + (tp.m || 0))} days` : ''}`; })() : '';
-  const leg = `<div class="hs-leg">${m.comb ? m.tiers.map((e) => `<span><i style="background:${e.col}"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}</span>`).join('') + (m.rows.some((r) => r.p) ? '<span class="hs-ptk"><i class="pt"></i>partial: only the tiers read</span>' : '') : `<span><i style="background:${one.col}"></i>exact</span><span><i class="e" style="background:${one.col}"></i>≈ estimated</span>`}<span><i class="nr"></i>not read (never 0)</span>${m.rows.some((r) => r.tvNa) ? '<span><i class="na"></i>not readable</span>' : ''}</div>`;
+  const leg = `<div class="hs-leg">${m.comb ? m.tiers.map((e) => `<span><i style="background:${e.col}"></i>${chainMark(e.q.chain, true)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}</span>`).join('') + (m.rows.some((r) => r.p) ? '<span class="hs-ptk"><i class="pt"></i>partial: only the tiers read</span>' : '') : `<span><i style="background:${one.col}"></i>exact</span><span><i class="e" style="background:${one.col}"></i>≈ estimated</span>`}<span><i class="nr"></i>not read (never 0)</span>${m.rows.some((r) => r.tvNa) ? '<span><i class="na"></i>not readable</span>' : ''}${m.rows.some((r) => hsUn(r)) ? `<span class="hs-uk" title="${esc(HS_UTXT)}"><i class="uc"></i>⚠ unconfirmed: no matching volume found yet · <b>▲</b> off the scale</span>` : ''}</div>`;
   WS.mod = m;
   return `<div class="hs" data-ms="" data-rows="${m.rows.length}" data-mode="${m.comb ? (m.tiers.length === m.all.length ? 'all' : 'some') : 'one'}" data-ph="end"><div class="hs-main">`
     + `<div class="hs-ctl">${hsRangeSeg()}${hsAprHead(m)}${chips}</div>`
@@ -5942,10 +6009,11 @@ function hsSorted(m) {
 function hsCell(r, k) {
   const v = r[k], src = hsSrcOf(null, r, k).join('+');
   if (v === undefined) return `<td class="nr">${DASH}</td>`;
-  const pt = hsPart(r, k);
-  if (pt) return `<td class="pt" title="${esc(hsPartTxt(pt))}">${usd(pt.v)}<span class="s">${pt.n}/${pt.of}</span></td>`; // partial: never shown as the day's total
+  const pt = hsPart(r, k), un = k === 'f' ? hsUn(r) : 0; // v0.7.4: the table marks an unconfirmed day as the chart does
+  const uw = un ? `<span class="uw" title="${esc((r.xs.length > 1 ? `${un} of ${r.xs.filter((x) => x && isNum(x.f)).length} tiers ` : '') + HS_UTXT)}">⚠ </span>` : '';
+  if (pt) return `<td class="pt${un ? ' uc' : ''}" title="${esc(hsPartTxt(pt))}">${uw}${usd(pt.v)}<span class="s">${pt.n}/${pt.of}</span></td>`; // partial: never shown as the day's total
   if (!isNum(v)) return `<td class="nr">${(k === 'tv' && r.tvNa) || (k === 'f' && r.fNa) ? DASH : 'not read'}</td>`;
-  return `<td>${k === 'f' && r.fe ? '≈ ' : ''}${usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
+  return `<td${un ? ' class="uc"' : ''}>${uw}${k === 'f' && r.fe ? '≈ ' : ''}${usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
 }
 function hsTableHtml(m) {
   const rows = hsSorted(m);
@@ -5957,8 +6025,8 @@ function hsTableHtml(m) {
 function hsCsv() {
   const m = WS.mod, p = poolById(WS.id);
   if (!m || !p || WS.tab !== 'history') return;
-  const q = (x) => (isNum(x) ? String(x) : ''), lines = ['day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume'];
-  for (const r of hsSorted(m)) lines.push([new Date(r.t).toISOString().slice(0, 10), q(r.f), hsSrcOf(m, r, 'f').join('+'), q(r.v), hsSrcOf(m, r, 'v').join('+'), q(r.tv), hsSrcOf(m, r, 'tv').join('+'), isNum(r.f) && isNum(r.v) && r.v > 0 ? (r.f / r.v).toPrecision(4) : ''].join(','));
+  const q = (x) => (isNum(x) ? String(x) : ''), lines = ['day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume,fees_unconfirmed'];
+  for (const r of hsSorted(m)) lines.push([new Date(r.t).toISOString().slice(0, 10), q(r.f), hsSrcOf(m, r, 'f').join('+'), q(r.v), hsSrcOf(m, r, 'v').join('+'), q(r.tv), hsSrcOf(m, r, 'tv').join('+'), isNum(r.f) && isNum(r.v) && r.v > 0 ? (r.f / r.v).toPrecision(4) : '', hsUn(r) || ''].join(',')); // v0.7.4: the tiers whose fees that day are unconfirmed
   const name = `history-${String(p.pair).replace(/[^A-Za-z0-9]+/g, '-')}-${m.comb ? 'all-tiers' : feeTxt(m.tiers[0].q.feeTier).replace('%', 'pct')}-${m.rows.length}d.csv`;
   const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }), a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; a.rel = 'noopener'; a.style.display = 'none';
@@ -5970,16 +6038,18 @@ function hsCardHtml(m, r) {
   const dv = (k, label) => {
     const v = r[k], s = hsSrcOf(m, r, k), map = HS_SRC[k];
     let q = s.map((x) => (map[x] ? `${map[x][0]} · ${map[x][1]}` : x)).join(' + ');
-    const pt = hsPart(r, k);
-    if (pt) return `<span class="hs-dv pt" data-k="${k}"><span class="lbl">${label}</span><b class="pt">${usd(pt.v)}</b><span class="q" title="${esc('Partial: only the tiers read that day are summed; ' + hsPartTxt(pt))}">${esc(hsPartTxt(pt))}</span></span>`;
+    const pt = hsPart(r, k), un = k === 'f' ? hsUn(r) : 0; // v0.7.4: an unconfirmed day says so, short (the card keeps its height on a phone)
+    const uq = un ? (m.comb ? `⚠ ${un} of ${r.xs.filter((x) => x && isNum(x.f)).length} unconfirmed` : '⚠ unconfirmed') : '';
+    if (pt) return `<span class="hs-dv pt${un ? ' uc' : ''}" data-k="${k}"><span class="lbl">${label}</span><b class="pt">${usd(pt.v)}</b><span class="q" title="${esc('Partial: only the tiers read that day are summed; ' + hsPartTxt(pt) + (un ? '; ' + HS_UTXT : ''))}">${esc((uq ? uq + ' · ' : '') + hsPartTxt(pt))}</span></span>`;
     if (r.pre) q = ''; // said once, in the card's own line below (three times over made the card jump on a phone)
     else if (v === null && k === 'f' && r.fNa) q = HS_NA.archive;
     else if (v === null && k === 'tv' && r.tvNa) q = HS_NA[r.tvNa[0]] || 'not readable';
     else if (v === null) q = m.comb ? `${r.xs.filter((x) => x && !isNum(x[k])).length} of ${r.xs.filter(Boolean).length} pools not read` : 'gap: never counted as 0';
     else if (v === undefined) q = 'the pool wasn’t there yet';
-    const tt = s.map((x) => (map[x] ? map[x][2] : '')).filter(Boolean).join('; ');
+    const tt = s.map((x) => (map[x] ? map[x][2] : '')).filter(Boolean).join('; ') + (un ? `; ${HS_UTXT}` : '');
+    if (uq && isNum(v)) q = uq;
     const naV = (v === null && ((k === 'tv' && r.tvNa) || (k === 'f' && r.fNa))) || r.pre;
-    return `<span class="hs-dv" data-k="${k}"><span class="lbl">${label}</span><b class="${isNum(v) ? '' : 'nr'}">${naV ? DASH : hsMoney(v, k === 'f' && r.fe)}</b><span class="q${naV ? ' na' : ''}" title="${esc(tt || q)}">${esc(q)}</span></span>`;
+    return `<span class="hs-dv${uq && isNum(v) ? ' uc' : ''}" data-k="${k}"><span class="lbl">${label}</span><b class="${isNum(v) ? '' : 'nr'}">${naV ? DASH : hsMoney(v, k === 'f' && r.fe)}</b><span class="q${naV ? ' na' : ''}" title="${esc(tt || q)}">${esc(q)}</span></span>`;
   };
   return `<span class="hs-dd">${hsDayTxt(r.t)}<small>${m.comb ? `${m.tiers.length} tiers combined` : esc(feeTxt(m.tiers[0].q.feeTier) + ' · ' + chainOf(m.tiers[0].q.chain).name)}</small></span>`
     + dv('f', 'Fees') + dv('v', 'Volume') + dv('tv', 'TVL') + hsAprDv(m, r) + `<span class="hs-dv" data-k="r"><span class="lbl">Fee ÷ vol</span><b>${hsRate(r)}</b><span class="q">${isNum(r.f) && isNum(r.v) ? 'the fee the LPs kept' : DASH}</span></span>`
@@ -5992,7 +6062,7 @@ function hsDayHtml(p) {
   if (!isNum(t) || !all.length) return '<p class="empty">No day picked.</p>';
   const rows = all.map((e) => ({ e, x: hsAt(e, t) }));
   const tot = (k) => hsAgg(rows.map((r) => r.x), k);
-  const cell = (x, k, e) => { if (x === undefined) return `<td class="nr">${DASH}</td>`; const v = x[k], s = x[k === 'f' ? 'fs' : k === 'v' ? 'vs' : 'ts']; if (!isNum(v)) return `<td class="nr">${k === 'tv' && hsTvNote(e, t) ? DASH + ' not readable' : 'not read'}</td>`; return `<td>${k === 'f' && s === 'e' ? '≈ ' : ''}${usd(v)} <span class="s">${s ? HS_SRC[k][s][1] : ''}</span></td>`; };
+  const cell = (x, k, e) => { if (x === undefined) return `<td class="nr">${DASH}</td>`; const v = x[k], s = x[k === 'f' ? 'fs' : k === 'v' ? 'vs' : 'ts']; if (!isNum(v)) return `<td class="nr">${k === 'tv' && hsTvNote(e, t) ? DASH + ' not readable' : 'not read'}</td>`; return `<td${k === 'f' && hsUf(x) ? ` class="uc" title="${esc(HS_UTXT)}"` : ''}>${k === 'f' && hsUf(x) ? '<span class="uw">⚠ </span>' : ''}${k === 'f' && s === 'e' ? '≈ ' : ''}${usd(v)} <span class="s">${s ? HS_SRC[k][s][1] : ''}</span></td>`; }; // v0.7.4: ⚠ an unconfirmed tier
   return `<div class="card hs-day"><h3 class="lbl acc" id="ws-day-h">${hsDayTxt(t)} · every pool of ${esc(p.pair)}</h3>`
     + `<div class="tbl-box" style="margin:0"><table><thead><tr><th>Pool</th><th>Fees</th><th>Volume</th><th>TVL</th><th>Fee ÷ vol</th></tr></thead><tbody>`
     + rows.map(({ e, x }) => `<tr><td><i class="sq" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${e.col}"></i>${chainMark(e.q.chain)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}${e.q.id === p.id ? ' · this' : ''}</td>${cell(x, 'f', e)}${cell(x, 'v', e)}${cell(x, 'tv', e)}<td>${x && isNum(x.f) && isNum(x.v) && x.v > 0 ? pct(x.f / x.v, { dp: 2 }) : DASH}</td></tr>`).join('')
@@ -6178,14 +6248,14 @@ function lnModel(pools, cols) {
 }
 function lnCardHtml(lm, i) {
   const t = lm.rows[i];
-  const one = (s) => { const x = s.at(t); const f = (k) => (x === undefined ? DASH : !isNum(x[k]) ? (k === 'tv' && s.e && hsTvNote(s.e, t) ? DASH : 'not read') : (k === 'f' && x.fs === 'e' ? '≈ ' : '') + usd(x[k])); return `<span class="hs-dv"><span class="lbl"><i class="sq" style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;background:${s.col}"></i>${esc(s.q.pair)} ${feeTxt(s.q.feeTier)}</span><b>${f('f')}</b><span class="q">vol ${f('v')} · TVL ${f('tv')} · fee APR ${x === undefined ? DASH : isNum(x.a) ? pct(x.a) : 'not read'}</span></span>`; };
+  const one = (s) => { const x = s.at(t); const f = (k) => (x === undefined ? DASH : !isNum(x[k]) ? (k === 'tv' && s.e && hsTvNote(s.e, t) ? DASH : 'not read') : (k === 'f' && x.fs === 'e' ? '≈ ' : '') + usd(x[k])); return `<span class="hs-dv${hsUf(x) ? ' uc' : ''}"${hsUf(x) ? ` title="${esc(HS_UTXT)}"` : ''}><span class="lbl"><i class="sq" style="display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;background:${s.col}"></i>${esc(s.q.pair)} ${feeTxt(s.q.feeTier)}</span><b>${f('f')}</b><span class="q">${hsUf(x) ? '⚠ unconfirmed · ' : ''}vol ${f('v')} · TVL ${f('tv')} · fee APR ${x === undefined ? DASH : isNum(x.a) ? pct(x.a) : 'not read'}</span></span>`; };
   return `<span class="hs-dd">${hsDayTxt(t)}<small>fees · volume · TVL · fee APR</small></span>` + lm.series.map(one).join('');
 }
 function lnBlock(lm, label) {
   WS.lmod = lm;
   if (!lm.rows.length) return `<div class="hs-empty" role="status"><b>No history read for ${lm.series.length > 1 ? 'these pools' : 'this pool'} yet.</b></div>`;
   return `<div class="ln hs-main" data-ms="" data-rows="${lm.rows.length}"><div class="hs-ctl">${hsRangeSeg()}</div><div class="hs-card" id="ln-card" aria-live="polite"></div>${hsStackHtml(label, lm.rows.length)}`
-    + `<p class="hs-note">Each line is one pool on the same axes; a gap in a line is a day not read (never 0). ≈ marks estimated fees.</p></div>`;
+    + `<p class="hs-note">Each line is one pool on the same axes; a gap in a line is a day not read (never 0). ≈ marks estimated fees.${lm.series.some((s) => lm.rows.some((t) => hsUf(s.at(t)))) ? ' ⚠ A ring marks fees the scanner couldn’t confirm yet: they never set the scale, and a ▲ with the value shows one that runs off the top.' : ''}</p></div>`;
 }
 function wsCompare(p) {
   WS.cmp = WS.cmp.filter((id) => poolById(id)).slice(0, 3);
