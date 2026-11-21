@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kgOu7EWKA+zTCEOY3FpBefikhnvM3m2mDGOnq/8qZKE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4zBmeEqrgaybFI70KkB6BTZKjkH7josiDUZju4T5GRI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -4553,7 +4553,7 @@ function drawScatter(rows) {
       // labels (v0.7.5): each beside its own dot, never over another label or dot, inside the plot. The live audit met
       // crowded real data: the old one-label-per-line spread pushed names far from their dots. Lone dots are placed first,
       // then crowded ones, each at the first clear spot of: right, left, a line up, a line down. A dot whose name finds no
-      // room is counted on a named dot of its crowd ("VELNA +3"), or as "+N" beside it; failing both, under the chart
+      // room is counted on a named dot of its crowd ("NAME +3"), or as "+N" beside it; failing both, under the chart
       // ("N dots unnamed"). A tap names every pool on the spot (the note).
       const vis = pts2.map((o) => ({ o, x: X(o.x), y: Y(o.y), t: short(base(o.r.p, o.r.id)) })).filter((d) => d.x >= L && d.x <= L + pw && d.y >= T && d.y <= T + ph);
       const near = (d, e, r) => Math.hypot(d.x - e.x, d.y - e.y) <= r;
@@ -4573,7 +4573,7 @@ function drawScatter(rows) {
       const order = vis.slice().sort((a, b) => a.crowd - b.crowd || a.i - b.i), left = [];
       for (const d of order) { const at = spot(d, d.t); if (at) boxes.set(d, at); else left.push(d); }
       // the dots left unnamed: each counts on its nearest named dot within 30 px (a pool's name before the benchmark's), as
-      // "VELNA +3"; where that label finds no room, the count goes beside one of the dots it counts ("+3"), else in place of
+      // "NAME +3"; where that label finds no room, the count goes beside one of the dots it counts ("+3"), else in place of
       // the name ("+4": the named dot counted too). Dots with no named dot near go in crowds (each within 24 px of another),
       // each crowd a "+N" beside one of its dots
       let unnamed = 0;
