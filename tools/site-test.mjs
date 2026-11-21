@@ -4808,11 +4808,12 @@ const tierWatch = (p, root, ms = 4000) => p.evaluate(({ root, ms, F }) => new Pr
     if (a && a.ph === 'end' && out.length > 2 && out.some((x) => x.ph !== 'end')) { res(out); return; } if (performance.now() - t0 > ms) { res(out); return; } requestAnimationFrame(f); };
   requestAnimationFrame(f);
 }), { root, ms, F: TIER_LOOK.toString() });
-// The build-up's steps in a run of frames (n other tiers): its phases in order, and each step seen. The page's build-up keeps
-// its own clock and a frame moves it on at most 120 ms (v0.7.2), so every phase (the 250 ms collapse, this pool's own growth:
-// 180 ms or more) shows in at least one frame however slow the runner. On the wall clock a long frame (WebKit drawing the 3D
-// map of the panel it just opened) jumped from the flash past the collapse and this pool's growth to the next tier's. Its time
-// is the page's clock: the wall time less what long frames held back (each frame's time past 120 ms).
+// The build-up's steps in a run of frames (n other tiers): its phases in order, and each step seen. The page's build-ups (the
+// tiers' chart, History's chips) keep their own clock and a frame moves it on at most 120 ms (v0.7.3), so every phase (the
+// 250 ms collapse, this pool's own growth: 180 ms or more) shows in at least one frame however slow the runner. On the wall
+// clock a long frame (WebKit drawing the 3D map of the panel it just opened) jumped from the flash past the collapse and this
+// pool's growth to the next tier's. Its time is the page's clock: the wall time less what long frames held back (each
+// frame's time past 120 ms).
 const fbSteps = (fr, n) => {
   const seq = fr.map((x) => x.ph).filter((x, i, a) => !i || x !== a[i - 1]), ORD = ['flash', 'collapse', 'build', 'end'];
   const mid = fr.filter((x) => x.ph === 'build'), iB = fr.findIndex((x) => x.ph === 'build');
@@ -5046,16 +5047,37 @@ async function testTiers(browser) {
     ok(`tiers ${tag}: no page errors, no NaN`, t.errors.length === 0 && noJunk(await bodyText(p)), t.errors[0]);
     await t.ctx.close();
   }
-  // B · History's chips build up the first time several tiers show, once; under reduced motion at once
-  for (const red of [false, true]) {
+  // B · History's chips build up the first time several tiers show, once; under reduced motion at once. Its time is the page's
+  // clock (v0.7.3: the wall time less what long frames held back), and a planted 1 s frame early in it skips no step (on the
+  // old wall clock that frame jumped past the collapse and this pool's own growth)
+  const HS_WATCH = ({ stall, ms }) => new Promise((res) => {
+    const t0 = performance.now(), out = []; let planted = !stall;
+    const f = () => {
+      const h = document.querySelector('#ws .hs');
+      if (h) {
+        const me = window.__lpsHooks.ws ? window.__lpsHooks.ws().id : null, cs = [...h.querySelectorAll('.hs-chip[data-act="ws-tier"]')].filter((b) => b.dataset.v !== 'all'), self = cs.find((b) => b.dataset.v === me);
+        out.push({ t: Math.round(performance.now() - t0), ph: h.dataset.ph || null, wait: cs.filter((b) => b.classList.contains('fl-wait')).length, lit: cs.filter((b) => b.classList.contains('fl-on')).length, self: !!self && self.classList.contains('fl-wait'), n: cs.length });
+        if (!planted && h.dataset.ph === 'flash') { planted = true; requestAnimationFrame(() => { const s = performance.now(); while (performance.now() - s < stall) { /* a long redraw */ } }); }
+        if (h.dataset.ph === 'end' && out.some((x) => x.ph && x.ph !== 'end')) { res(out); return; }
+      }
+      if (performance.now() - t0 > ms) { res(out); return; }
+      requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+  });
+  for (const how of ['plain', 'stall', 'reduce']) {
+    const red = how === 'reduce';
     const t = await openUnlocked(browser, 'default', { width: 1440, flash: true, mg: true, reducedMotion: red ? 'reduce' : 'no-preference' }), p = t.page;
     await openPool(p, base.id.slice(0, 10));
-    const watch = p.evaluate(() => new Promise((res) => { const t0 = performance.now(), out = []; const f = () => { const h = document.querySelector('#ws .hs'); if (h) { const s = h.dataset.ph; if (out[out.length - 1] !== s) out.push(s); if (s === 'end' && out.length > 1) { res({ seq: out, t: Math.round(performance.now() - t0) }); return; } } if (performance.now() - t0 > 4000) { res({ seq: out, t: -1 }); return; } requestAnimationFrame(f); }; requestAnimationFrame(f); }));
+    const watch = p.evaluate(HS_WATCH, { stall: how === 'stall' ? 1000 : 0, ms: red ? 4000 : 10000 }); // a window past any long frame
     await p.evaluate(() => document.querySelector('#sheet-hist').click());
-    const w = await watch; await wsWait(p);
-    const lim = BROWSER === 'webkit' ? 3800 : 2800;
-    if (!red) ok(`tiers: History's tiers build up the first time (${w.seq.join('>')}) in ${w.t} ms, ending every tier on`, w.seq.includes('build') && w.seq[w.seq.length - 1] === 'end' && w.t > 0 && w.t < lim && (await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode)) === 'all', JSON.stringify(w));
-    else ok('tiers: under reduced motion History shows every tier at once', !w.seq.includes('build') && !w.seq.includes('collapse'), JSON.stringify(w));
+    const all = await watch; await wsWait(p);
+    const i0 = all.findIndex((x) => x.ph && x.ph !== 'end'), fr = i0 < 0 ? [] : all.slice(i0), s = fbSteps(fr, fr.length ? fr[0].n - 1 : -1);
+    const lim = BROWSER === 'webkit' ? 3800 : 2800, mode = await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode);
+    const why = JSON.stringify({ seq: s.seq, t: s.tEnd, held: s.held, gap: s.gap }) + ' [ms, phase, dim, lit, this dim]: ' + s.near;
+    if (how === 'plain') ok(`tiers: History's tiers build up the first time (${s.seq.join('>')}) in ${s.tEnd} ms, ${s.held} of them held by long frames, this pool first, ending every tier on`, s.inOrder && s.steps && s.tEnd > 0 && s.tEnd - s.held < lim && mode === 'all', why);
+    else if (how === 'stall') ok(`tiers: a long frame early in History's build-up (${s.gap} ms, a slow phone's redraw) skips no step: ${s.seq.join('>')}, this pool alone first, then the others, ending every tier on`, s.gap >= 950 && s.inOrder && s.steps && s.tEnd - s.held < lim && mode === 'all', why);
+    else ok('tiers: under reduced motion History shows every tier at once', !all.some((x) => x.ph === 'build' || x.ph === 'collapse'), JSON.stringify(all.map((x) => x.ph)).slice(0, 120));
     await t.ctx.close();
   }
 }
