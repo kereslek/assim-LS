@@ -3,12 +3,14 @@ name: diag
 # parts: any of probe (price-history sources), events (v3 creation events per provider), scan (a fast
 # pool list, then the full scan), spikes (fee spikes in the sealed history, scripts/feespike.mjs: opens the
 # sealed data here and prints dates, ratios, spans and counts only). Inputs are public: never pass a private
-# value here (pool: public market terms, "PAIR FEE CHAIN VERSION").
+# value here (pool: public market terms, "PAIR FEE CHAIN VERSION"). tiers: UNI/WETH's pools on Ethereum per UTC day
+# (scripts/probe-tiers.mjs: swaps, fee counters, balances, GeckoTerminal and DefiLlama, and the scanner's own fee
+# history and spike code on those reads; public data only, no lock).
 on:
   workflow_dispatch:
     inputs:
       parts:
-        description: 'probe, events, scan, withevents, spikes (comma list)'
+        description: 'probe, events, scan, withevents, spikes, tiers (comma list)'
         default: 'probe'
       pool:
         description: 'spikes: the pool to look at, in public market terms'
@@ -35,6 +37,9 @@ jobs:
           LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
           SPIKE_POOL: ${{ inputs.pool }}
         run: node scripts/publish-data.mjs --restore && node scripts/feespike.mjs
+      - name: Tier days (public data only; no lock)
+        if: contains(inputs.parts, 'tiers')
+        run: node scripts/probe-tiers.mjs
       - name: Price-history sources
         if: contains(inputs.parts, 'probe')
         env:
