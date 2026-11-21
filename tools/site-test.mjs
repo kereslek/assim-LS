@@ -17,6 +17,7 @@
 //                                                    apr (v0.7.1: APR up front: the workspace chip, the Overview hero, the count-up, History's fee APR chart, every pool row)
 //                                                    errbadge (v0.7.2: a page error shows a calm badge by the version; its sheet sanitized, Copy, Close, Dismiss)
 //                                                    spike (v0.7.4: a confirmed fee spike sets every chart's scale; an unconfirmed one is drawn, hatched and marked)
+//                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -32,7 +33,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { writeFixtures, makeData, oldDepth, tinyCase, spikeCase, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR, GUEST_PASS, EXPIRED_PASS, GUEST_NAME, NEW_PASS, RECOVERY_KEY, OWNER_TICKET, SHARED_PASS, MEMBER_PASS, MEMBER_NAME, ELI_PASS } from './fixtures/make-fixture.mjs';
+import { writeFixtures, makeData, oldDepth, tinyCase, spikeCase, CLUSTER_SAME, FIXTURE_PASSPHRASE, STABLE_PROBE_ADDR, GUEST_PASS, EXPIRED_PASS, GUEST_NAME, NEW_PASS, RECOVERY_KEY, OWNER_TICKET, SHARED_PASS, MEMBER_PASS, MEMBER_NAME, ELI_PASS } from './fixtures/make-fixture.mjs';
 import { TEXT_OVERLAP } from './overlap.mjs';
 import { FINGERS, HOST_BOX, STILL_BOX, pinchPts } from './gestures.mjs';
 
@@ -58,7 +59,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -6160,9 +6161,70 @@ async function testSpike(browser) {
   }
 }
 
+// ---------- v0.7.5 · the forecast-vs-backtest scatter, crowded ----------
+// The live audit of 21 Nov 2026 met its text colliding on real data (a five-digit tick label over the rotated axis title).
+// The cluster case puts eleven more pools within a few points of one (three on one spot) and stretches the axes with an outlier
+// (7 days, 24 hours). In every window and zoom level, at a phone's width and a laptop's: no text on text or cut off; every name
+// inside the plot and beside a dot of its own; every dot in view named or counted in a "+N"; a tap on the shared spot names all three.
+const SC_GEOM = () => {
+  const svg = document.querySelector('#bt-scatter svg');
+  if (!svg) return null;
+  const fr = svg.querySelector(':scope > rect[fill="none"]').getBoundingClientRect();
+  const dots = [...svg.querySelectorAll('circle')].map((c) => { const r = c.getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; })
+    .filter((d) => d.x >= fr.left - 0.5 && d.x <= fr.right + 0.5 && d.y >= fr.top - 0.5 && d.y <= fr.bottom + 0.5);
+  const labs = [...svg.querySelectorAll('g[clip-path] text')].map((t) => { const r = t.getBoundingClientRect(); return { t: t.textContent, l: r.left, r: r.right, top: r.top, b: r.bottom }; });
+  const count = (t) => { const m = /\+(\d+)$/.exec(t); return (/^\+/.test(t) ? 0 : 1) + (m ? +m[1] : 0); };
+  const out = labs.filter((q) => q.l < fr.left - 1 || q.r > fr.right + 1 || q.top < fr.top - 1 || q.b > fr.bottom + 1).length;
+  const far = labs.filter((q) => { const my = (q.top + q.b) / 2; return !dots.some((d) => Math.abs(my - d.y) <= 13 && ((q.l - d.x >= 2 && q.l - d.x <= 12) || (d.x - q.r >= 2 && d.x - q.r <= 12))); }).map((q) => q.t);
+  const cap = document.querySelector('[data-chartbox="scatter"] .sc-more'), more = +((/^(\d+) dots? unnamed/.exec(cap ? cap.textContent : '') || [])[1] || 0); // the count no label could carry
+  return { dots: dots.length, named: labs.reduce((s, q) => s + count(q.t), 0), labs: labs.length, more, out, far };
+};
+async function testScatter(browser) {
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }], ['w1440', { width: 1440 }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440 }]];
+  for (const [tag, o] of SETS) {
+    const tt = await openUnlocked(browser, 'cluster', { ...o, storage: { 'lps.hint': '1' } }), p = tt.page, phone = !!o.phone || o.width < 500;
+    const ovl = [], bad = [], uncounted = [], seen = { views: 0, plus: 0, cap: 0 };
+    for (const wk of ['30d', '7d', '24h']) {
+      await setWin(p, wk); await sleep(150);
+      await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#bt-scatter').scrollIntoView({ block: 'center' }); }); await sleep(200);
+      for (let z = 0; z <= 3; z++) {
+        if (z) { const went = await p.evaluate(() => { const b = document.querySelector('[data-act="zoom"][data-chart="scatter"][data-dir="1"]'); if (!b || b.disabled) return false; b.click(); return true; }); if (!went) break; await sleep(350); }
+        seen.views++;
+        for (const x of await OVL(p, '[data-chartbox="scatter"]')) ovl.push(`${wk} z${z} ${x.kind}: ${x.a} × ${x.b}`);
+        const g = await p.evaluate(SC_GEOM);
+        if (!g) { bad.push(`${wk} z${z}: no chart`); continue; }
+        if (g.out || g.far.length) bad.push(`${wk} z${z}: ${g.out} outside the plot, ${g.far.length} away from any dot (${g.far.slice(0, 3).join(', ')})`);
+        if (g.named + g.more !== g.dots) uncounted.push(`${wk} z${z}: ${g.dots} dots in view, ${g.named} named or counted, ${g.more} under the chart`);
+        if (g.named > g.labs) seen.plus++;
+        if (g.more) seen.cap++;
+        if (wk === '30d' && z === 0) await snap(p, `scatter-${tag}`, '[data-chartbox="scatter"]');
+      }
+      await p.evaluate(() => { const b = document.querySelector('[data-act="zreset"][data-chart="scatter"]'); if (b) b.click(); }); await sleep(250);
+    }
+    ok(`scatter ${tag}: crowded and stretched (3 windows × 4 zoom levels, ${seen.views} views): no text collides or is cut off`, ovl.length === 0, `${ovl.length}: ${ovl.slice(0, 3).join(' | ')}`);
+    ok(`scatter ${tag}: every pool's name sits inside the plot, beside a dot`, bad.length === 0, bad.slice(0, 3).join(' | '));
+    ok(`scatter ${tag}: every dot in view is named or counted in a "+N" (${seen.plus} views with a count; ${seen.cap} with dots counted under the chart)`, uncounted.length === 0 && seen.plus > 0, uncounted.slice(0, 3).join(' | ') || 'no +N cue');
+    // the three pools on one spot (30 days): a tap (a hover on a laptop) names them all
+    await setWin(p, '30d'); await sleep(150);
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#bt-scatter').scrollIntoView({ block: 'center' }); }); await sleep(250);
+    const at = await p.evaluate(() => { const cs = [...document.querySelectorAll('#bt-scatter svg circle')].map((c) => { const r = c.getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; }); return cs.find((c) => cs.filter((d) => Math.hypot(d.x - c.x, d.y - c.y) < 0.5).length >= 3) || null; });
+    let tip = '';
+    if (at) {
+      if (phone && o.phone) await p.evaluate(FINGERS, { steps: 1, ms: 10, pts: [{ id: 72, x0: at.x, y0: at.y, x1: at.x, y1: at.y }] });
+      else { await p.mouse.move(at.x - 3, at.y); await p.mouse.move(at.x, at.y); }
+      await sleep(150);
+      tip = await p.evaluate(() => { const e = document.querySelector('#ctip'); return e && !e.hidden ? e.innerText : ''; });
+    }
+    const named = CLUSTER_SAME.filter((s) => tip.includes(s));
+    ok(`scatter ${tag}: a tap on the spot three pools share names all three in its note (${named.length} of 3)`, !!at && named.length === 3 && /also here/.test(tip), at ? tip.replace(/\s+/g, ' ').slice(0, 120) : 'no shared spot');
+    ok(`scatter ${tag}: no page errors`, tt.errors.length === 0, tt.errors[0]);
+    await tt.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
 const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {

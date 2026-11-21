@@ -30,6 +30,10 @@
 //            backtest replay (0.00000xyz: the widest y-axis labels) and hourly fees that are $0 three hours in four (a $0 median)
 //   spike    the tiny case with one day 23 days back at 70× its median (v0.7.4): a confirmed lone pool, an unconfirmed one, and
 //            the four tiers with one unconfirmed and the v4's TVL not recorded (see spikeCase)
+//   cluster  the default data with eleven more backtested pools whose forecast and backtest sit within a few points of
+//            VELNA/WETH's (three of them on the very same spot), and an outlier per window that stretches the axes to
+//            five-digit tick labels: −1,240% backtest on 7 days, about −11,000% on 24 hours (v0.7.5: the live audit met the
+//            scatter's text colliding on real data)
 //   keyed, keyedgone, keyedchange, keyedup, mismatch: v0.7.0 key slots (guests, members, the shared guest password, the recovery
 //            key, a passphrase change, the alarm): see below
 import fs from 'node:fs';
@@ -41,7 +45,7 @@ import { inboxKeys } from '../../lib/inbox.mjs';
 import { buildKeysFile, guestKek, splitPrivate, wrapSlot } from '../../lib/keyring.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'spike', 'keyed', 'keyedgone', 'keyedchange', 'keyedup', 'mismatch'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'spike', 'cluster', 'keyed', 'keyedgone', 'keyedchange', 'keyedup', 'mismatch'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -765,6 +769,39 @@ export function spikeCase(data) {
   return { ...T, spike: { t, x: SPIKE_X, conf: conf && conf.id, unconf: unconf && unconf.id, pair: pairIds, uTier } };
 }
 
+// cluster (v0.7.5): the forecast-vs-backtest scatter crowded. The live audit of 21 Nov 2026 met its text colliding on
+// real data: many pools a few points apart, and axes stretched by one far-off pool (five-digit tick labels beside the axis
+// title). Eleven made-up copies of VELNA/WETH (fictional tickers) join the backtest close to it in every window, three of them
+// on one spot (CLUSTER_SAME); on 7 days PRAXO's backtest drops to −1,240%, on 24 hours ORARX's forecast and backtest drop to
+// about −11,000%, so the rest of that window's dots sit in one corner (and "-5000" beside the axis title).
+export const CLUSTER_SYMS = ['ZEPHA', 'MOLTA', 'QUIRA', 'TAVEN', 'LUMOX', 'BRISKO', 'CORVA', 'DUNEX', 'FARRO', 'GLINTA', 'HALVO'];
+export const CLUSTER_SAME = ['QUIRA', 'TAVEN', 'LUMOX'];
+export function clusterCase(data) {
+  const live = structuredClone(data.live), hist = structuredClone(data.history), bt = structuredClone(data.backtest);
+  const src = live.pools.find((p) => p.t0.sym === 'VELNA' && bt.pools[p.id]);
+  if (!src) return { live, history: hist, backtest: bt };
+  CLUSTER_SYMS.forEach((sym, k) => {
+    const q = structuredClone(src);
+    q.id = src.id.slice(0, 36) + 'c1' + k.toString(16).padStart(4, '0');
+    q.t0.sym = sym; q.pair = sym + '/' + q.t1.sym;
+    live.pools.push(q);
+    if (hist.pools[src.id]) hist.pools[q.id] = hist.pools[src.id];
+    const e = structuredClone(bt.pools[src.id]), same = CLUSTER_SAME.includes(sym), j = same ? 0 : k + 1;
+    for (const [wk, b] of Object.entries(e)) {
+      if (!b) continue;
+      const f0 = isNum(b.forecastNet) ? b.forecastNet : 0.3, n0 = isNum(b.net) ? b.net : 0.3;
+      b.forecastNet = sig(f0 + ((j % 5) - 2) * 0.006 + (same ? 0.01 : 0), 4); // within a few points of the source, three on one spot
+      b.net = sig(n0 + ((j % 4) - 1.5) * 0.008 + (same ? 0.01 : 0), 4);
+    }
+    bt.pools[q.id] = e;
+  });
+  const by = (sym) => live.pools.find((p) => p.t0.sym === sym && bt.pools[p.id]);
+  const px = by('PRAXO'), orx = by('ORARX');
+  if (px && bt.pools[px.id]['7d']) bt.pools[px.id]['7d'].net = -12.4;
+  if (orx && bt.pools[orx.id]['24h']) { bt.pools[orx.id]['24h'].forecastNet = -108.5; bt.pools[orx.id]['24h'].net = -112.2; }
+  return { live, history: hist, backtest: bt };
+}
+
 // stress (v0.5.2): data as wide and as many as live data gets (the live iPhone audit of 15 Nov 2026 scrolled sideways
 // after a click, on data the fixtures never had): the long case, plus eleven copies of every pool on every chain the page
 // knows, with 12-letter symbols, 8-letter quotes and long venue names, in the discovery lanes beside their originals
@@ -1152,6 +1189,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'stress'), keys, stressCase(data), now);
   sealCase(path.join(outDir, 'tiny'), keys, tinyCase(data), now);
   sealCase(path.join(outDir, 'spike'), keys, spikeCase(data), now);
+  sealCase(path.join(outDir, 'cluster'), keys, clusterCase(data), now);
   sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
   sealCase(path.join(outDir, 'nodisc'), keys, noDiscovery(data), now);
   sealCase(path.join(outDir, 'oddlanes'), keys, { ...data, live: { ...data.live, discovery: { newPools: [], cexLed: ['0x' + 'f'.repeat(40)], crossChain: [] } } }, now);
