@@ -18,6 +18,8 @@
 //                                                    errbadge (v0.7.2: a page error shows a calm badge by the version; its sheet sanitized, Copy, Close, Dismiss)
 //                                                    spike (v0.7.4: a confirmed fee spike sets every chart's scale; an unconfirmed one is drawn, hatched and marked)
 //                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
+//                                                    explainer (v0.7.6: the "How to read this" note on top: shows, hides, comes back, jumps to the scatter)
+//                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -59,7 +61,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -1492,9 +1494,9 @@ async function testRefresh(browser) {
   await sleep(150);
   ok('refresh: spins while loading', (await p.getAttribute('#refresh', 'class')).includes('spin'));
   await p.click('#refresh', { force: true }).catch(() => {});
-  await p.waitForFunction(() => /Updated \d\d:\d\d/.test(document.querySelector('#refresh-msg').textContent), null, { timeout: 8000 });
+  await p.waitForFunction(() => /^(Up to date|New data ✓)/.test(document.querySelector('#refresh-msg').textContent), null, { timeout: 8000 });
   ok('refresh: re-fetches live, history and backtest at once, double taps ignored', n === 3, n + ' requests');
-  ok('refresh: says "Updated hh:mm" in the owner’s time zone', /^Updated \d\d:\d\d (CET|CEST|GMT\+\d)$/.test(await p.textContent('#refresh-msg')), await p.textContent('#refresh-msg'));
+  ok('refresh: says what it found and when the next pass is due ("Up to date · next …")', /^(Up to date|New data ✓)( · next (new data in \d+:\d\d|pass (due now|late)))?$/.test(await p.textContent('#refresh-msg')), await p.textContent('#refresh-msg'));
   await p.unroute('**/live.json*');
   await p.route('**/live.json*', (r) => r.abort());
   await sleep(1600);
@@ -2435,6 +2437,7 @@ async function testClicks(browser) {
       const sig = queue.shift();
       if (done.has(sig) || /^(lock|retry|lock-retry|pass|unlock)$/.test(sig)) continue;
       if (sig === 'refresh') await sleep(1600); // the button ignores taps within 1.5 s of the last // lock is a danger control: tested on its own
+      if (sig === 'xn-hide' && queue.some((s) => !done.has(s) && s !== 'xn-hide')) { queue.push(sig); continue; } // v0.7.6: the note's own buttons first, its hiding last (the i then brings it back)
       done.add(sig);
       const real = sig.replace(/~2$/, ''); // "~2": the same control pressed a second time
       if (!(await press(p, real))) { if (!/^(pan:|q-reset|q-clear)/.test(sig)) bad.push(sig + ' not found'); continue; } // an edge button shows only while there is more that way: testPan presses them; the search's Clear only while a filter is on: testQsearch presses it
@@ -6222,10 +6225,228 @@ async function testScatter(browser) {
   }
 }
 
+// ---------- v0.7.6 · A: the note on how to read the forecast and the backtest; C: the refresh button counts down ----------
+const V076_SETS = () => (BROWSER === 'webkit' ? [['phone', { phone: true }], ['w1440', { width: 1440 }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440 }]]);
+async function shotTop(p, name, h = 190) { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); const w = await p.evaluate(() => innerWidth); await p.screenshot({ path: path.join(SHOTS, name + '.png'), clip: { x: 0, y: 0, width: w, height: h } }); }
+const XN_LOOK = () => {
+  const x = document.querySelector('#xn'), i = document.querySelector('#xn-i'), app = document.querySelector('#app'), sub = document.querySelector('#subhead');
+  const on = !!x && !x.hidden && x.getBoundingClientRect().height > 0, r = x ? x.getBoundingClientRect() : null, cw = document.documentElement.clientWidth;
+  const btns = x ? [...x.querySelectorAll('button')].map((b) => { const q = b.getBoundingClientRect(); return { t: b.textContent.trim(), h: Math.round(q.height), w: Math.round(q.width), in: q.left >= -0.5 && q.right <= cw + 0.5 }; }) : [];
+  let st = null; try { st = localStorage.getItem('lps.xn'); } catch (e) { /* blocked */ }
+  return { on, first: !!app && app.firstElementChild === x, gap: on ? Math.round(r.top - sub.getBoundingClientRect().bottom) : null, top: on ? Math.round(r.top) : null,
+    inside: on && r.left >= -0.5 && r.right <= cw + 0.5, hs: document.documentElement.scrollWidth - cw, lbl: x ? x.querySelector('#xn-h').textContent : '',
+    mono: x ? /mono|Menlo|Consolas/i.test(getComputedStyle(x.querySelector('#xn-h')).fontFamily) : false,
+    text: on ? x.querySelector('#xn-body').innerText.replace(/\s+/g, ' ') : '', btns, i: !!i && !i.hidden && i.getBoundingClientRect().width > 0, iExp: i ? i.getAttribute('aria-expanded') : null, st,
+    focus: document.activeElement ? document.activeElement.id : '' };
+};
+const SC_AT = () => { // the scatter's card against the bar on top (or the screen's top while the bar is away)
+  const c = document.querySelector('#bt [data-chartbox="scatter"]'), bar = document.querySelector('#top');
+  if (!c) return null;
+  const r = c.getBoundingClientRect(), bb = bar.classList.contains('hid') ? 0 : bar.getBoundingClientRect().bottom, w = c.querySelector('.sc-what'), ch = c.querySelector('#bt-scatter');
+  return { top: Math.round(r.top), bb: Math.round(bb), ih: innerHeight, y: Math.round(scrollY), what: w ? w.innerText.replace(/\s+/g, ' ') : '', above: !!w && !!ch && w.getBoundingClientRect().bottom <= ch.getBoundingClientRect().top + 1 };
+};
+async function xnOverlap(p) { const a = await OVL(p, '#xn'), b = await OVL(p, 'header.top'), c = await OVL(p, '#subhead'); return [...a, ...b, ...c]; }
+async function testExplainer(browser) {
+  for (const [tag, o] of V076_SETS()) {
+    const t = await openUnlocked(browser, 'default', { ...o, storage: { 'lps.hint': '1' } }), p = t.page;
+    await p.evaluate(() => scrollTo(0, 0)); await frames(p, 2);
+    let a = await p.evaluate(XN_LOOK);
+    ok(`explainer ${tag}: A · the note is the first thing under the bar ("${a.lbl}" in mono), inside the screen, the i hidden while it shows`, a.on && a.first && a.gap >= 0 && a.gap <= 40 && /^how to read this$/i.test(a.lbl) && a.mono && a.inside && a.hs <= 0 && !a.i && a.iExp === 'true', JSON.stringify({ ...a, text: a.text.length }));
+    ok(`explainer ${tag}: its three paragraphs say what a forecast, a backtest and the comparison are, at the $1K example ticket`,
+      /^Forecast: at the start of each window \(24 h, 7 d, 30 d\), the scanner predicts a pool’s net APR\. Net APR = fees − LVR − re-centre swaps and gas, for the example \$1K position in its suggested range\. The forecast uses only what the scanner knew at that moment\./.test(a.text)
+      && /Backtest: the scanner replays that same position over the window’s real swaps and prices, and measures what it would really have earned\./.test(a.text)
+      && /The comparison \(Leaderboard → Forecast vs backtest\) shows how honest the forecasts are\. A dot on the diagonal means the forecast was right\. Inside the band means within ±10 points\.$/.test(a.text) && noJunk(a.text), a.text.slice(0, 160));
+    ok(`explainer ${tag}: "See the comparison ↓", "Got it" and ✕, each 44 px tall, inside the screen`, a.btns.length === 3 && a.btns.every((b) => b.h >= 43.5 && b.in) && a.btns.some((b) => b.t === 'See the comparison ↓') && a.btns.some((b) => b.t === 'Got it'), JSON.stringify(a.btns));
+    let ov = await xnOverlap(p);
+    ok(`explainer ${tag}: no text collides or is cut off in the note, the bar or the line under it`, ov.length === 0, JSON.stringify(ov[0] || {}));
+    await snap(p, `xn-${tag}-note`);
+    // the jump: to the leaderboard's scatter, its heading clear of the bar
+    await p.click('#xn [data-act="xn-go"]');
+    const went = await p.waitForFunction(() => { const c = document.querySelector('#bt [data-chartbox="scatter"]'), bar = document.querySelector('#top'); if (!c) return false; const r = c.getBoundingClientRect(), bb = bar.classList.contains('hid') ? 0 : bar.getBoundingClientRect().bottom; return r.top >= bb - 1 && r.top <= innerHeight * 0.45 && scrollY > 200; }, null, { timeout: 8000 }).then(() => true, () => false);
+    await sleep(900); // the jump keeps it aligned for a moment (late renders)
+    const sc = await p.evaluate(SC_AT);
+    ok(`explainer ${tag}: "See the comparison ↓" lands on the Forecast vs backtest scatter, clear of the bar (${sc && sc.top} px, bar ${sc && sc.bb})`, went && sc && sc.top >= sc.bb - 1 && sc.top <= sc.ih * 0.45, JSON.stringify(sc));
+    ok(`explainer ${tag}: B · the scatter's one line above its chart: forecast, backtest, diagonal and band`, sc && sc.above && sc.what === 'Forecast = predicted at the window’s start · Backtest = what the same $1K position really earned · on the diagonal = right; in the band = within ±10 pts.', sc && sc.what);
+    ov = await OVL(p, '[data-chartbox="scatter"]');
+    ok(`explainer ${tag}: the scatter's text still never collides with the line on top`, ov.length === 0, JSON.stringify(ov[0] || {}));
+    if (SHOTS) await snap(p, `xn-${tag}-scatter`, '[data-chartbox="scatter"]');
+    // Got it: hidden on this device, the i by the version brings it back
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await calm(p, BAR_MOVES);
+    await p.click('#xn .xn-row [data-act="xn-hide"]'); await frames(p, 2);
+    a = await p.evaluate(XN_LOOK);
+    ok(`explainer ${tag}: "Got it" hides the note on this device and shows the i (focused)`, !a.on && a.i && a.st === '0' && a.iExp === 'false' && a.focus === 'xn-i', JSON.stringify({ on: a.on, i: a.i, st: a.st, f: a.focus }));
+    const msg = await p.evaluate(() => { const m = document.querySelector('#refresh-msg'); return m.hidden ? '' : m.textContent; });
+    ok(`explainer ${tag}: it says where the note went ("${msg}")`, /^Note hidden · the i by the version brings it back$/.test(msg), msg);
+    ov = await xnOverlap(p);
+    ok(`explainer ${tag}: with the i in the version line nothing collides or spills (${a.hs} px sideways)`, ov.length === 0 && a.hs <= 0, JSON.stringify(ov[0] || {}));
+    if (SHOTS) await shotTop(p, `xn-${tag}-hidden`, 260);
+    await p.reload(); await waitApp(p); await frames(p, 2);
+    a = await p.evaluate(XN_LOOK);
+    ok(`explainer ${tag}: it stays hidden after a reload`, !a.on && a.i, JSON.stringify({ on: a.on, i: a.i }));
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 700); }); await calm(p, BAR_MOVES);
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await calm(p, BAR_MOVES);
+    await p.click('#xn-i');
+    await p.waitForFunction(() => { const x = document.querySelector('#xn'); return !x.hidden && x.getBoundingClientRect().top >= 0 && x.getBoundingClientRect().top < innerHeight / 2; }, null, { timeout: 5000 }).catch(() => {});
+    a = await p.evaluate(XN_LOOK);
+    ok(`explainer ${tag}: the i brings it back, in view, its heading focused, the i hidden again`, a.on && a.top >= 0 && !a.i && a.st === null && a.focus === 'xn-h', JSON.stringify({ on: a.on, top: a.top, i: a.i, st: a.st, f: a.focus }));
+    await p.click('#xn .xn-x'); await frames(p, 2);
+    a = await p.evaluate(XN_LOOK);
+    ok(`explainer ${tag}: ✕ hides it too`, !a.on && a.i && a.st === '0');
+    ok(`explainer ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // guests see it too, at the public $1K example (never the owner's ticket)
+  const [tag, o] = V076_SETS()[0];
+  const g = await unlockAs(browser, 'keyed', SHARED_PASS, o), p = g.page;
+  await waitApp(p); await p.click('#gw-ok').catch(() => {}); await sleep(200);
+  const a = await p.evaluate(XN_LOOK), sc = await p.evaluate(SC_AT), txt = await p.evaluate(() => document.body.innerText);
+  ok(`explainer guest ${tag}: a guest sees the note and the scatter's line at the $1K example, never the owner's ticket`, a.on && /the example \$1K position/.test(a.text) && sc && /same \$1K position/.test(sc.what) && !txt.includes(`$${OWNER_TICKET.toLocaleString('en-US')}`) && !/\$2\.5K/.test(a.text + sc.what), a.text.slice(0, 120));
+  ok(`explainer guest ${tag}: no page errors`, g.errors.length === 0, g.errors[0]);
+  await g.ctx.close();
+}
+
+// C · the refresh button: the ring and m:ss to the next pass, ~3 s while it checks, "Up to date" / "New data", "late"
+const RF_LOG = () => { // its states as they change, on the page's own clock
+  window.__rf = [];
+  const b = document.querySelector('#refresh'), t = b.querySelector('.rf-t'), m = document.querySelector('#refresh-msg');
+  const rec = () => { const l = window.__rf[window.__rf.length - 1], s = b.dataset.s, x = t ? t.textContent : ''; if (!l || l.s !== s || l.x !== x) window.__rf.push({ s, x, t: performance.now(), spin: b.classList.contains('spin'), msg: m.hidden ? '' : m.textContent }); };
+  new MutationObserver(rec).observe(b, { attributes: true, attributeFilter: ['data-s', 'class'], subtree: true, childList: true, characterData: true });
+  b.addEventListener('click', () => { if (!window.__rfTap) window.__rfTap = performance.now(); }, { capture: true });
+  rec();
+};
+const RF_NOW = () => {
+  const b = document.querySelector('#refresh'), t = b.querySelector('.rf-t'), fl = b.querySelector('.rf-fl'), r = b.getBoundingClientRect(), m = document.querySelector('#refresh-msg');
+  const cw = document.documentElement.clientWidth, kids = ['#qfind', '#viewseg', '#refresh', '#winseg'].map((s) => document.querySelector(s)).filter((e) => e && e.getBoundingClientRect().width > 0).map((e) => e.getBoundingClientRect());
+  const clash = kids.some((x, i) => kids.some((y, j) => j > i && x.left < y.right - 0.5 && y.left < x.right - 0.5));
+  return { s: b.dataset.s, x: t ? t.textContent : '', shown: !!t && getComputedStyle(t).display !== 'none' && t.getBoundingClientRect().width > 0, w: Math.round(r.width), h: Math.round(r.height),
+    off: fl ? +fl.getAttribute('stroke-dashoffset') : null, dash: fl ? +fl.getAttribute('stroke-dasharray') : null, fill: !!fl && getComputedStyle(fl).display !== 'none', spin: b.classList.contains('spin'),
+    next: window.__lpsHooks.rf ? window.__lpsHooks.rf().next : null, lt: window.__lpsHooks.rf ? window.__lpsHooks.rf().t : null, now: Date.now(), col: t ? getComputedStyle(t).color : '', msg: { on: !m.hidden, t: m.textContent, live: m.getAttribute('aria-live') },
+    anim: document.getAnimations().filter((a) => a.playState === 'running' && a.effect && a.effect.target && b.contains(a.effect.target)).length,
+    inside: r.left >= 0 && r.right <= cw, hs: document.documentElement.scrollWidth - cw, clash };
+};
+const secOf = (x) => { const m = /^(\d+):(\d\d)$/.exec(x); return m ? +m[1] * 60 + +m[2] : null; };
+async function rfSet(p, nextIn, period = 360e3) { // made-up timing: the next pass nextIn ms away, the last one period before it
+  await p.evaluate(([d, per]) => { const n = Date.now(), h = window.__lpsHooks.rfSet; if (h) h(d == null ? null : n + d, d == null ? null : n + d - per); }, [nextIn, period]);
+  await sleep(1150);
+}
+async function rfTapRun(p, { delay = 700, slow = false, change = false } = {}) { // one tap (and a second straight after), back to the countdown
+  let n = 0;
+  const onReq = (r) => { if (/\/(live|history|backtest)\.json\?t=/.test(r.url())) n++; };
+  p.on('request', onReq);
+  await p.route('**/live.json*', async (r) => {
+    await sleep(delay);
+    if (!change) { await r.continue(); return; }
+    const res = await r.fetch(), j = await res.json(); j.t += 1000; // the same sealed pass, stamped later: new to the page
+    await r.fulfill({ response: res, body: JSON.stringify(j) });
+  });
+  await p.evaluate(RF_LOG);
+  await p.click('#refresh');
+  await p.click('#refresh', { force: true, timeout: 1000 }).catch(() => {}); // a double tap
+  await sleep(1000);
+  const mid = await p.evaluate(RF_NOW);
+  await p.waitForFunction(() => { const l = window.__rf || []; const d = l.findIndex((x) => x.s === 'done' || x.s === 'fail'); return d >= 0 && l.slice(d).some((x) => x.s === 'wait'); }, null, { timeout: 20000 }).catch(() => {});
+  const log = await p.evaluate(() => ({ l: window.__rf, tap: window.__rfTap }));
+  p.off('request', onReq); await p.unroute('**/live.json*');
+  const tap = log.tap, busy = log.l.filter((x) => x.s === 'busy'), done = log.l.find((x) => x.s === 'done' || x.s === 'fail'), back = done && log.l.find((x) => x.t > done.t && x.s === 'wait');
+  return { n, mid, busy, done, back, tap, firstBusy: busy[0] ? Math.round(busy[0].t - tap) : null, doneAt: done ? Math.round(done.t - tap) : null, held: done && back ? Math.round(back.t - done.t) : null, texts: [...new Set(busy.map((x) => x.x))], slow };
+}
+async function testRefreshCd(browser) {
+  for (const [tag, o] of V076_SETS()) {
+    const t = await openUnlocked(browser, 'default', { ...o, storage: { 'lps.hint': '1', 'lps.xn': '0' } }), p = t.page, wide = /1440/.test(tag); // the note hidden: the bar with the i
+    await rfSet(p, 252e3);
+    let a = await p.evaluate(RF_NOW);
+    const want = (a.next - a.now) / (a.next - a.lt), sec = secOf(a.x);
+    ok(`refreshcd ${tag}: waiting, the ring shows the share left to the next pass (${(1 - a.off / a.dash).toFixed(3)} for ${want.toFixed(3)})`, a.s === 'wait' && a.fill && a.dash > 70 && Math.abs((1 - a.off / a.dash) - want) <= 0.01, JSON.stringify(a));
+    ok(`refreshcd ${tag}: and the time left as m:ss ("${a.x}"), ${wide ? 'beside the ring' : 'the ring alone on a phone (44 px)'}`, sec != null && Math.abs(sec - (a.next - a.now) / 1000) <= 1.5 && (wide ? a.shown : !a.shown && a.w === 44) && a.h >= 43.5, JSON.stringify(a));
+    const bar = await p.evaluate(BAR), ov0 = await OVL(p, 'header.top');
+    ok(`refreshcd ${tag}: the bar stays one slim row, nothing overlaps, nothing past the edge`, bar.oneRow && bar.h <= 52 && a.inside && a.hs <= 0 && !a.clash && ov0.length === 0, JSON.stringify([bar.h, bar.oneRow, a.hs, a.clash, ov0[0]]));
+    await shotTop(p, `rf-${tag}-1-wait`);
+    await sleep(2200);
+    const b = await p.evaluate(RF_NOW), sec2 = secOf(b.x);
+    ok(`refreshcd ${tag}: it ticks every second ("${a.x}" → "${b.x}"), the ring emptying`, sec2 != null && sec - sec2 >= 1 && sec - sec2 <= 3 && b.off > a.off, `${a.x} ${b.x} ${a.off} ${b.off}`);
+    // a tap: spinning ≥ 3 s with ~3 s counting down, then "Up to date" for 2 s, then the countdown
+    const r = await rfTapRun(p);
+    ok(`refreshcd ${tag}: a tap spins at once with "~3 s" (${r.firstBusy} ms) and says so in its status line`, r.firstBusy != null && r.firstBusy <= 400 && r.busy[0].spin && r.busy[0].x === '~3 s' && /^Checking for new data…/.test(r.busy[0].msg) && r.mid.msg.live === 'polite', JSON.stringify(r.busy[0] || {}));
+    ok(`refreshcd ${tag}: the fetch is quick, the spin still lasts 3 s (${r.doneAt} ms), counting ${r.texts.join(' ')}`, r.doneAt >= 2900 && r.doneAt <= 4500 && r.mid.s === 'busy' && r.mid.spin && r.texts.join() === '~3 s,~2 s,~1 s', JSON.stringify(r.texts));
+    ok(`refreshcd ${tag}: then a tick and "Up to date" for 2 s (${r.held} ms), the spin stopped, then back to the countdown`, r.done && r.done.s === 'done' && r.done.x === 'Up to date' && !r.done.spin && /^Up to date · next new data in \d+:\d\d$/.test(r.done.msg) && r.held >= 1850 && r.held <= 3300 && r.back && secOf(r.back.x) != null, JSON.stringify([r.done, r.back]));
+    ok(`refreshcd ${tag}: a double tap reads the files once (${r.n} reads)`, r.n === 3, String(r.n));
+    // the states' layout, and screenshots of each (made-up timing)
+    await p.route('**/live.json*', async (rt) => { await sleep(6000); await rt.continue(); });
+    await p.click('#refresh'); await sleep(1100);
+    a = await p.evaluate(RF_NOW);
+    const ov1 = await OVL(p, 'header.top');
+    ok(`refreshcd ${tag}: while it checks the bar still fits (${a.w} px button), nothing overlaps`, a.s === 'busy' && a.inside && a.hs <= 0 && !a.clash && ov1.length === 0 && (wide ? a.shown : a.w === 44), JSON.stringify([a, ov1[0]]));
+    await shotTop(p, `rf-${tag}-2-checking`);
+    await sleep(2600);
+    a = await p.evaluate(RF_NOW);
+    ok(`refreshcd ${tag}: a slow network: still spinning past 3 s, now "${a.x}"`, a.s === 'busy' && a.spin && /^~(10|9|8) s$/.test(a.x), JSON.stringify(a));
+    await p.waitForFunction(() => document.querySelector('#refresh').dataset.s === 'done', null, { timeout: 12000 }).catch(() => {});
+    a = await p.evaluate(RF_NOW);
+    const ov2 = await OVL(p, 'header.top');
+    ok(`refreshcd ${tag}: done once the slow fetch lands ("${a.x}"), the bar still fits`, a.s === 'done' && !a.spin && a.inside && a.hs <= 0 && !a.clash && ov2.length === 0, JSON.stringify([a, ov2[0]]));
+    await shotTop(p, `rf-${tag}-3-done`);
+    await p.unroute('**/live.json*');
+    await p.waitForFunction(() => document.querySelector('#refresh').dataset.s === 'wait', null, { timeout: 6000 }).catch(() => {});
+    // new data: "New data" in the button, "New data ✓" in the line
+    const nd = await rfTapRun(p, { change: true });
+    ok(`refreshcd ${tag}: when the tap brings a newer pass: "New data" and "New data ✓"`, nd.done && nd.done.x === 'New data' && /^New data ✓/.test(nd.done.msg) && nd.back, JSON.stringify(nd.done || {}));
+    await rfSet(p, 252e3);
+    await p.evaluate(() => { document.querySelector('#refresh-msg').hidden = true; }); // the last tap's line gone (it goes by itself after 6 s)
+    // due, late (amber, still checking), unknown
+    await rfSet(p, -20e3);
+    a = await p.evaluate(RF_NOW);
+    ok(`refreshcd ${tag}: once the pass is due: "due now", the ring empty`, a.s === 'due' && a.x === 'due now' && !a.fill, JSON.stringify(a));
+    await shotTop(p, `rf-${tag}-4-due`);
+    await rfSet(p, -6 * 60e3);
+    a = await p.evaluate(RF_NOW);
+    const amber = await p.evaluate(() => { const b = document.querySelector('#refresh'); return getComputedStyle(b).color; });
+    ok(`refreshcd ${tag}: more than 5 min late: "late" in amber`, a.s === 'late' && a.x === 'late' && /250, 178, 25/.test(amber) && (!wide || /250, 178, 25/.test(a.col)), JSON.stringify([a.s, a.x, amber, a.col]));
+    const ov3 = await OVL(p, 'header.top');
+    ok(`refreshcd ${tag}: late, the bar still fits`, a.inside && a.hs <= 0 && !a.clash && ov3.length === 0, JSON.stringify(ov3[0] || {}));
+    await shotTop(p, `rf-${tag}-5-late`);
+    await rfSet(p, null);
+    a = await p.evaluate(RF_NOW);
+    ok(`refreshcd ${tag}: no next pass known: the arrow alone, 44 px`, a.s === 'none' && !a.fill && !a.shown && a.w === 44, JSON.stringify(a));
+    // one 1 s timer, stopped while the page is hidden
+    await rfSet(p, 252e3);
+    await p.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
+    const h0 = await p.evaluate(() => ({ iv: window.__lpsHooks.rf().iv, x: document.querySelector('#refresh .rf-t').textContent }));
+    await sleep(2200);
+    const h1 = await p.evaluate(() => document.querySelector('#refresh .rf-t').textContent);
+    await p.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); });
+    await sleep(1200);
+    const h2 = await p.evaluate(() => ({ iv: window.__lpsHooks.rf().iv, x: document.querySelector('#refresh .rf-t').textContent }));
+    ok(`refreshcd ${tag}: its one timer stops while the page is hidden ("${h0.x}" stays "${h1}") and starts again when shown ("${h2.x}")`, !h0.iv && h1 === h0.x && h2.iv && h2.x !== h0.x, JSON.stringify([h0, h1, h2]));
+    ok(`refreshcd ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // reduced motion: nothing spins, the text stays put
+  for (const [tag, o] of V076_SETS()) {
+    const t = await openUnlocked(browser, 'default', { ...o, reducedMotion: 'reduce', storage: { 'lps.hint': '1', 'lps.xn': '0' } }), p = t.page, wide = /1440/.test(tag);
+    await rfSet(p, 252e3);
+    let a = await p.evaluate(RF_NOW);
+    ok(`refreshcd ${tag} reduced: waiting, the time in whole minutes ("${a.x}")`, a.s === 'wait' && a.x === '5 min' && a.fill, JSON.stringify(a));
+    await p.route('**/live.json*', async (rt) => { await sleep(700); await rt.continue(); });
+    await p.evaluate(RF_LOG);
+    await p.click('#refresh'); await sleep(700);
+    a = await p.evaluate(RF_NOW);
+    await sleep(1000);
+    const b = await p.evaluate(RF_NOW);
+    ok(`refreshcd ${tag} reduced: a tap: nothing spins (${a.anim} animations) and the text stays "${a.x}"`, a.s === 'busy' && b.s === 'busy' && a.anim === 0 && b.anim === 0 && a.x === 'Checking' && b.x === a.x && (wide ? a.shown : true) && !/about/.test(a.msg.t), JSON.stringify([a, b]));
+    await shotTop(p, `rf-${tag}-reduced-checking`);
+    await p.waitForFunction(() => { const l = window.__rf || []; const d = l.findIndex((x) => x.s === 'done'); return d >= 0 && l.slice(d).some((x) => x.s === 'wait'); }, null, { timeout: 12000 }).catch(() => {});
+    const log = await p.evaluate(() => ({ l: window.__rf, tap: window.__rfTap })), dn = log.l.find((x) => x.s === 'done');
+    ok(`refreshcd ${tag} reduced: still at least 3 s, then "Up to date", then the countdown`, !!dn && dn.t - log.tap >= 2900 && dn.x === 'Up to date' && log.l.slice(log.l.indexOf(dn)).some((x) => x.s === 'wait'), JSON.stringify(log.l.map((x) => [x.s, x.x, Math.round(x.t - log.tap)])));
+    await p.unroute('**/live.json*');
+    ok(`refreshcd ${tag} reduced: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
