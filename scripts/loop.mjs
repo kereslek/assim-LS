@@ -27,7 +27,7 @@ import { pathToFileURL } from 'node:url';
 import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { isEnvelope, openLock } from '../lib/lock.mjs';
 import { openStore } from '../lib/store.mjs';
-import { guestLine, guestStep, readInbox } from '../lib/guests.mjs';
+import { guestLine, guestStep, readInbox, removeInbox } from '../lib/guests.mjs';
 import { publishData, restoreData, restoreKeysFile } from './publish-data.mjs';
 
 export const HOUR = 3600e3, DAY = 24 * HOUR, MIN = 60e3;
@@ -137,6 +137,8 @@ export async function runLoop({ passCmd, mode = 'rehearsal', by = 'manual', spac
     const b = now() - h0, p0 = now();
     let pubOk = keysOk;
     if (keysOk) try { publish({ dryRun }); } catch (e) { pubOk = false; say(`publish failed: ${safeMsg(e)}`); }
+    // done requests' files leave inbox/ only once the step that did them is published (a lost pass applies them again)
+    if (pubOk && !dryRun && deps.inboxClean) try { deps.inboxClean(); } catch (e) { say(`inbox: done files not removed (${safeMsg(e)})`); }
     const c = now() - p0;
     if (!pubOk && r.ok) state = markPass(state, s, false);
     const passOk = r.ok && pubOk;
@@ -260,6 +262,7 @@ async function main(argv) {
   const store = openStore({ keys });
   const mode = arg('--mode', 'rehearsal') === 'live' ? 'live' : 'rehearsal';
   const dryRun = mode !== 'live' || argv.includes('--dry-run');
+  const doneFiles = new Set(); // inbox files whose requests were applied or refused: removed after the next publish
   const res = await runLoop({
     passCmd: arg('--pass', ''), mode, by: arg('--by', 'manual'), dryRun, restore: !argv.includes('--no-restore'),
     spacing: num('--spacing', 'SPACING', 360), deadlineMs: num('--deadline-min', 'DEADLINE_MIN', 320) * MIN,
@@ -271,7 +274,14 @@ async function main(argv) {
     guests: (phase, ctx = {}) => {
       const inbox = readInbox({ branch: process.env.BRANCH });
       const r = guestStep({ keys, requests: inbox.envs, allowMigrate: phase === 'start' && !!ctx.remoteRead && !ctx.remoteKeys });
+      for (const k of r.handled || []) if (inbox.names?.[k]) doneFiles.add(inbox.names[k]);
       if (phase === 'start' || r.wrote || r.refused || r.bad || r.skipped === 'guests file unread') say(guestLine(r, inbox));
+    },
+    inboxClean: () => {
+      if (!doneFiles.size) return;
+      const r = removeInbox({ branch: process.env.BRANCH, paths: [...doneFiles] });
+      for (const f of r.gone) doneFiles.delete(f);
+      say(r.pushed ? `inbox: ${r.removed} done request files removed (one commit)` : `inbox: done request files removed: ${r.gone.length ? 'none left' : 'no (push failed; next pass)'}`);
     },
   });
   if (mode === 'rehearsal' && !res.refused) {

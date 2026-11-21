@@ -173,7 +173,7 @@ test('add a guest: their slot opens the market files and nothing of the owner\'s
   const r3 = step(dir, { requests: [a.env, req(forged), { inbox: 1, epk: 'x', iv: 'y', ct: 'z' }, null] });
   assert.equal(r3.refused, 1); assert.equal(r3.bad, 2); assert.equal(readKeysFile(dir).slots.length, 1);
   const line = guestLine(r3, { read: true, files: 4 });
-  assert.match(line, /^guests: 1 active, 0 added, 0 removed, 0 expired, 1 refused, 2 unreadable; inbox 4 files; data key kept; passphrases 1; recovery key no; keys written: yes$/);
+  assert.match(line, /^guests: 1 active, 0 added, 0 removed, 0 expired, 1 refused, 1 already done, 2 unreadable; inbox 4 files; data key kept; passphrases 1; recovery key no; keys written: yes$/);
   assert.ok(!/Made-up|Forger/.test(line));
 });
 
