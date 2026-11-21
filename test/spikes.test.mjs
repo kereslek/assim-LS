@@ -2,7 +2,7 @@
 // else history.json `u` lists it as unconfirmed. Each rule has a planted fault it must catch. MOCKUP · MADE-UP NUMBERS.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SPIKE, rowRates, spikes, backed, volumeEvidence, unconfirmed, feeSpikes } from '../lib/spikes.mjs';
+import { SPIKE, rowRates, spikes, backed, volumeEvidence, swapEvidence, unconfirmed, feeSpikes } from '../lib/spikes.mjs';
 
 const DAY = 86400e3, T0 = Date.UTC(2026, 7, 1) + 5 * 60e3; // 00:05 UTC rows
 // 60 daily history rows [t, price, fees, vol, parked]: $100 a day, a spike of `big` on day `at`
@@ -76,4 +76,27 @@ test('history.json u: a spike the day volume backs stands; one it contradicts or
   const fy = feeSpikes({ y, gt: gtOf(), rate: RATE });
   assert.deepEqual(fy.u, { d: [], y: [day0 + 30 * DAY] }, 'the exact spike is listed, the estimated one is not judged');
   assert.equal(feeSpikes({ y, gt: gtOf((day) => (day === day0 + 30 * DAY ? 8e5 : 10000)), rate: RATE }).u, null, 'backed by its own day');
+});
+
+test('the newest daily row ends 5 minutes into a day with no candle or swaps yet: its spike is judged on its own day (planted fault: waiting for that day)', () => {
+  // 41 rows at 00:05 UTC, the last one ending today: today's candle and swap day can't exist yet (read 30 min after a day ends)
+  const d = dRows({ at: 40, big: 10000 }).slice(0, 41), spikeDay = Math.floor(d[39][0] / DAY) * DAY, today = spikeDay + DAY;
+  const days = new Map([...gtOf((x) => (x === spikeDay ? 1e6 : 10000)).days].filter(([x]) => x < today));
+  assert.equal(days.has(today), false);
+  assert.deepEqual(feeSpikes({ d, gt: { days }, rate: RATE }), { u: null, spikes: 1, backedN: 1, bySwaps: 0 }, 'the day traded 100×: backed, not unconfirmed');
+  const ev = volumeEvidence(days, d[39][0], d[40][0], RATE);
+  assert.ok(ev > 9900 && ev < 10000, 'the evidence is the spike day\'s own share, a lower bound (the 5 minutes left out)');
+  // swaps: the spike day read, today not yet
+  const su = new Map([[spikeDay, 10000]]);
+  assert.ok(Math.abs(swapEvidence(su, d[39][0], d[40][0]) - 10000 * (1 - 5 / 1440)) < 1e-6);
+  assert.deepEqual(feeSpikes({ d, gt: null, rate: RATE, su }), { u: null, spikes: 1, backedN: 1, bySwaps: 1 }, 'backed by its own swaps');
+  // what still has no evidence: the spike day's own candle missing, or a missing stretch longer than the sliver
+  const noDay = new Map([...days].filter(([x]) => x !== spikeDay));
+  assert.equal(volumeEvidence(noDay, d[39][0], d[40][0], RATE), null, 'the day itself unread: no evidence');
+  assert.deepEqual(feeSpikes({ d, gt: { days: noDay }, rate: RATE }).u, { d: [d[40][0]], y: [] });
+  assert.equal(volumeEvidence(days, d[39][0], today + SPIKE.sliver + 60e3, RATE), null, 'more than the sliver of an unread day: no evidence');
+  assert.equal(volumeEvidence(days, today + 60e3, today + 30 * 60e3, RATE), null, 'an interval with nothing read at all: null, never 0');
+  // the planted fault: the old rule, which needs every day the row touches
+  const old = (m, a, b) => { let sum = 0; for (let x = Math.floor(a / DAY) * DAY; x < b; x += DAY) { const part = (Math.min(b, x + DAY) - Math.max(a, x)) / DAY, v = m.get(x)?.[0]; if (part <= 0) continue; if (!(v >= 0)) return null; sum += v * part; } return sum * RATE; };
+  assert.equal(old(days, d[39][0], d[40][0]), null, 'the old rule had no evidence for the newest row and marked a real spike unconfirmed');
 });

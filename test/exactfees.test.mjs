@@ -11,7 +11,7 @@ import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 import { makeBudget } from '../lib/budget.mjs';
 import { feeYear } from '../lib/feehist.mjs';
 import { feeSpikes, swapEvidence } from '../lib/spikes.mjs';
-import { EXACT, SETTING_TOPICS, decodeSetting, filterOf, eventsByPool, dayFees, readStates, firstBlockAt, emptyCache, packSx, unpackSx, planDays, exactFeesChain, exactLine, reachFirstDay } from '../lib/exactfees.mjs';
+import { EXACT, EXACT_LOGS, exactLogOpts, chainIo, SETTING_TOPICS, decodeSetting, filterOf, eventsByPool, dayFees, readStates, firstBlockAt, emptyCache, packSx, unpackSx, planDays, exactFeesChain, exactLine, reachFirstDay } from '../lib/exactfees.mjs';
 
 const DAY = 86400e3;
 const W = (v) => BigInt.asUintN(256, BigInt(v)).toString(16).padStart(64, '0');
@@ -414,4 +414,27 @@ test('Base archive reach: no day whose start state the archive no longer serves 
   assert.ok(fseen.some((t) => t < oldest), 'the fault reads past the reach');
   assert.equal(fs0.past, 0);
   assert.equal(reachFirstDay(NOW, null), null, 'no reach (Ethereum): read back to the year\'s start, as before');
+});
+
+test('the day\'s log read has the scan\'s own 24 h patience: a node that answers only short chunks, or only on a third try, is read (planted fault: the former settings)', async () => {
+  const CHE = { id: 'ethereum', rpcs: ['https://a.test', 'https://f.test'], archive: ['https://a.test'], noLogs: ['f.test'], swapStep: 1000, confirmEmpty: true, secPerBlock: 12, c: { v4PoolManager: PM } };
+  const POOL = A('d');
+  const logsIn = (q) => { const a = parseInt(q.fromBlock, 16), b = parseInt(q.toBlock, 16), out = []; for (let x = a; x <= b; x++) if (x % 10 === 0) out.push(v3swap(POOL, { a0: 1000n, a1: -990n, block: x })); return out; };
+  // a node that refuses chunks over 100 blocks (a busy pool group's answer too big for it), and one that answers each chunk on its third ask
+  const short = () => ({ async callWho(m, p) { const q = p[0]; return parseInt(q.toBlock, 16) - parseInt(q.fromBlock, 16) + 1 > 100 ? { result: null, url: null } : { result: logsIn(q), url: 'https://a.test' }; } });
+  const asks = new Map();
+  const third = () => ({ async callWho(m, p) { const k = p[0].fromBlock + p[0].toBlock; asks.set(k, (asks.get(k) || 0) + 1); return asks.get(k) < 3 ? { result: null, url: null } : { result: logsIn(p[0]), url: 'https://a.test' }; } });
+  const opts = exactLogOpts(CHE, { waitMs: 1 });
+  assert.equal(opts.retries, EXACT_LOGS.retries); assert.equal(opts.minStep, 25); assert.equal(EXACT_LOGS.timeout, 30000);
+  for (const [name, node] of [['short chunks', short], ['third try', third]]) {
+    asks.clear();
+    let seen = null;
+    const io = chainIo(CHE, { head: 10000, waitMs: 1, make: (urls, o) => { if (urls.length === 1 && urls[0] === 'https://a.test' && o.maxRefusals === 1000) seen = o; return node(); } });
+    const got = await io.logs(3, [POOL], 1000, 2999);
+    assert.ok(Array.isArray(got) && got.length === 200, `${name}: the whole range read`);
+    assert.equal(seen?.timeout, 30000, 'the log node gets the 24 h read\'s 30 s; flashbots-like nodes left out');
+    asks.clear();
+    const former = await logsAdaptive(node(), filterOf(3, [POOL], PM), 1000, 2999, { step: 1000, maxStep: 1000, minStep: 250, segments: 1, confirmEmpty: true, retries: 1, waitMs: 1 });
+    assert.equal(former, null, `${name}: the former settings (250-block floor, one retry) left the day unread`);
+  }
 });
