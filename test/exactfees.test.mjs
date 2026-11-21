@@ -11,7 +11,7 @@ import { logsAdaptive } from '../lib/logs-adaptive.mjs';
 import { makeBudget } from '../lib/budget.mjs';
 import { feeYear } from '../lib/feehist.mjs';
 import { feeSpikes, swapEvidence } from '../lib/spikes.mjs';
-import { EXACT, EXACT_LOGS, exactLogOpts, chainIo, SETTING_TOPICS, decodeSetting, filterOf, eventsByPool, dayFees, readStates, firstBlockAt, emptyCache, packSx, unpackSx, planDays, exactFeesChain, exactLine, reachFirstDay } from '../lib/exactfees.mjs';
+import { EXACT, EXACT_LOGS, exactLogOpts, chainIo, cutGroups, SETTING_TOPICS, decodeSetting, filterOf, eventsByPool, dayFees, readStates, firstBlockAt, emptyCache, packSx, unpackSx, planDays, exactFeesChain, exactLine, reachFirstDay } from '../lib/exactfees.mjs';
 
 const DAY = 86400e3;
 const W = (v) => BigInt.asUintN(256, BigInt(v)).toString(16).padStart(64, '0');
@@ -437,4 +437,27 @@ test('the day\'s log read has the scan\'s own 24 h patience: a node that answers
     const former = await logsAdaptive(node(), filterOf(3, [POOL], PM), 1000, 2999, { step: 1000, maxStep: 1000, minStep: 250, segments: 1, confirmEmpty: true, retries: 1, waitMs: 1 });
     assert.equal(former, null, `${name}: the former settings (250-block floor, one retry) left the day unread`);
   }
+});
+
+test('a busy pool\'s day is a job of its own: the pass cap that cuts it no longer holds back the light pools grouped with it (planted fault: groups of 40 whatever their swaps)', async () => {
+  assert.deepEqual(cutGroups(Array.from({ length: 85 }, (_, i) => ({ id: i, w: 100 }))).map((g) => g.length), [40, 40, 5], 'light pools: groups of 40 as before');
+  assert.deepEqual(cutGroups([{ w: 8000 }, { w: 8000 }, { w: null }, { w: 2000 }]).map((g) => g.length), [1, 3], 'at most maxWeight swaps a day a group; an unknown count weighs nothing');
+  const heavy = { id: A('e'), v: 3, dex: 'uniswap', fee: 3000, createdAt: null, w: 30000 };
+  const light = Array.from({ length: 5 }, (_, i) => ({ id: A((i + 1).toString(16)), v: 3, dex: 'uniswap', fee: 3000, createdAt: null, w: 2000 }));
+  const pools = [heavy, ...light];
+  assert.deepEqual(cutGroups(pools).map((g) => g.map((p) => p.id)), [[heavy.id], light.map((p) => p.id)], 'the order kept');
+  // a made-up chain: one log call per 1,000 swaps the job's pools make a day, 35 calls a pass
+  const io = {
+    head: 1e6, spb: 12, clock: null, blockTs: async () => null,
+    state: async (ps) => new Map(ps.map((p) => [p.id, { setting: 0, sqrtPriceX96: Q96 }])),
+    logs: async (v, ids) => { const cost = Math.max(1, Math.ceil(ids.reduce((a, id) => a + pools.find((p) => p.id === id).w, 0) / 1000)); for (let k = 0; k < cost; k++) { if (!io.budget.take()) return null; await null; } return []; },
+  };
+  const passes = async (maxWeight) => {
+    const cache = emptyCache();
+    cache.b.set('ethereum', new Map(Array.from({ length: 6 }, (_, k) => [TODAY - k * DAY, 1e5 - k * 7200])));
+    for (let n = 0; n < 6; n++) { io.budget = makeBudget({ calls: 35 }); await exactFeesChain({ chain: 'ethereum', pools, cache, now: NOW, io, budget: io.budget, days: 3, concurrency: 1, maxWeight }); }
+    return pools.map((p) => cache.p.get(p.id).d.size);
+  };
+  assert.deepEqual(await passes(EXACT.maxWeight), [3, 3, 3, 3, 3, 3], 'every pool gets its 3 days within 6 passes');
+  assert.deepEqual(await passes(Infinity), [0, 0, 0, 0, 0, 0], 'the planted fault: one group of 40,000 swaps a day never fits a pass, and nobody gets a day');
 });

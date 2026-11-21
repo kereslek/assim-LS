@@ -1034,7 +1034,8 @@ async function writeOutputs() {
   const exRuns = snapsOk ? await Promise.all(ctxs.map((X) => timed(X.CH.prefix + 'exact fees', async () => {
     try {
       const budget = makeBudget({ ...(X.CH.caps?.exact || {}), ...(CAP_OVERRIDE[X.CH.id]?.exact || {}) });
-      const pools = out.filter((x) => x.chain === X.CH.id).map((x) => mById.get(x.id)).map((p) => ({ id: p.id, v: p.v, dex: p.dex, fee: p.fee, createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null }));
+      // w: each pool's swaps in the last 24 h (step 3), so a busy pool's day is a job of its own (lib/exactfees.mjs cutGroups)
+      const pools = out.filter((x) => x.chain === X.CH.id).map((x) => mById.get(x.id)).map((p) => ({ id: p.id, v: p.v, dex: p.dex, fee: p.fee, createdAt: isNum(p.createdAt) ? p.createdAt * 1000 : null, w: X.sums?.get(p.id)?.swaps ?? null }));
       // a chain whose own 24 h swap read got no answer at all this pass waits (its log nodes are not serving); one
       // its swaps cap cut short still reads within its own cap
       // Base: no day past its archive nodes' reach (lib/chains.mjs archiveDays); those days stay null
