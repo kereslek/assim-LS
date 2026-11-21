@@ -4834,7 +4834,7 @@ async function testFlash(browser) {
     const t = await openUnlocked(browser, 'default', { phone, width: 1440, flash: true, mg: true }), p = t.page;
     // 1. the build-up as the panel opens: flash → collapse → build → end, every tier on at the end, in under 2.5 s
     await fillQ(p, base.id.slice(0, 10)); await sleep(250);
-    const watch = tierWatch(p, '#sheet');
+    const watch = tierWatch(p, '#sheet', 10000); // a window past any long frame: the time is judged on the page's clock below
     await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
     const fr = await watch, end = await p.evaluate(TIER_LOOK, '#sheet');
     const { seq, mid, tEnd, gap, held, inOrder, steps, near } = fbSteps(fr, peers.length); // no phase may be skipped, however long a frame
@@ -4845,7 +4845,7 @@ async function testFlash(browser) {
     for (const x of await p.evaluate(TEXT_OVERLAP, { root: '#sheet' })) ok(`flash ${tag}: end state, no text collides`, false, `${x.kind}: ${x.a} × ${x.b}`);
     // 1b. a slow phone's long redraw, planted: ▶ replay with one frame held 900 ms just after it starts still shows every step in
     // order and ends all on, only later (on the old wall clock this frame jumped past the collapse and this pool's own growth)
-    const w2 = tierWatch(p, '#sheet', 7000);
+    const w2 = tierWatch(p, '#sheet', 10000);
     await p.evaluate(() => { document.querySelector('#sheet .mgchips [data-act="flash"]').click(); requestAnimationFrame(() => { const t = performance.now(); while (performance.now() - t < 900) { /* a long redraw */ } }); });
     const fr2 = await w2, i0 = fr2.findIndex((x) => x.ph !== 'end'), s2 = fbSteps(i0 < 0 ? [] : fr2.slice(i0), peers.length), end2 = await p.evaluate(TIER_LOOK, '#sheet');
     ok(`flash ${tag}: a long frame (${s2.gap} ms, a slow phone's redraw) skips no step: ${s2.seq.join('>')}, this pool alone first, then the others, all on in ${s2.tEnd} ms (${s2.held} held)`,
@@ -4930,7 +4930,7 @@ async function testFlash(browser) {
     await w2.goto(u);
     await w2.waitForSelector('.solo-box [data-pz="liq-detail"]', { timeout: 20000 }).catch(() => {});
     const built = await w2.waitForFunction(() => { const c = document.querySelector('[data-chartbox="liq-detail"] .mgchips'); return !!c && c.dataset.ph === 'build'; }, null, { polling: 'raf', timeout: 15000 }).then(() => true, () => false);
-    await sleep(2800);
+    await w2.waitForFunction(() => { const c = document.querySelector('[data-chartbox="liq-detail"] .mgchips'); return !!c && c.dataset.ph === 'end'; }, null, { polling: 'raf', timeout: 10000 }).catch(() => {}); // a long frame only makes it end later
     const end = await w2.evaluate((F) => new Function('return (' + F + ')')()('#sheet'), TIER_LOOK.toString()); // the chart the page stands for (the panel's map; the best find's has no tiers)
     ok('flash: the chart\'s own page builds it up too and ends with every tier on', built && !!end && end.ph === 'end' && end.pressed === end.chips && end.layers === end.chips && e2.length === 0, JSON.stringify(end).slice(0, 160) + ' ' + (e2[0] || ''));
     await w2.close();
