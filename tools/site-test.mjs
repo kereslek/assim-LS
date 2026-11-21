@@ -4808,6 +4808,23 @@ const tierWatch = (p, root, ms = 4000) => p.evaluate(({ root, ms, F }) => new Pr
     if (a && a.ph === 'end' && out.length > 2 && out.some((x) => x.ph !== 'end')) { res(out); return; } if (performance.now() - t0 > ms) { res(out); return; } requestAnimationFrame(f); };
   requestAnimationFrame(f);
 }), { root, ms, F: TIER_LOOK.toString() });
+// The build-up's steps in a run of frames (n other tiers): its phases in order, and each step seen. The page's build-up keeps
+// its own clock and a frame moves it on at most 120 ms (v0.7.2), so every phase (the 250 ms collapse, this pool's own growth:
+// 180 ms or more) shows in at least one frame however slow the runner. On the wall clock a long frame (WebKit drawing the 3D
+// map of the panel it just opened) jumped from the flash past the collapse and this pool's growth to the next tier's. Its time
+// is the page's clock: the wall time less what long frames held back (each frame's time past 120 ms).
+const fbSteps = (fr, n) => {
+  const seq = fr.map((x) => x.ph).filter((x, i, a) => !i || x !== a[i - 1]), ORD = ['flash', 'collapse', 'build', 'end'];
+  const mid = fr.filter((x) => x.ph === 'build'), iB = fr.findIndex((x) => x.ph === 'build');
+  return {
+    seq, mid, tEnd: (fr.find((x) => x.ph === 'end') || {}).t, gap: Math.max(0, ...fr.slice(1).map((x, i) => x.t - fr[i].t)), // the longest frame
+    held: fr.slice(1).reduce((h, x, i) => h + Math.max(0, x.t - fr[i].t - 120), 0),
+    inOrder: seq.every((x, i) => !i || ORD.indexOf(x) > ORD.indexOf(seq[i - 1])) && ORD.every((x) => seq.includes(x)),
+    // tiers to come wait dim while one grows lit; this pool's chip dims in the collapse, then it grows alone, every other tier still dim
+    steps: mid.some((x) => x.wait >= 1 && x.lit >= 1) && fr.some((x) => x.ph === 'collapse' && x.self) && mid.some((x) => !x.self && x.wait === n),
+    near: JSON.stringify(fr.slice(Math.max(0, iB - 3), iB + 3).map((x) => [x.t, x.ph, x.wait, x.lit, x.self ? 1 : 0])), // around the build's start: ms, phase, dim, lit, this pool dim
+  };
+};
 async function testFlash(browser) {
   const pools = FXD.live.pools;
   const base = pools.find((q) => q.pair === 'VELNA/WETH' && q.chain === 'ethereum'), peers = pools.filter((q) => q.id !== base.id && samePairFx(base, q));
@@ -4820,18 +4837,19 @@ async function testFlash(browser) {
     const watch = tierWatch(p, '#sheet');
     await p.evaluate(() => document.querySelector('#all tbody tr.row td:nth-child(3)').click());
     const fr = await watch, end = await p.evaluate(TIER_LOOK, '#sheet');
-    const seq = fr.map((x) => x.ph).filter((x, i, a) => !i || x !== a[i - 1]), ORD = ['flash', 'collapse', 'build', 'end'];
-    // the phases come from the clock, not from frames: a slow runner (WebKit drawing the 3D map) can draw no frame inside the
-    // 250 ms collapse. It may be missed only when the frames really jumped from the flash straight to the build
-    const jumped = fr.some((x, i) => i && fr[i - 1].ph === 'flash' && x.ph === 'build');
-    const inOrder = seq.every((x, i) => !i || ORD.indexOf(x) > ORD.indexOf(seq[i - 1])) && [...(jumped ? [] : ['collapse']), 'build', 'end'].every((x) => seq.includes(x));
-    const tEnd = (fr.find((x) => x.ph === 'end') || {}).t;
-    ok(`flash ${tag}: opening a pool with ${peers.length} other tiers plays flash → collapse → build → end (${seq.join('>')}) in ${tEnd} ms (under ${lim})`, inOrder && Number.isFinite(tEnd) && tEnd < lim, JSON.stringify(seq) + ' ' + tEnd);
-    const mid = fr.filter((x) => x.ph === 'build');
-    ok(`flash ${tag}: while it builds, tiers still to come wait dim, the one growing is lit, this pool's first (${mid.length} frames)`, mid.some((x) => x.wait >= 1 && x.lit >= 1) && (jumped || fr.some((x) => x.ph === 'collapse' && x.self)) && mid.some((x) => !x.self && x.wait === peers.length), JSON.stringify(mid.slice(0, 3)));
+    const { seq, mid, tEnd, gap, held, inOrder, steps, near } = fbSteps(fr, peers.length); // no phase may be skipped, however long a frame
+    ok(`flash ${tag}: opening a pool with ${peers.length} other tiers plays flash → collapse → build → end (${seq.join('>')}) in ${tEnd} ms, ${held} of them held by long frames (under ${lim})`, inOrder && Number.isFinite(tEnd) && tEnd - held < lim, JSON.stringify(seq) + ' ' + tEnd + ` (longest frame ${gap} ms) ` + near);
+    ok(`flash ${tag}: while it builds, tiers still to come wait dim, the one growing is lit, this pool's first (${mid.length} frames)`, steps, `longest frame ${gap} ms; [ms, phase, dim, lit, this dim]: ${near}`);
     ok(`flash ${tag}: …and the ±9% line counts each tier as it lands (${[...new Set(fr.map((x) => x.line))].join(',')} parts)`, new Set(fr.filter((x) => x.ph === 'build').map((x) => x.line)).size >= 2, JSON.stringify(fr.map((x) => x.line)).slice(0, 120));
     ok(`flash ${tag}: it ends with every tier on: ${peers.length} chips pressed, ${peers.length} layers stacked, none dim, the line and the legend complete`, end.ph === 'end' && end.pressed === peers.length && end.layers === peers.length && end.wait === 0 && end.lit === 0 && /total \$/.test(end.line) && end.leg === peers.length && end.replay, JSON.stringify(end).slice(0, 220));
     for (const x of await p.evaluate(TEXT_OVERLAP, { root: '#sheet' })) ok(`flash ${tag}: end state, no text collides`, false, `${x.kind}: ${x.a} × ${x.b}`);
+    // 1b. a slow phone's long redraw, planted: ▶ replay with one frame held 900 ms just after it starts still shows every step in
+    // order and ends all on, only later (on the old wall clock this frame jumped past the collapse and this pool's own growth)
+    const w2 = tierWatch(p, '#sheet', 7000);
+    await p.evaluate(() => { document.querySelector('#sheet .mgchips [data-act="flash"]').click(); requestAnimationFrame(() => { const t = performance.now(); while (performance.now() - t < 900) { /* a long redraw */ } }); });
+    const fr2 = await w2, i0 = fr2.findIndex((x) => x.ph !== 'end'), s2 = fbSteps(i0 < 0 ? [] : fr2.slice(i0), peers.length), end2 = await p.evaluate(TIER_LOOK, '#sheet');
+    ok(`flash ${tag}: a long frame (${s2.gap} ms, a slow phone's redraw) skips no step: ${s2.seq.join('>')}, this pool alone first, then the others, all on in ${s2.tEnd} ms (${s2.held} held)`,
+      s2.gap >= 850 && s2.inOrder && s2.steps && s2.tEnd - s2.held < lim && end2.ph === 'end' && end2.pressed === peers.length && end2.layers === peers.length && end2.wait === 0 && end2.lit === 0, `${s2.tEnd} ms; [ms, phase, dim, lit, this dim]: ${s2.near}`);
     // 2. the badge's maths against the independent model
     const m = cmpModel(base), bn = badgeNum((await flLook(p)).badgeTxt);
     ok(`flash ${tag}: the badge says +${m.n} pools · ${m.txt} liquidity, as the independent model reads the fixture`, bn && bn.n === m.n && bn.x === m.txt, `${bn && bn.x} vs ${m.n} ${m.txt}`);

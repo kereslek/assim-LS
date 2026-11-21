@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+aJZX7RESdzOSg5go6dzlYfM9WLj73OI+lTMfDKy92M='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FDLO1xAMXhQX93jcWkXbhijUD4rDspbNL7x9gKEdfh4='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2886,6 +2886,11 @@ const easeIO = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 // most liquidity near the price to the least (ease-out, 180–420 ms each, all of it under 2.5 s); each chip lights as its
 // layer grows, the ±9% line and the legend count each tier as it lands. It ends with every tier on.
 const FB_FLASH = 250, FB_COLL = 250, fbStep = (n) => clamp(1500 / (n + 1), 180, 420), fbMs = (n) => FB_FLASH + FB_COLL + (n + 1) * fbStep(n);
+// v0.7.2: the build-up keeps its own clock, and a frame moves it on at most FB_DT ms (under its shortest step, 180 ms): a long
+// redraw (a slow phone drawing the panel it just opened) can't jump past the collapse or this pool's own growth, it only
+// makes the build-up end that much later (the count-up's rule, v0.7.1)
+const FB_DT = 120;
+const fbClock = () => { let t = 0, last = performance.now(); return () => { const n = performance.now(); t += Math.min(FB_DT, Math.max(0, n - last)); last = n; return t; }; };
 const easeOut = (x) => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
 function flAt(t, ids) { // the build-up at t ms: this pool's share of its height (own), each other's (a), which chips are lit
   const st = fbStep(ids.length), b0 = FB_FLASH + FB_COLL, a = {}, lit = {};
@@ -2959,14 +2964,14 @@ function flStart(id, auto, cid = 'liq-detail') {
   const P = PZ[cid];
   if (flOwner(cid) !== id || !P || !P.p || P.p.id !== id || !P.every || !P.every.length || reduced() || (auto && NOFLASH)) return;
   flEnd();
-  const ids = P.every.slice().sort((x, y) => (isNum(y.v9) ? y.v9 : -1) - (isNum(x.v9) ? x.v9 : -1)).map((m) => m.id), t0 = performance.now(), ms = fbMs(ids.length);
+  const ids = P.every.slice().sort((x, y) => (isNum(y.v9) ? y.v9 : -1) - (isNum(x.v9) ? x.v9 : -1)).map((m) => m.id), clock = fbClock(), ms = fbMs(ids.length);
   S.mg = { for: id, on: P.every.map((m) => m.id) }; // it ends with every tier on
   S.fl = { for: id, cid, ids, st: flAt(0, ids), raf: 0 };
   const step = () => {
     const f = S.fl;
     if (!f || f.for !== id) return;
     if (flOwner(cid) !== id || !pzHost(cid) || reduced()) { flEnd(); return; }
-    const t = performance.now() - t0;
+    const t = clock();
     if (t >= ms) { flEnd(); return; }
     f.st = flAt(t, f.ids); flPaint();
     f.raf = requestAnimationFrame(step);
