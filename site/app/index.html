@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Vweh2KUt4PI1Q7X2Zm4HUFDl6EfqUo6ts1IEW5YTQ/8='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4zBmeEqrgaybFI70KkB6BTZKjkH7josiDUZju4T5GRI='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -190,6 +190,7 @@ body.solo main{display:block}
 .ctip .tt{display:block;margin-bottom:2px;font:600 11px/1.35 var(--mono);letter-spacing:.03em;color:var(--fg)}
 .ctip b{color:var(--fg);font-weight:600}
 .ctip .q{color:var(--muted)}
+.ctip .also{display:block;margin-top:3px;color:var(--muted)}
 .ctip .sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
 .spk{display:inline-block;vertical-align:middle}
 .fmini,.spk{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
@@ -695,6 +696,7 @@ button.ring:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .whyb{min-height:44px;padding:0 4px;border:0;background:transparent;display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--fg2);font:600 10px/1 var(--mono)}
 .whyb:hover .wi{transform:scale(1.15)}
 .sc-key{display:flex;align-items:center;gap:6px;margin:4px 0 0;font:500 11px/1.4 var(--mono);color:var(--fg2)}
+.sc-more{margin:3px 0 0;font:500 11px/1.4 var(--mono);color:var(--muted)}.sc-more:empty{display:none}
 .sc-key i{flex:none;width:14px;height:8px;border-radius:2px;background:rgba(22,199,132,.25);border-top:1px dashed #16C784}
 /* chain marks and edge stripes (CHAINS in the script holds the colours) */
 .cg{display:inline-grid;place-items:center;width:12px;height:12px;flex:none;vertical-align:-2px;border-radius:50%}
@@ -1815,7 +1817,7 @@ html.guest #fav .devnote,html.guest #positions,html.member #positions{display:no
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.7.4';
+const BUILD = 'v0.7.5';
 // the version, shown small at the top and on the lock screen (the owner can tell at a glance which one runs)
 document.querySelectorAll('#ver, .ver-t').forEach((e) => { e.textContent = BUILD; });
 // iOS Safari keeps a page's zoom (a pinch, or a tap into a small field in an older version) and opens it zoomed in
@@ -4430,6 +4432,7 @@ function verdict(b) {
 }
 const base = (p, id) => (p ? String(p.pair).split('/')[0] : String(id).slice(0, 8));
 const short = (s) => (s.length > 10 ? s.slice(0, 9) + '…' : s);
+const tkTxt = (v) => (Math.abs(v) >= 1000 ? +(v / 1000).toPrecision(3) + 'k' : String(v)); // a scatter tick: 1.5k, -10k
 function renderBt() {
   const ctx = $('#bt-ctx'), lead = $('#bt-lead'), lab = $('#bt-lab');
   $('#bt-prov').hidden = !!(S.bt && S.bt.provisional === false);
@@ -4456,7 +4459,7 @@ function renderBt() {
   const bias = diffs.length ? sum(diffs) / diffs.length : null;
   const worst = withF.slice().sort((a, b) => Math.abs(b.b.net - b.b.forecastNet) - Math.abs(a.b.net - a.b.forecastNet))[0];
   lead.innerHTML = `<div class="sub-card"><div class="sub-head"><div><h3>Leaderboard</h3><div class="lbl" style="margin-top:3px">FORECAST VS BACKTEST · NET APR · ${WIN_LABEL[S.win]}${bHid ? `<span class="hidn"> · ${hidTxt(bHid, true)}</span>` : ''}</div></div></div>`
-    + `<div class="calib"><div class="chartbox" data-chartbox="scatter"><div class="pane-title"><span class="lbl">Forecast vs backtest</span>${ztools('scatter', '')}</div><div class="chart" id="bt-scatter"></div><p class="sc-key"><i aria-hidden="true"></i>±10 pts band: the backtest within 10 points of the forecast</p></div><div class="kpis">`
+    + `<div class="calib"><div class="chartbox" data-chartbox="scatter"><div class="pane-title"><span class="lbl">Forecast vs backtest</span>${ztools('scatter', '')}</div><div class="chart" id="bt-scatter"></div><p class="sc-key"><i aria-hidden="true"></i>±10 pts band: the backtest within 10 points of the forecast</p><p class="sc-more pz-cap1"></p></div><div class="kpis">`
     + `<div class="kpi"><span class="v acc">${within} / ${withF.length}</span><span class="d">pools within ±10 pts of the forecast</span></div>`
     + `<div class="kpi"><span class="v">${pts(med).replace('+', '')}</span><span class="d">median miss</span></div>`
     + `<div class="kpi"><span class="v">${pts(bias)}</span><span class="d">average bias (backtest − forecast)${isNum(bias) ? (bias < -0.02 ? ': the scanner runs optimistic' : bias > 0.02 ? ': the scanner runs cautious' : '') : ''}</span></div>`
@@ -4480,11 +4483,19 @@ function drawScatter(rows) {
   const box = $('#bt-scatter'); if (!box) return;
   const pts2 = rows.filter((r) => isNum(r.b.forecastNet) && isNum(r.b.net)).map((r) => ({ r, x: r.b.forecastNet * 100, y: r.b.net * 100 }));
   const Wd = SOLO ? boxW(box, 260) : Math.min(boxW(box, 260), 640), Ht = Math.round(FULL ? Math.max(260, Math.min(innerHeight - 120, Wd * 1.2)) : Math.min(Math.max(Wd * 0.72, 210), 300) * (SOLO ? 1.6 : 1)); // a full view: as tall as the window allows
-  const L = 44, R = 14, T = 10, B = 32, pw = Wd - L - R, ph = Ht - T - B;
   if (!pts2.length) { delete PZ.scatter; box.innerHTML = `<p class="empty">No forecasts to compare yet (${DASH}).</p>`; return; }
   const all = pts2.flatMap((p) => [p.x, p.y]);
   let lo0 = Math.min(0, ...all), hi0 = Math.max(10, ...all);
   const pad = (hi0 - lo0) * 0.08; lo0 -= pad; hi0 += pad;
+  // v0.7.5: the margins fit the widest tick label any zoom can show (the live audit met "-5000" drawn over the rotated
+  // "backtest %" on real data): the left one holds the axis title's band (x 1…14) and the labels, the right one half an
+  // x label (the last tick sits on the plot's edge). Ticks of a thousand and more read 1.5k, 10k.
+  const tkW = (v) => tkTxt(v).length * SVG_CH, H00 = (hi0 - lo0) / 2;
+  let tkMax = 0;
+  for (const st of new Set(Array.from({ length: ZMAX.scatter * 20 + 1 }, (_, i) => niceStep(2 * H00 * Math.pow(0.6, i / 20), 4)))) { // every step a zoom can use
+    for (let v = Math.floor(lo0 / st) * st; v <= hi0 + st; v += st) tkMax = Math.max(tkMax, tkW(+v.toPrecision(10)));
+  }
+  const L = Math.max(44, Math.ceil(tkMax) + 22), R = Math.max(14, Math.ceil(tkMax / 2) + 3), T = 10, B = 32, pw = Wd - L - R, ph = Ht - T - B;
   // zoom: narrower axes around the middle; zoomed in, a drag moves them both ways, never past the full view
   const c0 = (lo0 + hi0) / 2, H0 = (hi0 - lo0) / 2, h = () => H0 * Math.pow(0.6, zget('scatter'));
   const lim = () => [c0 - H0 + h(), c0 + H0 - h()], pan = () => panGet('scatter', '', [0, 0]);
@@ -4512,7 +4523,11 @@ function drawScatter(rows) {
       }
       if (!best) return null;
       const o = best.o, q = o.r.p;
-      return { x: best.x, y: best.y, h: `<span class="tt">${esc(q ? q.pair : o.r.id)}${q ? ' · ' + feeTxt(q.feeTier) + ' · ' + chainShort(q.chain) : ''}${o.r.bench ? ' · benchmark' : ''}</span>forecast <b>${aprPd(o.r.b.forecastNet)}</b> · backtest <b>${aprPd(o.r.b.net)}</b> · miss <b>${pts(o.r.b.net - o.r.b.forecastNet)}</b>` };
+      // v0.7.5: dots on (almost) the same spot carry one label at most: the note names the others too
+      const gap = (e) => Math.hypot((m.X(e.x) - m.X(o.x)) * k, (m.Y(e.y) - m.Y(o.y)) * k);
+      const also = pts2.filter((e) => e !== o && gap(e) <= 6).sort((a, b) => gap(a) - gap(b)).map((e) => esc(e.r.p ? e.r.p.pair : e.r.id));
+      const alsoH = also.length ? `<span class="also">also here: ${also.slice(0, 8).join(', ')}${also.length > 8 ? ' +' + (also.length - 8) + ' more' : ''}</span>` : '';
+      return { x: best.x, y: best.y, h: `<span class="tt">${esc(q ? q.pair : o.r.id)}${q ? ' · ' + feeTxt(q.feeTier) + ' · ' + chainShort(q.chain) : ''}${o.r.bench ? ' · benchmark' : ''}</span>forecast <b>${aprPd(o.r.b.forecastNet)}</b> · backtest <b>${aprPd(o.r.b.net)}</b> · miss <b>${pts(o.r.b.net - o.r.b.forecastNet)}</b>${alsoH}` };
     },
     inner: () => {
       const zoomed = zget('scatter') > 1e-6;
@@ -4522,8 +4537,10 @@ function drawScatter(rows) {
       const X = (v) => L + ((v - xlo) / (xhi - xlo)) * pw, Y = (v) => T + ((yhi - v) / (yhi - ylo)) * ph, A = Math.min(xlo, ylo) - 50, Z = Math.max(xhi, yhi) + 50;
       P.map = { X, Y };
       let g = `<svg viewBox="0 0 ${Wd} ${Ht}" style="max-width:${Wd}px" role="img" aria-label="Forecast net APR against backtested net APR for each pool"><defs><clipPath id="sc-clip"><rect x="${L}" y="${T}" width="${pw}" height="${ph}"/></clipPath></defs>`;
-      for (const v of xt) g += `<line class="gridl" x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${T}" y2="${T + ph}"/><text x="${X(v).toFixed(1)}" y="${T + ph + 14}" text-anchor="middle">${v}</text>`;
-      for (const v of yt) g += `<line class="gridl" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${v}</text>`;
+      // an x label wider than the room to its neighbour's: every other one is left off (its grid line stays)
+      const xk = xt.length > 1 && xt.some((v, i) => i && X(v) - X(xt[i - 1]) < (tkW(v) + tkW(xt[i - 1])) / 2 + 8) ? 2 : 1;
+      xt.forEach((v, i) => { g += `<line class="gridl" x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${T}" y2="${T + ph}"/>` + (i % xk ? '' : `<text x="${X(v).toFixed(1)}" y="${T + ph + 14}" text-anchor="middle">${tkTxt(v)}</text>`); });
+      for (const v of yt) g += `<line class="gridl" x1="${L}" x2="${L + pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end">${tkTxt(v)}</text>`;
       g += `<g clip-path="url(#sc-clip)"><path d="M${X(A).toFixed(1)} ${Y(A + 10).toFixed(1)} L${X(Z).toFixed(1)} ${Y(Z + 10).toFixed(1)} L${X(Z).toFixed(1)} ${Y(Z - 10).toFixed(1)} L${X(A).toFixed(1)} ${Y(A - 10).toFixed(1)}Z" fill="rgba(22,199,132,.12)"/>`
         + `<line x1="${X(A).toFixed(1)}" y1="${Y(A).toFixed(1)}" x2="${X(Z).toFixed(1)}" y2="${Y(Z).toFixed(1)}" stroke="#16C784" stroke-dasharray="4 3"/></g>`;
       g += `<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="none" stroke="#1A212A"/><text x="${L + pw / 2}" y="${Ht - 3}" text-anchor="middle">forecast net APR % →</text>`
@@ -4533,23 +4550,68 @@ function drawScatter(rows) {
         const a = Math.abs(o.y - o.x), col = a <= 10 ? '#16C784' : a > 20 ? '#E2664C' : '#FAB219';
         g += o.r.bench ? `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4" fill="#0C1015" stroke="#8B96A3" stroke-width="1.5"/>` : `<circle cx="${X(o.x).toFixed(1)}" cy="${Y(o.y).toFixed(1)}" r="4.5" fill="${col}"/>`;
       }
-      // labels: only for dots in view, one per 11 px line; a label pushed out of the plot is left off (its dot stays), so
-      // no label is ever drawn over another or past the axes
-      const vis = pts2.filter((o) => X(o.x) >= L && X(o.x) <= L + pw && Y(o.y) >= T && Y(o.y) <= T + ph);
-      // v0.5.1: and a label goes on the side of its dot where no other pool's dot sits (a phone drew "IXPAX" over ORARX's)
-      const dots = vis.map((o) => [X(o.x), Y(o.y)]);
-      const onDot = (o, x0, tw) => dots.some(([cx, cy], j) => j !== o.i && cx + 5 > x0 && cx - 5 < x0 + tw && cy + 5 > o.y - 8.5 && cy - 5 < o.y + 2.5);
-      for (const o of spread(vis.map((o, i) => ({ i, y: Y(o.y) + 3.5, x: X(o.x), t: short(base(o.r.p, o.r.id)), b: o.r.bench })), 11, T + 9, T + ph - 2).filter((o) => o.y >= T + 9 && o.y <= T + ph - 2)) {
-        const tw = o.t.length * 6.4, sides = o.x < L + pw - 60 ? [true, false] : [false, true];
-        const fits = (r) => (r ? o.x + 7 + tw <= L + pw - 1 : o.x - 7 - tw >= L + 1), clear = (r) => !onDot(o, r ? o.x + 7 : o.x - 7 - tw, tw);
-        const right = [sides.find((r) => fits(r) && clear(r)), sides.find(fits), sides[0]].find((r) => r !== undefined);
-        g += `<text x="${(o.x + (right ? 7 : -7)).toFixed(1)}" y="${o.y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="${o.b ? 't-mut' : 't-fg'}">${esc(o.t)}</text>`;
+      // labels (v0.7.5): each beside its own dot, never over another label or dot, inside the plot. The live audit met
+      // crowded real data: the old one-label-per-line spread pushed names far from their dots. Lone dots are placed first,
+      // then crowded ones, each at the first clear spot of: right, left, a line up, a line down. A dot whose name finds no
+      // room is counted on a named dot of its crowd ("NAME +3"), or as "+N" beside it; failing both, under the chart
+      // ("N dots unnamed"). A tap names every pool on the spot (the note).
+      const vis = pts2.map((o) => ({ o, x: X(o.x), y: Y(o.y), t: short(base(o.r.p, o.r.id)) })).filter((d) => d.x >= L && d.x <= L + pw && d.y >= T && d.y <= T + ph);
+      const near = (d, e, r) => Math.hypot(d.x - e.x, d.y - e.y) <= r;
+      vis.forEach((d, i) => { d.i = i; d.crowd = vis.filter((e) => e !== d && near(d, e, 24)).length; });
+      const dots = vis.map((d) => ({ l: d.x - 5.5, r: d.x + 5.5, t: d.y - 5.5, b: d.y + 5.5 })), boxes = new Map();
+      const cross = (p, q) => p.l < q.r && p.r > q.l && p.t < q.b && p.b > q.t;
+      const spot = (d, txt, dys = [0, -10, 10]) => {
+        const tw = txt.length * SVG_CH, sides = d.x < L + pw - 60 ? [1, -1] : [-1, 1];
+        for (const dy of dys) for (const s of sides) {
+          const x0 = s > 0 ? d.x + 7 : d.x - 7 - tw, yb = d.y + 3.5 + dy, q = { l: x0 - 1, r: x0 + tw + 1, t: yb - 10, b: yb + 3.5 };
+          if (q.l < L + 1 || q.r > L + pw - 1 || q.t < T + 1 || q.b > T + ph - 1) continue;
+          if (dots.some((c) => cross(q, c)) || [...boxes.values()].some((c) => cross(q, c.q))) continue;
+          return { x0, yb, q, txt };
+        }
+        return null;
+      };
+      const order = vis.slice().sort((a, b) => a.crowd - b.crowd || a.i - b.i), left = [];
+      for (const d of order) { const at = spot(d, d.t); if (at) boxes.set(d, at); else left.push(d); }
+      // the dots left unnamed: each counts on its nearest named dot within 30 px (a pool's name before the benchmark's), as
+      // "NAME +3"; where that label finds no room, the count goes beside one of the dots it counts ("+3"), else in place of
+      // the name ("+4": the named dot counted too). Dots with no named dot near go in crowds (each within 24 px of another),
+      // each crowd a "+N" beside one of its dots
+      let unnamed = 0;
+      const groups = new Map(), lone = [];
+      for (const d of left) {
+        let host = null, hd = 30;
+        for (const e of boxes.keys()) { const dd = Math.hypot(d.x - e.x, d.y - e.y) + (e.o.r.bench ? 12 : 0); if (dd <= hd) { hd = dd; host = e; } }
+        if (host) groups.set(host, [...(groups.get(host) || []), d]); else lone.push(d);
+      }
+      const plus = (ds, also = []) => { for (const d of [...ds, ...also]) { const at = spot(d, '+' + ds.length); if (at) { boxes.set(d, { ...at, n: ds.length, only: true }); return true; } } return false; };
+      for (const [e, ds] of groups) {
+        const was = boxes.get(e);
+        boxes.delete(e);
+        const at = spot(e, e.t + ' +' + ds.length);
+        boxes.set(e, at ? { ...at, n: ds.length } : was);
+        if (at || plus(ds, [e])) continue;
+        const t2 = '+' + (ds.length + 1), tw = t2.length * SVG_CH; // no room at all: the named dot's own spot carries the count, its name included
+        if (t2.length > e.t.length) { unnamed += ds.length; continue; }
+        const x0 = was.x0 > e.x ? was.x0 : was.x0 + e.t.length * SVG_CH - tw;
+        boxes.set(e, { x0, yb: was.yb, q: { l: x0 - 1, r: x0 + tw + 1, t: was.q.t, b: was.q.b }, txt: t2, n: ds.length + 1, only: true });
+      }
+      while (lone.length) {
+        const crowd = [lone.shift()];
+        for (let k = 0; k < crowd.length; k++) for (let j = lone.length - 1; j >= 0; j--) if (near(crowd[k], lone[j], 24)) crowd.push(...lone.splice(j, 1));
+        if (!plus(crowd)) unnamed += crowd.length;
+      }
+      P.unnamed = unnamed;
+      for (const [d, at] of boxes) {
+        const right = at.x0 > d.x, nm = at.only ? '' : esc(d.t), cnt = at.n ? `<tspan class="t-mut">${at.only ? '' : ' '}+${at.n}</tspan>` : '';
+        g += `<text x="${(right ? at.x0 : at.x0 + at.txt.length * SVG_CH).toFixed(1)}" y="${at.yb.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" class="${d.o.r.bench ? 't-mut' : 't-fg'}">${nm}${cnt}</text>`;
       }
       return g + '</g></svg>';
     },
   };
+  P.caps = () => [P.unnamed ? `${P.unnamed} dot${P.unnamed === 1 ? '' : 's'} unnamed where pools crowd: tap one, or zoom in, for its pool` : '']; // the count no label could carry
   pzKeep('scatter');
   pzMount(box, 'scatter', 'pz-sc');
+  pzCaps('scatter');
 }
 function putHtml(id, html, outer) {
   const el = document.getElementById(id);
