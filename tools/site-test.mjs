@@ -17,6 +17,7 @@
 //                                                    apr (v0.7.1: APR up front: the workspace chip, the Overview hero, the count-up, History's fee APR chart, every pool row)
 //                                                    errbadge (v0.7.2: a page error shows a calm badge by the version; its sheet sanitized, Copy, Close, Dismiss)
 //                                                    spike (v0.7.4: a confirmed fee spike sets every chart's scale; an unconfirmed one is drawn, hatched and marked)
+//                                                    standout (v0.7.7: History's day table marks ★ highs, ↓ lows and ⚠ outliers against the median)
 //                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
 //                                                    explainer (v0.7.6: the "How to read this" note on top: shows, hides, comes back, jumps to the scatter)
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
@@ -61,7 +62,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -4576,7 +4577,7 @@ async function testWsHistory(browser) {
       let csv = '';
       if (dl) { const f = await dl.path().catch(() => null); if (f) csv = fs.readFileSync(f, 'utf8'); }
       const lines = csv.trim().split('\n'), row = lines.find((l) => l.startsWith(new Date(h.y[iv][0]).toISOString().slice(0, 10)));
-      ok(`history ws ${tag}: CSV saves the ${n90} days in view, a volume not read is an empty cell`, lines[0] === 'day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume,fees_unconfirmed' && lines.length === n90 + 1 && !!row && row.split(',')[3] === '', `${lines.length} lines · ${row ? row.split(',').slice(3, 5).join('|') : 'no row'}`);
+      ok(`history ws ${tag}: CSV saves the ${n90} days in view, a volume not read is an empty cell`, /^day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume,fees_unconfirmed(,x_median,mark)?$/.test(lines[0]) && lines.length === n90 + 1 && !!row && row.split(',')[3] === '', `${lines.length} lines · ${row ? row.split(',').slice(3, 5).join('|') : 'no row'}`);
     } else {
       // a finger: hold, then slide: the crosshair follows, the page doesn't scroll
       const before = await p.evaluate(() => ({ cur: window.__lpsHooks.ws().cur, sb: document.querySelector('#ws-body').scrollTop }));
@@ -6164,6 +6165,96 @@ async function testSpike(browser) {
   }
 }
 
+// ---------- v0.7.7 · E: standout days in History's day table (the owner picked E from the mockup) ----------
+// Each day's fees against the median of the confirmed days in view: ★ high ≥ 10×, good ≥ 3×, ↓ low ≤ ⅓ (a day with its fees read
+// only: a gap is never low), ⚠ outlier ≥ 3× and unconfirmed or its fee÷vol beyond 2.5× / under 0.4× the median's (it wins over
+// high). The spike case's confirmed pool carries a 70× day, a tenth-of-the-median day, a day not read and a 5× day with no more
+// volume behind it; the unconfirmed pool's 70× must read as an outlier, and so must the whole pair's (one tier unconfirmed).
+const SD_ROWS = () => [...document.querySelectorAll('#ws .hst tbody tr')].map((r) => { const c = r.cells[1], ch = r.querySelector('.sdc'), d = r.cells[0].getBoundingClientRect(), cb = ch && ch.getBoundingClientRect();
+  return { t: +r.dataset.t, k: r.dataset.sd || '', cls: r.className, chip: ch ? ch.textContent : '', f: c.textContent.trim(), w: c.style.getPropertyValue('--w'), bg: getComputedStyle(c).backgroundImage, edge: getComputedStyle(r.cells[0]).boxShadow, inCell: !cb || (cb.left >= d.left - 0.5 && cb.right <= d.right + 0.5) }; });
+const SD_HEAD = () => { const w = document.querySelector('#ws .hs-tw'), tb = document.querySelector('#ws .hs-tbl');
+  return { sd: w && w.dataset.sd, jmp: (document.querySelector('#ws .hs-jmp') || {}).textContent || '', leg: (document.querySelector('#ws .hs-sl') || {}).textContent || '', over: tb ? tb.scrollWidth - tb.clientWidth : 99, over0: tb ? (() => { const cs = [...tb.querySelectorAll('.sdc')]; cs.forEach((c) => { c.style.display = 'none'; }); const v = tb.scrollWidth - tb.clientWidth; cs.forEach((c) => { c.style.display = ''; }); return v; })() : 99, hdr: (() => { const h = document.querySelector('#ws .hs-th'), cs = h ? [...h.children].map((e) => e.getBoundingClientRect()) : []; return cs.length ? Math.round(Math.max(...cs.map((r) => r.bottom)) - Math.min(...cs.map((r) => r.top))) : 0; })(),
+    chips: [...document.querySelectorAll('#ws [data-act="ws-sdf"]')].map((b) => ({ v: b.dataset.v, t: b.textContent, on: b.getAttribute('aria-pressed') === 'true', dis: b.disabled })) }; };
+function sdModel(H, id, ts) { // the marks from the fixture's own numbers (made up), as the page must reach them
+  const h = H[id], nn = (x) => typeof x === 'number' && isFinite(x) && x >= 0;
+  const rs = ts.map((d) => { const i = h.y.findIndex((r) => r[0] === d), f = i >= 0 && nn(h.y[i][1]) ? h.y[i][1] : null, v = i >= 0 && h.yv && h.yv[i] && nn(h.yv[i][0]) ? h.yv[i][0] : null; return { t: d, f, v, u: f != null && !!(h.u && h.u.y && h.u.y.includes(d)) }; });
+  const med = (a) => { const b = a.slice().sort((x, y) => x - y), i = b.length >> 1; return !b.length ? null : b.length % 2 ? b[i] : (b[i - 1] + b[i]) / 2; };
+  const cf = rs.filter((r) => r.f != null && !r.u), m = med(cf.map((r) => r.f)), rm = med(cf.filter((r) => r.v > 0).map((r) => r.f / r.v));
+  const k = {};
+  for (const r of rs) {
+    if (r.f == null || !(m > 0)) { k[r.t] = ''; continue; }
+    const x = r.f / m, fv = r.v > 0 ? r.f / r.v : null, odd = r.u || (rm > 0 && fv != null && (fv > rm * 2.5 || fv < rm * 0.4));
+    k[r.t] = x >= 3 && odd ? 'o' : x >= 10 ? 'h' : x >= 3 ? 'g' : x <= 1 / 3 ? 'l' : '';
+  }
+  return { k, med: m, n: ['h', 'l', 'o', 'g'].map((q) => Object.values(k).filter((x) => x === q).length) };
+}
+async function testStandout(browser) {
+  const H = SPK.history.pools, t = SPD.t, sd = SPD.sd || {};
+  if (!ok('standout: the fixtures plant a 70× day, an unconfirmed 70× day, a low day, a day not read and a fee÷vol outlier', !!(SPD.conf && SPD.unconf && sd.low && sd.gap && sd.odd), JSON.stringify(sd))) return;
+  const c1 = SPD.pair.find((id) => id.endsWith('c1'));
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }], ['w1440', { width: 1440 }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440 }]];
+  for (const [tag, o] of SETS) {
+    const tt = await openUnlocked(browser, 'spike', { ...o, win: '24h' }), p = tt.page;
+    // 1 · the confirmed pool: every row's mark as the model reaches it; the planted days each as they should be
+    await spkHist(p, SPD.conf);
+    let rows = await p.evaluate(SD_ROWS), M = sdModel(H, SPD.conf, rows.map((r) => r.t));
+    const by = (t) => rows.find((r) => r.t === t) || {}, bad = rows.filter((r) => r.k !== M.k[r.t]);
+    ok(`standout ${tag}: every day's mark is the model's (${rows.length} days · ${M.n[0]} high, ${M.n[1]} low, ${M.n[2]} outlier, ${M.n[3]} good)`, rows.length === 30 && bad.length === 0, JSON.stringify(bad.slice(0, 3).map((r) => [r.t, r.k, M.k[r.t]])));
+    ok(`standout ${tag}: the 70× day is ★ high ("${by(t).chip}"), amber row with its left edge, amber bar`, by(t).k === 'h' && /\bsd-h\b/.test(by(t).cls) && /^★ \d+×$/.test(by(t).chip) && /246, 176, 74/.test(by(t).bg) && /246, 176, 74/.test(by(t).edge), JSON.stringify(by(t)));
+    ok(`standout ${tag}: a tenth-of-the-median day is ↓ low ("${by(sd.low).chip}"), blue row and bar`, by(sd.low).k === 'l' && /\bsd-l\b/.test(by(sd.low).cls) && /^↓ 0\.\d+×$/.test(by(sd.low).chip) && /143, 162, 255/.test(by(sd.low).bg), JSON.stringify(by(sd.low)));
+    ok(`standout ${tag}: a day not read is never low (${by(sd.gap).f}, no mark, no bar)`, by(sd.gap).k === '' && by(sd.gap).chip === '' && /not read/.test(by(sd.gap).f) && !by(sd.gap).w, JSON.stringify(by(sd.gap)));
+    ok(`standout ${tag}: a 5× day with no volume behind it is a ⚠ outlier, not a good day ("${by(sd.odd).chip}")`, by(sd.odd).k === 'o' && /\bsd-o\b/.test(by(sd.odd).cls) && /^⚠ [\d.]+× \?$/.test(by(sd.odd).chip), JSON.stringify(by(sd.odd)));
+    const ws = rows.filter((r) => /^\$|^≈/.test(r.f)).map((r) => parseFloat(r.w));
+    ok(`standout ${tag}: every fee cell read has its bar (${ws.length}), the 70× day's the longest`, ws.length >= 25 && ws.every((w) => w > 0 && w <= 100) && parseFloat(by(t).w) === Math.max(...ws), JSON.stringify(ws.slice(0, 6)));
+    let hd = await p.evaluate(SD_HEAD);
+    const cnt = (v) => { const c = hd.chips.find((x) => x.v === v); return c ? +(/(\d+)$/.exec(c.t) || [])[1] : NaN; };
+    ok(`standout ${tag}: the filter chips count them (${hd.chips.map((c) => c.t).join(' · ')}), a 0 is disabled, the header says "${hd.jmp}", the legend names each mark`,
+      hd.chips.length === 4 && cnt('h') === M.n[0] && cnt('l') === M.n[1] && cnt('o') === M.n[2] && hd.chips.every((c) => c.v === 'all' || c.dis === (cnt(c.v) === 0)) && new RegExp(`^★ ${M.n[0] + M.n[1] + M.n[2]} standout days? · jump ↓$`).test(hd.jmp) && /★/.test(hd.leg) && /↓/.test(hd.leg) && /⚠/.test(hd.leg) && /median/.test(hd.leg), JSON.stringify(hd));
+    // 2 · the filters: each shows only its rows; All brings every day back
+    const fl = {};
+    for (const v of ['h', 'l', 'o', 'all']) { await p.click(`#ws [data-act="ws-sdf"][data-v="${v}"]`); await sleep(150); const r = await p.evaluate(SD_ROWS); fl[v] = { n: r.length, kinds: [...new Set(r.map((x) => x.k))].join('') }; }
+    ok(`standout ${tag}: the filters show only highs (${fl.h.n}), lows (${fl.l.n}) or outliers (${fl.o.n}); All brings the ${fl.all.n} days back`, fl.h.n === M.n[0] && fl.h.kinds === 'h' && fl.l.n === M.n[1] && fl.l.kinds === 'l' && fl.o.n === M.n[2] && fl.o.kinds === 'o' && fl.all.n === 30, JSON.stringify(fl));
+    // 3 · sorting by fees keeps every mark on its day
+    await p.click('#ws [data-act="ws-sort"][data-k="f"]'); await sleep(200);
+    const so = await p.evaluate(SD_ROWS), sbad = so.filter((r) => r.k !== M.k[r.t]);
+    ok(`standout ${tag}: sorted by fees, every mark stays on its day (top row ${so[0] && so[0].chip})`, so.length === 30 && sbad.length === 0 && so[0].t === t, JSON.stringify(sbad.slice(0, 2)));
+    await p.click('#ws [data-act="ws-sort"][data-k="t"]'); await sleep(200); // (back to newest first)
+    // 4 · the jump: each tap puts the crosshair on the next standout day and shows its row; it goes round them all
+    const want = Object.entries(M.k).filter(([, k]) => /[hlo]/.test(k)).length, seen = [];
+    for (let i = 0; i < want + 1; i++) {
+      await p.click('#ws [data-act="ws-sdj"]'); await sleep(120);
+      seen.push(await p.evaluate(() => { const c = window.__lpsHooks.ws().cur, tb = document.querySelector('#ws .hs-tbl'), r = tb.querySelector(`tr[data-t="${c}"]`); if (!r) return { c, k: '' }; const a = r.getBoundingClientRect(), b = tb.getBoundingClientRect(); return { c, k: r.dataset.sd || '', on: r.classList.contains('on'), vis: a.top >= b.top - 1 && a.bottom <= b.bottom + 1 }; }));
+    }
+    ok(`standout ${tag}: "jump ↓" walks the ${want} standout days in turn, each row in view and picked, then round again`, seen.slice(0, want).every((s) => /[hlo]/.test(s.k) && s.on && s.vis) && new Set(seen.slice(0, want).map((s) => s.c)).size === want && seen[want].c === seen[0].c, JSON.stringify(seen));
+    // 5 · the day card and the day detail carry the badge
+    await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, t); await sleep(120);
+    const card = await p.evaluate(() => (document.querySelector('#hs-card .hs-dd .sdc') || {}).textContent || '');
+    // 6 · no text on text, nothing overflows (the table, the workspace, the page)
+    await p.evaluate(() => { const tb = document.querySelector('#ws .hs-tbl'); if (tb) tb.scrollTop = 0; }); await sleep(60);
+    const ov = [...await OVL(p, '#ws .hs-tw'), ...await OVL(p, '#hs-card')], fit = await p.evaluate(APR_FIT); hd = await p.evaluate(SD_HEAD); rows = await p.evaluate(SD_ROWS);
+    ok(`standout ${tag}: no text on text in the table or the card, the marks widen nothing (table overflow ${hd.over} vs ${hd.over0} without them, header ${hd.hdr} px on one line), no sideways scroll (page ${fit.page}, workspace ${fit.ws}), every chip inside its day cell`, ov.length === 0 && hd.over <= hd.over0 + 1 && hd.hdr <= 48 && fit.page <= 1 && fit.ws <= 1 && rows.every((r) => r.inCell), JSON.stringify({ ov: ov.slice(0, 2), over: hd.over, fit, out: rows.filter((r) => !r.inCell).length }));
+    if (SHOTS) { await p.evaluate(() => { const d = document.createElement('div'); d.id = 'sd-ribbon'; d.textContent = 'MOCKUP · MADE-UP NUMBERS'; d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#F6B04A;color:#201400;font:700 12px/1 monospace;letter-spacing:.14em;text-align:center;padding:7px 0;pointer-events:none'; document.body.append(d); }); await snap(p, `standout-${tag}`); await snap(p, `standout-${tag}-table`, '#ws .hs-tw'); await p.evaluate(() => document.querySelector('#sd-ribbon').remove()); }
+    await p.click(`#ws [data-act="ws-day"][data-t="${t}"]`).catch(() => {}); await sleep(250);
+    const det = await p.evaluate(() => (document.querySelector('#ws-day-h .sdc') || {}).textContent || '');
+    ok(`standout ${tag}: the day card ("${card}") and the Day detail ("${det}") show the same ★ badge`, /^★ \d+×$/.test(card) && det === card, JSON.stringify({ card, det }));
+    await p.click('#ws-back').catch(() => {}); await sleep(250);
+    // 7 · the CSV: x_median (2 decimals) and mark
+    const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 8000 }).catch(() => null), p.click('#ws [data-act="ws-csv"]')]);
+    let csv = ''; if (dl) { const f = await dl.path().catch(() => null); if (f) csv = fs.readFileSync(f, 'utf8'); }
+    const ln = csv.trim().split('\n'), hdr = (ln[0] || '').split(','), ci = hdr.indexOf('x_median'), mi = hdr.indexOf('mark'), cr = (d) => (ln.find((l) => l.startsWith(new Date(d).toISOString().slice(0, 10))) || '').split(',');
+    ok(`standout ${tag}: the CSV has x_median and mark (the 70× day ${cr(t)[ci]} ${cr(t)[mi]}, the low day ${cr(sd.low)[mi]}, the gap "${cr(sd.gap)[ci] || ''}")`, ci > 0 && mi === ci + 1 && /^\d+\.\d\d$/.test(cr(t)[ci]) && cr(t)[mi] === 'high' && cr(sd.low)[mi] === 'low' && cr(sd.odd)[mi] === 'outlier' && cr(sd.gap)[ci] === '' && cr(sd.gap)[mi] === '' && ln.slice(1).every((l) => l.split(',').length === hdr.length), JSON.stringify({ hdr, t: cr(t), gap: cr(sd.gap) }));
+    // 8 · an unconfirmed 70× day is an outlier, never a high; so is the whole pair's day with one tier unconfirmed
+    await spkHist(p, SPD.unconf);
+    const u = (await p.evaluate(SD_ROWS)).find((r) => r.t === t) || {};
+    ok(`standout ${tag}: the unconfirmed 70× day is a ⚠ outlier, not a high ("${u.chip}", hatched)`, u.k === 'o' && /\bsd-o\b/.test(u.cls) && /^⚠ \d+× \?$/.test(u.chip) && /repeating-linear-gradient/.test(u.bg), JSON.stringify(u));
+    await spkHist(p, c1);
+    const mode = await p.evaluate(() => document.querySelector('#ws .hs').dataset.mode), pr = (await p.evaluate(SD_ROWS)).find((r) => r.t === t) || {};
+    ok(`standout ${tag}: whole pair (${mode}): the 70× day with one tier unconfirmed is a ⚠ outlier ("${pr.chip}")`, mode === 'all' && pr.k === 'o' && /^⚠ \d+× \?$/.test(pr.chip), JSON.stringify(pr));
+    ok(`standout ${tag}: no page errors`, tt.errors.length === 0, tt.errors[0]);
+    await tt.ctx.close();
+  }
+}
+
 // ---------- v0.7.5 · the forecast-vs-backtest scatter, crowded ----------
 // The live audit of 21 Nov 2026 met its text colliding on real data (a five-digit tick label over the rotated axis title).
 // The cluster case puts eleven more pools within a few points of one (three on one spot) and stretches the axes with an outlier
@@ -6445,7 +6536,7 @@ async function testRefreshCd(browser) {
 
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
 const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {

@@ -766,7 +766,17 @@ export function spikeCase(data) {
   if (unconf) plant(unconf.id, true);
   for (const id of pairIds) plant(id, id === uTier);
   for (const id of pairIds) { const h = hist.pools[id], i = yRow(h); if (h.ytp && h.ytp.lim === 'v4' && i >= 0 && Array.isArray(h.yt)) h.yt[i] = [null, null]; } // v4: not recorded that day
-  return { ...T, spike: { t, x: SPIKE_X, conf: conf && conf.id, unconf: unconf && unconf.id, pair: pairIds, uTier } };
+  // v0.7.7 (standout days): the confirmed pool also gets a quiet day (a tenth of its median, the volume with it), a day not read
+  // (fees null: never a low day) and a 5× day with no more volume behind it (its fee÷vol 5× the others: an outlier, not a high)
+  const sd = { low: t + 10 * D, gap: t + 7 * D, odd: t + 18 * D };
+  if (conf) {
+    const h = hist.pools[conf.id], at = (d) => h.y.findIndex((r) => r[0] === d);
+    const around = h.y.filter((r) => r[0] !== t && Math.abs(r[0] - t) <= 20 * D && isNum(r[1])).map((r) => r[1]).sort((a, b) => a - b), med = around[Math.floor(around.length / 2)];
+    const set = (d, x, vk) => { const i = at(d); if (i < 0 || !isNum(h.y[i][1])) return; const k = (x * med) / h.y[i][1]; h.y[i] = [d, sig(x * med, 4), 'x']; if (h.yv && h.yv[i] && isNum(h.yv[i][0])) h.yv[i] = [sig(h.yv[i][0] * (vk ? k : 1), 4), 'g']; };
+    set(sd.low, 0.1, true); set(sd.odd, 5, false);
+    const g = at(sd.gap); if (g >= 0) { h.y[g] = [sd.gap, null, 'x']; if (h.yv && h.yv[g]) h.yv[g] = [null, null]; }
+  }
+  return { ...T, spike: { t, x: SPIKE_X, conf: conf && conf.id, unconf: unconf && unconf.id, pair: pairIds, uTier, sd } };
 }
 
 // cluster (v0.7.5): the forecast-vs-backtest scatter crowded. The live audit of 21 Nov 2026 met its text colliding on

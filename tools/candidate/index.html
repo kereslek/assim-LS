@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-999Ww4Oql329GQu7hQNNiHlwW8kvl5s6BZRozc75vhk='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-mnlfnsXcKsJRbW/Ua7L2GO9xL9r20R4u6scwalXvoEk='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1344,8 +1344,39 @@ table.hst{width:100%;border-collapse:collapse;font:500 11.5px/1.3 var(--mono);fo
 .hst td{padding:0 6px;height:30px;border-top:1px solid var(--line);text-align:right;white-space:nowrap;color:var(--fg)}
 @media (pointer:coarse){.hst td{height:44px}}
 .hst tr{cursor:pointer}
-.hst tr:hover td{background:rgba(230,237,243,.04)}
-.hst tr.on td{background:rgba(94,230,200,.14)}
+.hst tr:hover td{background-color:rgba(230,237,243,.04)}
+.hst tr.on td{background-color:rgba(94,230,200,.14)}
+/* v0.7.7 · E (the owner): standout days. Each day's fees against the median of the confirmed days in view: a data bar on a log
+   length in every fee cell; ★ high (≥ 10×) amber, 3× good a cyan mark, ↓ low (≤ ⅓) blue, ⚠ outlier (big, but unconfirmed or its
+   fee÷vol doesn't fit) hatched amber with a dashed chip. Every mark has a symbol, not only a colour */
+:root{--sd-hi:#F6B04A;--sd-hi-ink:#201400;--sd-lo:#8FA2FF;--sd-lo-fg:#B9C4FF}
+.hst td.sb{background-image:linear-gradient(var(--sbc,rgba(94,230,200,.2)),var(--sbc,rgba(94,230,200,.2)));background-repeat:no-repeat;background-position:left center;background-size:var(--w,0%) 62%}
+.hst tr.sd-h td.sb,.hst tr.sd-o td.sb{--sbc:rgba(246,176,74,.42)}
+.hst tr.sd-l td.sb{--sbc:rgba(143,162,255,.34)}
+.hst tr.sd-h td{background-color:rgba(246,176,74,.10)}
+.hst tr.sd-l td{background-color:rgba(143,162,255,.10)}
+.hst tr.sd-h td:first-child,.hst tr.sd-o td:first-child{box-shadow:inset 3px 0 0 var(--sd-hi)}
+.hst tr.sd-l td:first-child{box-shadow:inset 3px 0 0 var(--sd-lo)}
+.hst tr.sd-o td{background-image:repeating-linear-gradient(135deg,rgba(246,176,74,.11) 0 6px,transparent 6px 12px)}
+.hst tr.sd-o td.sb{background-image:linear-gradient(var(--sbc),var(--sbc)),repeating-linear-gradient(135deg,rgba(246,176,74,.11) 0 6px,transparent 6px 12px);background-size:var(--w,0%) 62%,auto;background-repeat:no-repeat,repeat}
+.hst tr.on td{background-color:rgba(94,230,200,.14)}
+.sdc{display:inline-block;font:700 9px/1 var(--mono);letter-spacing:.04em;border-radius:999px;padding:3px 5px;margin-left:4px;vertical-align:1px;white-space:nowrap}
+.sdc.h{background:var(--sd-hi);color:var(--sd-hi-ink)}
+.sdc.l{background:rgba(143,162,255,.22);color:var(--sd-lo-fg)}
+.sdc.o{border:1px dashed var(--sd-hi);color:var(--sd-hi);padding:2px 4px}
+.sdc.g{background:none;color:var(--accent2);padding:0;font-size:10px}
+.hst .rb{display:inline-flex;align-items:center}
+@media (max-width:560px){.hst .rb{flex-direction:column;align-items:flex-start;justify-content:center;gap:1px}.hst .rb .sdc{margin-left:0;padding-block:2px}.hst .rb .sdc.o{padding-block:1px}} /* a phone: the chip under its date */
+.hs-sf{display:flex;flex-wrap:wrap;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.hs-sf button{font:600 10.5px/1 var(--mono);border:1px solid var(--line);border-radius:999px;padding:0 9px;min-height:28px;background:transparent;color:var(--fg2);cursor:pointer;white-space:nowrap}
+@media (pointer:coarse){.hs-sf button{min-height:36px}}
+.hs-sf button[aria-pressed="true"]{border-color:var(--accent2);color:var(--accent2)}
+.hs-sf button:disabled{opacity:.4;cursor:default}
+.hs-th .hs-jmp{color:var(--sd-hi);font:600 10.5px/1.2 var(--mono);white-space:nowrap}
+.hs-th .lbl{min-width:0}
+@media (max-width:560px){.hs-th .hs-jw{display:none}}
+.hs-sl{display:flex;flex-wrap:wrap;gap:3px 10px;padding:6px 10px;border-top:1px solid var(--line);font:500 10px/1.35 var(--mono);color:var(--muted)}
+.hs-sl b{color:var(--fg2);font-weight:600}
 .hst .rb{min-height:30px;min-width:44px;padding:0;border:0;background:transparent;color:var(--fg);font:inherit;cursor:pointer;text-align:left;white-space:nowrap}
 @media (pointer:coarse){.hst .rb{min-height:44px}}
 .hst .nr{color:var(--muted)}
@@ -1867,7 +1898,7 @@ body.solo #xn,body.solo #xn-i{display:none!important}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.7.6';
+const BUILD = 'v0.7.7';
 // the version, shown small at the top and on the lock screen (the owner can tell at a glance which one runs)
 document.querySelectorAll('#ver, .ver-t').forEach((e) => { e.textContent = BUILD; });
 // iOS Safari keeps a page's zoom (a pinch, or a tap into a small field in an older version) and opens it zoomed in
@@ -5568,7 +5599,7 @@ const WS_RANGES = [[30, '30D'], [90, '90D'], [365, '1Y'], [0, 'All']];
 const WS_IDS = ['liq-ws', 'daily-ws', 'ws-hr']; // its pan charts: let go of when it closes or changes tab
 const WS_CHART_TAB = { 'liq-best': 'liquidity', 'liq-detail': 'liquidity', 'daily-best': 'overview', 'daily-detail': 'overview', 'd-px': 'overview', 'd-hr': 'overview', 'd-fees': 'history', 'd-day': 'history' };
 const WS_CHART_FOCUS = { 'liq-best': 'liq-ws', 'liq-detail': 'liq-ws', 'daily-best': 'daily-ws', 'daily-detail': 'daily-ws', 'd-hr': 'ws-hr', 'd-fees': 'hs', 'd-day': 'hs' };
-const WS = { open: false, id: null, tab: 'overview', list: [], opener: null, osig: null, y: 0, sb: 0, tiers: null, rangeOv: null, anim: null, cur: null, zoom: null, big: null, sort: { k: 't', dir: -1 }, cmp: [], lvl: null, dead: null, full: false, ms: null, v: null, q: '' };
+const WS = { open: false, id: null, tab: 'overview', list: [], opener: null, osig: null, y: 0, sb: 0, tiers: null, rangeOv: null, anim: null, cur: null, zoom: null, big: null, sort: { k: 't', dir: -1 }, sdf: 'all', cmp: [], lvl: null, dead: null, full: false, ms: null, v: null, q: '' };
 const HIST_SVG = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="6.5" width="2.4" height="4.5" rx=".6" fill="currentColor"/><rect x="4.8" y="3.5" width="2.4" height="7.5" rx=".6" fill="currentColor"/><rect x="8.6" y="1" width="2.4" height="10" rx=".6" fill="currentColor"/></svg>';
 const FS_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const wsSelf = () => (document.documentElement.classList.contains('m3d') ? '#5EE6C8' : '#16C784');
@@ -5981,6 +6012,7 @@ function hsModel(p) {
     }
     return r;
   });
+  out.sd = hsMarks(out.rows); // v0.7.7
   return out;
 }
 const hsSrcOf = (m, r, k) => { // the day's source letters (combined: each pool's, joined)
@@ -6212,6 +6244,34 @@ function hsSorted(m) {
   const { k, dir } = WS.sort;
   return m.rows.filter((r) => !r.pre).slice().sort((a, b) => { const x = hsKeyOf(a, k), y = hsKeyOf(b, k); if (x == null || y == null) return x == null && y == null ? b.t - a.t : x == null ? 1 : -1; return (x - y) * dir || b.t - a.t; });
 }
+// v0.7.7 · E (the owner): standout days. Against the median of the confirmed days in view (fees read, none unconfirmed):
+// ★ high ≥ 10×, good ≥ 3×, ↓ low ≤ ⅓ (only a day with its fees read: a gap or a day before the pool is never low), and ⚠ outlier:
+// ≥ 3× and either unconfirmed or its fee÷vol beyond 2.5× or under 0.4× the median fee÷vol (it wins over high: a glitch never looks
+// like a great day). w: the fee cell's bar, a log length up to the biggest confirmed day
+const SD_HI = 10, SD_GOOD = 3, SD_LO = 1 / 3, SD_RHI = 2.5, SD_RLO = 0.4;
+const sdMed = (a) => { if (!a.length) return null; const b = a.slice().sort((x, y) => x - y), i = b.length >> 1; return b.length % 2 ? b[i] : (b[i - 1] + b[i]) / 2; };
+function hsMarks(rows) {
+  const rs = rows.filter((r) => !r.pre && isNum(r.f)), cf = rs.filter((r) => !hsUn(r));
+  const med = sdMed(cf.map((r) => r.f)), rmed = sdMed(cf.filter((r) => isNum(r.v) && r.v > 0).map((r) => r.f / r.v));
+  const pos = cf.map((r) => r.f).filter((v) => v > 0), hi = pos.length ? Math.max(...pos) : null, lo = pos.length ? Math.min(...pos) : null;
+  const by = new Map(), n = { h: 0, l: 0, o: 0, g: 0 };
+  for (const r of rs) {
+    const x = isNum(med) && med > 0 ? r.f / med : null, fv = isNum(r.v) && r.v > 0 ? r.f / r.v : null;
+    let k = '';
+    if (x != null) {
+      const odd = !!hsUn(r) || (isNum(rmed) && rmed > 0 && fv != null && (fv > rmed * SD_RHI || fv < rmed * SD_RLO));
+      k = x >= SD_GOOD && odd ? 'o' : x >= SD_HI ? 'h' : x >= SD_GOOD ? 'g' : x <= SD_LO ? 'l' : '';
+    }
+    const w = hi && r.f > 0 ? (hi > lo ? clamp(Math.log(r.f / lo) / Math.log(hi / lo), 0, 1) : 1) * 0.9 + 0.1 : 0;
+    if (k) n[k]++;
+    by.set(r.t, { x, k, w });
+  }
+  return { med, rmed, by, n, days: cf.length };
+}
+const sdX = (x) => (x >= 10 ? String(Math.round(x)) : x >= 1 ? String(+x.toFixed(1)) : x >= 0.1 ? x.toFixed(1) : x > 0 ? x.toFixed(2) : '0');
+const SD_WORD = { h: 'high', g: 'good', l: 'low', o: 'outlier' };
+const SD_TIP = { h: 'high: 10× the median of the confirmed days in view or more', g: 'good: 3× the median or more', l: 'low: a third of the median or less', o: 'outlier: big, but unconfirmed or its fee÷vol doesn’t fit the other days (likely a data error)' };
+const sdChip = (z) => (!z || !z.k ? '' : `<span class="sdc ${z.k}" data-sd="${z.k}" title="${esc(SD_TIP[z.k])}">${{ h: '★ ', l: '↓ ', o: '⚠ ', g: '' }[z.k]}${sdX(z.x)}×${z.k === 'o' ? ' ?' : ''}</span>`);
 function hsCell(r, k) {
   const v = r[k], src = hsSrcOf(null, r, k).join('+');
   if (v === undefined) return `<td class="nr">${DASH}</td>`;
@@ -6219,20 +6279,28 @@ function hsCell(r, k) {
   const uw = un ? `<span class="uw" title="${esc((r.xs.length > 1 ? `${un} of ${r.xs.filter((x) => x && isNum(x.f)).length} tiers ` : '') + HS_UTXT)}">⚠ </span>` : '';
   if (pt) return `<td class="pt${un ? ' uc' : ''}" title="${esc(hsPartTxt(pt))}">${uw}${usd(pt.v)}<span class="s">${pt.n}/${pt.of}</span></td>`; // partial: never shown as the day's total
   if (!isNum(v)) return `<td class="nr">${(k === 'tv' && r.tvNa) || (k === 'f' && r.fNa) ? DASH : 'not read'}</td>`;
-  return `<td${un ? ' class="uc"' : ''}>${uw}${k === 'f' && r.fe ? '≈ ' : ''}${usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
+  const z = k === 'f' && WS.mod && WS.mod.sd ? WS.mod.sd.by.get(r.t) : null, cl = [un ? 'uc' : '', z ? 'sb' : ''].filter(Boolean).join(' '); // v0.7.7: the fee cell's bar
+  return `<td${cl ? ` class="${cl}"` : ''}${z ? ` style="--w:${(z.w * 100).toFixed(1)}%"` : ''}>${uw}${k === 'f' && r.fe ? '≈ ' : ''}${usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
 }
 function hsTableHtml(m) {
-  const rows = hsSorted(m);
-  return `<div class="hs-tw"><div class="hs-th"><span class="lbl">Days in view · ${rows.length}</span><button type="button" class="btn" data-act="ws-csv" aria-label="Download the days in view as CSV" title="Download CSV">CSV ↓</button></div>`
+  const all = hsSorted(m), sd = m.sd || hsMarks(m.rows), n = sd.n, nsd = n.h + n.l + n.o;
+  if (WS.sdf !== 'all' && !n[WS.sdf]) WS.sdf = 'all'; // a filter with nothing left to show goes back to every day
+  const rows = WS.sdf === 'all' ? all : all.filter((r) => (sd.by.get(r.t) || {}).k === WS.sdf);
+  const fb = (v, t, c) => `<button type="button" data-act="ws-sdf" data-v="${v}" aria-pressed="${WS.sdf === v}"${c === 0 ? ' disabled' : ''}>${t}${c == null ? '' : ' ' + c}</button>`;
+  return `<div class="hs-tw" data-sd="${n.h},${n.l},${n.o},${n.g}"><div class="hs-th"><span class="lbl">Days in view · ${all.length}</span>${nsd ? `<button type="button" class="linkbtn hs-jmp" data-act="ws-sdj" aria-label="Jump to the next standout day (${nsd})">★ ${nsd}<span class="hs-jw"> standout day${nsd > 1 ? 's' : ''}</span> · jump ↓</button>` : ''}<button type="button" class="btn" data-act="ws-csv" aria-label="Download the days in view as CSV" title="Download CSV">CSV ↓</button></div>`
+    + (isNum(sd.med) && sd.med > 0 ? `<div class="hs-sf" role="group" aria-label="Show only the standout days">${fb('all', 'All')}${fb('h', '★ Highs', n.h)}${fb('l', '↓ Lows', n.l)}${fb('o', '⚠ Outliers', n.o)}</div>` : '')
     + `<div class="hs-tbl"><table class="hst"><thead><tr>${HS_COLS.map(([k, t]) => `<th aria-sort="${WS.sort.k === k ? (WS.sort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" data-act="ws-sort" data-k="${k}" aria-label="Sort by ${t}">${t}${WS.sort.k === k ? (WS.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`).join('')}</tr></thead><tbody>`
-    + rows.map((r) => `<tr data-act="ws-row" data-t="${r.t}"><td><button type="button" class="rb" data-act="ws-row" data-t="${r.t}" tabindex="-1" aria-label="Show ${hsDayTxt(r.t)} on the charts">${dm(r.t)}</button></td>${hsCell(r, 'f')}${hsCell(r, 'v')}${hsCell(r, 'tv')}<td>${hsRate(r)}</td></tr>`).join('')
-    + '</tbody></table></div></div>';
+    + rows.map((r) => { const z = sd.by.get(r.t), k = z && z.k; return `<tr data-act="ws-row" data-t="${r.t}"${k && k !== 'g' ? ` class="sd-${k}"` : ''}${k ? ` data-sd="${k}"` : ''}><td><button type="button" class="rb" data-act="ws-row" data-t="${r.t}" tabindex="-1" aria-label="Show ${hsDayTxt(r.t)} on the charts${k ? ', ' + SD_WORD[k] + ' ' + sdX(z.x) + '× the median' : ''}">${dm(r.t)}${sdChip(z)}</button></td>${hsCell(r, 'f')}${hsCell(r, 'v')}${hsCell(r, 'tv')}<td>${hsRate(r)}</td></tr>`; }).join('')
+    + '</tbody></table></div>'
+    + (isNum(sd.med) && sd.med > 0 ? `<div class="hs-sl"><span>vs the median <b>${usd(sd.med)}</b> of ${sd.days} confirmed day${sd.days > 1 ? 's' : ''}</span><span><b style="color:var(--sd-hi)">★</b> high ≥ 10×</span><span><b style="color:var(--accent2)">3×</b> good</span><span><b style="color:var(--sd-lo-fg)">↓</b> low ≤ ⅓</span><span><b style="color:var(--sd-hi)">⚠ ?</b> outlier: big, but unconfirmed or its fee÷vol doesn’t fit</span></div>` : '')
+    + '</div>';
 }
 function hsCsv() {
   const m = WS.mod, p = poolById(WS.id);
   if (!m || !p || WS.tab !== 'history') return;
-  const q = (x) => (isNum(x) ? String(x) : ''), lines = ['day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume,fees_unconfirmed'];
-  for (const r of hsSorted(m)) lines.push([new Date(r.t).toISOString().slice(0, 10), q(r.f), hsSrcOf(m, r, 'f').join('+'), q(r.v), hsSrcOf(m, r, 'v').join('+'), q(r.tv), hsSrcOf(m, r, 'tv').join('+'), isNum(r.f) && isNum(r.v) && r.v > 0 ? (r.f / r.v).toPrecision(4) : '', hsUn(r) || ''].join(',')); // v0.7.4: the tiers whose fees that day are unconfirmed
+  const q = (x) => (isNum(x) ? String(x) : ''), lines = ['day_utc,fees_usd,fees_src,volume_usd,volume_src,tvl_usd,tvl_src,fee_per_volume,fees_unconfirmed,x_median,mark'];
+  const sd = m.sd || hsMarks(m.rows), zx = (r) => { const z = sd.by.get(r.t); return [z && z.x != null ? z.x.toFixed(2) : '', z && z.k ? SD_WORD[z.k] : '']; }; // v0.7.7
+  for (const r of hsSorted(m)) lines.push([new Date(r.t).toISOString().slice(0, 10), q(r.f), hsSrcOf(m, r, 'f').join('+'), q(r.v), hsSrcOf(m, r, 'v').join('+'), q(r.tv), hsSrcOf(m, r, 'tv').join('+'), isNum(r.f) && isNum(r.v) && r.v > 0 ? (r.f / r.v).toPrecision(4) : '', hsUn(r) || '', ...zx(r)].join(',')); // v0.7.4: the tiers whose fees that day are unconfirmed
   const name = `history-${String(p.pair).replace(/[^A-Za-z0-9]+/g, '-')}-${m.comb ? 'all-tiers' : feeTxt(m.tiers[0].q.feeTier).replace('%', 'pct')}-${m.rows.length}d.csv`;
   const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' }), a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; a.rel = 'noopener'; a.style.display = 'none';
@@ -6257,7 +6325,7 @@ function hsCardHtml(m, r) {
     const naV = (v === null && ((k === 'tv' && r.tvNa) || (k === 'f' && r.fNa))) || r.pre;
     return `<span class="hs-dv${uq && isNum(v) ? ' uc' : ''}" data-k="${k}"><span class="lbl">${label}</span><b class="${isNum(v) ? '' : 'nr'}">${naV ? DASH : hsMoney(v, k === 'f' && r.fe)}</b><span class="q${naV ? ' na' : ''}" title="${esc(tt || q)}">${esc(q)}</span></span>`;
   };
-  return `<span class="hs-dd">${hsDayTxt(r.t)}<small>${m.comb ? `${m.tiers.length} tiers combined` : esc(feeTxt(m.tiers[0].q.feeTier) + ' · ' + chainOf(m.tiers[0].q.chain).name)}</small></span>`
+  return `<span class="hs-dd">${hsDayTxt(r.t)}${m.sd ? sdChip(m.sd.by.get(r.t)) : ''}<small>${m.comb ? `${m.tiers.length} tiers combined` : esc(feeTxt(m.tiers[0].q.feeTier) + ' · ' + chainOf(m.tiers[0].q.chain).name)}</small></span>`
     + dv('f', 'Fees') + dv('v', 'Volume') + dv('tv', 'TVL') + hsAprDv(m, r) + `<span class="hs-dv" data-k="r"><span class="lbl">Fee ÷ vol</span><b>${hsRate(r)}</b><span class="q">${isNum(r.f) && isNum(r.v) ? 'the fee the LPs kept' : DASH}</span></span>`
     + (r.pre ? `<span class="hs-pre">${(() => { const bt = hsBorn(m); return bt ? `before the pool existed (created ${dm(bt)}): nothing to read, never 0` : 'before the pool existed: nothing to read, never 0'; })()}</span>` : '')
     + `<button type="button" class="linkbtn hs-dc" data-act="ws-day" data-t="${r.t}" aria-label="Every pool of the pair on ${hsDayTxt(r.t)}">Day detail ▸</button>`;
@@ -6269,7 +6337,8 @@ function hsDayHtml(p) {
   const rows = all.map((e) => ({ e, x: hsAt(e, t) }));
   const tot = (k) => hsAgg(rows.map((r) => r.x), k);
   const cell = (x, k, e) => { if (x === undefined) return `<td class="nr">${DASH}</td>`; const v = x[k], s = x[k === 'f' ? 'fs' : k === 'v' ? 'vs' : 'ts']; if (!isNum(v)) return `<td class="nr">${k === 'tv' && hsTvNote(e, t) ? DASH + ' not readable' : 'not read'}</td>`; return `<td${k === 'f' && hsUf(x) ? ` class="uc" title="${esc(HS_UTXT)}"` : ''}>${k === 'f' && hsUf(x) ? '<span class="uw">⚠ </span>' : ''}${k === 'f' && s === 'e' ? '≈ ' : ''}${usd(v)} <span class="s">${s ? HS_SRC[k][s][1] : ''}</span></td>`; }; // v0.7.4: ⚠ an unconfirmed tier
-  return `<div class="card hs-day"><h3 class="lbl acc" id="ws-day-h">${hsDayTxt(t)} · every pool of ${esc(p.pair)}</h3>`
+  const z = WS.tab === 'history' && S.hist ? hsModel(p).sd.by.get(t) : null; // v0.7.7: the day's mark in the History view it came from
+  return `<div class="card hs-day"><h3 class="lbl acc" id="ws-day-h">${hsDayTxt(t)} · every pool of ${esc(p.pair)}${sdChip(z)}</h3>`
     + `<div class="tbl-box" style="margin:0"><table><thead><tr><th>Pool</th><th>Fees</th><th>Volume</th><th>TVL</th><th>Fee ÷ vol</th></tr></thead><tbody>`
     + rows.map(({ e, x }) => `<tr><td><i class="sq" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${e.col}"></i>${chainMark(e.q.chain)}${feeTxt(e.q.feeTier)} v${esc(e.q.v)}${e.q.id === p.id ? ' · this' : ''}</td>${cell(x, 'f', e)}${cell(x, 'v', e)}${cell(x, 'tv', e)}<td>${x && isNum(x.f) && isNum(x.v) && x.v > 0 ? pct(x.f / x.v, { dp: 2 }) : DASH}</td></tr>`).join('')
     + `<tr><td><b>All combined</b></td><td><b>${hsMoney(tot('f'))}</b></td><td><b>${hsMoney(tot('v'))}</b></td><td><b>${hsMoney(tot('tv'))}</b></td><td>${DASH}</td></tr></tbody></table></div>`
@@ -6595,6 +6664,16 @@ function wsClick(el, e) {
     case 'ws-sort': { const k = el.dataset.k; WS.sort = WS.sort.k === k ? { k, dir: -WS.sort.dir } : { k, dir: k === 't' ? -1 : -1 }; wsRender(); refocus(`#ws [data-act="ws-sort"][data-k="${k}"]`); return true; }
     case 'ws-row': { const t = Number(el.dataset.t), v = WS.v; if (v) { const i = v.rows.indexOf(t); if (i >= 0) hsCursor(i, false); } return true; }
     case 'ws-csv': hsCsv(); return true;
+    case 'ws-sdf': WS.sdf = el.dataset.v || 'all'; wsRender(); refocus(`#ws [data-act="ws-sdf"][data-v="${WS.sdf}"]`); return true; // v0.7.7: only the highs, lows or outliers
+    case 'ws-sdj': { // v0.7.7: the next standout day below the one picked (round to the top), the crosshair on it
+      const tb = $('#ws .hs-tbl'), v = WS.v, trs = tb ? [...tb.querySelectorAll('tr[data-sd="h"],tr[data-sd="l"],tr[data-sd="o"]')] : [];
+      if (!trs.length || !v) return true;
+      const all = [...tb.querySelectorAll('tbody tr')], cur = all.findIndex((x) => Number(x.dataset.t) === WS.cur);
+      const nx = trs.find((x) => all.indexOf(x) > cur) || trs[0], i = v.rows.indexOf(Number(nx.dataset.t));
+      if (i >= 0) hsCursor(i, true);
+      const top = nx.offsetTop - tb.querySelector('thead').offsetHeight; if (top < tb.scrollTop || top + nx.offsetHeight > tb.scrollTop + tb.clientHeight - 4) tb.scrollTop = Math.max(0, top - tb.clientHeight / 2);
+      return true;
+    }
     case 'ws-day': wsLvl('day', { t: Number(el.dataset.t) }); return true;
     case 'ws-cmp-add': WS.q = ''; wsLvl('pick'); return true;
     case 'ws-cmp-rm': WS.cmp = WS.cmp.filter((x) => x !== el.dataset.id); WS.zoom = null; wsRender(); refocus('#ws [data-act="ws-cmp-add"]'); return true;
