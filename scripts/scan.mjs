@@ -53,6 +53,7 @@ import { cexVolumes, makeCexCache, cexScreen, CEX_BUDGET } from '../lib/cex.mjs'
 import { lensCexLed } from '../lib/lenses.mjs';
 import { makeBudget, capRpc, UNLIMITED } from '../lib/budget.mjs';
 import { makeLinksCache, resolveLinks } from '../lib/links.mjs';
+import { d1Pass } from '../lib/d1.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, GROUP = 40;
 // a pool under YOUNG_DAYS old is scanned from YOUNG_FLOOR (the newPools lane looks for them before liquidity arrives)
@@ -1117,7 +1118,7 @@ async function writeOutputs() {
     bench: BENCH, pools: out, pairs: pairsAll, market, discovery,
   };
   store.put('live.json', live);
-  let histWritten = false;
+  let histWritten = false, histPools = null;
   const fh = { pools: 0, exact: 0, est: 0, rows: 0, xc: [], xcPools: 0, aged: 0, full: 0, left: 0, spikes: 0, backed: 0, bySwaps: 0, uPools: 0 };
   const tvTot = { pools: 0, days: 0, b: 0, r: 0, m: 0, gone: 0, goneV4: 0, goneReach: 0, open: 0, vs: 0, vg: 0, vNull: 0, vx: [], tl: [] };
   if (snapsOk && (changed || exChanged || tvChanged || !fs.existsSync(`${store.outDir}/history.json`))) {
@@ -1153,7 +1154,7 @@ async function writeOutputs() {
     const last = (ph?.health || []).find((x) => x[0] === hour);
     health.push([hour, (last?.[1] ?? 0) + (badMaps ? 0 : 1), (last?.[2] ?? 0) + 1, unreadMaps + badMaps]);
     store.put('history.json', { v: 1, t: passT, pools: hp, health });
-    histWritten = true;
+    histWritten = true; histPools = hp;
   }
   if (snapsOk && (changed || exChanged || tvChanged || !fs.existsSync(`${store.outDir}/snapshots.json`))) store.put('snapshots.json', { ...serializeStore(snapsKeep), t: passT, fix: SNAP_FIX, gt: packGt(gtCache, { now: passT }), sx: packSx(sxCache, { now: passT }), tv: packTv(tvCache, { now: passT }) });
   // the fee history in the public log: counts, one ratio and seconds only (never a pool, an amount or an address)
@@ -1176,4 +1177,11 @@ async function writeOutputs() {
     pub(`volume history: ${tl.vol}`);
   }
   say(snapsOk ? true : false, 'sealed outputs', `live.json written with ${out.length} pools; history.json ${histWritten ? 'written' : 'kept (no new hourly row)'}; snapshots ${snapsOk ? (changed ? 'updated' : 'unchanged') : 'stored copy did not open: left as it was'}`);
+  // the permanent archive in Cloudflare D1 (lib/d1.mjs, docs/DATA.md "D1 archive"): history.json's market rows, after every
+  // sealed file is written; one public line of counts. Never fails the pass: no secrets is "skipped", a failure its category.
+  if (histPools) {
+    let d1 = null;
+    try { d1 = await timed('d1', () => d1Pass({ history: histPools, live: out, now: passT, exclude: config.leakSensitive || [] })); } catch { d1 = { line: 'd1: error internal' }; }
+    pub(d1.line);
+  } else pub('d1: idle (history.json unchanged this pass)');
 }

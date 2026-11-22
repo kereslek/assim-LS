@@ -1,6 +1,6 @@
-# SQL store plan (owner's picks, 14 Nov 2026) — planned, not built
+# SQL store plan (owner's picks, 14 Nov 2026) — part 1 built
 
-Status: **plan only**. Build starts on the owner's go, after the owner's one-time Cloudflare steps.
+Status: **part 1 built** (22 Nov 2026): the permanent history archive in D1 (`assim-ls-archive`, `db/schema.sql`, `lib/d1.mjs`, the jobs in `.github/workflows/d1.yml`, the loop's writer in `scripts/scan.mjs`; docs/DATA.md "D1 archive"). It goes live in the loop when `loop/PIN` moves to the commit that has it. Built differently from the plan: the loop writes D1 directly through its REST API with the Actions secrets (no Worker yet; the Worker comes with part 2), and the sealed yearly copy on GitHub is not built yet (the data and backup branches keep `history.json`'s year meanwhile). Parts 2 to 5: plan only, after mockups.
 
 ## Owner's decisions
 - Platform: **Cloudflare D1 + one Worker** (free plan). Supabase not used.

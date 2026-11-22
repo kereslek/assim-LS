@@ -1,0 +1,48 @@
+name: d1
+# The permanent history archive in Cloudflare D1 (lib/d1.mjs, scripts/d1.mjs, docs/DATA.md "D1 archive"). Never scheduled:
+#   check   the token works; the database assim-ls-archive exists (yes/no)
+#   setup   create assim-ls-archive if missing; apply db/schema.sql's migrations (idempotent)
+#   import  the history the loop keeps (the sealed history.json, opened here only) into D1: the rows D1 lacks or holds
+#           from a worse source, within the day's write budget; run it again to resume (idempotent)
+#   verify  row counts and date ranges; random pool-days of history.json against D1 (pass/fail counts)
+# Only resources named assim-ls* are ever created, read or changed. The secrets reach the step through env only; the
+# public log shows yes/no, counts, dates and category words: never the account, the token, a pool or an amount.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'check, setup, import or verify'
+        type: choice
+        options: [check, setup, import, verify]
+        default: check
+permissions:
+  contents: read   # the scripts, and the sealed data branch for import and verify
+concurrency:
+  group: d1
+  cancel-in-progress: false
+jobs:
+  d1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: D1 tests first (the SQL rules on SQLite, planted faults)
+        run: node --test test/d1.test.mjs
+      - name: Restore the sealed data (import and verify only; opened inside this job, never printed)
+        if: inputs.mode == 'import' || inputs.mode == 'verify'
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: node scripts/publish-data.mjs --restore
+      - name: D1 ${{ inputs.mode }}
+        env:
+          MODE: ${{ inputs.mode }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          LOCK_PASSPHRASE: ${{ (inputs.mode == 'import' || inputs.mode == 'verify') && secrets.LOCK_PASSPHRASE || '' }}
+        run: |
+          set +x
+          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_API_TOKEN" ]; then echo "d1 $MODE: secrets present: no"; exit 1; fi
+          node scripts/d1.mjs "$MODE"
