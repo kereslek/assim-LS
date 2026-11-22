@@ -75,9 +75,13 @@ export async function run(mode, { env = process.env, say = (s) => console.log(`d
     say(`pools ${fmt(pools)}; pool_day ${fmt(days)} rows (${dMin ?? '—'} to ${dMax ?? '—'}; fees from swaps ${fmt(ds)}, counters ${fmt(dx)}, estimated ${fmt(de)}, unread ${fmt(days - ds - dx - de)}; revised ${fmt(revised)}); `
       + `pool_hour ${fmt(hours)} rows (${hourText(hMin)} to ${hourText(hMax)}); written today ${fmt(wToday ?? 0)} of the ${fmt(LIMITS.daily)} budget`);
     // the cross-check: random pool-days over 4 days old (a newer day may still gain its candle's prices), D1 against history.json
+    // over the pools D1 holds days of (an import a budget cut leaves the rest to its next run; coverage says how far it is)
     const m = await load();
     const cutoff = Math.floor(now / DAY) * DAY - 4 * DAY;
-    const cand = archivePools(m.history, m.live, m.exclude).flatMap((p) => dayRows(p.id, p.hp, p.rate)).filter((r) => Date.parse(r.day_utc) < cutoff);
+    const held = new Set((await c.raw(db, 'SELECT pool_id FROM pool_day GROUP BY pool_id')).rows.map((x) => x[0]));
+    const ps = archivePools(m.history, m.live, m.exclude);
+    say(`coverage: D1 holds days of ${fmt(ps.filter((p) => held.has(p.id)).length)} of the ${fmt(ps.length)} pools in history.json${ps.every((p) => held.has(p.id)) ? '' : ' (the import resumes with its next run or the loop\'s daily sweep)'}`);
+    const cand = ps.filter((p) => held.has(p.id)).flatMap((p) => dayRows(p.id, p.hp, p.rate)).filter((r) => Date.parse(r.day_utc) < cutoff);
     for (let i = cand.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [cand[i], cand[j]] = [cand[j], cand[i]]; }
     const pick = cand.slice(0, sample), got = new Map();
     for (let i = 0; i < pick.length; i += 50) {
@@ -95,7 +99,7 @@ export async function run(mode, { env = process.env, say = (s) => console.log(`d
       if (f.some(([k, t, , si]) => r[`${k}_rank`] > rankOf(t, x[si]))) { behind++; continue; } // history has a better source since: the next sweep takes it
       if (f.every(([k, t, vi, si]) => rankOf(t, x[si]) === r[`${k}_rank`] && x[si] === r[`${k}_src`] && same(x[vi], r[`${k}_usd`]))) match++; else differ++;
     }
-    say(`cross-check: ${pick.length} random pool-days (of ${fmt(cand.length)} over 4 days old): ${match} match (value and source), ${behind} behind (a better source since: the next sweep), ${differ} differ, ${missing} missing`);
+    say(`cross-check: ${pick.length} random pool-days of those pools (of ${fmt(cand.length)} over 4 days old): ${match} match (value and source), ${behind} behind (a better source since: the next sweep), ${differ} differ, ${missing} missing`);
     const ok = pick.length > 0 && differ === 0 && missing === 0;
     say(ok ? 'PASS' : 'FAIL');
     return ok ? 0 : 1;

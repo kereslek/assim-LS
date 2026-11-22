@@ -414,7 +414,9 @@ test('the d1 job: check, setup (created, then already there), import, verify (PA
   assert.equal(one(f, 'SELECT COUNT(*) n FROM pool_day').n, 16);
   assert.equal(one(f, 'SELECT SUM(revisions) n FROM pool_day').n, 0);
   assert.equal(await job('verify', { load }), 0);
-  assert.match(out.at(-2), /cross-check: 12 random pool-days \(of 12 over 4 days old\): 12 match/);
+  assert.match(out.at(-2), /cross-check: 12 random pool-days of those pools \(of 12 over 4 days old\): 12 match/);
+  assert.equal(await job('verify', { load: async () => ({ history: { ...hist, [P4]: hpOf({ days: 8 }) }, live, exclude: [] }) }), 0); // a pool the import hasn't reached
+  assert.ok(out.includes("verify: coverage: D1 holds days of 2 of the 3 pools in history.json (the import resumes with its next run or the loop's daily sweep)"));
   assert.equal(out.at(-1), 'verify: PASS');
   f.db.prepare(`UPDATE pool_day SET fees_usd = fees_usd * 2 WHERE pool_id = '${P2}'`).run(); // a planted fault: D1 no longer holds what the history says
   assert.equal(await job('verify', { load }), 1);
