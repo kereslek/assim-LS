@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3VqcgFePCeAZnkL1qsJ0FAYrbE5+4aKMh8dAZU99JGs='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-B1C7smarTaHdvrpk4Mw8HO/H33A0CyWbRT4ryEpsXGk='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2325,9 +2325,10 @@ const chainTerm = (c) => { const k = String(c || '').toLowerCase(), x = CHAIN_AL
 // v0.7.8: each token's coin page, from the data (links.cmc: a CoinMarketCap slug, else links.cg: a CoinGecko id);
 // data without links (older passes) shows plain text, never a guessed link
 const TK_SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
+const COIN_PAGES = { cmc: 'https://coinmarketcap.com/currencies/', cg: 'https://www.coingecko.com/en/coins/' };
 const tokUrl = (t) => { const L = t && t.links; if (!L || typeof L !== 'object') return null;
-  if (TK_SLUG.test(String(L.cmc || ''))) return ['CoinMarketCap', 'https://coinmarketcap.com/currencies/' + L.cmc + '/'];
-  if (TK_SLUG.test(String(L.cg || ''))) return ['CoinGecko', 'https://www.coingecko.com/en/coins/' + L.cg];
+  if (TK_SLUG.test(String(L.cmc || ''))) return ['CoinMarketCap', COIN_PAGES.cmc + L.cmc + '/'];
+  if (TK_SLUG.test(String(L.cg || ''))) return ['CoinGecko', COIN_PAGES.cg + L.cg];
   return null; };
 const tokLink = (sym, t) => { const u = tokUrl(t); return u ? `<a class="tkl" href="${esc(u[1])}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" data-act="ext" aria-label="${esc(sym + ' on ' + u[0] + ' (opens a new tab)')}" title="${esc(sym + ' on ' + u[0])}">${esc(sym)}</a>` : esc(sym); };
 // the pair's text with each symbol a link to its coin page; the text stays exactly `label` (default the pool's pair)

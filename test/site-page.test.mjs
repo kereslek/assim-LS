@@ -35,11 +35,12 @@ test('self-contained: no external scripts, styles or fonts', () => {
   const hosts = [...html.matchAll(/https?:\/\/([^/"'\s);]+)/g)].map((m) => m[1]);
   // explorer links open in a new tab (navigation, not a fetch): the only other hosts, never in the CSP's fetch lists
   // v0.7.0: github.com, for the owner's two links (a sealed request as a new inbox/ file; the LOCK_PASSPHRASE secret's page)
-  const LINKS = ['etherscan.io', 'basescan.org', 'app.uniswap.org', ...(/const INBOX_NEW = /.test(html) ? ['github.com'] : [])];
+  // v0.7.8: each token's coin page (CoinMarketCap, else CoinGecko), a link too
+  const LINKS = ['etherscan.io', 'basescan.org', 'app.uniswap.org', ...(/const INBOX_NEW = /.test(html) ? ['github.com'] : []), ...(/const COIN_PAGES = /.test(html) ? ['coinmarketcap.com', 'www.coingecko.com'] : [])];
   assert.deepEqual([...new Set(hosts)].filter((h) => h !== 'www.w3.org' && !LINKS.includes(h)).sort(), ['raw.githubusercontent.com']); // w3.org: the svg namespace, never fetched
   for (const h of LINKS) assert.ok(!csp.includes(h), `${h} is a link target, not a source`);
   const linkLines = html.split('\n').filter((l) => LINKS.some((h) => l.includes('https://' + h)));
-  assert.ok(linkLines.length >= 1 && linkLines.every((l) => /^const (EXPLORER|UNI_CHAIN|INBOX_NEW|SECRET_URL) = |^  const id = String\(p\.id/.test(l)), 'link hosts only in the link builders');
+  assert.ok(linkLines.length >= 1 && linkLines.every((l) => /^const (EXPLORER|UNI_CHAIN|INBOX_NEW|SECRET_URL|COIN_PAGES) = |^  const id = String\(p\.id/.test(l)), 'link hosts only in the link builders');
   assert.match(html, /target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"/);
   assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,/);
   assert.match(html, /<link rel="apple-touch-icon" href="data:image\/png;base64,/);
