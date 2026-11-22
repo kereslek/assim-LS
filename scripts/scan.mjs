@@ -52,6 +52,7 @@ import { routerName } from '../lib/routers.mjs';
 import { cexVolumes, makeCexCache, cexScreen, CEX_BUDGET } from '../lib/cex.mjs';
 import { lensCexLed } from '../lib/lenses.mjs';
 import { makeBudget, capRpc, UNLIMITED } from '../lib/budget.mjs';
+import { makeLinksCache, resolveLinks } from '../lib/links.mjs';
 
 const FLOOR = 300_000, V4_PREFILTER = 100_000, GROUP = 40;
 // a pool under YOUNG_DAYS old is scanned from YOUNG_FLOOR (the newPools lane looks for them before liquidity arrives)
@@ -848,6 +849,13 @@ async function writeOutputs() {
   for (const X of ctxs) for (const t of X.tok.values()) if (t?.cg && !cexMeta.has(t.cg)) cexMeta.set(t.cg, { symbol: t.symbol ?? null, usd: isNum(t.usd) ? t.usd : null });
   const cx = await timed('exchanges', () => cexVolumes(getJson, cexCoins, { key: process.env.COINGECKO_KEY || null, cache: cexCache, now: passT, apis, meta: cexMeta }));
   try { cexCache.save(); } catch { /* the live.json copy carries it */ }
+  // each token's CoinMarketCap / CoinGecko link (lib/links.mjs); the public log gets the counts only
+  const linksCache = makeLinksCache('out/cache/links.json', { now: passT });
+  const linkToks = mapped.flatMap((p) => [p.t0, p.t1].map((a) => ({ chain: p.chain, addr: a, cg: p.X.tok.get(a)?.cg ?? null })));
+  const lk = await timed('links', () => resolveLinks(linkToks, { getJson, cmcGetJson: rawGetJson, cgKey: process.env.COINGECKO_KEY || null, cmcKey: process.env.CMC_API_KEY || null, cache: linksCache, apis })).catch(() => null);
+  try { linksCache.save(); } catch { /* asked again next pass */ }
+  pub(lk ? lk.line() : 'links: unread');
+  const linksOf = (p, a) => (lk ? lk.of(p.chain, a) : { cmc: null, cg: null });
 
   // every window per pool
   const firstAt = new Map((prev?.pools || []).map((x) => [x.id, x.gemFirstAt ?? null]));
@@ -958,7 +966,7 @@ async function writeOutputs() {
     const keptSeries = snapsKeep.get(p.id);
     out.push({
       id: p.id, chain: p.chain, dex: p.dex, v: p.v, pair: `${symOf(p.t0)}/${symOf(p.t1)}`,
-      t0: { sym: symOf(p.t0), addr: p.t0, dec: t0.decimals ?? null, usd: t0.usd ?? null }, t1: { sym: symOf(p.t1), addr: p.t1, dec: t1.decimals ?? null, usd: t1.usd ?? null },
+      t0: { sym: symOf(p.t0), addr: p.t0, dec: t0.decimals ?? null, usd: t0.usd ?? null, links: linksOf(p, p.t0) }, t1: { sym: symOf(p.t1), addr: p.t1, dec: t1.decimals ?? null, usd: t1.usd ?? null, links: linksOf(p, p.t1) },
       feeTier, dynamicFee: p.v === 4 && p.fee === DYNAMIC_FEE, lpKeeps: keeps ? (keeps[0] + keeps[1]) / 2 : null,
       hooks: p.v === 4 ? p.hooks ?? null : null, verified: p.verified ?? null,
       firstSeen: Math.min(X.passT, pp?.firstSeen ?? X.passT, keptSeries?.d[0]?.t ?? X.passT, keptSeries?.h[0]?.t ?? X.passT),

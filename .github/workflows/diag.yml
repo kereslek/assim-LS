@@ -66,6 +66,7 @@ jobs:
         env:
           COINGECKO_KEY: ${{ secrets.COINGECKO_KEY }}
           ETHERSCAN_KEY: ${{ secrets.ETHERSCAN_KEY }}
+          CMC_API_KEY: ${{ secrets.CMC_API_KEY }}   # optional: the token links' CoinMarketCap slugs
         run: node scripts/scan.mjs
       - name: Save the market-data caches
         if: always() && hashFiles('out/cache/**') != ''

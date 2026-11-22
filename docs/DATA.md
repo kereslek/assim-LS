@@ -127,7 +127,9 @@ Check ids in `health.checks` (each across every chain scanned: false if any chai
 {
   id: "<v3 pool address or v4 pool id>", chain: "ethereum"|"base", dex: "uniswap"|"pancakeswap", v: 3|4,   // PancakeSwap: v 3
   pair: "<SYM0>/<SYM1>", pairKey: "<key in pairs>",
-  t0: { sym, addr, dec, usd: <n|null> }, t1: { sym, addr, dec, usd: <n|null> },
+  t0: { sym, addr, dec, usd: <n|null>, links }, t1: { sym, addr, dec, usd: <n|null>, links },
+                                // links = { cmc: "<CoinMarketCap slug>"|null, cg: "<CoinGecko id>"|null } (from v0.7.8;
+                                //   older data has none: plain text). See "Token links" below
   feeTier: <fraction, e.g. 0.003>, dynamicFee: <bool>, lpKeeps: <fraction LPs keep after the protocol's cut|null>,
                                 // read per venue: Uniswap v3 1 − 1/N per nibble; PancakeSwap v3 1 − fp/10,000 per 16-bit
                                 // share (about 0.66); v4 from slot0's protocolFee and lpFee
@@ -364,3 +366,13 @@ Backtest = {
                                 // in-range positions' actual fee growth over the same window
 }
 ```
+
+### Token links (`pool.t0/t1.links`, lib/links.mjs)
+
+The page makes a token's symbol a link to read about the coin: `https://coinmarketcap.com/currencies/<cmc>/` when `cmc` is set, else `https://www.coingecko.com/en/coins/<cg>`, else plain text (also for data published before the field, which has no `links`). Nothing is guessed from a symbol:
+- **Wrapped and native tokens** come from an explicit map by chain and address (`WRAPPED`): WETH (Ethereum, Base) and native ETH → Ethereum; WBTC and cbBTC → Bitcoin.
+- **`cg`** is the pool list's coin id (the universe's CoinGecko coin, or the quote's); when that is missing, CoinGecko's contract lookup (`/coins/{ethereum|base}/contract/{address}`, the Demo key in a header, within the daily budget, at most 10 a pass), kept only when the answer lists that very address.
+- **`cmc`** only with the Actions secret **`CMC_API_KEY`** (passed to the scan in `loop.yml`, `pools.yml` and `diag.yml`; never a dispatch input, never printed): CoinMarketCap's `/v2/cryptocurrency/info?address=<address>` (free Basic plan, header `X-CMC_PRO_API_KEY`), one address a call, at most 30 a pass, kept only when exactly one coin answers and it lists that address among its contracts. Without the key `cmc` is null and the page links CoinGecko. A 401/402/403/429 stops the lookups for the pass.
+- **Cache** `out/cache/links.json` (`{ v: 1, cg: { "chain:addr": { v, t } }, cmc: { … } }`, public market data, kept with the loop's other caches): a found answer for 30 days, a miss or a failed call until the next UTC day; a failed call keeps an earlier answer.
+- **Public log:** counts only, e.g. `links: 48 cg, 0 cmc, 2 none · cmc key: absent · lookups 2 cg, 0 cmc` (`cmc key: present|absent` doubles as the key check; `lookups` = calls sent this pass) (`cg` = tokens whose link goes to CoinGecko).
+
