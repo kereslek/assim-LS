@@ -4451,7 +4451,7 @@ async function testWorkspace(browser) {
       const coarse = matchMedia('(pointer:coarse)').matches, bad = [];
       for (const el of document.querySelectorAll('#ws [data-act]')) {
         if (!el.getClientRects().length || el.closest('[hidden]') || el.tagName === 'TR') continue;
-        if (!['BUTTON', 'INPUT'].includes(el.tagName)) bad.push('not a button ' + el.dataset.act);
+        if (!['BUTTON', 'INPUT'].includes(el.tagName) && !(el.tagName === 'A' && el.classList.contains('tkl') && el.getAttribute('aria-label'))) bad.push('not a button ' + el.dataset.act); // v0.7.8: a coin page link, labelled
         else if (!(el.getAttribute('aria-label') || el.textContent.trim())) bad.push('no label ' + el.dataset.act);
         if (coarse && el.tagName === 'BUTTON' && el.dataset.act.startsWith('ws-')) { const r = el.getBoundingClientRect(); if (r.width < 43.5 || r.height < 43.5) bad.push(`small ${el.dataset.act} ${Math.round(r.width)}x${Math.round(r.height)}`); }
       }
@@ -5430,8 +5430,9 @@ async function testGuestEnd(browser) {
     await waitApp(t.page);
     await t.page.goto(url('keyedgone'));
     await t.page.waitForSelector('#gend:not([hidden])', { timeout: 30000 });
-    const e2 = await t.page.evaluate(() => ({ m: document.querySelector('#ge-msg').textContent, txt: document.body.textContent, line: getComputedStyle(document.querySelector('#gline')).display }));
-    ok(`guestend ${tag}: ended or removed: "The owner ended it", no pool left in the page, no violet line`, e2.m === 'The owner ended it. Ask them if you need it again.' && !e2.txt.includes('NUMA') && e2.line === 'none', e2.m);
+    const e2 = await t.page.evaluate(() => { const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let at = ''; for (let n; (n = tw.nextNode());) if (/NUMA/.test(n.nodeValue)) { at = (n.parentElement.id || n.parentElement.className || n.parentElement.tagName) + ' < ' + (n.parentElement.closest('[id]') || {}).id; break; }
+      return { m: document.querySelector('#ge-msg').textContent, txt: document.body.textContent, line: getComputedStyle(document.querySelector('#gline')).display, at }; });
+    ok(`guestend ${tag}: ended or removed: "The owner ended it", no pool left in the page, no violet line`, e2.m === 'The owner ended it. Ask them if you need it again.' && !e2.txt.includes('NUMA') && e2.line === 'none', e2.m + (e2.at ? ' · a pool name left in ' + e2.at : ''));
     await snap(t.page, `guestend-${tag}-removed`);
     await t.page.reload(); await t.page.waitForSelector('#gend:not([hidden])', { timeout: 30000 });
     ok(`guestend ${tag}: the end stays the end after a reload (calm, one way forward)`, await t.page.isVisible('#ge-new'));

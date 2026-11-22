@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-B1C7smarTaHdvrpk4Mw8HO/H33A0CyWbRT4ryEpsXGk='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-qj35XQE/1ExHejuhCwZ9YYj2w3Rm58fawJ9p7l7ZyrM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2339,7 +2339,7 @@ const pairLinks = (p, label) => { const txt = String(label == null ? (p && p.pai
 // a title with links keeps its plain text as its name (the panel is labelled by it: never "… on CoinMarketCap …")
 const setTitleLinks = (el, p, label) => { const h = p ? pairLinks(p, label) : esc(label); el.innerHTML = h;
   if (/<a /.test(h)) el.setAttribute('aria-label', el.textContent); else el.removeAttribute('aria-label'); };
-// the best find's title opens the pair view, so its coin pages sit in the meta line: "coins NUMA · USDC" (links only)
+// the best find's title opens the pair view, so its coin pages sit in its meta line ("coin info" and the links only)
 const tokAbout = (p) => { const l = [p && p.t0, p && p.t1].filter((t) => t && tokUrl(t)).map((t) => tokLink(t.sym, t)); return l.length ? ` · <span class="best-tk">coin info ${l.join(' · ')}</span>` : ''; };
 const symN = (s) => { const u = String(s || '').toUpperCase(); return u === 'ETH' ? 'WETH' : u; };
 const pairSyms = (p) => (p.t0 && p.t1 ? [p.t0.sym, p.t1.sym] : String(p.pair || '').split('/'));

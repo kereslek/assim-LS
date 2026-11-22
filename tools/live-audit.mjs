@@ -390,8 +390,8 @@ async function part2(page, run, skip, box, press) {
       } else skip();
       run('part 2: the window pills look small (≤ 26 px) with 44 px taps', await page.evaluate(() => [...document.querySelectorAll('#sheet-win button')].every((b) => b.getBoundingClientRect().height >= 43.5 && b.firstElementChild.getBoundingClientRect().height <= 26)));
     } else skip();
-    const lk = await page.evaluate(() => { const a = [...document.querySelectorAll('#sheet a[href]')]; return { n: a.length, good: a.every((x) => x.target === '_blank' && /noopener/.test(x.rel) && /noreferrer/.test(x.rel) && /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(x.href)) }; });
-    run('part 2: the pool\'s id and addresses link to the explorer in a new tab', lk.n >= 1 && lk.good);
+    const lk = await page.evaluate(() => { const a = [...document.querySelectorAll('#sheet a[href]')]; return { n: a.length, good: a.every((x) => x.target === '_blank' && /noopener/.test(x.rel) && /noreferrer/.test(x.rel) && /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org|coinmarketcap\.com|www\.coingecko\.com)\//.test(x.href)) }; });
+    run('part 2: the pool\'s id and addresses link to the explorer (its tokens to their coin pages) in a new tab', lk.n >= 1 && lk.good);
     await page.click('#sheet-close').catch(() => {}); await sleep(300);
   } else skip();
   // backtest highlights
