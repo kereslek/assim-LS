@@ -20,6 +20,7 @@
 //                                                    standout (v0.7.7: History's day table marks ★ highs, ↓ lows and ⚠ outliers against the median)
 //                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
 //                                                    explainer (v0.7.6: the "How to read this" note on top: shows, hides, comes back, jumps to the scatter)
+//                                                    tokenlinks (v0.7.8: each token a link to its coin page, CoinMarketCap else CoinGecko; rows keep their tap)
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
@@ -1877,7 +1878,7 @@ async function testLinks(browser) {
   await pop.waitForLoadState('domcontentloaded').catch(() => {});
   ok('links: the page\'s CSP lets an explorer link open in a new tab (no opener)', /^https:\/\/basescan\.org\/address\//.test(pop.url()) && (await pop.evaluate(() => window.opener === null)), pop.url().slice(0, 40));
   await pop.close();
-  ok('links: every link on the page is an explorer link in a new tab', await p.evaluate(() => [...document.querySelectorAll('a[href]')].every((a) => a.target === '_blank' && /noopener/.test(a.rel) && /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(a.href))));
+  ok('links: every link on the page is an explorer or coin-page link in a new tab', await p.evaluate(() => [...document.querySelectorAll('a[href]')].every((a) => a.target === '_blank' && /noopener/.test(a.rel) && /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org|coinmarketcap\.com|www\.coingecko\.com)\//.test(a.href))));
   ok('links: no page errors', t.errors.length === 0, t.errors[0]);
   await t.ctx.close();
 }
@@ -2467,7 +2468,7 @@ async function testClicks(browser) {
         const want = real.split(':')[1];
         good = new RegExp(`[?&]view=${want}(&|$)`).test(u) && /[?&]w=(24h|7d|30d)/.test(u) && /[?&]z=\d/.test(u) && (['scatter', 'health'].includes(want) || /[?&]pool=[0-9a-fx]+/.test(u));
       }
-      if (act === 'ext') good = /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org)\//.test(await p.evaluate(() => (window.__opened || []).slice(-1)[0] || ''));
+      if (act === 'ext') good = /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org|coinmarketcap\.com|www\.coingecko\.com)\//.test(await p.evaluate(() => (window.__opened || []).slice(-1)[0] || ''));
       if (act === 'why' || act === 'gas' || act === 'term') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
       if (act === 'fav') good = good && (await p.$$('#fav .mc')).length > 0;
       if (act === 'detail' || act === 'pair' || act === 'flash-open') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
@@ -6534,10 +6535,98 @@ async function testRefreshCd(browser) {
   }
 }
 
+// ---------- v0.7.8 tokenlinks: each token a link to its coin page (CoinMarketCap, else CoinGecko, else plain text) ----------
+const TL_LOOK = (sel) => { const el = document.querySelector(sel); if (!el) return null;
+  return { text: el.textContent, label: el.getAttribute('aria-label'), a: [...el.querySelectorAll('a')].map((a) => ({ t: a.textContent, href: a.getAttribute('href'), tg: a.target, rel: a.rel, rp: a.referrerPolicy, al: a.getAttribute('aria-label'), cls: a.className })) }; };
+const TL_ROWS = () => { // no coin link inside anything a tap opens (rows, cards, buttons): the row's own tap stays the row's
+  const bad = [...document.querySelectorAll('a.tkl')].filter((a) => a.parentElement.closest('button, [role="button"], [data-act]:not(a), tr.row, label'));
+  return { n: document.querySelectorAll('a.tkl').length, bad: bad.map((a) => a.parentElement.className || a.parentElement.tagName).slice(0, 3) }; };
+const TL_FIT = () => { const d = document.documentElement, out = [];
+  for (const a of document.querySelectorAll('a.tkl')) { const r = a.getBoundingClientRect(); if (!r.width) continue; const h = a.closest('h2, .lbl, .ws-cc') || a.parentElement, hr = h.getBoundingClientRect();
+    if (r.right > innerWidth + 0.5 || r.left < -0.5 || (getComputedStyle(h).overflow === 'visible' && (r.right > hr.right + 1 || r.left < hr.left - 1))) out.push(a.textContent); }
+  return { out, hs: d.scrollWidth - d.clientWidth }; };
+async function testTokenLinks(browser) {
+  const CMC = (s) => `https://coinmarketcap.com/currencies/${s}/`, CG = (s) => `https://www.coingecko.com/en/coins/${s}`;
+  const good = (x) => x.tg === '_blank' && x.rel === 'noopener noreferrer' && x.rp === 'no-referrer' && x.cls === 'tkl';
+  for (const [tag, o] of V076_SETS()) {
+    const t = await openUnlocked(browser, 'default', o), p = t.page;
+    // the best find: its title opens the pair view, so the coin pages sit in its meta line; the title stays the pair
+    let b = await p.evaluate(TL_LOOK, '#best .best-meta'), h = await p.evaluate(TL_LOOK, '#best h2');
+    ok(`tokenlinks ${tag}: the best find's title is still the pair (one button, no link inside)`, h && h.text === 'VELNA/WETH' && h.a.length === 0, JSON.stringify(h));
+    ok(`tokenlinks ${tag}: the best find links each coin: VELNA to CoinGecko (no CoinMarketCap slug), WETH to Ethereum on CoinMarketCap`, b && b.a.length === 2 && b.a.every(good)
+      && b.a[0].t === 'VELNA' && b.a[0].href === CG('velna-made-up') && b.a[1].t === 'WETH' && b.a[1].href === CMC('ethereum'), JSON.stringify(b && b.a));
+    if (SHOTS) { // a fixed ribbon on every screenshot (made-up data)
+      await p.addStyleTag({ content: '#tl-rib{position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#E8B84A;color:#03140C;font:700 12px/22px monospace;text-align:center;pointer-events:none}' });
+      await p.evaluate(() => { const d = document.createElement('div'); d.id = 'tl-rib'; d.textContent = 'MOCKUP · MADE-UP NUMBERS'; document.documentElement.appendChild(d); });
+      await p.evaluate(() => { const m = document.querySelector('#best .best-meta'); scrollTo(0, scrollY + m.getBoundingClientRect().top - 180); }); await sleep(400); await snap(p, `tokenlinks-${tag}-best`);
+    }
+    let r = await p.evaluate(TL_ROWS);
+    ok(`tokenlinks ${tag}: no coin link sits inside a row, card or button (a tap on a row still opens its panel)`, r.bad.length === 0 && r.n >= 2, JSON.stringify(r));
+    // a row's tap opens the panel; its title links each symbol, CoinMarketCap first
+    await openPool(p, 'NUMA/USDC');
+    let s = await p.evaluate(TL_LOOK, '#sheet-title');
+    ok(`tokenlinks ${tag}: a tap on the table row opens the panel (NUMA/USDC)`, (await p.isVisible('#sheet')) && s.text === 'NUMA/USDC', s && s.text);
+    ok(`tokenlinks ${tag}: the panel title links NUMA and USDC to CoinMarketCap (cmc before cg), new tab, no opener or referrer`, s.a.length === 2 && s.a.every(good)
+      && s.a[0].href === CMC('numa-made-up') && s.a[1].href === CMC('usd-coin'), JSON.stringify(s.a));
+    ok(`tokenlinks ${tag}: each link says where it goes ("NUMA on CoinMarketCap (opens a new tab)"); the panel keeps its plain name`, s.a.length === 2 && s.a[0].al === 'NUMA on CoinMarketCap (opens a new tab)' && s.a[1].al === 'USDC on CoinMarketCap (opens a new tab)'
+      && s.label === 'NUMA/USDC' && (await p.evaluate(() => document.querySelector('#sheet [role="dialog"]').getAttribute('aria-labelledby'))) === 'sheet-title', JSON.stringify({ al: s.a.map((x) => x.al), label: s.label }));
+    // hover shows the tiny arrow; a tap on the link opens the coin page and leaves the panel as it was
+    const sel = '#sheet-title a.tkl';
+    const has = !!(await p.$(sel));
+    const arrow0 = has ? await p.evaluate((q) => +getComputedStyle(document.querySelector(q), '::after').opacity, sel) : null;
+    if (has && !o.phone) { await p.hover(sel); await sleep(250); }
+    const arrow1 = has ? await p.evaluate((q) => ({ op: +getComputedStyle(document.querySelector(q), '::after').opacity, c: getComputedStyle(document.querySelector(q), '::after').content }), sel) : { op: 0, c: '' };
+    ok(`tokenlinks ${tag}: a dotted underline, the symbol's own colour, and a tiny ↗ ${o.phone ? '(hidden until hover or focus)' : 'on hover'}`, arrow0 === 0 && /↗/.test(arrow1.c) && (o.phone || arrow1.op > 0.5)
+      && has && (await p.evaluate((q) => { const a = document.querySelector(q), h = a.parentElement, cs = getComputedStyle(a); return /dotted/.test(cs.textDecorationStyle + cs.textDecoration) && cs.color === getComputedStyle(h).color; }, sel)), JSON.stringify({ arrow0, arrow1 }));
+    await p.evaluate(() => { window.__opened = []; });
+    if (has) { await p.click(sel); await sleep(250); }
+    const after = await p.evaluate(() => ({ opened: window.__opened || [], open: !document.querySelector('#sheet').hidden, title: document.querySelector('#sheet-title').textContent }));
+    ok(`tokenlinks ${tag}: a tap on NUMA opens its coin page and the panel stays as it was`, after.opened.length === 1 && after.opened[0] === CMC('numa-made-up') && after.open && after.title === 'NUMA/USDC', JSON.stringify(after));
+    let f = await p.evaluate(TL_FIT), ov = await OVL(p, '#sheet .sheet-head');
+    ok(`tokenlinks ${tag}: the panel title's links fit (no overlap, nothing past the screen, ${f.hs} px sideways)`, f.out.length === 0 && f.hs <= 0 && ov.length === 0, JSON.stringify({ f, ov: ov[0] }));
+    if (SHOTS) await snap(p, `tokenlinks-${tag}-panel`);
+    await p.click('#sheet-close'); await sleep(200);
+    // wrapped and native ETH go to Ethereum; a token with no ids, and one with no links field, stay plain text
+    await openPool(p, 'VELNA/ETH'); s = await p.evaluate(TL_LOOK, '#sheet-title');
+    ok(`tokenlinks ${tag}: native ETH links to Ethereum; VELNA (CoinGecko id only) to CoinGecko`, s.text === 'VELNA/ETH' && s.a.length === 2 && s.a[0].href === CG('velna-made-up') && s.a[0].al === 'VELNA on CoinGecko (opens a new tab)' && s.a[1].href === CMC('ethereum'), JSON.stringify(s.a));
+    await p.click('#sheet-close'); await sleep(200);
+    await openPool(p, 'TALI/WETH'); s = await p.evaluate(TL_LOOK, '#sheet-title');
+    ok(`tokenlinks ${tag}: a token with neither id (TALI) is plain text; WETH beside it goes to Ethereum`, s.text === 'TALI/WETH' && s.a.length === 1 && s.a[0].t === 'WETH' && s.a[0].href === CMC('ethereum'), JSON.stringify(s.a));
+    await p.click('#sheet-close'); await sleep(200);
+    await openPool(p, 'MUNT'); s = await p.evaluate(TL_LOOK, '#sheet-title');
+    ok(`tokenlinks ${tag}: a token with no links field (MUNT) is plain text, no error`, /\/MUNT$/.test(s.text) && s.a.every((x) => x.t !== 'MUNT') && s.a.length === 1, JSON.stringify(s));
+    await p.click('#sheet-close'); await sleep(200);
+    // the pair view and History: the same links in their titles
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(150);
+    await p.evaluate(() => document.querySelector('#best h2 button[data-act="pair"]').click()); await p.waitForSelector('#sheet:not([hidden])'); await sleep(300);
+    s = await p.evaluate(TL_LOOK, '#sheet-title');
+    ok(`tokenlinks ${tag}: the pair view's title links VELNA and WETH`, /PAIR VIEW/.test(await p.textContent('#sheet-kicker')) && s.text === 'VELNA/WETH' && s.a.length === 2 && s.a[0].href === CG('velna-made-up') && s.a[1].href === CMC('ethereum'), JSON.stringify(s));
+    f = await p.evaluate(TL_FIT); ok(`tokenlinks ${tag}: the pair view's title fits (${f.hs} px sideways)`, f.out.length === 0 && f.hs <= 0, JSON.stringify(f));
+    if (SHOTS) await snap(p, `tokenlinks-${tag}-pair`);
+    await p.click('#sheet-close'); await sleep(200);
+    await openPool(p, 'NUMA/USDC'); await p.click('#sheet-hist'); await wsWait(p);
+    s = await p.evaluate(TL_LOOK, '#ws-title');
+    const cmp = await p.evaluate(TL_LOOK, '#ws .ws-cc .n');
+    ok(`tokenlinks ${tag}: History's header links each token, its dialog keeps the plain name`, s && s.text === 'NUMA/USDC' && s.label === 'NUMA/USDC' && s.a.length === 2 && s.a.every(good) && s.a[0].href === CMC('numa-made-up'), JSON.stringify(s));
+    ok(`tokenlinks ${tag}: the Compare chips link each token too`, !cmp || (cmp.a.length === 2 && cmp.a.every(good)), JSON.stringify(cmp));
+    f = await p.evaluate(TL_FIT); ov = await OVL(p, '#ws .ws-ttl');
+    ok(`tokenlinks ${tag}: History's title fits (no overlap, ${f.hs} px sideways)`, f.out.length === 0 && f.hs <= 0 && ov.length === 0, JSON.stringify({ f, ov: ov[0] }));
+    if (SHOTS) await snap(p, `tokenlinks-${tag}-history`);
+    ok(`tokenlinks ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+    // older data (published before v0.7.8): no links anywhere, the page as before, no errors
+    const u = await openUnlocked(browser, 'nolinks', o), q = u.page;
+    await openPool(q, 'NUMA/USDC');
+    const n = await q.evaluate(() => ({ n: document.querySelectorAll('a.tkl').length, t: document.querySelector('#sheet-title').textContent, label: document.querySelector('#sheet-title').getAttribute('aria-label'), best: document.querySelector('#best h2').textContent, meta: document.querySelector('#best .best-meta').textContent }));
+    ok(`tokenlinks ${tag}: older data without links shows plain symbols, no coin links, no errors`, n.n === 0 && n.t === 'NUMA/USDC' && n.label === null && n.best === 'VELNA/WETH' && !/coin info/.test(n.meta) && u.errors.length === 0, JSON.stringify({ ...n, e: u.errors[0] }));
+    await u.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

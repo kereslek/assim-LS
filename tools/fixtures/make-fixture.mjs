@@ -16,6 +16,7 @@
 //   rekeyed  live.json sealed under another passphrase than lock.json (the page must show nothing)
 //   nomarket the default data, but the top strip's gas, one price, one 24 h change, the next pass and the watchdog's
 //            last restart unread (null, never 0): the page must show dashes
+//   nolinks  the default data as scanners before v0.7.8 published it: no token links
 //   olddepth the default data as older scanners published it: a third of the pools without depthEdges and the full-range
 //            layer (depthStep and depthSpan only), a third with ±45% fine bars and nothing else (the first contract)
 //   nodisc   the default data as scanners before the discovery lanes published it: no discovery, dex, cex or flow, and
@@ -45,7 +46,7 @@ import { inboxKeys } from '../../lib/inbox.mjs';
 import { buildKeysFile, guestKek, splitPrivate, wrapSlot } from '../../lib/keyring.mjs';
 
 export const FIXTURE_PASSPHRASE = 'made-up fixture passphrase';
-export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nodisc', 'oddlanes', 'stress', 'tiny', 'spike', 'cluster', 'keyed', 'keyedgone', 'keyedchange', 'keyedup', 'mismatch'];
+export const CASES = ['default', 'amber', 'stale', 'nogems', 'nofiles', 'rekeyed', 'nomarket', 'long', 'olddepth', 'nolinks', 'nodisc', 'oddlanes', 'stress', 'tiny', 'spike', 'cluster', 'keyed', 'keyedgone', 'keyedchange', 'keyedup', 'mismatch'];
 export const PLANTED = { unverifiedGem: 'TALI/WETH', htmlTicker: '<img src=x onerror="window.__xss=1">' };
 
 const H = 3600e3, D = 24 * H;
@@ -520,6 +521,7 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
     pairs,
     market: makeMarket(rng(seed + 777), now),
   };
+  for (const p of live.pools) for (const t of [p.t0, p.t1]) tokenLinks(t); // v0.7.8: no rng draw, so nothing else shifts
 
   // the pools under 72 hours old take their history from a stream of their own, so every other pool's rows stay as they were
   const isNewP = (p) => NEW_EXTRAS.includes(p._spec), olds = pools.filter((p) => !isNewP(p));
@@ -616,6 +618,26 @@ function makeMarket(r, now) {
   };
 }
 // the same pass with the strip's reads failed: missing is never zero
+// v0.7.8 token links (made-up slugs): WETH and ETH → Ethereum, a CoinMarketCap slug on some tokens, CoinGecko only on the
+// rest, LINKS_FIX.none with both null and LINKS_FIX.noField with no links at all (as older data)
+export const LINKS_FIX = { both: 'NUMA', cgOnly: 'VELNA', none: 'TALI', noField: 'MUNT' };
+const LINK_KNOWN = { WETH: ['ethereum', 'ethereum'], ETH: ['ethereum', 'ethereum'], USDC: ['usd-coin', 'usd-coin'], UNI: ['uniswap', 'uniswap'] };
+export function tokenLinks(t) {
+  const sym = String(t.sym || '');
+  if (sym === LINKS_FIX.noField) { delete t.links; return t; }
+  const slug = sym.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const k = LINK_KNOWN[sym], h = [...sym].reduce((a, c) => a + c.charCodeAt(0), 0);
+  t.links = k ? { cmc: k[0], cg: k[1] } : sym === LINKS_FIX.none || !slug ? { cmc: null, cg: null }
+    : sym === LINKS_FIX.both ? { cmc: slug + '-made-up', cg: slug + '-made-up' } : sym === LINKS_FIX.cgOnly || h % 2 ? { cmc: null, cg: slug + '-made-up' } : { cmc: slug + '-made-up', cg: slug + '-made-up' };
+  return t;
+}
+// nolinks: the default data as scanners before v0.7.8 published it (no links on any token)
+export function noLinks(data) {
+  const live = structuredClone(data.live);
+  for (const p of live.pools) for (const t of [p.t0, p.t1]) if (t) delete t.links;
+  return { ...data, live };
+}
+
 export function oldDepth(data) {
   const live = structuredClone(data.live);
   live.pools.forEach((p, i) => {
@@ -1201,6 +1223,7 @@ export function writeFixtures(outDir, { now = Date.now(), iterations = ITERATION
   sealCase(path.join(outDir, 'spike'), keys, spikeCase(data), now);
   sealCase(path.join(outDir, 'cluster'), keys, clusterCase(data), now);
   sealCase(path.join(outDir, 'olddepth'), keys, oldDepth(data), now);
+  sealCase(path.join(outDir, 'nolinks'), keys, noLinks(data), now);
   sealCase(path.join(outDir, 'nodisc'), keys, noDiscovery(data), now);
   sealCase(path.join(outDir, 'oddlanes'), keys, { ...data, live: { ...data.live, discovery: { newPools: [], cexLed: ['0x' + 'f'.repeat(40)], crossChain: [] } } }, now);
   keyedCases(outDir, { lock, aes, token }, data, now, iterations);

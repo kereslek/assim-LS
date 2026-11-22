@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-mnlfnsXcKsJRbW/Ua7L2GO9xL9r20R4u6scwalXvoEk='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-3VqcgFePCeAZnkL1qsJ0FAYrbE5+4aKMh8dAZU99JGs='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1615,6 +1615,14 @@ body.solo #xn,body.solo #xn-i{display:none!important}
 .rmsg .rm-n{color:var(--fg2)}
 @media (prefers-reduced-motion:reduce){#refresh.spin .rf-ic{animation:none}}
 /* /v076-css */
+/* v0.7.8: a token's coin page (CoinMarketCap, else CoinGecko): the symbol keeps its look, a dotted underline, a tiny arrow on hover or focus */
+a.tkl{color:inherit;font:inherit;text-decoration:underline dotted rgba(127,140,160,.75);text-underline-offset:3px;text-decoration-thickness:1px;position:relative;border-radius:3px}
+a.tkl::after{content:'\2197';position:absolute;top:-.6em;right:-.45em;font-size:.5em;line-height:1;opacity:0;pointer-events:none;transition:opacity .12s}
+a.tkl:hover::after,a.tkl:focus-visible::after{opacity:.85}
+a.tkl:hover{text-decoration-color:var(--accent)}
+a.tkl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.best-tk{white-space:nowrap}
+@media (prefers-reduced-motion:reduce){a.tkl::after{transition:none}}
 </style>
 </head>
 <body>
@@ -1899,7 +1907,7 @@ body.solo #xn,body.solo #xn-i{display:none!important}
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.7.7';
+const BUILD = 'v0.7.8';
 // the version, shown small at the top and on the lock screen (the owner can tell at a glance which one runs)
 document.querySelectorAll('#ver, .ver-t').forEach((e) => { e.textContent = BUILD; });
 // iOS Safari keeps a page's zoom (a pinch, or a tap into a small field in an older version) and opens it zoomed in
@@ -2314,6 +2322,24 @@ const termPop = (k) => (GLOSS[k] ? `<span class="lbl">${esc(GLOSS[k][0])}</span>
 const chainTerm = (c) => { const k = String(c || '').toLowerCase(), x = CHAIN_ALIAS[k] || k; return x in CHAINS ? x : ''; };
 
 // ---------- pairs: derived from the pools' tokens until live.json carries them (WETH and ETH are one pair) ----------
+// v0.7.8: each token's coin page, from the data (links.cmc: a CoinMarketCap slug, else links.cg: a CoinGecko id);
+// data without links (older passes) shows plain text, never a guessed link
+const TK_SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
+const tokUrl = (t) => { const L = t && t.links; if (!L || typeof L !== 'object') return null;
+  if (TK_SLUG.test(String(L.cmc || ''))) return ['CoinMarketCap', 'https://coinmarketcap.com/currencies/' + L.cmc + '/'];
+  if (TK_SLUG.test(String(L.cg || ''))) return ['CoinGecko', 'https://www.coingecko.com/en/coins/' + L.cg];
+  return null; };
+const tokLink = (sym, t) => { const u = tokUrl(t); return u ? `<a class="tkl" href="${esc(u[1])}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" data-act="ext" aria-label="${esc(sym + ' on ' + u[0] + ' (opens a new tab)')}" title="${esc(sym + ' on ' + u[0])}">${esc(sym)}</a>` : esc(sym); };
+// the pair's text with each symbol a link to its coin page; the text stays exactly `label` (default the pool's pair)
+const pairLinks = (p, label) => { const txt = String(label == null ? (p && p.pair) || '' : label), parts = txt.split('/'), tk = p ? [p.t0, p.t1] : [];
+  if (parts.length !== 2 || !tk[0] || !tk[1]) return esc(txt);
+  const is = (s, t) => t && (s === t.sym || s === symN(t.sym));
+  return parts.map((s, i) => tokLink(s, is(s, tk[i]) ? tk[i] : is(s, tk[1 - i]) ? tk[1 - i] : null)).join('/'); };
+// a title with links keeps its plain text as its name (the panel is labelled by it: never "… on CoinMarketCap …")
+const setTitleLinks = (el, p, label) => { const h = p ? pairLinks(p, label) : esc(label); el.innerHTML = h;
+  if (/<a /.test(h)) el.setAttribute('aria-label', el.textContent); else el.removeAttribute('aria-label'); };
+// the best find's title opens the pair view, so its coin pages sit in the meta line: "coins NUMA · USDC" (links only)
+const tokAbout = (p) => { const l = [p && p.t0, p && p.t1].filter((t) => t && tokUrl(t)).map((t) => tokLink(t.sym, t)); return l.length ? ` · <span class="best-tk">coin info ${l.join(' · ')}</span>` : ''; };
 const symN = (s) => { const u = String(s || '').toUpperCase(); return u === 'ETH' ? 'WETH' : u; };
 const pairSyms = (p) => (p.t0 && p.t1 ? [p.t0.sym, p.t1.sym] : String(p.pair || '').split('/'));
 const PAIRS = () => (S.live && S.live.pairs && typeof S.live.pairs === 'object' ? S.live.pairs : null);
@@ -2711,7 +2737,7 @@ async function lockDevice(ended = false) { // ended: a guest whose access ended 
   const words = lockWords(S.live);
   stopTimer(); stopPlay();
   wsClose(true); closeDetail(); popClose(); WS.cmp = []; WS.list = []; WS.mod = WS.lmod = null; HSC.h = null; HSC.m = new Map(); // v0.6.0: the workspace goes too
-  for (const s of ['#ws-title', '#ws-pos']) $(s).textContent = s === '#ws-title' ? '—' : ''; for (const s of ['#ws-cg', '#ws-chips', '#ws-gem', '#ws-star', '#ws-tabs']) $(s).innerHTML = '';
+  for (const s of ['#ws-title', '#ws-pos']) $(s).textContent = s === '#ws-title' ? '—' : ''; $('#ws-title').removeAttribute('aria-label'); for (const s of ['#ws-cg', '#ws-chips', '#ws-gem', '#ws-star', '#ws-tabs']) $(s).innerHTML = '';
   for (const k of Object.keys(PZA)) pzStop(k);
   for (const k of Object.keys(PZ)) delete PZ[k];
   G = null; PIN = null; lastTap = null; PTS.clear();
@@ -3477,7 +3503,7 @@ function renderBest() {
   el.innerHTML = `<div class="lbl acc">TOP ${list.length} · ${WIN_LABEL[wk]} · TAP A POOL${hidTop ? `<span class="hidn"> · ${hidTxt(hidTop, true)}</span>` : ''}</div>${tabs}<div class="best-head"><div class="grow">`
     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
     + `<div class="ttl">${chainMark(p.chain)}<h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
-    + `<div class="lbl best-meta">${metaTerms(p)} · ${term('range', rangeTxt(w.range))}</div>`
+    + `<div class="lbl best-meta">${metaTerms(p)} · ${term('range', rangeTxt(w.range))}${tokAbout(p)}</div>`
     + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div>${fmLink(p, 'best')}</div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
     + `<div class="best-body"><div class="best-l">`
     + `<div class="bigline"><span class="bignum${w.net < 0 ? ' neg' : ''}">${pct(w.net)}</span><span class="bigsub">${daysTxt} ${term('net', 'net APR')} at ${usdFull(ticketUsd())}<br>after ${term('lvr', 'LVR')}, swaps and gas</span></div>`
@@ -5136,7 +5162,7 @@ function renderPair() {
   $('#sheet-star').innerHTML = ''; renderSim(null);
   $('#sheet-ws').hidden = true; // v0.6.0: the pair's History (every tier combined) in the header, and each pool's in its row
   { const b = $('#sheet-hist'), q = pools[0] || every[0]; b.hidden = !q; if (q) { b.dataset.id = q.id; b.setAttribute('aria-label', `History of ${name}: every tier combined`); } }
-  $('#sheet-title').textContent = name;
+  setTitleLinks($('#sheet-title'), pools[0] || every[0], name);
   sheetChain(null);
   $('#sheet-meta').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${[...new Set(pools.map((p) => chainLong(p.chain)))].join(' + ')} · ${usd(totVol)} ${WIN_WORD[wk]} volume${hid ? ' · ' + hidTxt(hid) : ''}`;
   const label = (p) => `${feeTxt(p.feeTier)} · v${esc(p.v)} · ${chainShort(p.chain)}${p.t1 && p.t1.sym === 'ETH' ? ' · ETH' : ''}`;
@@ -5525,7 +5551,7 @@ function renderDetail() {
   if (!p) { closeDetail(); return; }
   const L = S.live, wk = S.win, w = W(p, wk);
   $('#sheet-kicker').textContent = `POOL DETAIL · ${WIN_LABEL[wk]}${p.id === L.bench ? ' · BENCHMARK' : ''}`;
-  $('#sheet-title').textContent = p.pair;
+  setTitleLinks($('#sheet-title'), p);
   sheetChain(p.chain);
   $('#sheet-star').innerHTML = starBtn(p);
   $('#sheet-meta').innerHTML = metaTerms(p);
@@ -5799,7 +5825,7 @@ function wsRender(fresh = false) {
   const keep = sameView ? body.scrollTop : 0, af = document.activeElement, afSig = af && $('#ws').contains(af) ? wsSig(af) : null;
   const n = WS.list.length, i = WS.list.indexOf(WS.id);
   $('#ws-ribbon').hidden = S.live.fixture !== true; // made-up data says so here too
-  $('#ws-title').textContent = p ? p.pair : 'Pool not found';
+  setTitleLinks($('#ws-title'), p, p ? undefined : 'Pool not found');
   $('#ws-cg').innerHTML = p ? chainMark(p.chain) : '';
   $('#ws-chips').innerHTML = p ? `<span class="tag">${esc(chainOf(p.chain).name)}</span><span class="tag">${esc(dexV(p, true))}</span><span class="tag">${feeTxt(p.feeTier)}${p.dynamicFee ? ' · dyn' : ''}</span>` : '';
   $('#ws-gem').innerHTML = p ? termB('gem', gemPill(p, wk)) : '';
@@ -6537,7 +6563,7 @@ function wsCompare(p) {
   WS.cmp = WS.cmp.filter((id) => poolById(id)).slice(0, 3);
   if (!WS.cmp.length) WS.cmp = [p.id];
   const pools = WS.cmp.map(poolById), cols = CMP_COL();
-  const chips = pools.map((q, i) => `<span class="ws-cc" style="--c:${cols[i]}"><i class="sq"></i>${chainMark(q.chain)}<span class="n">${esc(q.pair)}</span><span class="m">${feeTxt(q.feeTier)} · ${esc(dexV(q))}</span>${aprMini(q)}${histBtn(q, { list: 'wscmp', cls: 'sm' })}${pools.length > 1 ? `<button type="button" class="ws-rm" data-act="ws-cmp-rm" data-id="${esc(q.id)}" aria-label="${esc('Remove ' + poolWord(q) + ' from the comparison')}" title="Remove">✕</button>` : ''}</span>`).join('');
+  const chips = pools.map((q, i) => `<span class="ws-cc" style="--c:${cols[i]}"><i class="sq"></i>${chainMark(q.chain)}<span class="n">${pairLinks(q)}</span><span class="m">${feeTxt(q.feeTier)} · ${esc(dexV(q))}</span>${aprMini(q)}${histBtn(q, { list: 'wscmp', cls: 'sm' })}${pools.length > 1 ? `<button type="button" class="ws-rm" data-act="ws-cmp-rm" data-id="${esc(q.id)}" aria-label="${esc('Remove ' + poolWord(q) + ' from the comparison')}" title="Remove">✕</button>` : ''}</span>`).join('');
   const add = pools.length < 3 ? `<button type="button" class="btn" data-act="ws-cmp-add" aria-label="Add a pool to compare">+ Add a pool</button>` : '<span class="lbl">3 of 3 pools</span>';
   WS.mod = null;
   return `<div class="ws-cmp" role="group" aria-label="Pools compared">${chips}${add}</div>` + lnBlock(lnModel(pools, cols), `Fees, volume and TVL a day: ${pools.map((q) => q.pair).join(', ')}`);
