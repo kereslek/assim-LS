@@ -91,11 +91,17 @@ Slot = { iv, ct }   AES-256-GCM over JSON, its kind bound as additional data
 ## 4b · The owner's refinements (15 Nov): one shared password first; roles; lists of friends; two clocks
 
 ### The shared guest password (the main path for the first round)
-- **One guest slot for a group of friends.** Its label is `friends` (never a person's name). It's read-only, and it ends 30 days after it's made: the loop drops it then and rotates the market key. It has no per-device clock: its date is the rule.
+- **One guest slot for a group of friends.** Its label is `friends` (never a person's name). It's read-only, and it ends 180 days after it's made or after its last restart (the owner's rule, 23 Nov: 180 days from the day it's given to friends; 30 days before that): the loop drops it then and rotates the market key. It has no per-device clock: its date is the rule.
 - **Two ways to make it:**
-  - **(a) The loop makes it** from the sealed request `{ "action": "add-shared-guest", "label": "friends", "days": 30 }`. It uses the same generator (5 words of `lib/words.mjs` plus 2 digits) and keeps the password only in `guests.json`. The owner's Settings show it with Copy, a share text and "Mark as sent" / "Show again".
+  - **(a) The loop makes it** from the sealed request `{ "action": "add-shared-guest", "label": "friends", "days": 180 }` (180 when `days` is left out). It uses the same generator (5 words of `lib/words.mjs` plus 2 digits) and keeps the password only in `guests.json`. The owner's Settings show it with Copy, a share text and "Mark as sent" / "Show again".
   - **(b) The owner types one** (twice; anything under about 60 bits is refused), and the page seals `shared-set` with its slot.
 - **Change** (a new one replaces it: the old one stops, the key rotates) and **End shared access now** (`guest-remove` on its slot).
+- **Restart 180 days** (the owner's Settings, on the day the password is handed out): the sealed request `{ "action": "extend-shared-guest", "label": "friends", "days": 180, "from": "now" }`.
+  - The loop sets the shared slot's end to the pass that applies it plus 180 days. The password and the market key stay the same: no rotation, nothing sealed again, and friends' devices read the new date from their slot on their next refresh.
+  - The page can't tell the loop when a friend first logs in (there is no server), so the owner's tap is the start.
+  - Only the shared slot: never an owner slot, the recovery key, a named guest or a member. Without a label it means the only active shared password.
+  - Refused (counted in the public line, and noted in `guests.json` as `shx` for the owner's page): an unknown label, a role other than guest, or a shared password the loop already dropped (expired or ended). A slot past its date that the loop hasn't dropped yet is restarted.
+  - It runs once, like every request (its id stays in `done` for good). A new restart is a new file.
 - **On a friend's device:**
   - a violet "GUEST" pill with no name;
   - the sheet "Guest access · friends · ends <date>";
