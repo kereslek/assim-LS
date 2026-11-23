@@ -14,6 +14,10 @@
 //   reads the sealed requests in inbox/ and adds or removes guest slots (a removal rotates the data key). The first
 //   run on this code creates the data key, only when the data branch was read and has no keys.json. A keys step that
 //   fails stops that pass's publish: the data branch keeps its last good commit.
+// - The archive API's tokens (lib/apiauth.mjs, docs/DATA.md "Archive API"): after the keys step (at the start, and each pass
+//   whose keys step went through), live mode only, the hashes of the owner's and every live guest's token are synced to the
+//   KV namespace assim-ls-auth (a removed or expired guest's hash goes at once). Only when something changed; never fails a
+//   pass (one line: counts, or 'api auth: error <category>').
 //     health.loop = { passes24h, ok24h, lastGapMin (longest gap between pass starts in the last 24 h),
 //                     watchdogLast (ms of the last run the watchdog started), recent: [[t, ok 1|0]] }
 // - The pass command's own output goes to the sealed log only (lib/quietlogs.mjs). The public log gets
@@ -28,6 +32,7 @@ import { installSealedLogs } from '../lib/quietlogs.mjs';
 import { isEnvelope, openLock } from '../lib/lock.mjs';
 import { openStore } from '../lib/store.mjs';
 import { guestLine, guestStep, readInbox, removeInbox } from '../lib/guests.mjs';
+import { authSync } from '../lib/apiauth.mjs';
 import { publishData, restoreData, restoreKeysFile } from './publish-data.mjs';
 
 export const HOUR = 3600e3, DAY = 24 * HOUR, MIN = 60e3;
@@ -92,6 +97,7 @@ export function injectHealth(store, state, { now, next = null, sealedLog = null 
 // ---- the loop ----------------------------------------------------------------------------------------
 // deps: { say, now, sleep, runPass, publish, restore, store, marker, sealedLog, guests? }
 // guests(phase, ctx): the keys step; phase 'start' (ctx: { remoteRead, remoteKeys }) may migrate, 'pass' never does.
+// apiAuth(phase): the archive API's token hashes after the keys step (async; never fails a pass: a throw is one line).
 export async function runLoop({ passCmd, mode = 'rehearsal', by = 'manual', spacing = 360, deadlineMs = 320 * MIN, maxPasses = null,
   passTimeoutMs = 45 * MIN, dryRun = true, restore = true }, deps) {
   const { say, now, sleep, runPass, publish, store, marker } = deps;
@@ -111,6 +117,7 @@ export async function runLoop({ passCmd, mode = 'rehearsal', by = 'manual', spac
     try { deps.guests('start', { remoteRead: !!restored && restored.present !== undefined, remoteKeys: !!restored?.keys }); }
     catch (e) { say(`guests: keys step failed (${safeMsg(e)})`); }
   }
+  if (deps.apiAuth) { try { await deps.apiAuth('start'); } catch { say('api auth: error internal'); } }
   let prev = null;
   try { prev = store.get('live.json'); } catch { say('restore: live.json does not open with this lock; counters start empty'); }
   let state = seedState(prev?.health?.loop);
@@ -134,6 +141,7 @@ export async function runLoop({ passCmd, mode = 'rehearsal', by = 'manual', spac
     if (deps.guests) {
       try { deps.guests('pass'); } catch (e) { keysOk = false; say(`guests: keys step failed (${safeMsg(e)}); this pass is not published`); }
     }
+    if (keysOk && deps.apiAuth) { try { await deps.apiAuth('pass'); } catch { say('api auth: error internal'); } }
     const b = now() - h0, p0 = now();
     let pubOk = keysOk;
     if (keysOk) try { publish({ dryRun }); } catch (e) { pubOk = false; say(`publish failed: ${safeMsg(e)}`); }
@@ -263,6 +271,7 @@ async function main(argv) {
   const mode = arg('--mode', 'rehearsal') === 'live' ? 'live' : 'rehearsal';
   const dryRun = mode !== 'live' || argv.includes('--dry-run');
   const doneFiles = new Set(); // inbox files whose requests were applied or refused: removed after the next publish
+  const auth = { state: {}, last: null }; // the archive API's token sync: what this process last synced, and its last line
   const res = await runLoop({
     passCmd: arg('--pass', ''), mode, by: arg('--by', 'manual'), dryRun, restore: !argv.includes('--no-restore'),
     spacing: num('--spacing', 'SPACING', 360), deadlineMs: num('--deadline-min', 'DEADLINE_MIN', 320) * MIN,
@@ -276,6 +285,12 @@ async function main(argv) {
       const r = guestStep({ keys, requests: inbox.envs, allowMigrate: phase === 'start' && !!ctx.remoteRead && !ctx.remoteKeys });
       for (const k of r.handled || []) if (inbox.names?.[k]) doneFiles.add(inbox.names[k]);
       if (phase === 'start' || r.wrote || r.refused || r.bad || r.skipped === 'guests file unread') say(guestLine(r, inbox));
+    },
+    // live mode only: a rehearsal never writes the token hashes. A line at the start, on a change, and on a new error
+    apiAuth: dryRun ? null : async (phase) => {
+      const r = await authSync({ keys, store, state: auth.state });
+      if (r.line && (phase === 'start' || r.changed || (r.error && r.line !== auth.last))) say(r.line);
+      if (r.line) auth.last = r.line;
     },
     inboxClean: () => {
       if (!doneFiles.size) return;

@@ -1,7 +1,7 @@
 name: test
 on:
   push:
-    paths: ['lib/**', 'test/**', 'scripts/**', '.github/workflows/test.yml']
+    paths: ['lib/**', 'test/**', 'scripts/**', 'worker/**', 'db/**', '.github/workflows/test.yml']
   workflow_dispatch:
 permissions:
   contents: read

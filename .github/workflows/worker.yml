@@ -1,0 +1,61 @@
+name: worker
+# The archive's read API: the Cloudflare Worker assim-ls-api over the D1 archive (worker/, scripts/worker.mjs,
+# lib/apiauth.mjs; docs/DATA.md "Archive API"). Never scheduled:
+#   deploy   the KV namespace assim-ls-auth (made if missing), the Worker uploaded with its bindings, its workers.dev route
+#            on; prints the Worker's host (public anyway) and a smoke check
+#   test     every endpoint with made-up test tokens put in KV for 10 minutes, then removed (status codes, row counts,
+#            pass/fail only)
+#   sync     the loop's token sync once from the sealed key slots (opened here only), then the owner's and every slot's
+#            token, derived as the pages derive them, must be accepted (counts and pass/fail only)
+#   cleanup  remove any test token left in KV
+# Only resources named assim-ls* are ever created, read or changed. The secrets reach the step through env only; the
+# public log shows yes/no, status codes, counts, the host and category words: never the account, an id, a token or a value.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'deploy, test, sync or cleanup'
+        type: choice
+        options: [deploy, test, sync, cleanup]
+        default: test
+permissions:
+  contents: read   # the scripts, and the sealed data branch for sync
+concurrency:
+  group: worker
+  cancel-in-progress: false
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: The API's tests first (SQL on SQLite, auth, CORS, limits, planted faults)
+        run: node --test test/worker.test.mjs test/apitoken.test.mjs test/apiauth.test.mjs
+      - name: Restore the sealed data (sync only; opened inside this job, never printed)
+        if: inputs.mode == 'sync'
+        env:
+          LOCK_PASSPHRASE: ${{ secrets.LOCK_PASSPHRASE }}
+        run: node scripts/publish-data.mjs --restore
+      - name: Worker ${{ inputs.mode }}
+        env:
+          MODE: ${{ inputs.mode }}
+          BUILD: ${{ github.sha }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          LOCK_PASSPHRASE: ${{ (inputs.mode == 'sync') && secrets.LOCK_PASSPHRASE || '' }}
+        run: |
+          set +x
+          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_API_TOKEN" ]; then echo "worker $MODE: secrets present: no"; exit 1; fi
+          node scripts/worker.mjs "$MODE"
+      - name: Remove the test tokens (a safety net; the test removes them itself)
+        if: always() && inputs.mode == 'test'
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set +x
+          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_API_TOKEN" ]; then echo 'worker cleanup: secrets present: no'; exit 0; fi
+          node scripts/worker.mjs cleanup
