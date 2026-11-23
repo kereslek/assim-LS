@@ -116,7 +116,7 @@ test('dayRows: null stays null, an unknown source is unread, u.y marks a spike, 
   const rows = dayRows(P1, hp, 0.003);
   assert.equal(rows.length, 4);
   assert.deepEqual(rows[0], { pool_id: P1, day_utc: '2026-11-12', fees_usd: 10, fees_src: 'e', fees_rank: 1, fees_unconfirmed: 1, volume_usd: 1000, volume_src: 'g', volume_rank: 1,
-    tvl_usd: null, tvl_src: null, tvl_rank: 0, price: 1.5, lp_fee_rate: 0.003 });
+    tvl_usd: null, tvl_src: null, tvl_rank: 0, price: 1.5, lp_fee_rate: 0.003, valued: null });
   assert.deepEqual([rows[1].fees_usd, rows[1].fees_src, rows[1].fees_rank, rows[1].fees_unconfirmed, rows[1].price], [null, null, 0, null, null]);
   assert.deepEqual([rows[2].fees_usd, rows[2].fees_src, rows[2].fees_rank], [null, null, 0]);
   assert.deepEqual([rows[3].fees_usd, rows[3].fees_src, rows[3].fees_rank, rows[3].fees_unconfirmed], [0, 's', 3, 0]);
@@ -150,7 +150,7 @@ test('migrations: db/schema.sql parses into versions; applied once, then nothing
 
 // a day row with the given fields (the rest unread)
 const day = (o = {}) => ({ pool_id: P1, day_utc: '2026-11-12', fees_usd: null, fees_src: null, fees_rank: 0, fees_unconfirmed: null, volume_usd: null, volume_src: null, volume_rank: 0,
-  tvl_usd: null, tvl_src: null, tvl_rank: 0, price: null, lp_fee_rate: null, ...o });
+  tvl_usd: null, tvl_src: null, tvl_rank: 0, price: null, lp_fee_rate: null, valued: null, ...o });
 const fee = (src, v, unc = 0) => ({ fees_usd: v, fees_src: src, fees_rank: RANK.fees[src], fees_unconfirmed: unc });
 const write = (f, rows, build = dayStatements) => build(rows, nowS).reduce((n, s) => n + f.db.prepare(s.sql).run().changes, 0);
 const stored = (f) => ({ ...one(f, `SELECT fees_usd, fees_src, fees_rank, fees_unconfirmed, volume_usd, volume_src, tvl_usd, tvl_src, price, lp_fee_rate, revisions FROM pool_day WHERE pool_id = '${P1}'`) });
@@ -214,13 +214,14 @@ test('dayUpgrade and hourUpgrade say exactly what the SQL guard writes (random r
   const rnd = rng(11);
   const rand = () => {
     const fs = [null, 'e', 'x', 's'][rnd(4)], vs = [null, 'g', 's'][rnd(3)], ts = [null, 'r', 'b'][rnd(3)];
-    return day({ fees_usd: fs ? rnd(50) : null, fees_src: fs, fees_rank: fs ? RANK.fees[fs] : 0, fees_unconfirmed: fs ? rnd(2) : null, volume_usd: vs ? rnd(50) : null, volume_src: vs,
-      volume_rank: vs ? RANK.volume[vs] : 0, tvl_usd: ts ? rnd(50) : null, tvl_src: ts, tvl_rank: ts ? 1 : 0, price: rnd(2) ? null : 1 + rnd(5), lp_fee_rate: rnd(2) ? null : 0.003 });
+    return day({ fees_usd: fs ? rnd(3) : null, fees_src: fs, fees_rank: fs ? RANK.fees[fs] : 0, fees_unconfirmed: fs ? rnd(2) : null, volume_usd: vs ? rnd(3) : null, volume_src: vs,
+      volume_rank: vs ? RANK.volume[vs] : 0, tvl_usd: ts ? rnd(3) : null, tvl_src: ts, tvl_rank: ts ? 1 : 0, price: rnd(2) ? null : 1 + rnd(5), lp_fee_rate: rnd(2) ? null : 0.003,
+      valued: [null, 0, 1][rnd(3)] });
   };
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 600; i++) {
     const id = '0x' + i.toString(16).padStart(40, '0'), a = { ...rand(), pool_id: id }, b = { ...rand(), pool_id: id };
     write(f, [a]);
-    const s = one(f, `SELECT fees_rank fr, volume_rank vr, tvl_rank tr, price IS NOT NULL hp, lp_fee_rate IS NOT NULL hr FROM pool_day WHERE pool_id = '${id}'`);
+    const s = one(f, `SELECT fees_rank fr, volume_rank vr, tvl_rank tr, price IS NOT NULL hp, lp_fee_rate IS NOT NULL hr, valued va, fees_usd fu, volume_usd vu, tvl_usd tu FROM pool_day WHERE pool_id = '${id}'`);
     assert.equal(write(f, [b]) === 1, dayUpgrade(b, { ...s, hp: !!s.hp, hr: !!s.hr }));
   }
   for (let i = 0; i < 200; i++) {
@@ -423,4 +424,67 @@ test('the d1 job: check, setup (created, then already there), import, verify (PA
   assert.equal(out.at(-1), 'verify: FAIL');
   const text = out.join('\n');
   assert.ok(!text.includes(ACCT) && !text.includes(TOKEN) && !/0x[0-9a-f]/i.test(text) && !text.includes('db-new'));
+});
+
+test('migration 2: valued; a day-close figure replaces a pass-priced one of the same source, never the reverse, never pass over pass', noSql, async () => {
+  const f = await ready();
+  const row = () => ({ ...one(f, `SELECT fees_usd, fees_src, tvl_usd, valued, revisions FROM pool_day WHERE pool_id = '${P1}'`) });
+  const x = (v, valued, tvl = 5e5) => day({ ...fee('x', v), tvl_usd: tvl, tvl_src: 'b', tvl_rank: 1, valued });
+  assert.equal(write(f, [x(10, 0)]), 1);
+  assert.equal(write(f, [x(10.07, 0, 5.035e5)]), 0);            // history revalued it at a later pass's prices: the first stays
+  assert.equal(write(f, [x(9.8, 1, 4.9e5)]), 1);                 // the day's own close arrived: it replaces the pass-priced figures
+  assert.deepEqual(row(), { fees_usd: 9.8, fees_src: 'x', tvl_usd: 4.9e5, valued: 1, revisions: 1 });
+  assert.equal(write(f, [x(9.9, 1)]), 0);                        // at the day's close: frozen
+  assert.equal(write(f, [x(11, 0)]), 0);                         // a pass's prices never replace the day's close
+  assert.equal(write(f, [day({ ...fee('s', 9.7), valued: 0 })]), 1); // a better source still does
+  assert.deepEqual(row(), { fees_usd: 9.7, fees_src: 's', tvl_usd: 4.9e5, valued: 0, revisions: 2 });
+  // rows written before the migration (valued null): the day's close replaces only a figure that differs (no write, no revision otherwise)
+  const g = await ready();
+  const old = day({ ...fee('x', 10), pool_id: P2 });
+  write(g, [old]);
+  assert.equal(write(g, [{ ...old, valued: 1 }]), 0);
+  assert.equal(write(g, [{ ...old, valued: 0, fees_usd: 10.5 }]), 0);
+  assert.equal(write(g, [{ ...old, valued: 1, fees_usd: 10.2 }]), 1);
+  assert.deepEqual({ ...one(g, `SELECT fees_usd, valued, revisions FROM pool_day WHERE pool_id = '${P2}'`) }, { fees_usd: 10.2, valued: 1, revisions: 1 });
+  // planted faults: each guard taken out lets a figure move that must not
+  const plant = (from, to) => (rows, n) => dayStatements(rows, n).map((st) => ({ ...st, sql: st.sql.replaceAll(from, to) }));
+  for (const [from, to, seq] of [
+    ['excluded.valued = 1', 'excluded.valued >= 0', [x(10, 0), x(10.07, 0)]], // pass over pass: history's drift would follow
+    ['COALESCE(pool_day.valued, 0) = 0', '1 = 1', [x(10, 1), x(10.07, 1)]],   // a day-close figure would move
+  ]) {
+    const h = await ready();
+    for (const r of seq) write(h, [r], plant(from, to));
+    assert.notEqual(one(h, `SELECT fees_usd FROM pool_day WHERE pool_id = '${P1}'`).fees_usd, 10, `${from} taken out must be caught`);
+    const k = await ready();
+    for (const r of seq) write(k, [r]);
+    assert.equal(one(k, `SELECT fees_usd FROM pool_day WHERE pool_id = '${P1}'`).fees_usd, 10);
+  }
+});
+
+test('valuedFrom: the day\'s own prices only with the base token known and a candle close within 3 days', async () => {
+  const { valuedFrom } = await import('../lib/d1.mjs');
+  const days = new Map([[D0, [100, 2.5]], [D0 + 10 * DAY, [100, null]]]);
+  const v = valuedFrom({ b: 1, days });
+  assert.deepEqual([v(D0), v(D0 + 3 * DAY), v(D0 + 4 * DAY), v(D0 + 10 * DAY)], [1, 1, 0, 0]);
+  assert.equal(valuedFrom({ b: null, days })(D0), 0);                 // base token unmatched: the pass's prices
+  assert.equal(valuedFrom({ b: 0, days: new Map(), miss: 5 })(D0), 0); // GeckoTerminal does not know the pool
+  assert.equal(valuedFrom(null)(D0), 0);
+  assert.equal(dayRows(P1, hpOf({ days: 1 }), 0.003, v)[0].valued, 1);
+});
+
+test('compareDays: like with like: a consistent revaluation passes; a moved day-close figure, a lone moved field or a mixed group fails', async () => {
+  const { compareDays } = await import('../lib/d1.mjs');
+  const h = (i, o = {}) => ({ ...day({ day_utc: `2026-06-${String(i).padStart(2, '0')}`, ...fee('x', 100 + i), tvl_usd: 1000 + i, tvl_src: 'b', tvl_rank: 1, valued: 0 }), ...o });
+  const g = (r, k = 1, o = {}) => [r.pool_id, r.day_utc, o.fees ?? r.fees_usd * k, r.fees_src, r.volume_usd, r.volume_src, o.tvl ?? r.tvl_usd * k, r.tvl_src, r.price, o.valued ?? null, o.at ?? 1000];
+  const map = (rows) => new Map(rows.map((x) => [`${x[0]}|${x[1]}`, x]));
+  const pick = [1, 2, 3].map((i) => h(i));
+  const ok = compareDays(pick, map(pick.map((r) => g(r, 1.007))), { now: NOW });
+  assert.deepEqual([ok.match, ok.revalued, ok.behind, ok.differ], [0, 3, 0, 0]);
+  assert.equal(compareDays(pick, map(pick.map((r) => g(r))), { now: NOW }).match, 3);
+  assert.equal(compareDays(pick, map(pick.map((r) => g(r, 1.007, { valued: 1 }))), { now: NOW }).differ, 3);   // at the day's close a figure never moves
+  assert.equal(compareDays(pick, map(pick.map((r) => g(r, 1, { fees: r.fees_usd * 2 }))), { now: NOW }).differ, 3); // fees doubled, TVL valued alike unmoved
+  assert.equal(compareDays(pick, map(pick.map((r, i) => g(r, i ? 1.007 : 1.05))), { now: NOW }).differ, 3);        // one write, two price ratios
+  assert.equal(compareDays(pick, map(pick.map((r, i) => g(r, i ? 1.007 : 1.05, { at: i ? 1000 : 99000 }))), { now: NOW }).differ, 0); // two passes, two ratios
+  assert.equal(compareDays(pick.map((r) => ({ ...r, valued: 1 })), map(pick.map((r) => g(r, 1.007))), { now: NOW }).behind, 3); // the next sweep takes the close
+  assert.equal(compareDays(pick, new Map(), { now: NOW }).missing, 3);
 });

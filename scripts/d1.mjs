@@ -20,9 +20,12 @@ async function market() {
   const { loadConfig } = await import('../lib/config.mjs');
   const { keys } = openLock();
   const store = openStore({ keys });
+  const { unpackGt } = await import('../lib/feehist.mjs');
   const h = store.get('history.json'), l = store.get('live.json');
   if (!h?.pools) throw new D1Error('nohistory');
-  return { history: h.pools, live: l?.pools || [], exclude: loadConfig({ keys }).config.leakSensitive || [], t: h.t };
+  let gt = null;
+  try { gt = unpackGt(store.get('snapshots.json')?.gt); } catch { gt = null; } // the candle cache: how each day was valued
+  return { history: h.pools, live: l?.pools || [], exclude: loadConfig({ keys }).config.leakSensitive || [], gt, t: h.t };
 }
 
 async function dbOf(c, say) {
@@ -31,7 +34,7 @@ async function dbOf(c, say) {
   return db;
 }
 
-export async function run(mode, { env = process.env, say = (s) => console.log(`d1 ${mode}: ${s}`), fetchImpl, load = market, sample = Number(env.D1_SAMPLE) > 0 ? Math.min(2000, Number(env.D1_SAMPLE)) : 200, now = Date.now() } = {}) {
+export async function run(mode, { env = process.env, say = (s) => console.log(`d1 ${mode}: ${s}`), fetchImpl, load = market, sample = Number(env.D1_SAMPLE) > 0 ? Math.min(2000, Number(env.D1_SAMPLE)) : 1000, now = Date.now() } = {}) {
   const c = makeClient({ accountId: env.CF_ACCOUNT_ID, token: env.CF_API_TOKEN, ...(fetchImpl ? { fetchImpl } : {}) });
   if (mode === 'check') {
     const ok = await c.verify();
@@ -79,21 +82,22 @@ export async function run(mode, { env = process.env, say = (s) => console.log(`d
     const m = await load();
     const cutoff = Math.floor(now / DAY) * DAY - 4 * DAY;
     const held = new Set((await c.raw(db, 'SELECT pool_id FROM pool_day GROUP BY pool_id')).rows.map((x) => x[0]));
-    const ps = archivePools(m.history, m.live, m.exclude);
+    const ps = archivePools(m.history, m.live, m.exclude, m.gt);
     say(`coverage: D1 holds days of ${fmt(ps.filter((p) => held.has(p.id)).length)} of the ${fmt(ps.length)} pools in history.json${ps.every((p) => held.has(p.id)) ? '' : ' (the import resumes with its next run or the loop\'s daily sweep)'}`);
-    const cand = ps.filter((p) => held.has(p.id)).flatMap((p) => dayRows(p.id, p.hp, p.rate)).filter((r) => Date.parse(r.day_utc) < cutoff);
+    const cand = ps.filter((p) => held.has(p.id)).flatMap((p) => dayRows(p.id, p.hp, p.rate, p.valuedAt)).filter((r) => Date.parse(r.day_utc) < cutoff);
     for (let i = cand.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [cand[i], cand[j]] = [cand[j], cand[i]]; }
     const pick = cand.slice(0, sample), got = new Map();
     for (let i = 0; i < pick.length; i += 50) {
       const part = pick.slice(i, i + 50);
-      const sql = 'SELECT pool_id, day_utc, fees_usd, fees_src, volume_usd, volume_src, tvl_usd, tvl_src, price FROM pool_day WHERE '
+      const sql = 'SELECT pool_id, day_utc, fees_usd, fees_src, volume_usd, volume_src, tvl_usd, tvl_src, price, valued, written_at FROM pool_day WHERE '
         + part.map((r) => `(pool_id = ${sqlStr(r.pool_id, 66)} AND day_utc = ${sqlStr(r.day_utc)})`).join(' OR ');
       for (const x of (await c.raw(db, sql)).rows) got.set(`${x[0]}|${x[1]}`, x);
     }
     const st = compareDays(pick, got, { now });
     for (const l of compareLines(st)) say(l);
-    const { match, behind, differ, missing } = st;
-    say(`cross-check: ${pick.length} random pool-days of those pools (of ${fmt(cand.length)} over 4 days old): ${match} match (value and source), ${behind} behind (a better source since: the next sweep), ${differ} differ, ${missing} missing`);
+    const { match, revalued, behind, differ, missing } = st;
+    say(`cross-check: ${pick.length} random pool-days of those pools (of ${fmt(cand.length)} over 4 days old): ${match} match, ${revalued} revalued consistently (D1 keeps the first figure at a pass's prices), `
+      + `${behind} behind (a better source or the day's close since: the next sweep), ${differ} differ, ${missing} missing${m.gt ? '' : ' (no candle cache: every day counted as valued at a pass\'s prices)'}`);
     const ok = pick.length > 0 && differ === 0 && missing === 0;
     say(ok ? 'PASS' : 'FAIL');
     return ok ? 0 : 1;

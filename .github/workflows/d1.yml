@@ -17,7 +17,7 @@ on:
         default: check
       sample:
         description: 'verify: how many random pool-days to cross-check (up to 2000)'
-        default: '200'
+        default: '1000'
 permissions:
   contents: read   # the scripts, and the sealed data branch for import and verify
 concurrency:

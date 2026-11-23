@@ -58,3 +58,10 @@ CREATE TABLE IF NOT EXISTS meta (
   v TEXT,
   n INTEGER
 ) WITHOUT ROWID;
+
+-- migration: 2
+-- valued: how the day's USD figures were valued when written. 1 = at the day's own prices (the candle's close within 3
+-- days, GeckoTerminal's base token known): a fact, frozen. 0 = at the prices of the pass that wrote it (no close yet):
+-- kept as first written, and replaced only by the same source valued at the day's close. NULL = written before this
+-- migration (treated as 0).
+ALTER TABLE pool_day ADD COLUMN valued INTEGER;

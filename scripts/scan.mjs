@@ -1181,7 +1181,7 @@ async function writeOutputs() {
   // sealed file is written; one public line of counts. Never fails the pass: no secrets is "skipped", a failure its category.
   if (histPools) {
     let d1 = null;
-    try { d1 = await timed('d1', () => d1Pass({ history: histPools, live: out, now: passT, exclude: config.leakSensitive || [] })); } catch { d1 = { line: 'd1: error internal' }; }
+    try { d1 = await timed('d1', () => d1Pass({ history: histPools, live: out, gt: gtCache, now: passT, exclude: config.leakSensitive || [] })); } catch { d1 = { line: 'd1: error internal' }; }
     pub(d1.line);
   } else pub('d1: idle (history.json unchanged this pass)');
 }
