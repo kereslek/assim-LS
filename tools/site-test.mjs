@@ -21,6 +21,7 @@
 //                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
 //                                                    explainer (v0.7.6: the "How to read this" note on top: shows, hides, comes back, jumps to the scatter)
 //                                                    tokenlinks (v0.7.8: each token a link to its coin page, CoinMarketCap else CoinGecko; rows keep their tap)
+//                                                    guest180 (v0.8.1: the shared guest password's end date and "Restart 180 days", owner only)
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
@@ -63,7 +64,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -5514,6 +5515,99 @@ async function testGuestAdmin(browser) {
   ok('guestadmin: owner pages have no errors', t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
   await t.ctx.close();
 }
+// ---------- v0.8.1 · guest180: the shared guest password lasts 180 days from the day the owner hands it out. Settings shows its
+// end (dd Mon yyyy, CET) and "Restart 180 days", which seals extend-shared-guest through the same "Send to the loop" flow; the
+// loop's own code keeps the password and the market key and ends it 180 days from its pass; a restart after the end is refused
+// and said; guests and members never get the button. Made-up fixtures only ----------
+const DMY_CET = (t) => { const p = {}; for (const x of new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Budapest', day: '2-digit', month: 'short', year: 'numeric' }).formatToParts(t)) p[x.type] = x.value; return `${p.day} ${p.month.slice(0, 3)} ${p.year}`; };
+async function g180Pass(src, name, requests) { // the loop's own keys step over a copy of a case, served as a case of its own
+  const { openVault } = await import('../lib/keyring.mjs');
+  const { guestStep } = await import('../lib/guests.mjs');
+  const dir = path.join(FX, name);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const n of fs.readdirSync(path.join(FX, src))) fs.copyFileSync(path.join(FX, src, n), path.join(dir, n));
+  const read = (n) => JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'));
+  const r = guestStep({ keys: openVault(read('lock.json'), FIXTURE_PASSPHRASE, read('keys.json')), outDir: dir, requests, now: Date.now() });
+  return { r, kf: read('keys.json') };
+}
+const G180_LOOK = () => {
+  const vis = (el) => !!el && !el.hidden && !el.closest('[hidden]') && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
+  const b = document.querySelector('#sh-ext'), r = b && b.getBoundingClientRect(), sibs = b ? [...b.parentElement.children].filter((x) => x !== b && vis(x)).map((x) => x.getBoundingClientRect()) : [];
+  return { ext: vis(b), label: b ? b.textContent.trim() : '', inView: !!r && r.left >= 0 && r.right <= innerWidth + 0.5, h: r ? Math.round(r.height) : 0,
+    hit: sibs.some((s) => r && s.left < r.right - 1 && r.left < s.right - 1 && s.top < r.bottom - 1 && r.top < s.bottom - 1),
+    exp: (document.querySelector('#sh-exp') || {}).textContent || '', body: (document.querySelector('#sh-body') || {}).textContent || '', state: (document.querySelector('#sh-state') || {}).textContent || '',
+    late: (document.querySelector('#sh-late') || {}).textContent || '', settings: vis(document.querySelector('#settings')), hs: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+};
+async function testGuest180(browser) {
+  const { inboxOpen: io, inboxKeys: ik } = await import('../lib/inbox.mjs');
+  const { unlock: un } = await import('../lib/lock.mjs');
+  const priv = ik(un(JSON.parse(fs.readFileSync(path.join(FX, 'keyed', 'lock.json'), 'utf8')), FIXTURE_PASSPHRASE).token).privateKey;
+  // the base: keyed after one plain pass of the loop (its guest past the outer limit drops and the key rotates there, not here)
+  const base = await g180Pass('keyed', 'g180base', []), kf0 = base.kf, sh0 = await slotFor(kf0, SHARED_PASS), ada0 = await slotFor(kf0, GUEST_PASS);
+  ok('guest180: the base pass leaves the shared password and the personal guest in place', base.r.expired === 1 && !!sh0 && !!ada0, JSON.stringify({ ...base.r, handled: 0 }));
+  let env = null;
+  for (const [tag, o] of BROWSER === 'webkit' ? [['phone', { phone: true }], ['w1440', { width: 1440 }]] : [['w360', { width: 360 }], ['phone', { phone: true }], ['w1440', { width: 1440 }]]) {
+    const t = await unlockAs(browser, 'g180base', FIXTURE_PASSPHRASE, o), p = t.page;
+    await waitApp(p); await p.waitForSelector('#sh-exp', { timeout: 15000 });
+    await p.evaluate(() => document.querySelector('#settings').scrollIntoView({ block: 'start' })); await sleep(200);
+    const s = await p.evaluate(G180_LOOK), ov = await p.evaluate(TEXT_OVERLAP, { root: '#settings' });
+    ok(`guest180 ${tag}: Settings shows the shared password's end as dd Mon yyyy, CET (${s.exp})`, /^\d{2} [A-Z][a-z]{2} \d{4}$/.test(s.exp) && s.exp === DMY_CET(sh0.exp) && s.body.includes(`ends ${s.exp} (CET)`), `${s.exp} vs ${DMY_CET(sh0.exp)}`);
+    ok(`guest180 ${tag}: "Restart 180 days" is there for the owner, on screen, clear of its neighbours, nothing sideways`, s.ext && s.label === 'Restart 180 days' && s.inView && !s.hit && s.h >= 30 && s.hs <= 0 && ov.length === 0, JSON.stringify({ ...s, body: '', ov: ov[0] }));
+    await snap(p, `guest180-${tag}-settings`, '#settings');
+    const before = Date.now();
+    await p.click('#sh-ext');
+    await p.waitForSelector('#sh-out a.g-send', { timeout: 30000 });
+    const out = await p.evaluate(() => ({ lbl: (document.querySelector('#sh-out .lbl') || {}).textContent, txt: document.querySelector('#sh-out').textContent, href: document.querySelector('#sh-out a.g-send').href }));
+    const u = new URL(out.href), e = sealedOf(out.href), raw = e ? JSON.parse(io(e, priv)) : {};
+    ok(`guest180 ${tag}: the button seals the restart for the loop: GitHub's new-file page, inbox/<id>.json on the code branch, "Commit changes"`, out.lbl === 'RESTART SEALED' && /\/new\/claude\/ecstatic-dirac-wkrqja$/.test(u.pathname) && /^inbox\/[0-9a-f]{32}\.json$/.test(u.searchParams.get('filename')) && /Commit changes/.test(out.txt) && /Copy the sealed request/.test(out.txt), out.lbl);
+    ok(`guest180 ${tag}: the request is exactly { action: extend-shared-guest, label: friends, days: 180, from: now } (with its id and time), sealed`, Object.keys(e || {}).sort().join() === 'ct,epk,inbox,iv' && JSON.stringify(Object.keys(raw).sort()) === '["action","at","days","from","id","label"]'
+      && raw.action === 'extend-shared-guest' && raw.label === 'friends' && raw.days === 180 && raw.from === 'now' && u.searchParams.get('filename') === `inbox/${raw.id}.json` && raw.at >= before - 1000 && raw.at <= Date.now(), JSON.stringify({ ...raw, id: !!raw.id }));
+    ok(`guest180 ${tag}: it says when the same password then ends (${DMY_CET(before + 180 * 86400e3)}, CET)`, out.txt.includes(`until about ${DMY_CET(before + 180 * 86400e3)} (CET)`) || out.txt.includes(`until about ${DMY_CET(Date.now() + 180 * 86400e3)} (CET)`), out.txt.slice(0, 160));
+    await snap(p, `guest180-${tag}-sealed`, '#settings');
+    const a0 = Date.now(), q = await loopApplies(e, 'g180base'), a1 = Date.now();
+    const ns = await slotFor(q.kf, SHARED_PASS), ada = await slotFor(q.kf, GUEST_PASS);
+    ok(`guest180 ${tag}: the loop's own code restarts it: the same password and market key, ending 180 days from its pass, no rotation, nobody else touched`, !!q.req && q.req.lps === 'shared-extend' && q.r.extended === 1 && q.r.refused === 0 && !q.r.rotated
+      && ns && ns.shared && ns.dek.equals(sh0.dek) && ns.exp >= a0 + 180 * 86400e3 && ns.exp <= a1 + 180 * 86400e3 && ada && ada.exp === ada0.exp && ada.dek.equals(ada0.dek) && q.kf.owner[0].ct === kf0.owner[0].ct && q.kf.recovery.ct === kf0.recovery.ct, JSON.stringify(q.r && { ...q.r, handled: 0 }));
+    env = e;
+    await p.click('#sh-out [data-act="g-cancel"]');
+    ok(`guest180 ${tag}: Done closes it; no page errors`, (await p.evaluate(() => document.querySelector('#sh-out').hidden)) && t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
+    await t.ctx.close();
+  }
+  // after the loop's pass: the owner sees the new end and when it was restarted; a friend's device reads the new date from the slot
+  const done = await g180Pass('g180base', 'g180done', [env]), ne = (await slotFor(done.kf, SHARED_PASS)).exp;
+  let t = await unlockAs(browser, 'g180done', FIXTURE_PASSPHRASE, { phone: true }), p = t.page;
+  await waitApp(p); await p.waitForSelector('#sh-exp', { timeout: 15000 });
+  let s = await p.evaluate(G180_LOOK);
+  ok('guest180: after the pass, Settings shows the new end and the restart\'s date; the button stays', s.exp === DMY_CET(ne) && s.body.includes(`restarted ${DMY_CET(Date.now())}`) && s.ext && s.late === '', `${s.exp} | ${s.body.slice(0, 120)}`);
+  await snap(p, 'guest180-restarted', '#settings');
+  await t.ctx.close();
+  t = await unlockAs(browser, 'g180done', SHARED_PASS, { phone: true }); p = t.page;
+  await waitApp(p); await p.click('#gw-ok'); await sleep(150); await p.click('#gpill'); await sleep(250);
+  const meta = await p.textContent('#gs-meta');
+  ok('guest180: a friend\'s device reads the new date from its slot: 180 days left', /^ENDS \d+ [A-Z]{3} · 180 DAYS LEFT$/.test(meta), meta);
+  await t.ctx.close();
+  // the loop had already ended it: refused, and Settings says so; no restart button without a shared password
+  const late = await g180Pass('keyedgone', 'g180late', [env]);
+  t = await unlockAs(browser, 'g180late', FIXTURE_PASSPHRASE, { width: 1440 }); p = t.page;
+  await waitApp(p); await p.waitForSelector('#sh-late', { timeout: 15000 });
+  s = await p.evaluate(G180_LOOK);
+  ok('guest180: a restart after the end is refused by the loop and said in Settings; no restart button then', late.r.refused === 1 && late.r.extEnded === 1 && late.r.extended === 0 && !(await slotFor(late.kf, SHARED_PASS))
+    && /^Restart refused \d{2} [A-Z][a-z]{2} \d{4}: the shared password had already ended\. Create a new one\.$/.test(s.late) && !s.ext && s.state === 'NONE', JSON.stringify({ late: s.late, ext: s.ext, st: s.state }));
+  await snap(p, 'guest180-late', '#settings');
+  await t.ctx.close();
+  // guests and members: never the button (Settings is the owner's), and a forced tap seals nothing
+  for (const [who, pass] of [['guest', SHARED_PASS], ['member', MEMBER_PASS]]) {
+    for (const [tag, o] of [['phone', { phone: true }], ['w1440', { width: 1440 }]]) {
+      t = await unlockAs(browser, 'keyed', pass, o); p = t.page;
+      await waitApp(p);
+      const g = await p.evaluate(G180_LOOK);
+      await p.evaluate(() => { const b = document.querySelector('#sh-ext'); if (b) { b.hidden = false; b.click(); } }); await sleep(600);
+      const sealedNone = await p.evaluate(() => !document.querySelector('#sh-out a.g-send') && !/RESTART SEALED/.test(document.querySelector('#sh-out').textContent));
+      ok(`guest180 ${who} ${tag}: no "Restart 180 days" and no Settings; a forced tap seals nothing`, !g.ext && !g.settings && sealedNone && !t.reqs.some((r) => /\/(owner|guests)\.json$/.test(r)), JSON.stringify({ ext: g.ext, settings: g.settings, sealedNone }));
+      await t.ctx.close();
+    }
+  }
+}
 async function testRecovery(browser) {
   const t = await newPage(browser, { phone: true }), p = t.page;
   await p.goto(url('keyed'));
@@ -6626,8 +6720,8 @@ async function testTokenLinks(browser) {
 
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

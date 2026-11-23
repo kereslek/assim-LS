@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-qj35XQE/1ExHejuhCwZ9YYj2w3Rm58fawJ9p7l7ZyrM='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-C1O4+MztYITlAsRAF72QL87JhF6AbwEjNdw6FwQib5k='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1501,6 +1501,7 @@ html.guest #fav .devnote,html.guest #positions,html.member #positions{display:no
 .guests .g-made{margin-top:10px;padding:12px;border:1px solid var(--line3);border-radius:12px;display:grid;gap:8px;max-width:640px}
 .guests .g-pass{font:700 clamp(15px,4.4vw,19px)/1.35 var(--mono);letter-spacing:.02em;color:var(--fg);word-break:break-all;user-select:all;-webkit-user-select:all}
 .guests .g-hint,.guests .g-wait,.guests .g-msg{margin:0;color:var(--fg2);font:400 12.5px/1.45 var(--sans)}
+.guests #sh-exp{white-space:nowrap}
 .guests ol.g-steps{margin:0;padding-left:18px;display:grid;gap:8px}
 .guests ol.g-steps li{margin:0;line-height:1.5}
 .guests ol.g-steps .g-hint{display:block;margin-top:6px}
@@ -1800,9 +1801,9 @@ a.tkl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <section id="settings" class="card guests" aria-labelledby="settings-h" hidden>
       <div class="sec-head"><h2 id="settings-h">Settings</h2><span class="lbl">ONLY YOU SEE THIS</span></div>
       <h3 class="g-h3">Shared guest password <span class="lbl" id="sh-state"></span></h3>
-      <p class="g-sub">One password for a group of friends: read-only, for 30 days from when it’s made. Change it (the old one stops) or end it any time.</p>
+      <p class="g-sub">One password for a group of friends: read-only, for 180 days. On the day you hand it out, tap <b>Restart 180 days</b>: the same password then works for 180 days from that day. Change it (the old one stops) or end it any time.</p>
       <div id="sh-body"></div>
-      <div class="g-acts"><button type="button" class="btn" id="sh-set" data-act="sh-set">Create a shared password</button><button type="button" class="linkbtn" id="sh-end" data-act="sh-end" hidden>End shared access now</button></div>
+      <div class="g-acts"><button type="button" class="btn" id="sh-ext" data-act="sh-ext" hidden>Restart 180 days</button><button type="button" class="btn" id="sh-set" data-act="sh-set">Create a shared password</button><button type="button" class="linkbtn" id="sh-end" data-act="sh-end" hidden>End shared access now</button></div>
       <div id="sh-out" hidden></div>
       <h3 class="g-h3">Personal guests and members <span class="lbl" id="guests-count"></span></h3>
       <p class="g-sub">A guest sees every market view, read-only, for 30 days from their first visit. A member also keeps favourites and notes on their own device. Neither sees anything of yours. Removing one changes the data key, so their device stops getting new data; what they already saw can’t be recalled.</p>
@@ -7587,6 +7588,10 @@ async function sealAsk(req) { const id = rhex(16); return { id, env: await inbox
 const splitNames = (t) => [...new Set(String(t || '').split(/[\n,;]+/).map(cleanName).filter(Boolean))];
 const dashLink = () => location.origin + location.pathname;
 const shareTxt = (name, pass, role) => `Hi ${name}! Your ${role === 'member' ? 'login' : 'guest access'} to the LP Shape Scanner: open ${dashLink()} and enter this passphrase once (it stays on that device): ${pass}${role === 'member' ? '' : '. Guest access lasts 30 days from your first visit.'}`;
+// the shared password lasts 180 days from when it's made or restarted (the loop's extend-shared-guest); dates as dd Mon yyyy, CET
+const SHARED_DAYS = 180, fDMY = dtf({ day: '2-digit', month: 'short', year: 'numeric' });
+const dmy = (t) => { if (!isNum(t)) return DASH; const p = {}; for (const x of fDMY.formatToParts(t)) p[x.type] = x.value; return `${p.day} ${p.month.slice(0, 3)} ${p.year}`; };
+const sharedNow = () => (S.gl && Array.isArray(S.gl.guests) ? S.gl.guests : []).filter((g) => g.sh && g.st === 'active').sort((a, b) => (b.at || 0) - (a.at || 0))[0] || null;
 const sharedTxt = (pass, end) => `Hi! Guest access to the LP Shape Scanner: open ${dashLink()} and enter this password once (it stays on that device): ${pass}${isNum(end) ? `. It works until ${dm(end)}.` : ''}`;
 // one passphrase per friend (5 words and 2 digits), their slots wrapped here, ALL in one sealed request
 async function addGuests(names, role, days, progress = () => {}) {
@@ -7607,10 +7612,10 @@ async function addGuests(names, role, days, progress = () => {}) {
 // the shared guest password the owner typed: its slot wrapped here, sealed for the loop (which replaces any shared one before it)
 async function setShared(pass) {
   if (!S.keys || !S.mdekRaw) throw new Error('the keys aren’t read yet');
-  const at = Date.now(), slot = rhex(8), e = at + 30 * D;
+  const at = Date.now(), slot = rhex(8), e = at + SHARED_DAYS * D;
   const g = await passKey(pass, S.keys.gsalt, S.keys.iter, ['encrypt']);
   const wrap = await sealSlot({ k: S.mdekRaw, s: slot, n: 'friends', e, r: 'guest', x: null, d: 0, sh: 1, g: S.gen }, g.key, 'guest');
-  const r = await sealAsk({ lps: 'shared-set', label: 'friends', days: 30, slot, kek: B64(g.raw), wrap });
+  const r = await sealAsk({ lps: 'shared-set', label: 'friends', days: SHARED_DAYS, slot, kek: B64(g.raw), wrap });
   g.raw.fill(0);
   return r;
 }
@@ -7642,10 +7647,14 @@ function renderSettings() {
   el.hidden = false;
   const all = S.gl && Array.isArray(S.gl.guests) ? S.gl.guests : [];
   // the shared guest password (the main path): the one in use, with its password when the loop made it
-  const sh = all.filter((g) => g.sh && g.st === 'active').sort((a, b) => (b.at || 0) - (a.at || 0))[0] || null;
+  const sh = sharedNow(), x = S.gl && S.gl.shx;
+  // a restart the loop refused (it came after the password had ended, or named no shared password): said once it's newer than the password
+  const late = !!x && x.ok === false && isNum(x.at) && x.at > (sh ? sh.rx || sh.at || 0 : 0) && Date.now() - x.at < 14 * D;
   $('#sh-state').textContent = sh ? `ACTIVE · ENDS ${dm(sh.e).toUpperCase()}` : 'NONE';
-  $('#sh-body').innerHTML = sh ? `<p class="g-hint">Made ${esc(dm(sh.at))} · ${esc(sh.n)} · works until ${esc(full(sh.e))}.${sh.pw ? '' : ' You set it on this page: it isn’t kept anywhere, so you have it.'}</p>${pwBlock(sh, sharedTxt(sh.pw, sh.e))}` : '';
+  $('#sh-body').innerHTML = (sh ? `<p class="g-hint">Made ${esc(dm(sh.at))}${isNum(sh.rx) ? ` · restarted ${esc(dmy(sh.rx))}` : ''} · ${esc(sh.n)} · ends <b id="sh-exp">${esc(dmy(sh.e))}</b> (CET).${sh.pw ? '' : ' You set it on this page: it isn’t kept anywhere, so you have it.'}</p>${pwBlock(sh, sharedTxt(sh.pw, sh.e))}` : '')
+    + (late ? `<p class="g-hint" id="sh-late"><b>Restart refused ${esc(dmy(x.at))}:</b> ${x.why === 'ended' ? 'the shared password had already ended. Create a new one.' : 'no shared password with that label.'}</p>` : '');
   $('#sh-set').textContent = sh ? 'Change the shared password' : 'Create a shared password';
+  $('#sh-ext').hidden = !sh;
   $('#sh-end').hidden = !sh; if (sh) $('#sh-end').dataset.slot = sh.s;
   // per-person guests and members
   const list = all.filter((g) => !g.sh).sort((a, b) => (b.st === 'active') - (a.st === 'active') || (b.at || 0) - (a.at || 0)); // active first, newest first
@@ -7759,7 +7768,7 @@ async function gClick(el) {
     }
     // the shared guest password (the main path): typed here, or made by the loop
     case 'sh-set':
-      gOut('#sh-out', `<form class="g-form" novalidate><p class="g-hint">One password for your friends, read-only, for 30 days from now.${S.gl && S.gl.guests && S.gl.guests.some((g) => g.sh && g.st === 'active') ? ' It replaces the one in use (that one stops working).' : ''}</p>`
+      gOut('#sh-out', `<form class="g-form" novalidate><p class="g-hint">One password for your friends, read-only, for ${SHARED_DAYS} days from now.${S.gl && S.gl.guests && S.gl.guests.some((g) => g.sh && g.st === 'active') ? ' It replaces the one in use (that one stops working).' : ''}</p>`
         + '<label class="lbl" for="sh-new">Shared password (16 characters or more, e.g. 5 words)</label><input id="sh-new" type="password" autocomplete="new-password" spellcheck="false">'
         + '<label class="lbl" for="sh-new2">The same again</label><input id="sh-new2" type="password" autocomplete="new-password" spellcheck="false">'
         + '<p class="g-msg" id="sh-msg" role="status" aria-live="polite"></p><div class="g-acts"><button type="button" class="btn" data-act="sh-save">Seal it for the loop</button>'
@@ -7777,11 +7786,25 @@ async function gClick(el) {
           if (a !== b) { m.textContent = 'The two don’t match.'; return true; }
           m.textContent = 'Sealing (a few seconds)…';
           q = await setShared(a);
-        } else q = await sealAsk({ lps: 'shared-set', label: 'friends', days: 30 });
+        } else q = await sealAsk({ lps: 'shared-set', label: 'friends', days: SHARED_DAYS });
         GU.sent.push(q.id);
         gOut('#sh-out', `<div class="g-made"><div class="lbl">SHARED PASSWORD SEALED</div>${sendBlock(q.id, q.env, el.dataset.act === 'sh-save' ? 'Your friends can unlock with it' : 'The password appears here')}<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>`);
         renderSettings();
       } catch (e) { m.textContent = errTxt(e); } finally { el.disabled = false; }
+      return true;
+    }
+    // the day the owner hands the shared password out: the same password, 180 days from the loop's next pass
+    case 'sh-ext': {
+      const sh = sharedNow();
+      if (!isOwner() || !sh) return true;
+      el.disabled = true; $('#g-form').hidden = true;
+      try {
+        const q = await sealAsk({ action: 'extend-shared-guest', label: sh.n, days: SHARED_DAYS, from: 'now' });
+        GU.sent.push(q.id);
+        gOut('#sh-out', `<div class="g-made"><div class="lbl">RESTART SEALED</div><p class="g-hint">The same password, for ${SHARED_DAYS} days from the loop’s next pass: until about <b>${esc(dmy(Date.now() + SHARED_DAYS * D))}</b> (CET). Nothing else changes.</p>`
+          + `${sendBlock(q.id, q.env, `The ${SHARED_DAYS} days start`)}<button type="button" class="linkbtn" data-act="g-cancel">Done</button></div>`);
+        renderSettings();
+      } catch (e) { gOut('#sh-out', `<p class="g-hint">${esc(errTxt(e))}</p>`); } finally { el.disabled = false; }
       return true;
     }
     case 'sh-end': GU.rm = { slot: el.dataset.slot, name: 'the shared password' }; $('#g-form').hidden = true;
