@@ -217,7 +217,21 @@ Check ids in `health.checks` (each across every chain scanned: false if any chai
        //   smallest tx hashes of the day (a stable sample, cached); null under 10 sampled or half the sample unread
        // senders = distinct tx.from over all the day's transactions (24h only; null unless every one was read)
   gem: { total: <0..100|null>, yield, thinness, flow, staying, warnings: ["..."], missing: ["..."],
-         tags: ["unconfirmed"|"one-off"|"unchecked"] },
+         tags: ["unconfirmed"|"one-off"|"unchecked"],
+         why: { y, yd, yx, yh, th, mk, tr, ps, sd, ws, ia, sp, sf: [], sn: [], dp, df: [], dn: [], wn: [] } },
+       // why (from v0.8.x scanners; older data has none, and the page then hides its "Why ?" link): what each part read and
+       // how the gates went, for the dashboard's "Why this pool?" breakdown. Missing is never zero: an input not read is null.
+       //   y  the typical day's net per $1,000 a day Yield now read; yd the days its median took (3-7), 0 = too little
+       //      history, the window's own net stood in; yx 1 = a one-off day was left out of it; yh 1 = a one-trader day with
+       //      no history behind it was halved
+       //   th thinness (the day's LP fees ÷ the value at the price); mk markout ÷ fee and tr traders a week (flow; a 7d or
+       //      30d window reads the latest replay); ps the persistence score behind staying power (null: not measured, the
+       //      part counts 0); sd days stranded of the last 30, ws the nearest wall in σ-weeks (99: none in view), ia the
+       //      share held by inactive wallets
+       //   sp/dp safety and data checks passed; sf/df the ids that failed (no gem); sn/dn the ids that did not run (a
+       //      safety one caps at 40, a data one costs 5); wn the warnings (10 points each). The ids are the pool's checks.
+       //   total = max(0, yield + thinness + flow + staying − 10·wn − 5·dn), capped at 40 when sn is not empty; null when
+       //   sf or df is not empty (lib/gem.mjs whyTotal; test/gem-why.test.mjs, and the scan end to end)
        // Gem now (lib/gem.mjs gemNow): yield now 45 (the median of the last 7 days' net per $1,000 a day) + thinness 25
        // (the day's LP fees ÷ the value at the price) + flow 20 (markout ÷ fee, traders) + staying power 10 (bonus).
        // A failed check → no gem; a safety check not run → capped at 40 ("unchecked"); a data check not run → −5.

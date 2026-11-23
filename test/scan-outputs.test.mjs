@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { initLock } from '../lib/lock.mjs';
 import { openStore } from '../lib/store.mjs';
+import { whyTotal } from '../lib/gem.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DUMMY = 'scan outputs test dummy passphrase, not a secret';
@@ -46,6 +47,16 @@ test('the scan writes sealed outputs per docs/DATA.md and prints only areas, pas
   assert.equal(live.defaultWindow, '24h');
   assert.ok(live.pools.every((p) => Array.isArray(p.daily) && p.daily.length <= 30 && 'pattern' in p && 'burst' in p && !('daily' in (p.w['24h'] || {}))));
   assert.ok(live.pools.every((p) => p.w['24h'] == null || Array.isArray(p.w['24h'].gem.tags)), 'Gem now carries its tags');
+  // "Why this pool?": every window's gem carries its why, the checks it counts are the pool's own checklist, and the parts
+  // less the deductions give the published total
+  for (const p of live.pools) for (const wk of live.windows) {
+    const g = p.w[wk]?.gem;
+    if (!g) continue;
+    assert.ok(g.why && ['sf', 'sn', 'df', 'dn', 'wn'].every((k) => Array.isArray(g.why[k])), `${wk} gem carries its why`);
+    const n = g.why.sp + g.why.sf.length + g.why.sn.length + g.why.dp + g.why.df.length + g.why.dn.length;
+    assert.equal(n, p.checks.length, 'the why counts every check of the pool\'s list');
+    assert.equal(whyTotal(g), g.total, `${wk}: the breakdown adds up to the score`);
+  }
   // the market block: the fake chain answers eth_gasPrice only and every price host fails, so gas reads
   // 2 gwei with no range yet, and each price is null, never 0
   const m = live.market;
