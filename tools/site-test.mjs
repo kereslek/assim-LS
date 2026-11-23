@@ -21,7 +21,7 @@
 //                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
 //                                                    explainer (v0.7.6: the "How to read this" note on top: shows, hides, comes back, jumps to the scatter)
 //                                                    tokenlinks (v0.7.8: each token a link to its coin page, CoinMarketCap else CoinGecko; rows keep their tap)
-//                                                    guest180 (v0.8.1: the shared guest password's end date and "Restart 180 days", owner only)
+//                                                    guest180 (v0.7.9: the shared guest password's end date and "Restart 180 days", owner only)
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
@@ -5515,7 +5515,7 @@ async function testGuestAdmin(browser) {
   ok('guestadmin: owner pages have no errors', t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
   await t.ctx.close();
 }
-// ---------- v0.8.1 · guest180: the shared guest password lasts 180 days from the day the owner hands it out. Settings shows its
+// ---------- v0.7.9 · guest180: the shared guest password lasts 180 days from the day the owner hands it out. Settings shows its
 // end (dd Mon yyyy, CET) and "Restart 180 days", which seals extend-shared-guest through the same "Send to the loop" flow; the
 // loop's own code keeps the password and the market key and ends it 180 days from its pass; a restart after the end is refused
 // and said; guests and members never get the button. Made-up fixtures only ----------
