@@ -15,6 +15,9 @@ on:
         type: choice
         options: [check, setup, import, verify]
         default: check
+      sample:
+        description: 'verify: how many random pool-days to cross-check (up to 2000)'
+        default: '200'
 permissions:
   contents: read   # the scripts, and the sealed data branch for import and verify
 concurrency:
@@ -39,6 +42,7 @@ jobs:
       - name: D1 ${{ inputs.mode }}
         env:
           MODE: ${{ inputs.mode }}
+          D1_SAMPLE: ${{ inputs.sample }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           LOCK_PASSPHRASE: ${{ (inputs.mode == 'import' || inputs.mode == 'verify') && secrets.LOCK_PASSPHRASE || '' }}

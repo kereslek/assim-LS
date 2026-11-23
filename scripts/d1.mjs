@@ -8,7 +8,7 @@
 // category words only: never the account, the token, the database id, a pool, an amount or an API message.
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { DB_NAME, DAY, HOUR, LIMITS, D1Error, archivePools, dayOf, dayRows, makeClient, migrate, rankOf, RANK, sqlStr, sync } from '../lib/d1.mjs';
+import { DB_NAME, DAY, HOUR, LIMITS, D1Error, archivePools, compareDays, compareLines, dayOf, dayRows, makeClient, migrate, rankOf, RANK, sqlStr, sync } from '../lib/d1.mjs';
 
 const fmt = (n) => Number(n).toLocaleString('en-US');
 const hourText = (h) => (h == null ? '—' : new Date(Number(h) * HOUR).toISOString().slice(0, 13) + ':00Z');
@@ -31,7 +31,7 @@ async function dbOf(c, say) {
   return db;
 }
 
-export async function run(mode, { env = process.env, say = (s) => console.log(`d1 ${mode}: ${s}`), fetchImpl, load = market, sample = 200, now = Date.now() } = {}) {
+export async function run(mode, { env = process.env, say = (s) => console.log(`d1 ${mode}: ${s}`), fetchImpl, load = market, sample = Number(env.D1_SAMPLE) > 0 ? Math.min(2000, Number(env.D1_SAMPLE)) : 200, now = Date.now() } = {}) {
   const c = makeClient({ accountId: env.CF_ACCOUNT_ID, token: env.CF_API_TOKEN, ...(fetchImpl ? { fetchImpl } : {}) });
   if (mode === 'check') {
     const ok = await c.verify();
@@ -86,19 +86,13 @@ export async function run(mode, { env = process.env, say = (s) => console.log(`d
     const pick = cand.slice(0, sample), got = new Map();
     for (let i = 0; i < pick.length; i += 50) {
       const part = pick.slice(i, i + 50);
-      const sql = 'SELECT pool_id, day_utc, fees_usd, fees_src, volume_usd, volume_src, tvl_usd, tvl_src FROM pool_day WHERE '
+      const sql = 'SELECT pool_id, day_utc, fees_usd, fees_src, volume_usd, volume_src, tvl_usd, tvl_src, price FROM pool_day WHERE '
         + part.map((r) => `(pool_id = ${sqlStr(r.pool_id, 66)} AND day_utc = ${sqlStr(r.day_utc)})`).join(' OR ');
       for (const x of (await c.raw(db, sql)).rows) got.set(`${x[0]}|${x[1]}`, x);
     }
-    const same = (a, b) => (a == null && b == null) || (a != null && b != null && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a)));
-    let match = 0, behind = 0, differ = 0, missing = 0;
-    for (const r of pick) {
-      const x = got.get(`${r.pool_id}|${r.day_utc}`);
-      if (!x) { missing++; continue; }
-      const f = [['fees', RANK.fees, 2, 3], ['volume', RANK.volume, 4, 5], ['tvl', RANK.tvl, 6, 7]];
-      if (f.some(([k, t, , si]) => r[`${k}_rank`] > rankOf(t, x[si]))) { behind++; continue; } // history has a better source since: the next sweep takes it
-      if (f.every(([k, t, vi, si]) => rankOf(t, x[si]) === r[`${k}_rank`] && x[si] === r[`${k}_src`] && same(x[vi], r[`${k}_usd`]))) match++; else differ++;
-    }
+    const st = compareDays(pick, got, { now });
+    for (const l of compareLines(st)) say(l);
+    const { match, behind, differ, missing } = st;
     say(`cross-check: ${pick.length} random pool-days of those pools (of ${fmt(cand.length)} over 4 days old): ${match} match (value and source), ${behind} behind (a better source since: the next sweep), ${differ} differ, ${missing} missing`);
     const ok = pick.length > 0 && differ === 0 && missing === 0;
     say(ok ? 'PASS' : 'FAIL');
