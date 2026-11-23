@@ -127,7 +127,7 @@ const ENUM = () => {
   const layers = [...document.querySelectorAll('dialog[open], [role="dialog"], [aria-modal="true"], .sheet')].filter((el) => !el.hidden && !el.closest('#lockscreen') && vis(el));
   const layer = layers.length ? layers[layers.length - 1] : document.body;
   const layerId = layer === document.body ? 'page' : (layer.id || layer.className || 'layer');
-  const SKIP_ACT = /^(unlock|lock|lock-retry|retry|pass|search|scrub|lens|chain|g-.+|rk-.+|pw-.+)$/; // v0.7.0: guests, the recovery key, the passphrase
+  const SKIP_ACT = /^(unlock|lock|lock-retry|retry|pass|search|scrub|lens|chain|g-.+|rk-.+|pw-.+|bb)$/; // v0.7.0: guests, the recovery key, the passphrase; v0.8.0: the bottom bar (its own step)
   const sel = 'button, [role="button"], [role="tab"], [role="switch"], [role="menuitem"], [role="checkbox"], [data-act], a[href]';
   const out = [];
   document.querySelectorAll('[data-la-i]').forEach((el) => el.removeAttribute('data-la-i'));
@@ -311,6 +311,96 @@ async function gestures(page, R, tag, errTotal) {
   console.log(`[${tag}] gestures: ${n.run} checks run, ${n.skip} skipped (not in this data)`);
   if (n.skip > 5 && n.after) for (const [k, v] of [...n.after].slice(0, 6)) console.log(`[${tag}]   ${v} skipped after '${k}'`);
 }
+// ---------- 2d. v0.8.0: the phone's bottom tab bar (every item pressed) and hold to explain (three numbers held) ----------
+// Prints pass/fail and counts only: which item lit up, never what a section or a card says (a card's value is the owner's data).
+const BBA = () => { // the bar as drawn: its items, the lit one, whether it sits at the bottom (booleans and counts)
+  const bar = document.querySelector('#bbar');
+  if (!bar) return { el: false, vis: false, n: 0 };
+  const cs = getComputedStyle(bar), r = bar.getBoundingClientRect();
+  const items = [...bar.querySelectorAll('.bb')].filter((b) => b.getClientRects().length && getComputedStyle(b).display !== 'none');
+  return { el: true, vis: cs.display !== 'none' && r.height > 0, n: items.length, small: items.filter((b) => { const q = b.getBoundingClientRect(); return q.width < 44 || q.height < 44; }).length,
+    bottom: Math.abs(r.bottom - innerHeight) <= 1, lit: (items.find((b) => b.getAttribute('aria-current') === 'true') || { dataset: {} }).dataset.to || null, hs: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+};
+// until the page stops scrolling (a jump and its settling), without a wheel event (that would end the jump's settling)
+const STILL = async () => { const fr = () => new Promise((r) => { requestAnimationFrame(() => setTimeout(r, 0)); setTimeout(r, 200); }); let y = scrollY, same = 0; for (const t0 = performance.now(); performance.now() - t0 < 4000 && same < 4;) { await fr(); if (Math.abs(scrollY - y) < 0.5) same++; else { same = 0; y = scrollY; } } await new Promise((r) => setTimeout(r, 150)); };
+const BBA_TOP = (sel) => { const e = document.querySelector(sel); if (!e) return false; const r = e.getBoundingClientRect(), top = document.querySelector('#top'), tb = top.classList.contains('hid') ? 0 : Math.max(0, top.getBoundingClientRect().bottom); return r.top >= tb - 1 && r.top <= tb + 160; };
+// a finger held on an element (pointer events with pointerType 'touch', then the click a release sends): did its card open,
+// and did the element's own tap stay away (the panel, a note)? Booleans only.
+const HOLDA = async ({ sel, ms }) => {
+  const el = document.querySelector(sel);
+  if (!el || !el.getClientRects().length) return { found: false };
+  window.dispatchEvent(new WheelEvent('wheel')); el.scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 200));
+  const r = el.getBoundingClientRect(), x = r.left + Math.min(16, r.width / 2), y = r.top + r.height / 2, tg = document.elementFromPoint(x, y);
+  if (!tg) return { found: false };
+  const ev = (type) => tg.dispatchEvent(new PointerEvent(type, { pointerId: 61, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1 }));
+  ev('pointerdown'); await new Promise((q) => setTimeout(q, ms)); ev('pointerup'); tg.click(); await new Promise((q) => setTimeout(q, 150));
+  const hx = document.querySelector('#hx'), t = document.querySelector('#hx-t'), m = document.querySelector('#hx-m');
+  return { found: true, card: !!hx && !hx.hidden, said: !!t && t.textContent.trim().length > 0 && !!m && m.textContent.trim().length > 10, sheet: !document.querySelector('#sheet').hidden, pop: !document.querySelector('#pop').hidden };
+};
+async function bottomBar(page, R, tag, errTotal) {
+  const e0 = errTotal();
+  let a = await page.evaluate(BBA);
+  if (!a.vis) { R.ok('bar: no bottom bar on a laptop or a tablet', tag.includes('1440')); return; }
+  R.ok('bar: the bottom bar shows at the bottom, every item 44×44 or more, nothing sideways', a.bottom && a.n >= 4 && a.small === 0 && a.hs <= 0);
+  let pressed = 0, landed = 0;
+  for (const [k, sel] of [['best', '#best'], ['pools', '#all'], ['tests', '#bt'], ['best', '#best']]) {
+    const b = page.locator(`#bbar [data-to="${k}"]`);
+    if (!(await b.isVisible().catch(() => false))) continue;
+    await b.click({ timeout: 6000 }).catch(() => {}); pressed++;
+    await sleep(300); await page.evaluate(STILL);
+    a = await page.evaluate(BBA);
+    if (a.lit === k && (await page.evaluate(BBA_TOP, sel))) landed++;
+  }
+  console.log(`[${tag}] bar: ${pressed} section items pressed, ${landed} landed on their section's top and lit up`);
+  R.ok('bar: Best, Pools and Tests each land on their section, lit up', pressed >= 3 && landed === pressed);
+  if (await page.locator('#bb-saved').isVisible().catch(() => false)) { // an owner or a member: the favourites filter on, then off again
+    await page.click('#bb-saved'); await sleep(300); await page.evaluate(STILL);
+    const on = await page.evaluate(() => document.querySelector('#f-lens').value === 'fav' && document.querySelector('#bb-saved').getAttribute('aria-pressed') === 'true');
+    await page.click('#bb-saved'); await sleep(300); await page.evaluate(STILL);
+    const off = await page.evaluate(() => document.querySelector('#f-lens').value === 'all' && document.querySelector('#bb-saved').getAttribute('aria-pressed') === 'false');
+    R.ok('bar: Saved turns the favourites filter on and, pressed again, off', on && off);
+  } else console.log(`[${tag}] bar: no Saved (a guest)`);
+  await page.click('#bb-more').catch(() => {}); await sleep(400);
+  const more = await page.evaluate(() => { const s = document.querySelector('#bmore'), c = s && s.querySelector('.bm-card'), bar = document.querySelector('#bbar').getBoundingClientRect(); return { open: !!s && !s.hidden, above: !!c && c.getBoundingClientRect().bottom <= bar.top + 1, items: s ? [...s.querySelectorAll('.bm-it')].filter((b) => !b.hidden && b.getClientRects().length).length : 0 }; });
+  await page.keyboard.press('Escape'); await sleep(300);
+  const shut = await page.evaluate(() => document.querySelector('#bmore').hidden);
+  console.log(`[${tag}] bar: More holds ${more.items} items`);
+  R.ok('bar: More opens a sheet above the bar, and Esc closes it', more.open && more.above && more.items >= 2 && shut);
+  await page.click('#bb-more').catch(() => {}); await sleep(300);
+  await page.click('#bm-xn').catch(() => {}); await sleep(300); await page.evaluate(STILL);
+  R.ok('bar: More → How to read this shows the note', await page.evaluate(() => { const x = document.querySelector('#xn'); return !!x && !x.hidden && document.querySelector('#bmore').hidden && x.getBoundingClientRect().top < innerHeight * 0.5; }));
+  // the pool workspace: the bar becomes its five tabs; each pressed
+  const ws = await page.evaluate(() => { const b = document.querySelector('#best [data-act="ws-hist"]'); if (!b) return false; window.dispatchEvent(new WheelEvent('wheel')); b.click(); return true; });
+  if (ws) {
+    await page.waitForFunction(() => document.querySelectorAll('#ws:not([hidden]) #ws-tabs [role="tab"]').length === 5, null, { timeout: 15000 }).catch(() => {});
+    await sleep(500);
+    const w = await page.evaluate(() => { const t = document.querySelector('#ws-tabs'), r = t.getBoundingClientRect(); return { n: t.querySelectorAll('[role="tab"]').length, fixed: getComputedStyle(t).position === 'fixed', bottom: Math.abs(r.bottom - innerHeight) <= 1, lists: [...document.querySelectorAll('#ws [role="tablist"]')].filter((x) => x.getClientRects().length).length }; });
+    let tabs = 0;
+    for (const v of ['overview', 'liquidity', 'pair', 'compare', 'history']) {
+      await page.click(`#ws-tabs [data-v="${v}"]`, { timeout: 6000 }).catch(() => {}); await sleep(450);
+      if (await page.evaluate((v) => { const b = document.querySelector(`#ws-tabs [data-v="${v}"]`); return !!b && b.getAttribute('aria-selected') === 'true'; }, v)) tabs++;
+    }
+    console.log(`[${tag}] bar: in the workspace ${w.n} tabs at the bottom, ${tabs} of 5 pressed and selected`);
+    R.ok('bar: in the pool workspace the bar is its five tabs at the bottom (one tablist), each one switches the view', w.n === 5 && w.fixed && w.bottom && w.lists === 1 && tabs === 5);
+    await page.keyboard.press('Escape'); await sleep(500);
+    R.ok('bar: the workspace closed, the main bar is back', await page.evaluate(() => document.querySelector('#ws').hidden && getComputedStyle(document.querySelector('#bbar')).display !== 'none' && !document.querySelector('#bbar').hasAttribute('inert')));
+  } else R.ok('bar: a History button opens the workspace', false);
+  // hold to explain: three numbers held 470 ms (the net APR, the gas reading, a pool row's TVL); each opens its card, no tap action
+  let held = 0, cards = 0, quiet = 0;
+  for (const sel of ['#best .bignum', '#gas', '#all-tbl tbody tr:first-child td:nth-child(7)']) {
+    await page.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(200);
+    const h = await page.evaluate(HOLDA, { sel, ms: 470 });
+    if (!h.found) continue;
+    held++; if (h.card && h.said) cards++; if (!h.sheet && !h.pop) quiet++;
+    await page.keyboard.press('Escape'); await sleep(250);
+    if (h.sheet) { await page.keyboard.press('Escape'); await sleep(250); }
+  }
+  console.log(`[${tag}] hold: ${held} numbers held, ${cards} cards opened, ${quiet} without the element's own tap`);
+  R.ok('hold: three numbers held 450 ms each open their card (title and meaning), and the element\'s own tap stays away', held === 3 && cards === 3 && quiet === 3);
+  R.ok('hold: Esc closed every card', await page.evaluate(() => document.querySelector('#hx').hidden));
+  R.ok('bar and hold: no page or console errors', errTotal() === e0);
+}
+// /v080-audit
 // ---------- 2c. Run 2 part 2: the top strip, favourites, why, new, search, similar pools, highlights, links, the lock note ----------
 // Prints booleans and counts only. Page text stays in the browser, except the best find's first letters, which the
 // search check types back in: held in memory for that, never printed or saved.
@@ -875,6 +965,18 @@ async function runProfile(tag, browserType, ctxOpts, wantBuild) {
       await gestures(page, R, tag, errTotal);
     } catch (e) { console.log(`[${tag}] gestures step stopped: ${errName(e)}${R.last ? ` · after the check '${R.last}'` : ' · before its first check'}`); R.ok('gestures: ran to the end', false); }
     T.gestures = secs(t);
+
+    // v0.8.0: the bottom bar (every item pressed) and hold to explain (three numbers held), from a fresh view
+    t = Date.now();
+    try {
+      await page.evaluate(() => history.replaceState(null, '', location.pathname + location.search)).catch(() => {});
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('#app:not([hidden])', { timeout: 60000 });
+      await page.waitForFunction(() => { const b = document.querySelector('#best'); return b && b.children.length > 0; }, null, { timeout: 30000 });
+      await sleep(800);
+      await bottomBar(page, R, tag, errTotal);
+    } catch (e) { console.log(`[${tag}] bar step stopped: ${errName(e)}`); R.ok('bar: ran to the end', false); }
+    T.bar = secs(t);
 
     // close anything open, then "Sign out on this device"
     t = Date.now();

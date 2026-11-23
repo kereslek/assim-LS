@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-joIbPvO2ZkjApYqGM8k6iQrUeLYdZd2dUKHIzcJqSgg='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-FRZz5RnJDNNUiaiPFBb9iezJ7IchBIL0DkQFU4dYHy0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1638,6 +1638,135 @@ a.tkl:hover{text-decoration-color:var(--accent)}
 a.tkl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .best-tk{white-space:nowrap}
 @media (prefers-reduced-motion:reduce){a.tkl::after{transition:none}}
+/* v080-css · B: the phone's bottom tab bar (a phone: ≤ 700 px wide, or on its side, under 500 px tall and ≤ 950 px wide; laptops and tablets keep their layout); C: hold to explain */
+:root{--bbh:0px;--hxb:0px}
+.bbar{display:none}
+.bbar,.bmore,.hx,.hxtip{-webkit-tap-highlight-color:transparent}
+.bb-row{display:flex;align-items:stretch;width:100%;height:100%}
+.bb{flex:1 1 0;min-width:0;min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:5px 2px 4px;border:0;border-radius:0;background:transparent;color:var(--fg2);font:600 10px/1.1 var(--mono);letter-spacing:.07em;text-transform:uppercase;cursor:pointer;position:relative;transition:color .15s ease}
+.bb svg,.ws-tab .bbi svg{width:22px;height:22px;flex:none;display:block}
+.bb .bb-t,.ws-tab .wt{white-space:nowrap}
+.bb::before,.ws-tab::before{content:"";position:absolute;top:0;left:50%;width:34px;height:2px;margin-left:-17px;border-radius:0 0 2px 2px;background:transparent;transition:background .15s ease}
+.bb[aria-current="true"],.bb[aria-pressed="true"],.bb[aria-expanded="true"]{color:var(--accent2)}
+html.bm-open .bb[aria-current="true"]:not([aria-expanded]){color:var(--fg2)}
+html.bm-open .bb[aria-current="true"]:not([aria-expanded])::before{background:transparent}
+.bb-ghost .on{color:var(--accent2)}.bb-ghost .on::before{background:var(--accent2)}
+.bb[aria-current="true"]::before{background:var(--accent2)}
+.bb[aria-pressed="true"] .bb-st{fill:currentColor}
+.bb:focus-visible{outline:2px solid var(--accent);outline-offset:-5px;border-radius:12px}
+.bb:hover{color:var(--fg)}
+.bb[aria-current="true"]:hover{color:var(--accent2)}
+html.guest #bb-saved{display:none}
+.bb-ghost{position:absolute;inset:0;display:flex;pointer-events:none;background:inherit;padding:inherit}
+.ws-tab .bbi{display:none}
+@media (max-width:700px),(max-width:950px) and (max-height:499.98px){
+  html.bb-on{--bbh:calc(56px + env(safe-area-inset-bottom))}
+  html.bb-on .bbar{display:block;position:fixed;left:0;right:0;bottom:0;z-index:42;height:var(--bbh);padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:var(--head);border-top:1px solid var(--line2);box-shadow:0 -10px 22px -14px rgba(0,0,0,.85)}
+  html.bb-on body{padding-bottom:var(--bbh)}
+  html.bb-on{scroll-padding-bottom:var(--bbh)} /* what scrolls into view (a focus, a jump) stops above the bar */
+  html.bb-on .totop{bottom:calc(var(--bbh) + 12px)}
+  html.bb-on .ebsheet,html.bb-on .gsheet,html.bb-on .gwel{padding-bottom:var(--bbh)}
+  html.bb-on .eb-card,html.bb-on .gs-card,html.bb-on .gw-card{max-height:calc(100% - 40px)} /* the room above the bar */
+  html.bb-on.bm-open .bbar{z-index:47}
+  /* the pool workspace: its five tabs are the bar (the real tablist, drawn at the bottom; the row on top goes) */
+  .ws{--wsbh:calc(56px + env(safe-area-inset-bottom))}
+  .ws-tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;height:var(--wsbh);display:flex;gap:0;overflow:visible;padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:var(--head);border-top:1px solid var(--line2);box-shadow:0 -10px 22px -14px rgba(0,0,0,.85)}
+  .ws-tab{flex:1 1 0;min-width:0;min-height:44px;height:auto;padding:5px 2px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-bottom:0;font-size:10px;line-height:1.1;letter-spacing:.06em;position:relative;-webkit-tap-highlight-color:transparent}
+  .ws-tab .hbi{display:none}
+  .ws-tab .bbi{display:block}
+  .ws-tab[aria-selected="true"]::before{background:var(--accent2)}
+  .ws-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-5px;border-radius:12px}
+  .ws-body{margin-bottom:var(--wsbh);padding-bottom:20px}
+  html.bb-kb .ws{--wsbh:0px}
+  html.bb-kb .ws-tabs{display:none}
+  [data-x]{-webkit-user-select:none;user-select:none} /* a phone: a held number never selects text */
+}
+/* a phone on its side, under 500 px tall: icons only, 44 px */
+@media (max-width:950px) and (max-height:499.98px){
+  html.bb-on{--bbh:calc(44px + env(safe-area-inset-bottom))}
+  .ws{--wsbh:calc(44px + env(safe-area-inset-bottom))}
+  .bb .bb-t,.ws-tab .wt{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%)}
+  .bb,.ws-tab{padding:0 2px;gap:0}
+  .bb::before,.ws-tab::before{width:28px;margin-left:-14px}
+}
+html.bb-kb{--bbh:0px}
+html.bb-kb .bbar{display:none!important}
+html.m3d .bbar{background:#0F4246;border-top-color:rgba(126,240,214,.2);box-shadow:0 -3px 0 -1px #082C2F}
+@media (max-width:700px),(max-width:950px) and (max-height:499.98px){html.m3d .ws-tabs{background:#0F4246;border-top-color:rgba(126,240,214,.2);box-shadow:0 -3px 0 -1px #082C2F}}
+/* the More sheet and the explanation card on a phone: bottom sheets above the bar */
+.sgrab{display:flex;justify-content:center;padding:6px 0 2px;touch-action:none;cursor:grab}
+.sgrab i{display:block;width:38px;height:5px;border-radius:3px;background:var(--line3)}
+.bmore{position:fixed;inset:0;z-index:46;display:flex;align-items:flex-end;justify-content:center;padding-bottom:var(--bbh)}
+.bm-scrim,.hx-scrim{position:absolute;inset:0;background:rgba(2,4,6,.62);touch-action:none}
+.bm-card{position:relative;width:100%;max-width:560px;max-height:calc(100% - 56px);overflow:auto;overscroll-behavior:contain;background:var(--raised);border:1px solid var(--line3);border-bottom:0;border-radius:16px 16px 0 0;padding:0 max(14px,env(safe-area-inset-right)) 12px max(14px,env(safe-area-inset-left));box-shadow:0 -12px 30px rgba(0,0,0,.55);outline:none}
+.bmore:not([hidden]) .bm-card{animation:sheetIn .18s ease-out}
+.bmore:not([hidden]) .bm-scrim,.hx.hxs:not([hidden]) .hx-scrim{animation:fadeIn .18s ease-out}
+.bm-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px}
+.bm-head h2{font:700 15px/1.2 var(--sans)}
+.bm-head .btn{min-width:64px}
+.bm-list{display:grid;gap:2px}
+.bm-it{display:flex;align-items:center;gap:12px;min-height:52px;width:100%;padding:6px 10px;border:0;border-radius:10px;background:transparent;color:var(--fg);text-align:left;cursor:pointer;font:inherit}
+.bm-it:hover{background:color-mix(in srgb,var(--line2) 60%,transparent)}
+.bm-it svg{width:22px;height:22px;flex:none;color:var(--accent2)}
+.bm-it span{display:grid;gap:1px;min-width:0}
+.bm-it b{font:600 14px/1.25 var(--sans)}
+.bm-it small{font:400 12px/1.3 var(--sans);color:var(--muted)}
+.bm-it.bm-out svg{color:var(--bad)}
+.bm-it:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bm-mkt{display:grid;gap:6px;margin:4px 0;padding:10px;border:1px solid var(--line2);border-radius:10px;background:var(--surface2);font:500 12px/1.4 var(--mono);color:var(--fg2)}
+.bm-mkt .lbl{display:block}
+.bm-mkt .bm-px{display:flex;flex-wrap:wrap;gap:4px 14px}
+.bm-mkt .bm-px b,.bm-mkt .bm-nx b{color:var(--fg);font-weight:600}
+.bm-mkt .up{color:var(--pos)}.bm-mkt .dn{color:var(--neg)}
+.bm-mkt .gas{justify-self:start}
+.bm-ver{margin:6px 2px 2px;text-align:center}
+html.m3d .bm-card,html.m3d .hx-card{background:rgba(10,46,50,.98);border-color:#3B7F7D;box-shadow:0 -12px 32px rgba(1,16,18,.65)}
+html.m3d .bm-mkt{background:rgba(9,48,52,.55);border-color:rgba(126,240,214,.14)}
+html.m3d .bm-scrim,html.m3d .hx-scrim{background:rgba(2,18,20,.62)}
+/* C · the explanation card: a bottom sheet above the bar (touch), or a popover beside the element (a mouse or the keyboard) */
+.hx{position:fixed;inset:0;z-index:74;pointer-events:none}
+.hx.hxs{pointer-events:auto;display:flex;align-items:flex-end;justify-content:center;padding-bottom:var(--hxb)}
+.hx.hxp .hx-scrim,.hx.hxp .sgrab{display:none}
+.hx-card{position:relative;pointer-events:auto;box-sizing:border-box;background:var(--raised);color:var(--fg2);border:1px solid var(--line3);outline:none;display:grid;gap:6px;font:400 13px/1.5 var(--sans)}
+.hx.hxs .hx-card{width:100%;max-width:560px;max-height:calc(100% - 64px);overflow:auto;overscroll-behavior:contain;border-bottom:0;border-radius:16px 16px 0 0;padding:0 max(16px,env(safe-area-inset-right)) 14px max(16px,env(safe-area-inset-left));box-shadow:0 -12px 30px rgba(0,0,0,.55)}
+.hx.hxs:not([hidden]) .hx-card{animation:sheetIn .18s ease-out}
+.hx.hxp .hx-card{position:fixed;left:0;top:0;width:max-content;max-width:min(360px,calc(100vw - 24px));padding:10px 12px 12px;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.55)}
+.hx.hxp:not([hidden]) .hx-card{animation:fadeIn .14s ease-out}
+.hx-card:focus-visible,.bm-card:focus-visible{outline:none} /* the dialog itself takes the focus first: its controls show the ring */
+.hx-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px}
+.hx-x{flex:none;width:44px;height:44px;margin:-8px -10px -8px 0;display:inline-grid;place-items:center;border:0;border-radius:10px;background:none;color:var(--muted);cursor:pointer;font:600 15px/1 var(--sans)}
+.hx-x:hover{color:var(--fg)}
+.hx-x:focus-visible{outline:2px solid var(--accent);outline-offset:-6px}
+.hx-t{font:700 16px/1.25 var(--sans);color:var(--fg)}
+.hx-m{color:var(--fg);font-size:14px}
+.hx.hxp .hx-m{font-size:13px}
+.hx-h b,.hx-v b{color:var(--fg);font-weight:600}
+.hx-h:empty,.hx-v:empty,.hx-msg:empty{display:none}
+.hx-v{font:500 12px/1.45 var(--mono);color:var(--fg2);padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--accent2) 9%,transparent);border:1px solid color-mix(in srgb,var(--accent2) 28%,transparent);overflow-wrap:anywhere}
+.hx-acts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;margin-top:2px}
+.hx-acts .linkbtn{min-height:44px}
+.hx-msg{font:500 12px/1.3 var(--mono);color:var(--pos)}
+/* the hold: a ring fills round the finger from 150 ms to 450 ms (a quick tap never shows it) */
+.hxring{position:fixed;left:0;top:0;z-index:80;width:56px;height:56px;margin:-28px 0 0 -28px;pointer-events:none}
+.hxring svg{width:56px;height:56px;display:block;overflow:visible}
+.hxring circle{fill:none;stroke-width:3.5}
+.hxring .tr{stroke:color-mix(in srgb,var(--accent2) 26%,transparent)}
+.hxring .fl{stroke:var(--accent2);stroke-linecap:round;stroke-dasharray:150.8;stroke-dashoffset:150.8}
+.hxring.go .fl{animation:hxfill .3s linear forwards}
+@keyframes hxfill{to{stroke-dashoffset:0}}
+/* the one-time tip, above the bar (the ↑ button keeps its corner) */
+.hxtip{position:fixed;left:max(12px,env(safe-area-inset-left));right:calc(70px + env(safe-area-inset-right));bottom:calc(var(--bbh) + 12px);z-index:43;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--accent2) 45%,transparent);background:var(--raised);box-shadow:0 10px 26px rgba(0,0,0,.55);font:400 13px/1.35 var(--sans);color:var(--fg2)}
+.hxtip b{color:var(--accent2);font-weight:700}
+.hxtip span{flex:1 1 auto;min-width:0}
+.hxtip-x{flex:none;min-height:44px;min-width:44px;padding:0 10px;border:0;border-radius:9px;background:color-mix(in srgb,var(--accent2) 16%,transparent);color:var(--fg);font:600 12px/1 var(--sans);cursor:pointer}
+html.m3d .hxtip{background:rgba(10,46,50,.98);border-color:#3B7F7D}
+.xn-hx{margin:0;font-size:12px;color:var(--muted)}
+.xn-hx b{color:var(--fg2);font-weight:600}
+/* the touch screen: a held number never selects text or shows iOS's callout (only these elements) */
+[data-x]{-webkit-touch-callout:none}
+@media (hover:none),(pointer:coarse){[data-x]{-webkit-user-select:none;user-select:none}}
+@media (prefers-reduced-motion:reduce){.bb,.bb::before,.ws-tab::before{transition:none}.hxring .fl{animation:none!important;stroke-dashoffset:0}}
+/* /v080-css */
 </style>
 </head>
 <body>
@@ -1721,6 +1850,7 @@ a.tkl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <section id="xn" class="card xn" aria-labelledby="xn-h" hidden>
     <div class="xn-h"><h2 class="lbl" id="xn-h" tabindex="-1">How to read this</h2><button type="button" class="xn-x" data-act="xn-hide" aria-label="Hide this note on this device" title="Hide (the i by the version brings it back)">&#x2715;&#xFE0E;</button></div>
     <div id="xn-body"></div>
+    <p class="xn-hx" id="xn-hx"><b>Tip:</b> press and hold any number (on a laptop: hover over it, or focus it and press ?) to see what it means and how it is worked out.</p>
     <div class="xn-row"><button type="button" class="btn xn-go" data-act="xn-go">See the comparison ↓</button><button type="button" class="btn" data-act="xn-hide">Got it</button></div>
   </section>
   <section id="glance" class="glance" aria-label="Today at a glance">
@@ -1918,6 +2048,40 @@ a.tkl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   </div></div>
 <div class="ctip" id="ctip" role="tooltip" hidden></div>
 <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<!-- v080-html · B: the phone's bottom tab bar and its More sheet; C: the explanation card, the ring under the finger, the one-time tip -->
+<nav id="bbar" class="bbar" aria-label="Sections"><div class="bb-row">
+<button type="button" class="bb" id="bb-best" data-act="bb" data-to="best"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4h11l3.5 5-9 11L3 9z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M3 9h18M9.5 4 8 9l4 11 4-11-1.5-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="bb-t">Best</span></button>
+<button type="button" class="bb" id="bb-pools" data-act="bb" data-to="pools"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="4.6" cy="6.5" r="1.5" fill="currentColor"/><circle cx="4.6" cy="12" r="1.5" fill="currentColor"/><circle cx="4.6" cy="17.5" r="1.5" fill="currentColor"/></svg><span class="bb-t">Pools</span></button>
+<button type="button" class="bb" id="bb-saved" data-act="bb" data-to="saved" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="bb-st" d="M12 3.2l2.6 5.5 6 .75-4.4 4.15 1.15 6L12 16.6l-5.35 3 1.15-6L3.4 9.45l6-.75z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><span class="bb-t">Saved</span></button>
+<button type="button" class="bb" id="bb-tests" data-act="bb" data-to="tests"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3.5v16.5h16.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6.5 17.5 19.5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2.2"/><circle cx="9" cy="11" r="1.7" fill="currentColor"/><circle cx="14" cy="12.5" r="1.7" fill="currentColor"/><circle cx="16.5" cy="7" r="1.7" fill="currentColor"/></svg><span class="bb-t">Tests</span></button>
+<button type="button" class="bb" id="bb-more" data-act="bb" data-to="more" aria-haspopup="dialog" aria-expanded="false" aria-controls="bmore"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="18.5" cy="12" r="1.9" fill="currentColor"/></svg><span class="bb-t">More</span></button>
+</div></nav>
+<div id="bmore" class="bmore" hidden><div class="bm-scrim" data-act="bm-close"></div>
+  <div class="bm-card" role="dialog" aria-modal="true" aria-labelledby="bm-h" tabindex="-1">
+    <div class="sgrab" aria-hidden="true"><i></i></div>
+    <div class="bm-head"><h2 id="bm-h">More</h2><button type="button" class="btn" id="bm-x" data-act="bm-close">Close</button></div>
+    <div class="bm-list">
+      <button type="button" class="bm-it" id="bm-set" data-act="bm-go" data-to="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span><b>Settings</b><small>Guests, recovery key, passphrase</small></span></button>
+      <button type="button" class="bm-it" id="bm-xn" data-act="bm-go" data-to="xn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 10.8v6M12 7.4v.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span><b>How to read this</b><small>Forecast, backtest and the comparison</small></span></button>
+      <div class="bm-mkt" id="bm-mkt"></div>
+      <button type="button" class="bm-it bm-out" id="bm-lock" data-act="lock" data-danger aria-describedby="bm-lockn"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></svg><span><b>Sign out on this device</b><small id="bm-lockn">Forgets the saved key here; your passphrase opens it again</small></span></button>
+      <p class="bm-ver"><span class="lbl">LP SHAPE SCANNER · <span class="ver-t">v—</span> · <span id="bm-look">3D</span></span></p>
+    </div>
+  </div></div>
+<div id="hx" class="hx" hidden><div class="hx-scrim" data-act="hx-x"></div>
+  <div class="hx-card" id="hx-card" role="dialog" aria-modal="true" aria-labelledby="hx-t" aria-describedby="hx-m" tabindex="-1">
+    <div class="sgrab" aria-hidden="true"><i></i></div>
+    <div class="hx-head"><span class="lbl">What it means</span><button type="button" class="hx-x" id="hx-x" data-act="hx-x" aria-label="Close the explanation" title="Close (Esc)">&#x2715;&#xFE0E;</button></div>
+    <h2 class="hx-t" id="hx-t"></h2>
+    <p class="hx-m" id="hx-m"></p>
+    <p class="hx-h" id="hx-h"></p>
+    <p class="hx-v" id="hx-v"></p>
+    <div class="hx-acts"><button type="button" class="btn" id="hx-copy" data-act="hx-copy">Copy value</button><button type="button" class="linkbtn" id="hx-more" data-act="hx-more">More in How to read this</button></div>
+    <p class="hx-msg" id="hx-msg" role="status" aria-live="polite"></p>
+  </div></div>
+<div id="hxring" class="hxring" aria-hidden="true" hidden><svg viewBox="0 0 56 56"><circle class="tr" cx="28" cy="28" r="24"/><circle class="fl" cx="28" cy="28" r="24" transform="rotate(-90 28 28)"/></svg></div>
+<div id="hxtip" class="hxtip" role="status" hidden><span><b>Tip:</b> press and hold any number to see what it means</span><button type="button" class="hxtip-x" data-act="hx-tipx" aria-label="Dismiss the tip">Got it</button></div>
+<!-- /v080-html -->
 
 <script type="text/plain" id="lps-3d">
 // v0.7.9: the 3D look's depth layer, run by the page (d3Load) only when 3D shows. It hands back start, stop and mark.
@@ -2246,7 +2410,7 @@ return { start: d3Start, stop: d3Stop, mark: d3Mark };
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.7.9';
+const BUILD = 'v0.8.0';
 // v0.7.9: never inside another site's frame (a meta CSP can't say frame-ancestors). A framed page goes blank and never asks
 // for the passphrase; only the dashboard's own full view (same origin, ?full=1) may frame it.
 const FRAMED = (() => {
@@ -2623,7 +2787,7 @@ const GLOSS = {
   unverified: ['Unverified', 'Its swaps can’t be checked against its fee counters (often a hook that moves tokens). It is never counted as a gem.'],
   notchecked: ['Not checked', 'The fee check hasn’t run yet (too few swaps, or not read). It may still be a gem: look twice.'],
   unchecked: ['Unchecked', 'A safety check didn’t run this pass, so the gem score is capped at 40.'],
-  unconfirmed: ['Unconfirmed', 'The pool is young, so its gem hasn’t been confirmed over a full window yet.'],
+  unconfirmed: ['Unconfirmed', 'Fees just rose, or there are only a day or two of them: the gem isn’t confirmed over time yet.'],
   young: ['Young pool', 'Under 30 days old: there is little history to trust yet.'],
   oneoff: ['One-off', 'A single trader paid most of the best day’s fees. Don’t count on it again.'],
   offmarket: ['Off market', 'The pool’s price is away from the market price. Check before trusting its numbers.'],
@@ -2966,7 +3130,7 @@ function rfPaint() {
   if (fl && fl.getAttribute('stroke-dashoffset') !== off) fl.setAttribute('stroke-dashoffset', off);
   b.dataset.f = f.toFixed(3);
   const n = S.live && S.live.next, ttl = 'Refresh now' + (isNum(n) && !RF.t0 ? ` · next new data expected ${hm(n)} ${TZ_NAME}` : '');
-  if (b.title !== ttl) b.title = ttl;
+  const ta = b.dataset.x ? 'data-xt' : 'title'; if (b.getAttribute(ta) !== ttl) b.setAttribute(ta, ttl); // v0.8.0: an explained element's tooltip is its card's
 }
 function rfStart() { clearInterval(RF.iv); RF.iv = 0; if (!document.hidden) RF.iv = setInterval(rfPaint, 1000); rfPaint(); }
 function rfStop() { clearInterval(RF.iv); RF.iv = 0; }
@@ -4547,7 +4711,7 @@ function tipPut(html, ax, ay, touch) {
   const top0 = Math.max(8, (hd ? hd.getBoundingClientRect().bottom : 0) + 6);
   let y = ay - h - (touch ? 34 : 14);
   if (y < top0) y = ay + (touch ? 30 : 20);
-  y = clamp(y, top0, Math.max(top0, innerHeight - h - 8));
+  y = clamp(y, top0, Math.max(top0, innerHeight - bbInset() - h - 8)); // v0.8.0: above the bar at the bottom
   const x = clamp(ax - w / 2, 8, Math.max(8, innerWidth - w - 8));
   el.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
   TIP.px = x; TIP.py = y; TIP.at = performance.now();
@@ -5568,6 +5732,8 @@ function hlShut(kind) { // the browser went back past this level
   else if (kind === 'ebsheet') ebSheet(false); // v0.7.2
   else if (kind === 'gsheet') gSheet(false); // v0.7.0
   else if (kind === 'gwel') gWelcome(false);
+  else if (kind === 'bmore') bmClose(); // v0.8.0
+  else if (kind === 'hx') hxClose();
   else if (kind === 'sheet') closeDetail();
   else if (kind === 'pair') { if (S.pair && S.backTo && !$('#sheet').hidden) { const id = S.backTo; S.backTo = null; openDetail(id); } else closeDetail(); }
 }
@@ -6195,7 +6361,7 @@ function wsRender(fresh = false) {
   if (WS.lvl) { const to = WS.tab === 'compare' ? 'Compare' : 'History'; back.textContent = '‹ ' + to; back.setAttribute('aria-label', 'Back to ' + to); }
   const tabs = $('#ws-tabs');
   tabs.hidden = !p;
-  if (p) tabs.innerHTML = WS_TABS.map(([k, t]) => `<button type="button" role="tab" class="ws-tab" id="ws-t-${k}" data-act="ws-tab" data-v="${k}" aria-selected="${k === WS.tab}" aria-controls="ws-body" tabindex="${k === WS.tab ? 0 : -1}">${k === 'history' ? `<span class="hbi">${HIST_SVG}</span>` : ''}${t}</button>`).join('');
+  if (p) tabs.innerHTML = WS_TABS.map(([k, t]) => `<button type="button" role="tab" class="ws-tab" id="ws-t-${k}" data-act="ws-tab" data-v="${k}" aria-selected="${k === WS.tab}" aria-controls="ws-body" tabindex="${k === WS.tab ? 0 : -1}"><span class="bbi" aria-hidden="true">${WS_ICO[k] || ''}</span>${k === 'history' ? `<span class="hbi">${HIST_SVG}</span>` : ''}<span class="wt">${t}</span></button>`).join('');
   const stb = p && tabs.querySelector('[aria-selected="true"]'); // a phone's tab row scrolls: the open tab stays in it
   if (stb) { const r = stb.offsetLeft + stb.offsetWidth - tabs.clientWidth + 12; tabs.scrollLeft = stb.offsetLeft < 12 ? 0 : Math.max(0, r); }
   body.setAttribute('role', 'tabpanel'); body.setAttribute('aria-labelledby', p ? 'ws-t-' + WS.tab : 'ws-title');
@@ -7310,9 +7476,10 @@ function popPlace() {
   const top = (bar.contains(a) || !$('#sheet').hidden ? 0 : barBottom()) + 8; // never under the bar on top
   if (!a.isConnected || r.bottom < top - 8 || r.top > innerHeight || (r.width === 0 && r.height === 0)) { popClose(); return; }
   let y = r.bottom + 4;
-  if (y + h > innerHeight - 8 && r.top - h - 4 > top) y = r.top - h - 4;
+  const vb = innerHeight - bbInset(); // v0.8.0: above the bar at the bottom
+  if (y + h > vb - 8 && r.top - h - 4 > top) y = r.top - h - 4;
   pop.style.left = clamp(r.left + r.width / 2 - w / 2, 12, Math.max(12, vw - w - 12)) + 'px';
-  pop.style.top = clamp(y, top, Math.max(top, innerHeight - h - 8)) + 'px';
+  pop.style.top = clamp(y, top, Math.max(top, vb - h - 8)) + 'px';
 }
 function popClose() {
   const pop = $('#pop');
@@ -8472,7 +8639,7 @@ addEventListener('touchstart', (e) => {
   if (PTR.busy) return;
   if (!t || e.touches.length !== 1) { if (PTR.on) ptrDrop(); return; }
   if ((!S.key && !S.mk) || SOLO || $('#app').hidden || document.documentElement.classList.contains('modal-open') || G || PIN || scrollY > 0) return;
-  if (tg && tg.closest && tg.closest('.pz, #sheet, #ws, #lockscreen, input, select, textarea')) return;
+  if (tg && tg.closest && tg.closest('.pz, #sheet, #ws, #lockscreen, input, select, textarea, #bbar, #bmore, #hx, #hxtip')) return; // v0.8.0: the bar, its sheets
   Object.assign(PTR, { on: true, live: false, id: t.identifier, x0: t.clientX, y0: t.clientY, dy: 0 });
 }, { passive: true, capture: true });
 addEventListener('touchmove', (e) => {
@@ -8586,6 +8753,535 @@ const d3Busy = () => { // a scroll, a drag, a key: the light holds still until 2
 for (const ev of ['pointerdown', 'wheel', 'touchstart', 'keydown', 'scroll']) addEventListener(ev, d3Busy, { passive: true, capture: true });
 try { const mq = matchMedia('(prefers-reduced-motion: reduce)'), f = () => { if (!viewKept()) viewSet(viewWant(), false); }; if (mq.addEventListener) mq.addEventListener('change', f); else mq.addListener(f); } catch (e) { /* an old browser: the look stays */ }
 viewSet(viewWant(), false);
+// v080-js
+// ---------- v0.8.0 · B: the phone's bottom tab bar · C: hold to explain ----------
+// B, on a phone (up to 700 px wide, or on its side: under 500 px tall and up to 950 px wide; CSS decides, laptops and tablets
+// keep their layout): Best · Pools · Saved · Tests · More,
+// fixed at the bottom over the safe area. The item of the section in view lights up (scroll-spy); a tap goes to that
+// section's top, clear of the bar on top (a tap on the lit item again: its top again). Saved switches the table's favourites
+// lens on or off and goes to Pools (guests can't save: no Saved). More opens a sheet: Settings, How to read this, the market
+// strip, Sign out, the version. In the pool workspace the bar becomes its five tabs: #ws-tabs, the one real tablist, drawn
+// at the bottom (a 150 ms cross-fade between the two). Hidden under the lock screen and while the on-screen keyboard is up.
+// C: hold a [data-x] element 450 ms with a finger (a ring fills from 150 ms; moving 10 px or a second finger lets go), hover
+// it 700 ms with a mouse, or focus it and press ?, for its card from the glossary XG: what it means, how it is worked out,
+// and this element's own value. Charts keep their crosshair, drag and pinch: nothing inside one explains.
+// To add a term: an entry in XG ({ title, meaning, how, valueLine(el) }; strings or functions of the element) and either a
+// data-x="key" in a template or a rule in XT ([selector, key]: XT tags the page's elements after every render). A GLOSS
+// note (an explainable word, data-act="term") explains itself through XG under its own key (XA renames one).
+
+// ---------- C · the glossary: what a number means, how it is worked out, and the element's own value ----------
+// valueLine(el) says only what this element shows (its text, its tooltip, its row's day, the pass time on screen), so a
+// guest never sees the owner's data; every text here is checked against docs/DATA.md and the code (lib/windows.mjs,
+// lib/economics.mjs, lib/gem.mjs, lib/shape.mjs, the History model above)
+const xText = (el) => String((el && (el.innerText || el.textContent)) || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+const xAsOf = () => (S.live && isNum(S.live.t) ? `as of ${hm(S.live.t)} ${TZ_NAME}` : '');
+const xJoin = (...a) => a.filter((x) => x != null && String(x).trim() !== '').join(' · ');
+const xNum = (el) => { const t = xText(el); return /\d/.test(t) ? t : ''; }; // the element's value, when it shows one
+const xTip = (el) => { const t = el && el.dataset ? el.dataset.xt || '' : ''; return t.replace(/\s*\n\s*/g, ' · '); }; // its tooltip (moved off it)
+const xWin = () => (S.win && WIN_LABEL[S.win] ? `${WIN_LABEL[S.win]} window` : '');
+const xDay = (el) => { // a History row's or the day card's day, as shown
+  const tr = el.closest && el.closest('tr[data-t]'); if (tr && isNum(+tr.dataset.t)) return hsDayTxt(+tr.dataset.t);
+  const dd = el.closest && el.closest('.hs-card') && el.closest('.hs-card').querySelector('.hs-dd'); return dd ? xText(dd.firstChild) : '';
+};
+const X_SRC = { f: HS_SRC.f, v: HS_SRC.v, tv: HS_SRC.tv };
+const xSrc = (k, letters) => String(letters || '').split('+').map((s) => s.trim()).filter(Boolean).map((s) => (X_SRC[k] && X_SRC[k][s] ? `${s} = ${X_SRC[k][s][2]}` : s)).join('; ');
+const xCell = (k) => (el) => { // a History cell or a day card entry: its value, its source and its day
+  const td = el.closest('td'), s = td ? td.querySelector('.s') : null, q = el.querySelector && el.querySelector('.q'), b = el.querySelector && el.querySelector('b');
+  const v = td ? xText(td).replace(s ? s.textContent : '', '').trim() : xText(b);
+  const src = s && !/\//.test(s.textContent) ? `source: ${xSrc(k, s.textContent)}` : q ? xText(q) : '';
+  return xJoin(v && v !== DASH ? v : 'not read', src, xDay(el));
+};
+const XG = {
+  netApr: { title: 'Net APR', meaning: 'The yearly return the example position would keep after arbitrage losses (LVR) and its own costs.',
+    how: 'Fee APR − LVR − re-centre swaps − gas, for the example ticket in the suggested range, over the window you picked. ≈ marks an estimate (the pool is younger than the window); a dash is not read yet, never zero. ▲ ▼ compare it with the next longer window (24H with its 7-day average, 7D with the 30-day). The $/day is the rate on the example ticket: APR × ticket ÷ 365.',
+    valueLine: (el) => xJoin(xNum(el), xWin(), isNum(ticketUsd()) ? `at ${usdFull(ticketUsd())}` : '', xAsOf()) },
+  feeApr: { title: 'Fee APR', meaning: 'Fees alone, as a yearly rate, for a new position inside the suggested range, before LVR and costs.',
+    how: '365 × the pool’s LP fees a day in the window × ticket ÷ (the value already inside the suggested range + the ticket), as a share of the ticket: the part of the fees a new position would get. Trackers divide the fees by the whole pool instead (aggregator APR).',
+    valueLine: (el) => xJoin(xNum(el), xWin(), xAsOf()) },
+  win: { title: 'Time window', meaning: 'Which stretch of time the numbers cover: the last 24 hours, 7 days or 30 days.',
+    how: 'Fees, volume, APRs, gem scores and backtests are all worked out again for the window you pick; a pool younger than the window shows ≈ or “N OF 30 D”. The choice is kept on this device.',
+    valueLine: (el) => xJoin(S.win ? `showing ${WIN_LABEL[S.win]} now` : '', el.dataset && el.dataset.w && el.dataset.w !== S.win ? `this one: ${WIN_LABEL[el.dataset.w] || ''}` : '') },
+  gem: { title: 'Gem score', meaning: () => `How good this pool looks for a new LP right now, from 0 to 100: ${gemAt()} or more is a gem.`,
+    how: 'Yield now 45 (the median of the last 7 days’ net per $1,000 a day) + thinness 25 (the day’s LP fees ÷ the value already at the price) + flow 20 (markout ÷ fee, and traders) + staying power 10. A failed check means no gem; a safety check that didn’t run caps it at 40; an unverified pool is never a gem.',
+    valueLine: (el) => { const n = (xText(el).match(/\d+/) || [])[0]; return xJoin(n ? `${n} of 100 · ${+n >= gemAt() ? 'a gem' : 'not a gem'}` : '', xWin()); } },
+  shape: { title: 'Shape', meaning: 'How the pool’s money spreads around the price: served, mixed, stranded or one-sided.',
+    how: 'From the liquidity map: the share of the pool’s value parked above the level that is active at the price. 80% or more is stranded (one-sided when 85% of it sits on one side), 30% or less is served, in between mixed. Stranded is good for a new LP: the few LPs at the price share the fees.',
+    valueLine: (el) => xNum(el) || xText(el).replace(/^.*·\s*/, '') },
+  hsfees: { title: 'LP fees a day', meaning: 'What the pool’s LPs earned each UTC day.',
+    how: 's: summed from the day’s own swaps (exact); x: the pool’s fee counters (exact); e: estimated as the day’s volume × the fee (pale, marked ≈). A day not read is a gap, never 0; ⚠ marks fees the scanner couldn’t back with volume or swaps yet.',
+    valueLine: xCell('f') },
+  hsvol: { title: 'Volume a day', meaning: 'What traded through the pool each UTC day.',
+    how: 's: summed from the day’s own swaps; g: GeckoTerminal’s day candle (the swaps win when a day has both). A day not read is a gap, never 0.', valueLine: xCell('v') },
+  hstvl: { title: 'TVL at the day’s end', meaning: 'What the pool held at the end of each UTC day, at that day’s prices.',
+    how: 'b: its token balances at an archive block; r: its balances read by the scanner’s own pass; m: a v4 pool’s liquidity map (the positions’ principal). Past v4 days, and Base days past its archive (about 90 days), can’t be read: “—”.', valueLine: xCell('tv') },
+  hsrate: { title: 'Fee ÷ volume', meaning: 'The share of each traded dollar the LPs kept as fees that day.',
+    how: 'The day’s LP fees ÷ its volume: the fee tier less the protocol’s cut, when both come from the same swaps. On a big day, a rate far from the pool’s usual one (beyond 2.5× or under 0.4× the median) marks the day ⚠ as an outlier: likely a data error.',
+    valueLine: (el) => xJoin(xNum(el.matches('.hs-dv') && el.querySelector('b') ? el.querySelector('b') : el), xDay(el)) },
+  hsapr: { title: 'Fee APR a day', meaning: 'Each UTC day’s LP fees as a yearly rate on everything the pool held that day.',
+    how: 'The day’s LP fees ÷ the pool’s TVL at the day’s end × 365, before LVR and costs (inside a tight range it is higher). The gold line is its 7-day average. A day with its fees or TVL not read is a gap, never 0%; unconfirmed fees never set the axis or the average.',
+    valueLine: (el) => xJoin(xNum(el.matches('.hs-dv') && el.querySelector('b') ? el.querySelector('b') : el), xDay(el)) },
+  srcFees: { title: 'Where a day’s fees come from', meaning: 'The small letter after the amount names the reading behind it.',
+    how: 's = the day’s own swaps, summed (exact) · x = the pool’s fee counters (exact) · e = estimated as the day’s volume × the fee (≈) · g = a gap average, a stretch not split into days yet. Swaps win over the counters, the counters over an estimate.',
+    valueLine: (el) => xJoin(`source: ${xSrc('f', el.textContent)}`, xDay(el)) },
+  srcVol: { title: 'Where a day’s volume comes from', meaning: 'The small letter after the amount names the reading behind it.',
+    how: 's = the day’s own swaps, summed · g = GeckoTerminal’s day candle. The swaps win when a day has both.', valueLine: (el) => xJoin(`source: ${xSrc('v', el.textContent)}`, xDay(el)) },
+  srcTvl: { title: 'Where a day’s TVL comes from', meaning: 'The small letter after the amount names the reading behind it.',
+    how: 'b = the pool’s token balances at an archive block · r = its balances read by the scanner’s own pass · m = a v4 pool’s liquidity map (its tokens sit in the shared PoolManager, so no balance is its own). One reading a pool-day: the first one taken.',
+    valueLine: (el) => xJoin(`source: ${xSrc('tv', el.textContent)}`, xDay(el)) },
+  tiersPart: { title: 'Part of the tiers', meaning: 'Only some of the pair’s pools were read that day, so this is a partial sum, never the day’s total.',
+    how: '“3/4” means 3 of its 4 tiers (fee levels, versions, chains) were read; the note names the ones that weren’t. The tiers read are drawn and stacked; the day is never shown as the whole pair’s total.',
+    valueLine: (el) => { const td = el.closest('td'); return xJoin(xTip(td || el) || xTip(el.querySelector && el.querySelector('.q')) || xText(el), xDay(el)); } },
+  standout: { title: 'Standout days', meaning: 'Days far above or below the pool’s usual day, so you can find them fast.',
+    how: 'Each day’s fees against the median of the confirmed days in view: ★ high at 10× or more, 3× good, ↓ low at a third or less, ⚠ outlier when a big day is unconfirmed or its fee ÷ volume doesn’t fit the other days.', valueLine: (el) => xNum(el) },
+  sdHigh: { title: '★ High day', meaning: 'A day whose fees were 10 times the usual day or more.', how: 'The day’s fees ÷ the median fees of the confirmed days in view (fees read, none unconfirmed); the number is that multiple.', valueLine: (el) => xJoin(xNum(el), xDay(el)) },
+  sdGood: { title: '3× · a good day', meaning: 'A day whose fees were at least 3 times the usual day.', how: 'The day’s fees ÷ the median fees of the confirmed days in view; the number is that multiple.', valueLine: (el) => xJoin(xNum(el), xDay(el)) },
+  sdLow: { title: '↓ Low day', meaning: 'A day whose fees were a third of the usual day or less.', how: 'The day’s fees ÷ the median of the confirmed days in view. Only a day with its fees read can be low: a gap, or a day before the pool existed, never is.', valueLine: (el) => xJoin(xNum(el), xDay(el)) },
+  sdOut: { title: '⚠ Outlier', meaning: 'A big day the scanner can’t vouch for: likely a data error, not a great day.',
+    how: 'At 3× the median or more, and either unconfirmed (no volume or swaps back it yet) or its fee ÷ volume beyond 2.5× or under 0.4× the median fee ÷ volume. It wins over ★, so a glitch never looks like a great day.', valueLine: (el) => xJoin(xNum(el), xDay(el)) },
+  feeUnconf: { title: 'Unconfirmed fees', meaning: 'Fees the scanner found no trading volume or swaps to back yet.',
+    how: 'A day at 20× its 30-day median or more counts as real only when the day’s own swaps, or its volume × the fee, reach at least a quarter of it. Until then it is drawn hatched, marked ⚠, and never sets a chart’s scale or an average.',
+    valueLine: (el) => xJoin(xTip(el) || '', xDay(el)) },
+  forecast: { title: 'Forecast', meaning: 'The net APR the scanner predicted for a pool at the start of the window.',
+    how: 'Worked out as the live net APR is (fees − LVR − re-centre swaps and gas, for the example position in its suggested range), using only what the scanner knew at that moment.', valueLine: (el) => xJoin(xNum(el), xWin()) },
+  backtest: { title: 'Backtest', meaning: 'What that same position would really have earned over the window.',
+    how: 'The scanner replays it over the window’s real swaps and prices: a range of ±r around the price, re-centred when the price leaves it. Net = fees − LVR − costs, as a yearly rate, against holding the starting tokens.', valueLine: (el) => xJoin(xNum(el), xWin()) },
+  fvb: { title: 'Forecast vs backtest', meaning: 'How honest the forecasts are: each dot is a pool, its forecast across and its backtest up.',
+    how: 'A dot on the diagonal means the forecast was right; inside the band means the backtest landed within 10 points of it. Above the diagonal the pool did better than forecast, below it worse.', valueLine: () => xWin() },
+  band10: { title: '±10 point band', meaning: 'The zone where a backtest landed within 10 percentage points of its forecast.',
+    how: '|backtest − forecast| ≤ 10 points of net APR. The count says how many of the pools with both landed inside it.', valueLine: (el) => xJoin(xNum(el), xWin()) },
+  miss: { title: 'Miss', meaning: 'How far a backtest landed from its forecast, in points of net APR.',
+    how: 'The median miss is the middle of every pool’s |backtest − forecast|; the biggest miss is the pool furthest from its forecast.', valueLine: (el) => xJoin(xNum(el), xWin()) },
+  bias: { title: 'Average bias', meaning: 'Whether the forecasts run high or low on average.',
+    how: 'The mean of backtest − forecast over the pools with both. Below −2 points the scanner runs optimistic (it forecast more than was earned); above +2 it runs cautious.', valueLine: (el) => xJoin(xNum(el), xWin()) },
+  refresh: { title: 'Refresh and the next pass', meaning: 'A tap checks for new data now; the ring empties until the next scanner pass is due.',
+    how: 'The ring runs from the pass on screen to the next one the scanner expects; the time beside it counts down (“due now” once due, “late” in amber 5 minutes after). A tap reads the three sealed files again; the page also checks by itself every minute.',
+    valueLine: (el) => xTip(el) },
+  fresh: { title: 'Data age', meaning: 'How old the scanner pass on screen is.',
+    how: 'Fresh under 15 minutes, late under an hour, stale after that. “Refresh failed”: the newest pass couldn’t be read, so the last good one is shown, marked stale.', valueLine: (el) => xJoin(xText(el), xAsOf()) },
+  sealed: { title: 'Sealed', meaning: 'Every data file is encrypted, so only a browser holding the key from your passphrase can read it.',
+    how: 'AES-256-GCM, with the key derived from the passphrase by PBKDF2-SHA256. This browser keeps the key, which can’t be read back out, until you sign out on this device.' },
+  gas: { title: 'Gas', meaning: 'What Ethereum charges to run a transaction now; opening or re-centring a position pays it.',
+    how: 'The next block’s base fee plus the median recent priority fee, in gwei, read by the scanner each pass, against its own usual range: cheap below p25, normal to p60, busy to p90, expensive above.',
+    valueLine: (el) => xJoin(xNum(el), xTip(el).replace(/^Gas [^·]*·?\s*/, ''), xAsOf()) },
+  nextPass: { title: 'Next pass', meaning: 'When the scanner is expected to publish new data next.',
+    how: 'Each pass says when the next one should land; the small ring empties until then. “Updated” is the time of the pass on screen. The page checks for new data every minute.', valueLine: (el) => xText(el) },
+  px: { title: 'Market prices', meaning: 'ETH, BTC and SOL in US dollars, with their move over 24 hours.',
+    how: 'Read by the scanner during its pass (DefiLlama first, then Coinbase, CoinGecko only for a coin both lack), so the page itself never calls anyone else.',
+    valueLine: (el) => xJoin(xTip(el) || xText(el), xAsOf()) },
+  lvr: { title: 'LVR', meaning: 'Loss-versus-rebalancing: what arbitrage traders take from LPs each time the price moves.',
+    how: 'The textbook estimate, a yearly share of the position: 365 × σ² ÷ 8 (σ: the daily volatility), times how concentrated the suggested range is (1 ÷ (1 − e^(−r/2))). The fees have to beat it.',
+    valueLine: (el) => xJoin(xNum(el), xWin()) },
+  lpkeeps: { title: 'LPs keep', meaning: 'The share of the swap fee that goes to LPs after the protocol’s cut.',
+    how: 'Read from the pool, never assumed: Uniswap v3 from its protocol fee setting (1 − 1/N), PancakeSwap v3 from its protocol share, v4 from the pool’s own protocol fee.', valueLine: (el) => xNum(el) },
+  tvlNow: { title: 'TVL', meaning: 'The value in the pool now.',
+    how: 'Its two token balances × the tokens’ prices this pass; a v4 pool, whose tokens sit in the shared PoolManager, counts its liquidity map’s value instead.', valueLine: (el) => xJoin(xNum(el), xAsOf()) },
+  volDay: { title: 'Volume a day', meaning: 'What traded through the pool per day in this window.',
+    how: 'The window’s LP fees, from the pool’s own fee counters, ÷ the fee the LPs keep (the fee tier × their share), per day.', valueLine: (el) => xJoin(xNum(el), xWin()) },
+  fees30: { title: 'LP fees, 30 days', meaning: 'What the pool’s LPs earned a day over the last 30 days.',
+    how: 'The bars are the days; the figure is the last 7 days’ average, the arrow compares it with the 7 days before.', valueLine: (el) => xNum(el) },
+  tvl: { title: 'TVL · map · aggregator', meaning: 'The pool’s total value three ways, as a cross-check.',
+    how: 'TVL: its token balances at this pass’s prices (a v4 pool: its map); map: what its liquidity map adds up to; aggregator: a tracker’s figure. Far apart means a reading to look at twice.', valueLine: (el) => xNum(el) },
+  unconfirmed: { title: 'Unconfirmed', meaning: 'Fees just rose, or there are only a day or two of them: the gem isn’t confirmed over time yet.',
+    how: 'The scanner tags a pool unconfirmed when its fee pattern is “rising”: the last day at 3× the median of the last 7 or more, or 2 days of fees or fewer.', valueLine: () => xWin() },
+};
+// every other explainable word: its note (GLOSS) as the meaning, the rest of it as the how
+const XA = { net: 'netApr', gascost: 'gasCost' };
+for (const k of Object.keys(GLOSS)) {
+  const key = XA[k] || k;
+  if (XG[key]) continue;
+  const [t, txt] = GLOSS[k], i = txt.search(/[.!?](\s|$)/), one = i > 0 ? txt.slice(0, i + 1) : txt;
+  XG[key] = { title: t, meaning: one, how: txt.slice(one.length).trim(), valueLine: (el) => xNum(el) };
+}
+// XT: which elements explain what (a rule after another wins); the explainable words (data-act="term") explain themselves
+const XT = [
+  ['#best .bignum', 'netApr'], ['.aprh .aprh-big', 'netApr'], ['.aprh-bar', 'netApr'], ['.aprh-cap', 'netApr'], ['.aprb', 'netApr'], ['.aprm', 'netApr'],
+  ['.aprh-mini > div:first-child', 'feeApr'], ['.aprh-mini > div:nth-child(2)', 'netApr'], ['.aprh-mini > div:nth-child(3)', 'netApr'], ['.hs-aprh', 'hsapr'],
+  ['#winseg button[data-w]', 'win'], ['#sheet-win button[data-w]', 'win'], ['#ws-win button[data-w]', 'win'],
+  ['.pill', 'gem'], ['#best .best-head .grow > .lbl.acc', 'shape'],
+  ['.hst th button[data-k="f"]', 'hsfees'], ['.hst th button[data-k="v"]', 'hsvol'], ['.hst th button[data-k="tv"]', 'hstvl'], ['.hst th button[data-k="r"]', 'hsrate'],
+  ['.hst tbody td:nth-child(2)', 'hsfees'], ['.hst tbody td:nth-child(3)', 'hsvol'], ['.hst tbody td:nth-child(4)', 'hstvl'], ['.hst tbody td:nth-child(5)', 'hsrate'],
+  ['.hst tbody td:nth-child(2) .s', 'srcFees'], ['.hst tbody td:nth-child(3) .s', 'srcVol'], ['.hst tbody td:nth-child(4) .s', 'srcTvl'], ['.hst tbody td.pt', 'tiersPart'], ['.hst tbody td.pt .s', 'tiersPart'],
+  ['.hs-dv[data-k="f"]', 'hsfees'], ['.hs-dv[data-k="v"]', 'hsvol'], ['.hs-dv[data-k="tv"]', 'hstvl'], ['.hs-dv[data-k="a"]', 'hsapr'], ['.hs-dv[data-k="r"]', 'hsrate'], ['.hs-dv.pt', 'tiersPart'],
+  ['.uw', 'feeUnconf'], ['.hs-dv.uc .q', 'feeUnconf'],
+  ['.sdc.h', 'sdHigh'], ['.sdc.g', 'sdGood'], ['.sdc.l', 'sdLow'], ['.sdc.o', 'sdOut'], ['.hs-jmp', 'standout'], ['.hs-sl > span:first-child', 'standout'],
+  ['.hs-sl > span:nth-child(2)', 'sdHigh'], ['.hs-sl > span:nth-child(3)', 'sdGood'], ['.hs-sl > span:nth-child(4)', 'sdLow'], ['.hs-sl > span:nth-child(5)', 'sdOut'],
+  ['[data-act="ws-sdf"][data-v="all"]', 'standout'], ['[data-act="ws-sdf"][data-v="h"]', 'sdHigh'], ['[data-act="ws-sdf"][data-v="l"]', 'sdLow'], ['[data-act="ws-sdf"][data-v="o"]', 'sdOut'],
+  ['#bt-h', 'backtest'], ['#bt [data-chartbox="scatter"] .pane-title > .lbl', 'fvb'], ['#bt .sc-what b:first-of-type', 'forecast'], ['#bt .sc-what b:nth-of-type(2)', 'backtest'], ['#bt .sc-key', 'band10'],
+  ['#bt-lead .kpis > .kpi:nth-child(1)', 'band10'], ['#bt-lead .kpis > .kpi:nth-child(2)', 'miss'], ['#bt-lead .kpis > .kpi:nth-child(3)', 'bias'], ['#bt-lead .kpis > .kpi:nth-child(4)', 'miss'],
+  ['#bt-lead thead th:nth-child(2)', 'forecast'], ['#xn-body > p:nth-child(1) > b:first-child', 'forecast'], ['#xn-body > p:nth-child(2) > b:first-child', 'backtest'], ['#xn-body > p:nth-child(3) > b:first-child', 'fvb'],
+  ['#refresh', 'refresh'], ['#fresh', 'fresh'], ['#gas', 'gas'], ['#mt', 'nextPass'], ['#mpx .px', 'px'],
+  ['#all-tbl th button[data-k="gem"]', 'gem'], ['#all-tbl th button[data-k="net"]', 'netApr'], ['#all-tbl th button[data-k="fees"]', 'fees30'], ['#all-tbl th button[data-k="vol"]', 'volDay'],
+  ['#all-tbl th button[data-k="tvl"]', 'tvlNow'], ['#all-tbl th button[data-k="room"]', 'room'], ['#all-tbl th button[data-k="feeApr"]', 'feeApr'], ['#all-tbl th button[data-k="edge"]', 'edge'], ['#all-tbl th button[data-k="sigma"]', 'sigma'],
+  ['.shw .sh th button[data-k="gem"]', 'gem'], ['.shw .sh th button[data-k="net"]', 'netApr'], ['.shw .sh th button[data-k="vol"]', 'volDay'], ['.shw .sh th button[data-k="tvl"]', 'tvlNow'], ['.shw .sh th button[data-k="feeApr"]', 'feeApr'],
+  ['#all-tbl tbody td:nth-child(6)', 'volDay'], ['#all-tbl tbody td:nth-child(7)', 'tvlNow'], ['#all-tbl tbody td:nth-child(9)', 'feeApr'],
+];
+// a native tooltip on an explained element (or inside one) moves to data-xt: the card shows it, never two tooltips at once
+function xUntitle(e) { const t = e.getAttribute('title'); if (t == null) return; if (t) e.setAttribute('data-xt', t); e.removeAttribute('title'); }
+function xTag(root) {
+  if (!root || root.nodeType !== 1 || !root.isConnected) return;
+  for (const e of [root, ...root.querySelectorAll('[data-act="term"][data-term]')]) {
+    if (!e.dataset || e.dataset.act !== 'term' || !e.dataset.term) continue;
+    const k = XA[e.dataset.term] || e.dataset.term;
+    if (XG[k] && e.dataset.x !== k) e.dataset.x = k;
+  }
+  for (const [sel, k] of XT) { if (root.matches(sel) && root.dataset.x !== k) root.dataset.x = k; for (const e of root.querySelectorAll(sel)) if (e.dataset.x !== k) e.dataset.x = k; }
+  if (root.closest('[data-x]')) for (const e of [root, ...root.querySelectorAll('[title]')]) xUntitle(e);
+  else for (const e of root.querySelectorAll('[data-x][title], [data-x] [title]')) xUntitle(e);
+}
+
+// ---------- B · the bottom bar ----------
+const BB = { el: $('#bbar'), on: false, cov: false, kb: false, main: false, ws: false, tall: 0, tw: 0, act: undefined, pin: null, raf: 0, tip: false };
+const BM = { open: false, opener: null };
+const BB_SEC = { best: '#best', pools: '#all', saved: '#all', tests: '#bt' };
+const BB_WATCH = new Set(['app', 'lockscreen', 'gend', 'loaderr', 'sheet', 'ws', 'ebsheet', 'gsheet', 'gwel', 'settings', 'bmore', 'hx']);
+const phoneW = () => matchMedia('(max-width:700px), (max-width:950px) and (max-height:499.98px)').matches;
+const WS_ICO = { // the workspace's tabs, as the bar's icons on a phone
+  overview: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7 15.5l3.2-3.6 2.6 2.2 4.2-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  history: '<svg viewBox="0 0 24 24"><path d="M5 20v-6M10 20V9M15 20v-9M20 20V4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  liquidity: '<svg viewBox="0 0 24 24"><path d="M2.5 19.5c3.5 0 4.6-11 9.5-11s6 11 9.5 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 3.5v17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="1.8 1.8"/></svg>',
+  pair: '<svg viewBox="0 0 24 24"><circle cx="9" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
+  compare: '<svg viewBox="0 0 24 24"><path d="M3.5 17l4.5-5 3.5 3 8.5-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 12.5l4.5 1.5 3.5-4.5 8.5 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/></svg>',
+};
+const bbCovered = () => WS.open || !$('#sheet').hidden || !$('#ebsheet').hidden || !$('#gsheet').hidden || !$('#gwel').hidden || !!$('#fullv');
+function bbInset() { // how much of the screen's bottom a bar takes now: the main bar, or the workspace's tabs
+  if (WS.open) { const t = $('#ws-tabs'); return t && phoneW() && t.getClientRects().length && getComputedStyle(t).position === 'fixed' ? Math.max(0, innerHeight - t.getBoundingClientRect().top) : 0; }
+  return BB.el.getClientRects().length && !BB.cov ? Math.max(0, innerHeight - BB.el.getBoundingClientRect().top) : 0;
+}
+function bbKbNow() { // the on-screen keyboard: a field has the focus and the visible height shrank (visualViewport)
+  const a = document.activeElement, vv = window.visualViewport, h = vv ? vv.height * (vv.scale || 1) : innerHeight;
+  const ed = !!(a && a.matches && a.matches('input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select, [contenteditable="true"]'));
+  if (BB.tw !== innerWidth) { BB.tw = innerWidth; BB.tall = Math.max(innerHeight, h); }
+  if (!ed) { BB.tall = Math.max(innerHeight, h); return false; }
+  return BB.tall - Math.min(innerHeight, h) > 120;
+}
+function bbSync() {
+  const de = document.documentElement;
+  const on = !SOLO && !FULL && !!S.live && !$('#app').hidden && $('#lockscreen').hidden && $('#gend').hidden && $('#loaderr').hidden;
+  if (de.classList.contains('bb-on') !== on) de.classList.toggle('bb-on', on);
+  if (!on) { bmClose(true); hxClear(); $('#hxtip').hidden = true; }
+  const kb = bbKbNow();
+  if (de.classList.contains('bb-kb') !== kb) de.classList.toggle('bb-kb', kb);
+  BB.kb = kb; BB.cov = on && bbCovered();
+  const hxs = !$('#hx').hidden && $('#hx').classList.contains('hxs') && !WS.open;
+  const inert = !on || BB.cov || hxs;
+  if (BB.el.hasAttribute('inert') !== inert) { BB.el.toggleAttribute('inert', inert); if (inert) BB.el.setAttribute('aria-hidden', 'true'); else BB.el.removeAttribute('aria-hidden'); }
+  const was = BB.main;
+  BB.main = on && phoneW() && !BB.cov && !kb;
+  if (BB.ws !== WS.open) { BB.ws = WS.open; if (XH.open) hxClose(true); if (WS.open) bmClose(true); if (on && phoneW()) bbMorph(WS.open, was); }
+  if (on && !BB.tip) { BB.tip = true; hxTipMaybe(); }
+  bbSpy();
+}
+// the morph: the main bar's items fade out as the workspace's tabs fade in (150 ms), and back when it closes
+function bbGhost(from, into, active) {
+  const g = document.createElement('div');
+  g.className = 'bb-ghost'; g.setAttribute('aria-hidden', 'true');
+  g.innerHTML = [...from.querySelectorAll('button')].filter((b) => b.getClientRects().length).map((b) => `<span class="${esc(b.className)}${b.getAttribute(active) === 'true' ? ' on' : ''}">${b.innerHTML}</span>`).join('');
+  into.append(g);
+  return g;
+}
+function bbMorph(open, was) {
+  if (reduced()) return;
+  const T = 150, fade = (el, a, b) => el.animate([{ opacity: a }, { opacity: b }], { duration: T, easing: 'ease-out' });
+  if (open) {
+    const tabs = $('#ws-tabs'); if (!tabs) return;
+    for (const b of tabs.querySelectorAll('[role="tab"]')) fade(b, 0, 1);
+    if (was) { const g = bbGhost(BB.el, tabs, 'aria-current'); const a = fade(g, 1, 0); a.id = 'bb-morph'; a.onfinish = a.oncancel = () => g.remove(); }
+  } else if (BB.main) {
+    const row = BB.el.querySelector('.bb-row'), tabs = $('#ws-tabs');
+    fade(row, 0, 1).id = 'bb-morph';
+    if (tabs && tabs.children.length) { const g = bbGhost(tabs, BB.el, 'aria-selected'); const a = fade(g, 1, 0); a.onfinish = a.oncancel = () => g.remove(); }
+  }
+}
+// scroll-spy: the section whose stretch holds a line 30% down the free screen (Best runs to Pools, Pools to Tests)
+function bbSpy() {
+  if (BB.raf) return;
+  BB.raf = requestAnimationFrame(() => { BB.raf = 0; bbSpyNow(); });
+}
+function bbSpyNow() {
+  let k = null;
+  if (BB.pin && Date.now() < BB.pin.until) k = BB.pin.k;
+  else if (BB.main) {
+    BB.pin = null;
+    const r = (s) => { const e = $(s); return e && !e.hidden && e.getClientRects().length ? e.getBoundingClientRect() : null; };
+    const top = barBottom(), y = top + (innerHeight - bbInset() - top) * 0.3, b = r('#best'), a = r('#all'), t = r('#bt');
+    if (t && t.top <= y) k = t.bottom > y - 12 ? 'tests' : null;
+    else if (a && a.top <= y) k = 'pools';
+    else if (b && b.top <= y) k = 'best';
+    if (k === 'pools' && S.filt.lens === 'fav' && !isGuest()) k = 'saved';
+  } else return;
+  if (k !== BB.act) {
+    BB.act = k;
+    for (const b of BB.el.querySelectorAll('.bb[data-to]')) { if (b.dataset.to === k) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); }
+  }
+  const sv = $('#bb-saved'), fav = String(S.filt.lens === 'fav');
+  if (sv.getAttribute('aria-pressed') !== fav) sv.setAttribute('aria-pressed', fav);
+}
+function bbGo(k, el) {
+  if (k === 'more') { if (BM.open) bmClose(); else bmOpen(el); return; }
+  if (BM.open) bmClose(true);
+  if (k === 'saved') { if (isGuest()) return; S.filt.lens = S.filt.lens === 'fav' ? 'all' : 'fav'; S.showAll = false; renderTable(); }
+  const sel = BB_SEC[k], sec = sel && $(sel);
+  if (!sec) return;
+  BB.pin = { k: k === 'saved' && S.filt.lens !== 'fav' ? 'pools' : k, until: Date.now() + 1500 };
+  bbSpyNow();
+  jumpTo(sel);
+  const h = sec.querySelector('h2'); // the keyboard lands in the section too
+  if (h) { if (!h.hasAttribute('tabindex')) h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+}
+for (const ev of ['wheel', 'touchstart']) addEventListener(ev, (e) => { if (BB.pin && !(e.target && e.target.closest && e.target.closest('#bbar'))) BB.pin = null; }, { passive: true, capture: true }); // a hand on the page: the spy follows it again
+addEventListener('scroll', bbSpy, { passive: true });
+addEventListener('resize', () => bbSync());
+if (window.visualViewport) visualViewport.addEventListener('resize', () => bbSync());
+document.addEventListener('focusin', () => { bbSync(); setTimeout(bbSync, 400); }); // the keyboard slides up a moment later
+document.addEventListener('focusout', () => setTimeout(bbSync, 60));
+// More: Settings, How to read this, the market strip, Sign out, the version
+function bmRender() {
+  $('#bm-set').hidden = $('#settings').hidden;
+  const L = S.live, m = L && L.market, g = (m && m.gas) || {}, band = GAS_BANDS.includes(g.band) ? g.band : null, px = (m && m.px) || {};
+  const pxs = ['ETH', 'BTC', 'SOL'].map((c) => { const q = px[c] || {}, ch = isNum(q.ch24) ? q.ch24 : null; return `<span data-x="px"><b>${c}</b> ${mkt(q.usd)} <i class="${ch == null ? '' : ch > 0 ? 'up' : ch < 0 ? 'dn' : ''}">${ch == null ? DASH : (ch > 0 ? '▲' : ch < 0 ? '▼' : '') + pct(Math.abs(ch), { dp: 1 })}</i></span>`; }).join('');
+  const n = L && L.next, mn = isNum(n) ? (n - Date.now()) / 6e4 : null, nx = mn == null ? DASH : mn > 1 ? `in ${Math.ceil(mn)} min` : mn > 0 ? 'in <1 min' : mn > -5 ? 'due now' : 'overdue';
+  $('#bm-mkt').innerHTML = '<span class="lbl">Market · read by the scanner</span>'
+    + `<button type="button" class="gas g-${band || 'none'}" data-act="gas" data-x="gas" aria-haspopup="true" aria-expanded="false" aria-label="${esc(`Ethereum gas ${isNum(g.gwei) && g.gwei > 0 ? gwei(g.gwei) + ' gwei' : 'not read'}${band ? ', ' + band : ''}: show its usual range`)}">${gasArc(g)}<span><span class="gv">${gwei(g.gwei)}</span> <span class="u">gwei</span></span>${band ? `<span class="gb">${band}</span>` : ''}</button>`
+    + `<div class="bm-px">${pxs}</div><div class="bm-nx" data-x="nextPass">next pass <b>${esc(nx)}</b> · updated <b>${hm(L && L.t)}</b> ${TZ_NAME}</div>`;
+  $('#bm-look').textContent = document.documentElement.classList.contains('m3d') ? '3D look' : 'Classic 2D look';
+}
+function bmOpen(opener) {
+  if (BM.open) return;
+  popClose(); hxClose(true);
+  bmRender();
+  BM.open = true; BM.opener = opener || $('#bb-more');
+  $('#bmore').hidden = false;
+  document.documentElement.classList.add('bm-open');
+  $('#bb-more').setAttribute('aria-expanded', 'true');
+  hlOpen('bmore');
+  setTimeout(() => { if (!BM.open) return; const f = $$('#bmore .bm-it').find((b) => !b.hidden); (f || $('#bm-x')).focus({ preventScroll: true }); }, 0);
+}
+function bmClose(quiet = false) {
+  if (!BM.open) return;
+  BM.open = false;
+  $('#bmore').hidden = true;
+  document.documentElement.classList.remove('bm-open');
+  $('#bb-more').setAttribute('aria-expanded', 'false');
+  hlClosed('bmore');
+  const o = BM.opener; BM.opener = null;
+  if (!quiet && o && o.isConnected && o.getClientRects().length) o.focus({ preventScroll: true });
+}
+// a bottom sheet (More, the explanation) follows a finger down from its top and closes past 64 px or on a flick
+function sheetSwipe(card, close) {
+  let s = null;
+  card.addEventListener('touchstart', (e) => { s = null; if (e.touches.length !== 1 || !phoneW() || !e.target.closest('.sgrab, .bm-head, .hx-head') || e.target.closest('button')) return; s = { y0: e.touches[0].clientY, t0: e.timeStamp, dy: 0 }; }, { passive: true });
+  card.addEventListener('touchmove', (e) => { if (!s) return; s.dy = Math.max(0, e.touches[0].clientY - s.y0); if (e.cancelable) e.preventDefault(); if (!reduced()) card.style.transform = `translateY(${s.dy.toFixed(1)}px)`; }, { passive: false });
+  const end = (e) => { if (!s) return; const go = s.dy > 64 || (s.dy > 20 && s.dy / Math.max(1, e.timeStamp - s.t0) > 0.5); s = null; card.style.transform = ''; if (go) close(); };
+  card.addEventListener('touchend', end); card.addEventListener('touchcancel', end);
+}
+sheetSwipe($('#bmore .bm-card'), () => bmClose());
+sheetSwipe($('#hx-card'), () => hxClose());
+
+// ---------- C · hold to explain: the hold, the hover, the ? key, the card ----------
+const XH = { id: null, el: null, x: 0, y: 0, rt: 0, ft: 0, fired: false, eat: 0, hov: null, ht: 0, lt: 0, noHov: null, down: 0, open: null };
+const X_OFF = '[data-pz], .pz, .chart, input, select, textarea, #hx'; // a chart's surface keeps its crosshair, drag and pinch
+function xTarget(t) {
+  if (!t || !t.closest || t.closest(X_OFF)) return null;
+  const el = t.closest('[data-x]');
+  return el && XG[el.dataset.x] ? el : null;
+}
+function xHoldEnd() {
+  clearTimeout(XH.rt); clearTimeout(XH.ft);
+  const r = $('#hxring'); if (!r.hidden) { r.hidden = true; r.classList.remove('go'); }
+  XH.id = null; XH.el = null;
+}
+function xRing() {
+  const r = $('#hxring');
+  if (WS.open && r.parentElement !== $('#ws')) $('#ws').append(r); else if (!WS.open && r.parentElement !== document.body) document.body.append(r);
+  r.style.left = XH.x + 'px'; r.style.top = XH.y + 'px';
+  r.classList.remove('go'); r.hidden = false; void r.offsetWidth; r.classList.add('go');
+}
+function xFire() {
+  const el = XH.el;
+  clearTimeout(XH.rt); const r = $('#hxring'); r.hidden = true; r.classList.remove('go');
+  if (!el || !el.isConnected) return;
+  XH.fired = true;
+  try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) { /* no haptics here */ }
+  hxOpen(el, 'sheet', 'hold');
+  hxTipDone(false);
+}
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') { // a click: the hover waits until the mouse leaves what it pressed
+    clearTimeout(XH.ht); XH.noHov = xTarget(e.target); XH.hov = XH.noHov; XH.down = Date.now();
+    if (XH.open && XH.open.mode === 'pop' && !(e.target.closest && e.target.closest('#hx'))) hxClose(true);
+    return;
+  }
+  if (XH.id != null) { xHoldEnd(); return; } // a second finger: a pinch, never a hold
+  if (!e.isPrimary) return;
+  const el = xTarget(e.target);
+  if (!el) return;
+  Object.assign(XH, { id: e.pointerId, el, x: e.clientX, y: e.clientY, fired: false });
+  XH.rt = setTimeout(xRing, 150); XH.ft = setTimeout(xFire, 450);
+}, { capture: true, passive: true });
+document.addEventListener('pointermove', (e) => { if (e.pointerId === XH.id && Math.hypot(e.clientX - XH.x, e.clientY - XH.y) > 10) xHoldEnd(); }, { capture: true, passive: true });
+const xUp = (e) => { if (e.pointerId !== XH.id) return; const f = XH.fired; xHoldEnd(); if (f) { XH.fired = false; XH.eat = Date.now() + 450; } };
+document.addEventListener('pointerup', xUp, { capture: true, passive: true });
+document.addEventListener('pointercancel', xUp, { capture: true, passive: true });
+// the tap that ends a hold is the hold's, not the element's (its own tap behaviour is for a release before 450 ms)
+addEventListener('click', (e) => { if (XH.eat && Date.now() < XH.eat) { XH.eat = 0; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+document.addEventListener('contextmenu', (e) => { if (XH.id != null || (XH.eat && Date.now() < XH.eat) || (XH.open && XH.open.via === 'hold')) e.preventDefault(); }, true);
+// a mouse: 700 ms over an element shows its card beside it; leaving both for 250 ms puts it away
+function xHovFire(el) {
+  if (XH.hov !== el || !el.isConnected || XH.id != null || el === XH.noHov) return;
+  if ((S.popFor === el && !$('#pop').hidden) || (XH.open && XH.open.el === el) || BM.open) return;
+  if (XH.open && XH.open.via !== 'hover') return; // a card opened on purpose stays
+  hxOpen(el, 'pop', 'hover');
+}
+// The mouse's own moves arm it (a page redrawn under a still mouse doesn't), never within 600 ms of a click: a hand that
+// clicks is doing, not reading
+document.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  if (e.target.closest && e.target.closest('#hx-card')) { clearTimeout(XH.lt); return; }
+  const el = xTarget(e.target);
+  if (el !== XH.noHov) XH.noHov = null;
+  if (el !== XH.hov) { clearTimeout(XH.ht); XH.hov = el; if (el && Date.now() - XH.down > 600) XH.ht = setTimeout(() => xHovFire(el), 700); }
+  if (XH.open && XH.open.via === 'hover' && el !== XH.open.el) { if (!XH.lt) XH.lt = setTimeout(() => { XH.lt = 0; if (XH.open && XH.open.via === 'hover') hxClose(true); }, 250); }
+  else { clearTimeout(XH.lt); XH.lt = 0; }
+}, { passive: true });
+document.addEventListener('pointerout', (e) => {
+  if (e.pointerType !== 'mouse' || e.relatedTarget) return; // left the window
+  clearTimeout(XH.ht); XH.hov = null;
+  if (XH.open && XH.open.via === 'hover') { clearTimeout(XH.lt); XH.lt = setTimeout(() => { XH.lt = 0; if (XH.open && XH.open.via === 'hover') hxClose(true); }, 250); }
+}, { passive: true });
+document.addEventListener('scroll', () => { if (XH.open && XH.open.mode === 'pop') hxPlace(); if (XH.id != null) xHoldEnd(); }, { capture: true, passive: true });
+// the keyboard: ? on a focused element explains it; Esc closes the card (or the More sheet) first; Tab stays inside a sheet
+addEventListener('keydown', (e) => {
+  const open = !!XH.open && !$('#hx').hidden;
+  const trap = (box) => {
+    const f = $$('button, [href], [tabindex="0"]', box).filter((x) => !x.disabled && !x.hidden && x.getClientRects().length);
+    if (!f.length) return;
+    const i = f.indexOf(document.activeElement), j = e.shiftKey ? (i <= 0 ? f.length - 1 : i - 1) : i < 0 || i === f.length - 1 ? 0 : i + 1;
+    e.preventDefault(); e.stopPropagation(); f[j].focus({ preventScroll: true });
+  };
+  if (open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hxClose(); return; }
+  if (open && e.key === 'Tab' && XH.open.mode === 'sheet') { trap($('#hx-card')); return; }
+  if (open && e.key === 'Tab' && $('#hx-card').contains(document.activeElement)) { // the popover: its controls, then back to the element
+    const f = $$('button', $('#hx-card')).filter((x) => !x.hidden && x.getClientRects().length), i = f.indexOf(document.activeElement);
+    if (i >= 0 && ((e.shiftKey && i === 0) || (!e.shiftKey && i === f.length - 1))) { e.preventDefault(); e.stopPropagation(); const el = XH.open.el; hxClose(true); if (el.isConnected && el.matches('button, [href], [tabindex]')) el.focus({ preventScroll: true }); }
+    return;
+  }
+  if (BM.open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); bmClose(); return; }
+  if (BM.open && e.key === 'Tab') { trap($('#bmore .bm-card')); return; }
+  if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    const a = document.activeElement, t = a && a.closest && !a.matches('input, select, textarea, [contenteditable="true"]') ? xTarget(a) || (a.closest('[data-x]') && XG[a.closest('[data-x]').dataset.x] ? a.closest('[data-x]') : null) : null;
+    if (!t) return;
+    e.preventDefault(); e.stopPropagation();
+    if (open && XH.open.el === t) hxClose(); else hxOpen(t, phoneW() ? 'sheet' : 'pop', 'key');
+  }
+}, true);
+function hxOpen(el, mode, via) {
+  const k = el && el.dataset ? el.dataset.x : null, g = k ? XG[k] : null;
+  if (!g) return;
+  if (XH.open) hxClose(true);
+  popClose(); tipHide();
+  const f = (x) => { try { return String((typeof x === 'function' ? x(el) : x) || ''); } catch (er) { return ''; } };
+  const hx = $('#hx'), card = $('#hx-card'), how = f(g.how);
+  $('#hx-t').textContent = f(g.title);
+  $('#hx-m').textContent = f(g.meaning);
+  $('#hx-h').innerHTML = how ? `<b>How:</b> ${esc(how)}` : '';
+  const v = f(g.valueLine);
+  $('#hx-v').innerHTML = v ? `<b>Here:</b> ${esc(v)}` : '';
+  $('#hx-msg').textContent = ''; $('#hx-copy').hidden = !v && !xNum(el);
+  hx.className = 'hx ' + (mode === 'sheet' ? 'hxs' : 'hxp');
+  card.setAttribute('aria-modal', String(mode === 'sheet'));
+  card.style.transform = '';
+  if (WS.open && hx.parentElement !== $('#ws')) $('#ws').append(hx); else if (!WS.open && hx.parentElement !== document.body) document.body.append(hx);
+  hx.style.setProperty('--hxb', mode === 'sheet' ? bbInset() + 'px' : '0px');
+  const prev = el.getAttribute('aria-describedby');
+  el.setAttribute('aria-describedby', (prev ? prev + ' ' : '') + 'hx-m');
+  XH.open = { el, k, mode, via, prev, back: document.activeElement };
+  hx.hidden = false;
+  if (mode === 'pop') hxPlace(); else hlOpen('hx');
+  if (via !== 'hover') setTimeout(() => { if (XH.open && XH.open.el === el) card.focus({ preventScroll: true }); }, 0);
+  bbSync();
+}
+function hxPlace() { // beside the element, inside the screen (under the bar on top, above the bar at the bottom)
+  const o = XH.open; if (!o || o.mode !== 'pop') return;
+  const c = $('#hx-card'), r = o.el.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+  const top0 = (WS.open ? 0 : barBottom()) + 8, bot = innerHeight - bbInset() - 8;
+  if (!o.el.isConnected || r.bottom < top0 - 8 || r.top > bot + 8 || (!r.width && !r.height)) { hxClose(true); return; }
+  const w = c.offsetWidth, h = c.offsetHeight, mid = clamp(r.top + r.height / 2 - h / 2, top0, Math.max(top0, bot - h));
+  let x, y;
+  if (r.right + 10 + w <= vw - 12) { x = r.right + 10; y = mid; } else if (r.left - 10 - w >= 12) { x = r.left - 10 - w; y = mid; } else {
+    x = clamp(r.left + r.width / 2 - w / 2, 12, Math.max(12, vw - w - 12)); y = r.bottom + 8;
+    if (y + h > bot && r.top - 8 - h >= top0) y = r.top - 8 - h;
+    y = clamp(y, top0, Math.max(top0, bot - h));
+  }
+  c.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
+}
+function hxClose(quiet = false) {
+  const o = XH.open, hx = $('#hx');
+  if (!o) { if (!hx.hidden) hx.hidden = true; return; }
+  XH.open = null; clearTimeout(XH.lt); XH.lt = 0;
+  const had = hx.contains(document.activeElement);
+  hx.hidden = true;
+  if (o.el.isConnected) { if (o.prev) o.el.setAttribute('aria-describedby', o.prev); else o.el.removeAttribute('aria-describedby'); }
+  if (o.mode === 'sheet') hlClosed('hx');
+  if (!quiet && had) { // the focus goes back where it was, else to what was explained
+    const b = o.back && o.back !== document.body && o.back.isConnected && o.back.getClientRects().length ? o.back : o.el.isConnected && o.el.matches('button, [href], [tabindex]') ? o.el : null;
+    if (b) b.focus({ preventScroll: true }); else if (document.activeElement && hx.contains(document.activeElement)) document.activeElement.blur();
+  }
+  bbSync();
+}
+function hxClear() { hxClose(true); for (const id of ['hx-t', 'hx-m', 'hx-h', 'hx-v', 'hx-msg']) $('#' + id).textContent = ''; $('#bm-mkt').innerHTML = ''; } // a sign-out: nothing of the data stays
+async function hxCopy() {
+  const o = XH.open; if (!o) return;
+  const t = `${$('#hx-t').textContent}: ${xText($('#hx-v')).replace(/^Here:\s*/, '') || xText(o.el)}`;
+  let done = false;
+  try { await navigator.clipboard.writeText(t); done = true; } catch (x) {
+    try { const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; $('#hx').append(ta); ta.select(); done = document.execCommand('copy'); ta.remove(); } catch (y) { done = false; }
+  }
+  if (XH.open === o) $('#hx-msg').textContent = done ? 'Copied' : 'Copy blocked here: select the line and copy it by hand.';
+}
+function hxMore() { // to the note on top of the page (the panel and the workspace close first)
+  hxClose(true); bmClose(true);
+  if (WS.open) wsClose(true);
+  if (!$('#sheet').hidden) closeDetail();
+  xnShow();
+}
+// the one-time tip after the first unlock on a phone; "Got it" (or a first hold) and it never comes back on this device
+const HXTIP = 'lps.hxtip';
+function hxTipMaybe() {
+  if (store.get(HXTIP) === '1' || !(phoneW() || matchMedia('(pointer:coarse)').matches)) return;
+  setTimeout(() => { if (store.get(HXTIP) !== '1' && document.documentElement.classList.contains('bb-on')) $('#hxtip').hidden = false; }, 1200);
+}
+function hxTipDone(focusBack) { const t = $('#hxtip'), had = t.contains(document.activeElement); store.set(HXTIP, '1'); t.hidden = true; if (focusBack && had) { const b = $('#bb-best'); if (b && b.getClientRects().length) b.focus({ preventScroll: true }); } }
+document.addEventListener('click', (e) => {
+  const el = e.target.closest && e.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const a = el.dataset.act;
+  if (a === 'bb') bbGo(el.dataset.to, el);
+  else if (a === 'bm-close') bmClose();
+  else if (a === 'bm-go') { bmClose(true); if (el.dataset.to === 'settings' && !$('#settings').hidden) { jumpTo('#settings'); const h = $('#settings-h'); if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); } } else if (el.dataset.to === 'xn') xnShow(); }
+  else if (a === 'hx-x') hxClose();
+  else if (a === 'hx-copy') hxCopy();
+  else if (a === 'hx-more') hxMore();
+  else if (a === 'hx-tipx') hxTipDone(true);
+});
+// what changes the bar: a sheet or the lock screen showing or going, the full view, new parts of the page (tagged here)
+new MutationObserver((ms) => {
+  let sync = false;
+  for (const m of ms) {
+    if (m.type === 'attributes') {
+      if (m.attributeName === 'hidden') { if (BB_WATCH.has(m.target.id)) sync = true; }
+      else if (m.target.getAttribute('title') && m.target.closest('[data-x]')) xUntitle(m.target);
+      continue;
+    }
+    for (const n of m.addedNodes) { if (n.nodeType === 1 && !(n.closest('svg, [data-pz]'))) xTag(n); if (n.id === 'fullv') sync = true; }
+    for (const n of m.removedNodes) if (n.id === 'fullv') sync = true;
+  }
+  if (sync) bbSync();
+}).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'title'] });
+xTag(document.body);
+if (window.__lpsHooks) window.__lpsHooks.v080 = () => ({ on: document.documentElement.classList.contains('bb-on'), kb: BB.kb, cov: BB.cov, main: BB.main, act: BB.act, more: BM.open,
+  hx: XH.open ? { k: XH.open.k, mode: XH.open.mode, via: XH.open.via } : null, inset: bbInset(), keys: Object.keys(XG) });
+if (window.__lpsHooks) window.__lpsHooks.hxShow = (el) => (el ? hxOpen(el, 'pop', 'key') : hxClose(true)); // the tests read every card
+// /v080-js
 window.LPS = Object.freeze({ build: BUILD, refresh: () => refresh() });
 boot();
 })();

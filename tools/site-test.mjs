@@ -25,6 +25,8 @@
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
 //                                                    lazy3d (v0.7.9: the 3D look's code runs only when 3D shows; both ways; idle preload)
 //                                                    a11yfix (v0.7.9: WCAG AA text in both looks, layout shifts under 0.05, a framed page blank)
+//                                                    bottombar (v0.8.0: the phone's bottom tab bar: Best Pools Saved Tests More, the workspace's tabs, More, overlap, keyboard)
+//                                                    holdx (v0.8.0: hold a number 450 ms, hover 700 ms or ? for its card: the glossary, the ring, what cancels, charts left alone)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -67,7 +69,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix,bottombar,holdx').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -108,11 +110,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // page's own default (off), and the stable group and the overlap walk use it.
 // The competition flash (v0.4.5) plays when a pool's detail opens; groups that read the detail's chart at once turn its
 // auto-play off (`flash: true` leaves it on: the flash group and the walk-through). A tap on its badge still plays it.
-async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false, flash = false, mode = MODE, dpr = null, mg = false } = {}) {
+async function newPage(browser, { phone = false, width = 390, height = 860, reducedMotion = 'no-preference', storage = null, stableDefault = false, flash = false, mode = MODE, dpr = null, mg = false, dev = null, tip = false } = {}) {
   if (!stableDefault) storage = { 'lps.stable': '1', ...(storage || {}) };
   if (mode) storage = { 'lps.view': mode, ...(storage || {}) }; // the look (--mode): set before the page's script reads it
-  const base = phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: phone ? { width: 390, height: 844 } : { width, height } }; // phone = 390 px here, the device in Actions
-  if (BROWSER !== 'chromium') delete base.defaultBrowserType;
+  if (!tip) storage = { 'lps.hxtip': '1', ...(storage || {}) }; // v0.8.0: the one-time "press and hold" tip was seen (the holdx group shows it)
+  // dev (v0.8.0): a device descriptor of its own (the bottom bar's iPhones, iPad and a phone on its side)
+  const base = dev ? { ...dev } : phone && DEVICE ? { ...pw.devices[DEVICE] } : { viewport: phone ? { width: 390, height: 844 } : { width, height } }; // phone = 390 px here, the device in Actions
+  if (BROWSER !== 'chromium' || dev) delete base.defaultBrowserType;
   const ctx = await browser.newContext({ ...base, reducedMotion, ...(dpr ? { deviceScaleFactor: dpr } : {}) });
   if (storage) await ctx.addInitScript((s) => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v); }, storage);
   if (!flash) await ctx.addInitScript(() => { window.__lpsNoFlash = true; });
@@ -1517,7 +1521,7 @@ async function testRefresh(browser) {
 const SEEN_KEY = (id) => String(id).slice(0, 18).toLowerCase();
 const STRIP = () => {
   const g = document.querySelector('#gas'), m = document.querySelector('#mstrip'), r = g.getBoundingClientRect(), mr = m.getBoundingClientRect();
-  return { shown: !m.hidden && mr.height > 0, h: r.height, gas: g.innerText.replace(/\s+/g, ' ').trim(), cls: g.className, title: g.title,
+  return { shown: !m.hidden && mr.height > 0, h: r.height, gas: g.innerText.replace(/\s+/g, ' ').trim(), cls: g.className, title: g.title || g.getAttribute('data-xt') || '', // v0.8.0: an explained element's tooltip moves to its card (data-xt)
     px: [...document.querySelectorAll('#mpx .px')].map((e) => ({ c: e.dataset.c, t: e.innerText.replace(/\s+/g, ' ').trim(), up: !!e.querySelector('.up'), dn: !!e.querySelector('.dn') })),
     pxFit: (() => { const x = document.querySelector('#mpx'); return x.scrollWidth <= x.clientWidth + 1; })(), mt: document.querySelector('#mt').innerText.replace(/\s+/g, ' ').trim(),
     stripH: Math.round(mr.height) };
@@ -2483,6 +2487,12 @@ async function testClicks(browser) {
       if (act === 'sort') good = good && (await p.$$('#all-tbl thead th[aria-sort="ascending"], #all-tbl thead th[aria-sort="descending"]')).length === 1;
       // the look already on stays on (a no-op, like the other pressed pills); the other pill switches
       if (act === 'view') { const v = real.split(':')[1], on = await p.evaluate(() => (document.documentElement.classList.contains('m3d') ? '3d' : '2d')); good = (good || wasOn) && on === v; }
+      if (act === 'bb') { // v0.8.0: the bottom bar: a section item lights up; Saved filters the table (pressed again: back); More opens its sheet (Esc closes it)
+        const to = real.split(':')[1];
+        if (to === 'more') { good = await p.isVisible('#bmore'); await p.keyboard.press('Escape'); await sleep(200); good = good && !(await p.isVisible('#bmore')); }
+        else if (to === 'saved') { good = (await p.inputValue('#f-lens')) === 'fav'; await handle.asElement().click(); await sleep(350); good = good && (await p.inputValue('#f-lens')) === 'all'; }
+        else good = await p.evaluate((k) => document.querySelector(`#bbar [data-to="${k}"]`).getAttribute('aria-current') === 'true', to);
+      }
       if (!good) bad.push(sig);
       // put filters back so later controls see the full table
       if (act === 'lens' || act === 'chain') { await handle.asElement().selectOption('all'); await sleep(150); }
@@ -6928,10 +6938,466 @@ async function testA11yFix(browser) {
   }
 }
 
+// ---------- v0.8.0 · bottombar (B): the phone's bottom tab bar; holdx (C): hold to explain ----------
+// The sets: WebKit as an iPhone 15 (393), today's iPhone SE (375), an iPhone 15 Pro Max (430) and iPhones on their side;
+// Chromium as a Pixel 7, at 375, 393 and 430 and on its side; both at the iPad's 768 and a 1440 laptop, where there is no bar.
+// The WebKit 3D job (near its time limit) runs its iPhone 15 and the laptop only; the 2D job runs them all.
+const BB_SETS = () => {
+  const d = (name) => { const x = { ...pw.devices[name] }; delete x.defaultBrowserType; return x; };
+  const se = { ...d('iPhone SE'), viewport: { width: 375, height: 667 }, screen: { width: 375, height: 667 }, deviceScaleFactor: 2 }; // the SE of today (2nd, 3rd gen)
+  const seL = { ...se, viewport: { width: 667, height: 375 }, screen: { width: 667, height: 375 } };
+  const lap = { viewport: { width: 1440, height: 900 } };
+  const all = BROWSER === 'webkit'
+    ? [['iPhone 15', d('iPhone 15'), 'phone'], ['iPhone SE', se, 'phone'], ['iPhone 15 Pro Max', d('iPhone 15 Pro Max'), 'phone'], ['iPhone 15 landscape', d('iPhone 15 landscape'), 'side'], ['iPhone SE landscape', seL, 'side'], ['iPad 768', d('iPad Mini'), 'none'], ['laptop 1440', lap, 'none']]
+    : [['Pixel 7', d('Pixel 7'), 'phone'], ['iPhone SE 375', se, 'phone'], ['iPhone 15 393', d('iPhone 15'), 'phone'], ['Pro Max 430', d('iPhone 15 Pro Max'), 'phone'], ['Pixel 7 landscape', d('Pixel 7 landscape'), 'side'], ['iPad 768', d('iPad Mini'), 'none'], ['laptop 1440', lap, 'none']];
+  return BROWSER === 'webkit' && MODE === '3d' && !opt('only') ? all.filter(([t]) => /^iPhone 15$|laptop/.test(t)) : all;
+};
+const BB_RIB = async (p) => { // the made-up data ribbon on every screenshot
+  if (!SHOTS) return;
+  await p.addStyleTag({ content: '#bb-rib{position:fixed;left:0;right:0;top:0;z-index:99999;background:#E8B84A;color:#03140C;font:700 11px/20px monospace;text-align:center;pointer-events:none}' });
+  await p.evaluate(() => { if (document.querySelector('#bb-rib')) return; const d = document.createElement('div'); d.id = 'bb-rib'; d.textContent = 'MOCKUP · MADE-UP NUMBERS'; document.documentElement.appendChild(d); });
+};
+const BB_LOOK = () => { // the bar as drawn, its items, the page's room under it (a page without the bar: el false)
+  const bar = document.querySelector('#bbar'), de = document.documentElement;
+  if (!bar) return { el: false, vis: false, items: [], hs: de.scrollWidth - de.clientWidth, pad: parseFloat(getComputedStyle(document.body).paddingBottom) };
+  const cs = getComputedStyle(bar), r = bar.getBoundingClientRect(), vis = cs.display !== 'none' && r.height > 0;
+  const items = [...bar.querySelectorAll('.bb')].filter((b) => b.getClientRects().length && getComputedStyle(b).display !== 'none').map((b) => {
+    const q = b.getBoundingClientRect(), t = b.querySelector('.bb-t'), tr = t && t.getBoundingClientRect();
+    return { to: b.dataset.to, w: Math.round(q.width), h: Math.round(q.height), name: b.textContent.trim(), lab: !!tr && tr.width > 2, cur: b.getAttribute('aria-current') === 'true', pressed: b.getAttribute('aria-pressed'), exp: b.getAttribute('aria-expanded'), svg: !!b.querySelector('svg'), col: getComputedStyle(b).color, tr: getComputedStyle(b).transitionDuration };
+  });
+  const hook = window.__lpsHooks && window.__lpsHooks.v080 ? window.__lpsHooks.v080() : null;
+  return { el: true, vis, top: r.top, bottom: r.bottom, h: Math.round(r.height), vh: innerHeight, items, pad: parseFloat(getComputedStyle(document.body).paddingBottom), hs: de.scrollWidth - de.clientWidth,
+    inert: bar.hasAttribute('inert'), bg: cs.backgroundColor, act: (items.find((i) => i.cur) || {}).to || null, a2: getComputedStyle(de).getPropertyValue('--accent2').trim(), kb: de.classList.contains('bb-kb'), hook,
+    fixed: cs.position === 'fixed', z: +cs.zIndex };
+};
+const BB_REST = async (ms = 3500) => { // until the page stops scrolling (a jump and its settling): the same scrollY over 4 frames
+  window.dispatchEvent(new Event('lps-none'));
+  const fr = () => new Promise((r) => { requestAnimationFrame(() => setTimeout(r, 0)); setTimeout(r, 200); });
+  let y = scrollY, same = 0;
+  for (const t0 = performance.now(); performance.now() - t0 < ms && same < 4;) { await fr(); if (Math.abs(scrollY - y) < 0.5) same++; else { same = 0; y = scrollY; } }
+  await new Promise((r) => setTimeout(r, 120));
+};
+const BB_AT = (sel) => { // a section's top under the bar on top (it may have slid away), and where the spy is
+  const e = document.querySelector(sel), r = e.getBoundingClientRect(), top = document.querySelector('#top'), tb = top.classList.contains('hid') ? 0 : Math.max(0, top.getBoundingClientRect().bottom);
+  const cur = document.querySelector('#bbar .bb[aria-current="true"]');
+  return { top: Math.round(r.top), clear: Math.round(r.top - tb), act: cur ? cur.dataset.to : null, y: Math.round(scrollY), focus: (document.activeElement || {}).id || '' };
+};
+const bbOver = (a, b) => !!a && !!b && a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
+const BB_RECTS = (sels) => sels.map((s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length || getComputedStyle(e).visibility === 'hidden') return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+async function bbTap(p, sel, touch) { const l = p.locator(sel).first(); if (touch) await l.tap({ timeout: 6000 }); else await l.click({ timeout: 6000 }); }
+async function testBottomBar(browser) {
+  let first = true;
+  for (const [tag, dev, kind] of BB_SETS()) {
+    const bar = kind !== 'none', touch = !!dev.hasTouch, t = await openUnlocked(browser, 'default', { dev }), p = t.page;
+    await BB_RIB(p);
+    let a = await p.evaluate(BB_LOOK);
+    if (!bar) { // a tablet or a laptop: today's layout, no bar, no room kept for one
+      ok(`bottombar ${tag}: no bar (${a.vis ? 'shown' : 'none'}), no room kept under the page (${a.pad} px)`, !a.vis && a.pad < 1, JSON.stringify({ vis: a.vis, pad: a.pad }));
+      await p.evaluate(() => document.querySelector('#best [data-act="ws-hist"]').click()); await wsWait(p);
+      const w = await p.evaluate(() => { const t = document.querySelector('#ws-tabs'), r = t.getBoundingClientRect(), h = document.querySelector('#ws-head').getBoundingClientRect(); return { pos: getComputedStyle(t).position, inHead: r.top >= h.top - 1 && r.bottom <= h.bottom + 1, n: t.querySelectorAll('[role="tab"]').length, icons: [...t.querySelectorAll('.bbi')].filter((i) => i.getClientRects().length).length }; });
+      ok(`bottombar ${tag}: the workspace keeps its five tabs on top, as today (no icons)`, w.pos !== 'fixed' && w.inHead && w.n === 5 && w.icons === 0, JSON.stringify(w));
+      if (SHOTS) await snap(p, `bb-${tag.replace(/\W+/g, '')}-ws`);
+      ok(`bottombar ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+      await t.ctx.close();
+      continue;
+    }
+    // the bar: five items (the owner), icons with short labels (on its side: icons only, named for a screen reader), fixed at the bottom
+    const side = kind === 'side', want = side ? 44 : 56;
+    ok(`bottombar ${tag}: the bar shows fixed at the bottom, ${a.h} px tall (${want} plus the safe area), the page keeps that room under it (${a.pad} px)`,
+      a.vis && a.fixed && Math.abs(a.bottom - a.vh) <= 1 && a.h >= want - 1 && a.h <= want + 40 && a.pad >= a.h - 1, JSON.stringify({ vis: a.vis, fixed: a.fixed, b: a.bottom, vh: a.vh, h: a.h, pad: a.pad }));
+    ok(`bottombar ${tag}: Best · Pools · Saved · Tests · More, each an icon ${side ? 'alone (the label kept for a screen reader)' : 'with its label'}, every one 44×44 or more`,
+      a.items.map((i) => i.to).join() === 'best,pools,saved,tests,more' && a.items.every((i) => i.svg && i.w >= 44 && i.h >= 44 && i.name.length >= 4 && i.lab === !side), JSON.stringify(a.items.map((i) => [i.to, i.w, i.h, i.lab])));
+    ok(`bottombar ${tag}: nothing sideways (${a.hs} px)`, a.hs <= 0, String(a.hs));
+    if (SHOTS) await snap(p, `bb-${tag.replace(/\W+/g, '')}-main`);
+    // tapping: each item lands on its section's top, clear of the bar on top; the item lights up; the spy follows a hand scroll
+    for (const [k, sel] of [['best', '#best'], ['pools', '#all'], ['tests', '#bt']]) {
+      await bbTap(p, `#bbar [data-to="${k}"]`, touch); await p.evaluate(BB_REST);
+      const s = await p.evaluate(BB_AT, sel);
+      ok(`bottombar ${tag}: ${k} goes to its section's top, clear of the bar on top (${s.clear} px), and lights up`, s.clear >= -1 && s.top <= 140 && s.act === k, JSON.stringify(s));
+    }
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const e = document.querySelector('#all'); scrollTo(0, scrollY + e.getBoundingClientRect().top + Math.min(600, e.offsetHeight / 2)); }); await p.evaluate(BB_REST);
+    let s = await p.evaluate(BB_AT, '#all');
+    ok(`bottombar ${tag}: scrolled by hand into the pool list, Pools lights up (scroll-spy)`, s.act === 'pools', JSON.stringify(s));
+    await bbTap(p, '#bbar [data-to="pools"]', touch); await p.evaluate(BB_REST);
+    s = await p.evaluate(BB_AT, '#all');
+    ok(`bottombar ${tag}: a tap on the lit item goes back to its section's top`, s.clear >= -1 && s.top <= 140 && s.act === 'pools', JSON.stringify(s));
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const e = document.querySelector('#best'); scrollTo(0, scrollY + e.getBoundingClientRect().top + 200); }); await p.evaluate(BB_REST);
+    ok(`bottombar ${tag}: scrolled by hand into the best find, Best lights up`, (await p.evaluate(BB_AT, '#best')).act === 'best');
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await p.evaluate(BB_REST);
+    ok(`bottombar ${tag}: at the top of the page (the note, today, favourites) no item is lit`, (await p.evaluate(BB_AT, '#best')).act === null);
+    // Saved: the favourites lens on, at Pools; again: off
+    await bbTap(p, '#bbar [data-to="saved"]', touch); await p.evaluate(BB_REST);
+    let sv = await p.evaluate(() => ({ lens: document.querySelector('#f-lens').value, pressed: document.querySelector('#bb-saved') && document.querySelector('#bb-saved').getAttribute('aria-pressed') }));
+    s = await p.evaluate(BB_AT, '#all');
+    ok(`bottombar ${tag}: Saved turns the favourites filter on and goes to Pools, Saved lit and pressed`, sv.lens === 'fav' && sv.pressed === 'true' && s.act === 'saved' && s.clear >= -1 && s.top <= 140, JSON.stringify({ sv, s }));
+    await bbTap(p, '#bbar [data-to="saved"]', touch); await p.evaluate(BB_REST);
+    sv = await p.evaluate(() => ({ lens: document.querySelector('#f-lens').value, pressed: document.querySelector('#bb-saved').getAttribute('aria-pressed') }));
+    ok(`bottombar ${tag}: Saved again turns it off (all pools)`, sv.lens === 'all' && sv.pressed === 'false' && (await p.evaluate(BB_AT, '#all')).act === 'pools', JSON.stringify(sv));
+    // More: a sheet above the bar (the bar stays on top of its dim), its items, Esc and Back close it
+    await bbTap(p, '#bb-more', touch); await sleep(350);
+    const M = () => p.evaluate(() => {
+      const sh = document.querySelector('#bmore'), c = sh && sh.querySelector('.bm-card'), bar = document.querySelector('#bbar').getBoundingClientRect(), r = c ? c.getBoundingClientRect() : null;
+      const its = sh ? [...sh.querySelectorAll('.bm-it')].filter((b) => !b.hidden && b.getClientRects().length).map((b) => b.id) : [];
+      const mid = document.elementFromPoint(bar.left + bar.width / 2, bar.top + bar.height / 2);
+      return { open: !!sh && !sh.hidden, its, above: !!r && r.bottom <= bar.top + 1, barOnTop: !!mid && !!mid.closest('#bbar'), dialog: c && c.getAttribute('role') === 'dialog' && c.getAttribute('aria-modal') === 'true',
+        exp: (document.querySelector('#bb-more') || {}).getAttribute ? document.querySelector('#bb-more').getAttribute('aria-expanded') : null, focusIn: !!sh && sh.contains(document.activeElement),
+        mkt: sh ? sh.querySelector('#bm-mkt').innerText.replace(/\s+/g, ' ') : '', ver: sh ? sh.querySelector('.bm-ver').textContent : '', px: sh ? sh.querySelectorAll('#bm-mkt [data-x="px"]').length : 0, gas: !!(sh && sh.querySelector('#bm-mkt [data-act="gas"]')), fit: !!r && r.left >= -0.5 && r.right <= innerWidth + 0.5 };
+    });
+    let m = await M();
+    ok(`bottombar ${tag}: More opens a sheet above the bar (the bar on top of its dim, More pressed), the focus inside`, m.open && m.above && m.barOnTop && m.dialog && m.exp === 'true' && m.focusIn && m.fit, JSON.stringify(m));
+    ok(`bottombar ${tag}: More holds How to read this, the market strip (gas, 3 prices, the next pass), Sign out and the version`, m.its.includes('bm-xn') && m.its.includes('bm-lock') && m.gas && m.px === 3 && /next pass/.test(m.mkt) && /updated/.test(m.mkt) && /v0\.8\.0/.test(m.ver) && noJunk(m.mkt), JSON.stringify({ its: m.its, mkt: m.mkt, ver: m.ver }));
+    if (SHOTS) await snap(p, `bb-${tag.replace(/\W+/g, '')}-more`);
+    await p.evaluate(() => document.querySelector('#bmore [data-act="gas"]').click()); await sleep(250);
+    const gp = await p.evaluate(() => { const pop = document.querySelector('#pop'), r = pop.getBoundingClientRect(), b = document.querySelector('#bbar').getBoundingClientRect(); return { vis: !pop.hidden, txt: pop.textContent, above: r.bottom <= b.top + 1 }; });
+    ok(`bottombar ${tag}: More's gas opens its note (gwei, p10 / p50 / p90), above the bar`, gp.vis && /gwei/.test(gp.txt) && /p10/.test(gp.txt) && gp.above, JSON.stringify({ vis: gp.vis, above: gp.above }));
+    await p.keyboard.press('Escape'); await sleep(120);
+    await p.keyboard.press('Escape'); await sleep(250);
+    m = await M();
+    ok(`bottombar ${tag}: Esc closes the More sheet, the focus back on More`, !m.open && m.exp === 'false' && (await p.evaluate(() => (document.activeElement || {}).id)) === 'bb-more', JSON.stringify(m));
+    await bbTap(p, '#bb-more', touch); await sleep(300);
+    await p.evaluate(() => history.back()); await sleep(450);
+    m = await M();
+    ok(`bottombar ${tag}: Back (Safari's back swipe) closes it and stays on the page`, !m.open && (await p.isVisible('#app')), JSON.stringify(m));
+    await bbTap(p, '#bb-more', touch); await sleep(300);
+    await bbTap(p, '#bb-more', touch); await sleep(300);
+    ok(`bottombar ${tag}: More again closes it`, !(await M()).open);
+    await bbTap(p, '#bb-more', touch); await sleep(300);
+    await p.mouse.click(Math.round((await p.evaluate(() => innerWidth)) / 2), 30); await sleep(300);
+    ok(`bottombar ${tag}: a tap outside closes it`, !(await M()).open);
+    await bbTap(p, '#bb-more', touch); await sleep(300);
+    await bbTap(p, '#bm-xn', touch); await p.evaluate(BB_REST);
+    const xn = await p.evaluate(() => { const x = document.querySelector('#xn'), r = x.getBoundingClientRect(); return { vis: !x.hidden, top: Math.round(r.top), more: !document.querySelector('#bmore').hidden }; });
+    ok(`bottombar ${tag}: More → How to read this shows the note again, in view`, xn.vis && !xn.more && xn.top >= -1 && xn.top <= 160, JSON.stringify(xn));
+    // nothing overlaps the bar: ↑, the last row, the refresh line, a note near the bottom, the error sheet
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, document.documentElement.scrollHeight); }); await p.evaluate(BB_REST); await sleep(300);
+    let [rb, rt, rl] = await p.evaluate(BB_RECTS, ['#bbar', '#totop.on', '#lockbtn']);
+    ok(`bottombar ${tag}: at the page's end ↑ sits above the bar and the last control (Sign out) clears it`, !!rt && !!rl && !bbOver(rb, rt) && rt.bottom <= rb.top && rl.bottom <= rb.top + 0.5, JSON.stringify({ rb, rt, rl }));
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const e = document.querySelector('#all-tbl tbody tr:last-child'); if (e) e.scrollIntoView({ block: 'end' }); }); await p.evaluate(BB_REST);
+    [rb, rl] = await p.evaluate(BB_RECTS, ['#bbar', '#all-tbl tbody tr:last-child']);
+    ok(`bottombar ${tag}: the table's last row, scrolled to the bottom of the screen, ends above the bar`, !!rl && rl.bottom <= rb.top + 1, JSON.stringify({ rb, rl }));
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector('#all .fld.stab .ibtn'); scrollTo(0, scrollY + b.getBoundingClientRect().bottom - (innerHeight - document.querySelector('#bbar').getBoundingClientRect().height - 6)); }); await p.evaluate(BB_REST);
+    await p.evaluate(() => document.querySelector('#all .fld.stab .ibtn').click()); await sleep(250);
+    const [rb2, rp] = await p.evaluate(BB_RECTS, ['#bbar', '#pop']);
+    ok(`bottombar ${tag}: a note opened just above the bar stays above it`, !!rp && rp.bottom <= rb2.top + 1, JSON.stringify({ rb2, rp }));
+    await p.keyboard.press('Escape'); await sleep(150);
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await p.evaluate(BB_REST);
+    await sleep(1600); await bbTap(p, '#refresh', touch); await sleep(500);
+    const [rb3, rm] = await p.evaluate(BB_RECTS, ['#bbar', '#refresh-msg']);
+    ok(`bottombar ${tag}: the refresh status line shows clear of the bar`, !!rm && !bbOver(rb3, rm), JSON.stringify({ rm }));
+    await p.evaluate(EB_PLANT); await sleep(300);
+    if (await p.isVisible('#eb-open')) { await p.evaluate(() => document.querySelector('#eb-open').click()); await sleep(300); }
+    const [rb4, re] = await p.evaluate(BB_RECTS, ['#bbar', '.eb-card']);
+    ok(`bottombar ${tag}: the error sheet sits above the bar (never under it)`, !!re && re.bottom <= rb4.top + 1, JSON.stringify({ rb4, re }));
+    if (SHOTS) await snap(p, `bb-${tag.replace(/\W+/g, '')}-errsheet`);
+    await p.evaluate(() => { const b = document.querySelector('#eb-dis'); if (b) b.click(); }); await sleep(250);
+    t.errors.length = 0; // the planted errors
+    // the on-screen keyboard: the bar goes while a field has it (Android: the window shrinks; iOS: the visual viewport does)
+    const vp = await p.evaluate(() => ({ w: innerWidth, h: innerHeight }));
+    await p.evaluate(() => { const q = document.querySelector('#f-q'); q.scrollIntoView({ block: 'center' }); q.focus(); }); await sleep(250);
+    const k0 = await p.evaluate(BB_LOOK);
+    await p.setViewportSize({ width: vp.w, height: Math.round(vp.h * 0.55) }); await sleep(450); // a keyboard takes about half the screen
+    const k1 = await p.evaluate(BB_LOOK);
+    await p.setViewportSize({ width: vp.w, height: vp.h }); await sleep(450);
+    const k2 = await p.evaluate(BB_LOOK);
+    await p.evaluate(() => { const vv = window.visualViewport; if (!vv) return; Object.defineProperty(vv, 'height', { configurable: true, get: () => Math.round(innerHeight * 0.55) }); vv.dispatchEvent(new Event('resize')); }); await sleep(250);
+    const k3 = await p.evaluate(BB_LOOK);
+    await p.evaluate(() => { const vv = window.visualViewport; if (!vv) return; delete vv.height; vv.dispatchEvent(new Event('resize')); document.activeElement.blur(); }); await sleep(250);
+    const k4 = await p.evaluate(BB_LOOK);
+    ok(`bottombar ${tag}: the bar hides while the keyboard is up (a shrunk window, a shrunk visual viewport) and comes back after`, k0.vis && !k1.vis && k1.kb && k2.vis && !k3.vis && k4.vis && !k4.kb, JSON.stringify([k0.vis, k1.vis, k2.vis, k3.vis, k4.vis]));
+    // the pool workspace: the bar becomes its five tabs (the one tablist, at the bottom; the row on top goes)
+    await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await p.evaluate(BB_REST);
+    const mf = await p.evaluate(async () => { document.querySelector('#best [data-act="ws-hist"]').click(); await Promise.resolve(); await new Promise((r) => setTimeout(r, 0)); return document.getAnimations().filter((x) => x.effect && x.effect.target && x.effect.target.closest && x.effect.target.closest('#ws-tabs, #bbar') && x.effect.getTiming().duration === 150).length; });
+    await wsWait(p); await sleep(300);
+    const W = () => p.evaluate(() => {
+      const tl = [...document.querySelectorAll('#ws [role="tablist"]')].filter((x) => x.getClientRects().length), t = document.querySelector('#ws-tabs'), r = t.getBoundingClientRect(), body = document.querySelector('#ws-body').getBoundingClientRect(), head = document.querySelector('#ws-head').getBoundingClientRect();
+      const tabs = [...t.querySelectorAll('[role="tab"]')].map((b) => { const q = b.getBoundingClientRect(); return { v: b.dataset.v, sel: b.getAttribute('aria-selected'), ctl: b.getAttribute('aria-controls'), w: Math.round(q.width), h: Math.round(q.height), icon: !!(b.querySelector('.bbi') && b.querySelector('.bbi').getClientRects().length), cut: b.scrollWidth > b.clientWidth + 1 }; });
+      const main = document.querySelector('#bbar'), mr = main.getBoundingClientRect(), mid = document.elementFromPoint(innerWidth / 2, innerHeight - 10);
+      return { lists: tl.length, fixed: getComputedStyle(t).position === 'fixed', bottom: Math.round(r.bottom), vh: innerHeight, h: Math.round(r.height), tabs, bodyEnd: Math.round(body.bottom), top: Math.round(r.top), headH: Math.round(head.height), inert: main.hasAttribute('inert'), onTop: !!mid && !!mid.closest('#ws-tabs'), ws: window.__lpsHooks.ws().tab, hs: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    });
+    let w = await W();
+    ok(`bottombar ${tag}: in the workspace the bar is its five tabs (Overview · History · Liquidity · Pair · Compare), one tablist, at the bottom`, w.lists === 1 && w.fixed && Math.abs(w.bottom - w.vh) <= 1 && w.h >= want - 1 && w.tabs.length === 5 && w.tabs.map((x) => x.v).join() === 'overview,history,liquidity,pair,compare' && w.onTop, JSON.stringify({ lists: w.lists, fixed: w.fixed, b: w.bottom, vh: w.vh, h: w.h }));
+    ok(`bottombar ${tag}: the tabs are real (role tab, aria-selected, aria-controls the view), 44×44 or more, an icon each, no label cut off`, w.tabs.every((x) => x.ctl === 'ws-body' && x.w >= 44 && x.h >= 44 && x.icon && !x.cut) && w.tabs.filter((x) => x.sel === 'true').length === 1 && w.tabs.find((x) => x.sel === 'true').v === 'history', JSON.stringify(w.tabs));
+    ok(`bottombar ${tag}: the workspace's content ends above its tabs; the main bar underneath is inert; nothing sideways`, w.bodyEnd <= w.top + 1 && w.inert && w.hs <= 0, JSON.stringify({ bodyEnd: w.bodyEnd, top: w.top, inert: w.inert, hs: w.hs }));
+    ok(`bottombar ${tag}: the bar and the tabs cross-fade (150 ms) as the workspace opens`, mf >= 5, String(mf));
+    if (SHOTS) await snap(p, `bb-${tag.replace(/\W+/g, '')}-ws`);
+    for (const v of ['overview', 'liquidity', 'pair', 'compare', 'history']) {
+      await bbTap(p, `#ws-tabs [data-v="${v}"]`, touch); await sleep(350);
+      w = await W();
+      ok(`bottombar ${tag}: the workspace's ${v} tab switches the view and is the one selected`, w.ws === v && w.tabs.find((x) => x.v === v).sel === 'true' && w.tabs.filter((x) => x.sel === 'true').length === 1, JSON.stringify({ ws: w.ws }));
+    }
+    await p.keyboard.press('Escape'); await sleep(450);
+    a = await p.evaluate(BB_LOOK);
+    ok(`bottombar ${tag}: the workspace closed, the main bar is back`, a.vis && !a.inert && !(await p.isVisible('#ws')), JSON.stringify({ vis: a.vis, inert: a.inert }));
+    // the pool panel covers the bar (and makes it inert) while it is open
+    await p.evaluate(() => document.querySelector('#best [data-act="detail"]').click()); await sleep(450);
+    a = await p.evaluate(BB_LOOK);
+    ok(`bottombar ${tag}: the pool panel covers the bar, which takes no tap or focus meanwhile`, a.inert && (await p.evaluate(() => { const b = document.querySelector('#bbar').getBoundingClientRect(), e = document.elementFromPoint(b.left + 10, b.top + b.height / 2); return !e || !e.closest('#bbar'); })), JSON.stringify({ inert: a.inert }));
+    await p.click('#sheet-close'); await sleep(300);
+    if (first) { // once: the two looks, reduced motion, a guest, the owner's Settings, the lock screen
+      first = false;
+      for (const mode of ['3d', '2d']) {
+        const u = await openUnlocked(browser, 'default', { dev, mode }), q = u.page;
+        await bbTap(q, '#bbar [data-to="pools"]', touch); await q.evaluate(BB_REST);
+        const b = await q.evaluate(BB_LOOK), lit = b.items.find((i) => i.cur), hex = (c) => { const m = /rgb\((\d+), (\d+), (\d+)/.exec(c); return m ? '#' + m.slice(1).map((x) => (+x).toString(16).padStart(2, '0')).join('').toUpperCase() : c; };
+        ok(`bottombar ${tag} ${mode.toUpperCase()}: the bar takes the look's own tokens (${hex(b.bg)}), the lit item its accent (${hex(lit && lit.col)} = ${b.a2})`, b.vis && !!lit && hex(lit.col) === b.a2.toUpperCase() && hex(b.bg) === (mode === '3d' ? '#0F4246' : '#090C10'), JSON.stringify({ bg: b.bg, col: lit && lit.col, a2: b.a2 }));
+        if (SHOTS) { await BB_RIB(q); await snap(q, `bb-${tag.replace(/\W+/g, '')}-${mode}`); }
+        await u.ctx.close();
+      }
+      const r = await openUnlocked(browser, 'default', { dev, reducedMotion: 'reduce' }), q = r.page;
+      const rb5 = await q.evaluate(BB_LOOK);
+      const rf = await q.evaluate(async () => { document.querySelector('#best [data-act="ws-hist"]').click(); await Promise.resolve(); await new Promise((x) => setTimeout(x, 0)); return document.getAnimations().filter((x) => x.effect && x.effect.target && x.effect.target.closest && x.effect.target.closest('#ws-tabs, #bbar')).length; });
+      ok(`bottombar ${tag} reduced motion: no transitions on the bar, no cross-fade`, rb5.vis && rb5.items.every((i) => /^0s/.test(i.tr)) && rf === 0, JSON.stringify({ tr: rb5.items.map((i) => i.tr), rf }));
+      await r.ctx.close();
+      const g = await unlockAs(browser, 'keyed', GUEST_PASS, { dev }), gp2 = g.page;
+      await waitApp(gp2); if (await gp2.isVisible('#gw-ok')) { await gp2.click('#gw-ok'); await sleep(250); }
+      const gl = await gp2.evaluate(BB_LOOK);
+      ok(`bottombar ${tag} guest: no Saved (guests can't save): four items, each as wide`, gl.vis && gl.items.map((i) => i.to).join() === 'best,pools,tests,more' && Math.max(...gl.items.map((i) => i.w)) - Math.min(...gl.items.map((i) => i.w)) <= 1, JSON.stringify(gl.items.map((i) => [i.to, i.w])));
+      await bbTap(gp2, '#bb-more', touch); await sleep(300);
+      ok(`bottombar ${tag} guest: More has no Settings`, !(await gp2.isVisible('#bm-set')) && (await gp2.isVisible('#bm-xn')));
+      if (SHOTS) { await BB_RIB(gp2); await snap(gp2, `bb-${tag.replace(/\W+/g, '')}-guest-more`); }
+      await g.ctx.close();
+      const o = await openUnlocked(browser, 'keyed', { dev, win: null }), op = o.page;
+      await bbTap(op, '#bb-more', touch); await sleep(300);
+      const hasSet = await op.isVisible('#bm-set');
+      if (hasSet) { await bbTap(op, '#bm-set', touch); await op.evaluate(BB_REST); }
+      const st = await op.evaluate(() => { const s = document.querySelector('#settings'), r = s.getBoundingClientRect(); return { vis: !s.hidden, top: Math.round(r.top), more: !document.querySelector('#bmore').hidden }; });
+      ok(`bottombar ${tag} owner: More → Settings goes to the owner's Settings`, hasSet && st.vis && !st.more && st.top >= -1 && st.top <= 160, JSON.stringify({ hasSet, st }));
+      await op.evaluate(() => { scrollTo(0, document.documentElement.scrollHeight); }); await sleep(300);
+      await op.click('#lockbtn'); await op.waitForSelector('#lockscreen:not([hidden])');
+      const lk = await op.evaluate(BB_LOOK);
+      ok(`bottombar ${tag}: the lock screen shows no bar`, !lk.vis, JSON.stringify({ vis: lk.vis }));
+      await o.ctx.close();
+    }
+    ok(`bottombar ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
+// ---------- holdx (C): hold to explain ----------
+// A finger's hold, as a phone sends it: pointer events with pointerType 'touch' on the element, then the click a release
+// sends (the page's own tap). Returns what showed: the ring at the end of the wait, the card, the hook's state, the taps the
+// page saw, and whether the tap's own action happened (a note, the panel).
+const HX_HOLD = async ({ sel, ms, move = 0, second = false, end = 'pointerup', at = null }) => {
+  const el = typeof sel === 'string' ? document.querySelector(sel) : null;
+  if (!el) return { err: 'no ' + sel };
+  if (!at) { el.scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 150)); }
+  const r = el.getBoundingClientRect(), x = at ? at[0] : r.left + Math.min(16, r.width / 2), y = at ? at[1] : r.top + r.height / 2, tg = document.elementFromPoint(x, y);
+  if (!tg) return { err: 'nothing at the point' };
+  const ev = (type, id, xx, yy, prim = true) => tg.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', isPrimary: prim, clientX: xx, clientY: yy, bubbles: true, cancelable: true, composed: true, buttons: /up|cancel/.test(type) ? 0 : 1, width: 18, height: 18 }));
+  let taps = 0; const seen = () => { taps++; }; document.addEventListener('click', seen); // bubbling: the clicks the page's own handler saw
+  ev('pointerdown', 41, x, y);
+  if (second) { await new Promise((q) => setTimeout(q, 100)); ev('pointerdown', 42, x + 70, y, false); }
+  if (move) { await new Promise((q) => setTimeout(q, 100)); ev('pointermove', 41, x, y + move); }
+  await new Promise((q) => setTimeout(q, ms));
+  const ring = !!document.querySelector('#hxring') && !document.querySelector('#hxring').hidden, card = !!document.querySelector('#hx') && !document.querySelector('#hx').hidden;
+  ev(end, 41, x, y + move);
+  if (second) ev(end, 42, x + 70, y, false);
+  if (end === 'pointerup') tg.click();
+  await new Promise((q) => setTimeout(q, 80));
+  document.removeEventListener('click', seen);
+  const hk = window.__lpsHooks && window.__lpsHooks.v080 ? window.__lpsHooks.v080().hx : null;
+  return { ring, card, hx: hk, taps, pop: !document.querySelector('#pop').hidden, sheet: !document.querySelector('#sheet').hidden, ws: !document.querySelector('#ws').hidden, tg: tg.className && typeof tg.className === 'string' ? tg.className.split(' ')[0] : tg.tagName };
+};
+const HX_CARD = async () => { // the card as shown (once its slide-in has ended), and what it says
+  const hx = document.querySelector('#hx'), c = document.querySelector('#hx-card');
+  if (!hx || hx.hidden || !c) return { open: false, title: '', meaning: '', how: '', value: '' };
+  await Promise.all(c.getAnimations().map((x) => x.finished.catch(() => {})));
+  const r = c.getBoundingClientRect(), bar = [document.querySelector('#bbar'), document.querySelector('#ws:not([hidden]) #ws-tabs')].filter((b) => b && b.getClientRects().length && getComputedStyle(b).display !== 'none' && getComputedStyle(b).position === 'fixed').map((b) => b.getBoundingClientRect());
+  const tx = (id) => (document.querySelector('#' + id) || {}).textContent || '';
+  const k = window.__lpsHooks.v080().hx, src = k ? document.querySelector('[aria-describedby~="hx-m"]:not(#hx-card)') : null;
+  return { open: true, k: k && k.k, mode: k && k.mode, via: k && k.via, title: tx('hx-t'), meaning: tx('hx-m'), how: tx('hx-h'), value: tx('hx-v'), role: c.getAttribute('role'), modal: c.getAttribute('aria-modal'), lab: c.getAttribute('aria-labelledby'),
+    focusIn: c.contains(document.activeElement), desc: !!src, l: r.left, r: r.right, t: r.top, b: r.bottom, vw: innerWidth, vh: innerHeight, barTop: bar.length ? Math.min(...bar.map((q) => q.top)) : innerHeight,
+    copy: !!document.querySelector('#hx-copy') && !document.querySelector('#hx-copy').hidden, more: !!document.querySelector('#hx-more') };
+};
+const HX_KEYS = (root) => [...new Set([...document.querySelectorAll((root || 'body') + ' [data-x]')].filter((e) => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden').map((e) => e.dataset.x))];
+const HX_NEED = {
+  main: ['netApr', 'feeApr', 'win', 'gem', 'shape', 'lvr', 'refresh', 'fresh', 'sealed', 'gas', 'nextPass', 'px', 'forecast', 'backtest', 'fvb', 'band10', 'miss', 'bias', 'tvlNow', 'volDay'],
+  overview: ['netApr', 'feeApr', 'lvr', 'win', 'gem'],
+  history: ['hsfees', 'hsvol', 'hstvl', 'hsrate', 'hsapr', 'srcFees', 'srcVol', 'srcTvl', 'tiersPart', 'standout', 'sdHigh', 'sdLow', 'sdOut', 'feeUnconf'],
+  sheet: ['lpkeeps', 'tvl', 'netApr'],
+};
+async function hxEsc(p) { await p.keyboard.press('Escape'); await sleep(200); }
+async function testHoldx(browser) {
+  // 1 · a phone (touch): the hold's timing, its ring, what cancels it, the card, the ways it closes
+  const [tag, dev] = BB_SETS()[0];
+  const t = await openUnlocked(browser, 'default', { dev, win: '24h' }), p = t.page; // the 24-hour best find (its History has unconfirmed days)
+  await BB_RIB(p);
+  const has = await p.evaluate(() => !!(window.__lpsHooks && window.__lpsHooks.v080));
+  ok(`holdx ${tag}: the page has the explanation layer (the glossary and its hook)`, has);
+  const keys = has ? (await p.evaluate(() => window.__lpsHooks.v080().keys)) : [];
+  let a = await p.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 440 });
+  ok(`holdx ${tag}: a 440 ms hold on the net APR shows no card (a long tap is still a tap)`, !a.err && !a.card && !(a.hx), JSON.stringify(a));
+  a = await p.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 460 });
+  let c = await p.evaluate(HX_CARD);
+  ok(`holdx ${tag}: a 460 ms hold shows its card (Net APR), the release's tap swallowed`, a.card && c.open && c.k === 'netApr' && c.title === 'Net APR' && a.taps === 0, JSON.stringify({ a, k: c.k }));
+  ok(`holdx ${tag}: the card says what it means, how it is worked out and this number ("${c.value.slice(0, 60)}"), with Copy value and More in How to read this`,
+    c.meaning.length > 30 && /^How: .{40,}/.test(c.how) && /^Here: .*\d+%.*(24H|7D|30D) window.*at \$1,000.*as of \d\d:\d\d/.test(c.value) && c.copy && c.more && noJunk(c.meaning + c.how + c.value), JSON.stringify(c));
+  ok(`holdx ${tag}: a bottom sheet above the bar, a modal dialog with its title, the focus in it, the number described by it`, c.mode === 'sheet' && c.role === 'dialog' && c.modal === 'true' && c.lab === 'hx-t' && c.focusIn && c.desc && c.b <= c.barTop + 1 && c.l >= -0.5 && c.r <= c.vw + 0.5, JSON.stringify(c));
+  if (SHOTS) await snap(p, `hx-${tag.replace(/\W+/g, '')}-card`);
+  await p.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (x) => { window.__hxCopied = String(x); } } }); });
+  await p.click('#hx-copy'); await sleep(200);
+  const cp = await p.evaluate(() => ({ t: window.__hxCopied || '', msg: document.querySelector('#hx-msg').textContent }));
+  ok(`holdx ${tag}: Copy value copies "Net APR: 157% · …" and says so`, /^Net APR: \d+% · /.test(cp.t) && cp.msg === 'Copied' && noJunk(cp.t), JSON.stringify(cp));
+  await p.click('#hx-x'); await sleep(250);
+  c = await p.evaluate(HX_CARD);
+  const d0 = await p.evaluate(() => document.querySelectorAll('[aria-describedby~="hx-m"]:not(#hx-card)').length);
+  ok(`holdx ${tag}: ✕ closes it, the description goes with it`, !c.open && d0 === 0, JSON.stringify({ c, d0 }));
+  // the ring: a quick tap never shows it; it starts at 150 ms
+  a = await p.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 100 });
+  const a2 = await p.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 210 });
+  ok(`holdx ${tag}: no ring on a quick tap (100 ms); the ring at the finger from 150 ms (210 ms)`, !a.ring && !a.card && a2.ring && !a2.card, JSON.stringify([a.ring, a2.ring]));
+  // what cancels: moving (a scroll), a second finger (a pinch), the browser taking the touch
+  a = await p.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 500, move: 14 });
+  const b = await p.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 500, second: true });
+  const cc = await p.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 300, end: 'pointercancel' });
+  const cc2 = await p.evaluate(() => new Promise((r) => setTimeout(() => r(!document.querySelector('#hx').hidden), 250)));
+  ok(`holdx ${tag}: a move of 14 px, a second finger or a cancelled touch (a scroll) lets the hold go: no card`, !a.card && !b.card && !cc.card && !cc2, JSON.stringify([a.card, b.card, cc.card, cc2]));
+  // a short tap still does what it always did: a word's note, a table row's panel
+  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await sleep(200);
+  a = await p.evaluate(HX_HOLD, { sel: '#best .best-meta [data-act="term"]', ms: 80 });
+  ok(`holdx ${tag}: a quick tap on an explainable word still opens its note (no card)`, a.pop && !a.card && !a.hx, JSON.stringify(a));
+  await hxEsc(p);
+  a = await p.evaluate(HX_HOLD, { sel: '#best .best-meta [data-act="term"]', ms: 470 });
+  ok(`holdx ${tag}: holding the same word opens its card instead, not the note`, a.card && !a.pop && a.hx && a.hx.k === 'fee', JSON.stringify(a));
+  await hxEsc(p);
+  ok(`holdx ${tag}: Esc closes the card`, !(await p.evaluate(HX_CARD)).open);
+  a = await p.evaluate(HX_HOLD, { sel: '#all-tbl tbody tr:first-child td:nth-child(7)', ms: 90 });
+  ok(`holdx ${tag}: a quick tap on a table row still opens its panel`, a.sheet && !a.card, JSON.stringify(a));
+  await p.click('#sheet-close'); await sleep(300);
+  a = await p.evaluate(HX_HOLD, { sel: '#all-tbl tbody tr:first-child td:nth-child(7)', ms: 480 });
+  c = await p.evaluate(HX_CARD);
+  ok(`holdx ${tag}: holding a row's TVL explains TVL ("${c.value}"), the row's panel stays shut`, a.card && !a.sheet && c.k === 'tvlNow' && /^Here: \$[\d.]+[KMB]? · as of/.test(c.value), JSON.stringify({ a, v: c.value }));
+  await p.mouse.click(Math.round((await p.evaluate(() => innerWidth)) / 2), 20); await sleep(250);
+  ok(`holdx ${tag}: a tap outside closes it`, !(await p.evaluate(HX_CARD)).open);
+  a = await p.evaluate(HX_HOLD, { sel: '#all-tbl tbody tr:first-child td:nth-child(7)', ms: 480 });
+  await p.evaluate(() => history.back()); await sleep(450);
+  ok(`holdx ${tag}: Back (Safari's back gesture) closes it and stays on the page`, a.card && !(await p.evaluate(HX_CARD)).open && (await p.isVisible('#app')));
+  const swipe = await p.evaluate(async () => { // a finger down the card's top (where touch events can be made)
+    if (typeof Touch !== 'function') return 'no touch events here';
+    const el = document.querySelector('#best .bignum'); el.scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 150));
+    const q = el.getBoundingClientRect(), tg = document.elementFromPoint(q.left + 10, q.top + q.height / 2);
+    tg.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 51, pointerType: 'touch', isPrimary: true, clientX: q.left + 10, clientY: q.top + q.height / 2, bubbles: true }));
+    await new Promise((r) => setTimeout(r, 480));
+    tg.dispatchEvent(new PointerEvent('pointerup', { pointerId: 51, pointerType: 'touch', isPrimary: true, clientX: q.left + 10, clientY: q.top + q.height / 2, bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    const g = document.querySelector('#hx-card .sgrab'), r0 = g.getBoundingClientRect(), x = r0.left + r0.width / 2, y0 = r0.top + 4;
+    const mk = (type, y) => { const tt = new Touch({ identifier: 9, target: g, clientX: x, clientY: y }); g.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [tt], changedTouches: [tt], bubbles: true, cancelable: true })); };
+    mk('touchstart', y0); for (let i = 1; i <= 6; i++) { await new Promise((r) => setTimeout(r, 30)); mk('touchmove', y0 + i * 22); } mk('touchend', y0 + 132);
+    await new Promise((r) => setTimeout(r, 300));
+    return document.querySelector('#hx').hidden ? 'closed' : 'open';
+  });
+  ok(`holdx ${tag}: a swipe down closes the card (${swipe})`, swipe === 'closed' || swipe === 'no touch events here', swipe);
+  // charts keep their own gestures: a hold on a chart explains nothing; its title still does
+  await p.evaluate(() => { const b = document.querySelector('[data-chartbox="liq-best"]'); if (b) b.dataset.x = 'logscale'; }); // even inside an explained box (a planted one)
+  a = await p.evaluate(HX_HOLD, { sel: '[data-pz="liq-best"]', ms: 520 });
+  await p.evaluate(() => { const b = document.querySelector('[data-chartbox="liq-best"]'); if (b) delete b.dataset.x; });
+  ok(`holdx ${tag}: a hold on a chart (the liquidity map) opens no card, even inside an explained box: its crosshair, drag and pinch stay its own`, !a.err && !a.card && !a.ring, JSON.stringify(a));
+  await hxEsc(p);
+  a = await p.evaluate(HX_HOLD, { sel: '[data-chartbox="liq-best"] .chart-head [data-act="term"]', ms: 480 });
+  ok(`holdx ${tag}: the chart's title (LOG SCALE) still explains`, a.card && a.hx && a.hx.k === 'logscale', JSON.stringify(a));
+  await hxEsc(p);
+  // iOS: no callout and no text selection on what explains, and only there
+  const io = await p.evaluate(() => { const x = document.querySelector('#best .bignum'), y = document.querySelector('#xn-body p') || document.querySelector('footer'), cx = getComputedStyle(x), cy = getComputedStyle(y);
+    return { co: CSS.supports('-webkit-touch-callout', 'none') ? cx.getPropertyValue('-webkit-touch-callout') : 'none', us: cx.userSelect || cx.webkitUserSelect, other: cy.userSelect || cy.webkitUserSelect }; });
+  ok(`holdx ${tag}: no iOS callout or text selection on a held number (${io.co}, ${io.us}); other text stays selectable (${io.other})`, io.co === 'none' && io.us === 'none' && io.other !== 'none', JSON.stringify(io));
+  // the glossary: every key on screen has an entry; the required ones show in their views
+  const seen = new Set();
+  const need = async (view, root) => { const k = has ? await p.evaluate(HX_KEYS, root) : []; k.forEach((x) => seen.add(x)); const miss = HX_NEED[view].filter((x) => !k.includes(x)); ok(`holdx ${tag}: ${view}: ${HX_NEED[view].length} terms explain themselves there (${miss.length ? 'missing ' + miss.join(', ') : 'all present'})`, has && miss.length === 0, miss.join(', ')); };
+  await need('main', 'body');
+  await p.evaluate(() => document.querySelector('#best [data-act="detail"]').click()); await sleep(500);
+  await need('sheet', '#sheet');
+  await p.click('#sheet-close'); await sleep(250);
+  await p.evaluate(() => document.querySelector('#best [data-act="ws-hist"]').click()); await wsWait(p); await sleep(400);
+  await need('history', '#ws');
+  a = await p.evaluate(HX_HOLD, { sel: '#ws .hst tbody td:nth-child(2):not(.pt) .s', ms: 480 });
+  c = await p.evaluate(HX_CARD);
+  ok(`holdx ${tag}: in History a fee's source letter explains its reading and its day ("${c.value}"), the card above the workspace's tabs`, a.card && c.k === 'srcFees' && /^Here: source: [sxeg] = .+ · \w{3} \d{1,2} \w{3} \d{4}$/.test(c.value) && c.b <= c.barTop + 1, JSON.stringify({ k: c.k, v: c.value, b: c.b, bar: c.barTop }));
+  if (SHOTS) await snap(p, `hx-${tag.replace(/\W+/g, '')}-history`);
+  await hxEsc(p);
+  ok(`holdx ${tag}: Esc closes the card first, the workspace stays`, !(await p.evaluate(HX_CARD)).open && (await p.isVisible('#ws')));
+  await bbTap(p, '#ws-tabs [data-v="overview"]', true).catch(() => p.click('#ws-tabs [data-v="overview"]')); await sleep(450);
+  await need('overview', '#ws');
+  a = await p.evaluate(HX_HOLD, { sel: '#ws .aprh .aprh-big', ms: 480 });
+  await p.click('#hx-more').catch(() => {}); await p.evaluate(BB_REST);
+  const mo = await p.evaluate(() => { const x = document.querySelector('#xn'), r = x.getBoundingClientRect(); return { ws: !document.querySelector('#ws').hidden, xn: !x.hidden, top: Math.round(r.top) }; });
+  ok(`holdx ${tag}: More in How to read this closes the card and the workspace and shows the note`, a.card && !mo.ws && mo.xn && mo.top >= -1 && mo.top <= 160, JSON.stringify({ a: a.card, mo }));
+  const xl = await p.evaluate(() => (document.querySelector('#xn-hx') || {}).textContent || '');
+  ok(`holdx ${tag}: the note says how to explain a number`, /press and hold any number/.test(xl) && /\?/.test(xl), xl);
+  const unknown = [...seen].filter((k) => !keys.includes(k));
+  ok(`holdx ${tag}: every data-x key on screen has a glossary entry (${seen.size} keys seen)`, has && seen.size >= 30 && unknown.length === 0, unknown.join(', '));
+  // every entry: a title, one plain sentence, and how for the required terms; every card it shows reads clean
+  const g = has ? await p.evaluate(async () => { const out = []; for (const e of document.querySelectorAll('[data-x]')) { if (!e.getClientRects().length || out.some((o) => o.k === e.dataset.x)) continue; window.__lpsHooks.hxShow(e); const t = (id) => document.querySelector('#' + id).textContent; out.push({ k: e.dataset.x, t: t('hx-t'), m: t('hx-m'), h: t('hx-h'), v: t('hx-v') }); } window.__lpsHooks.hxShow(null); return out; }) : [];
+  const bad = g.filter((x) => !x.t || !/^[A-Z0-9★↓⚠±$≈].*[.:]$/.test(x.m.trim()) || !noJunk(x.t + x.m + x.h + x.v)).map((x) => x.k);
+  const noHow = Object.values(HX_NEED).flat().filter((k) => { const x = g.find((y) => y.k === k); return x && !/^How: .{20,}/.test(x.h); });
+  ok(`holdx ${tag}: ${g.length} cards opened, each with a title and a plain meaning, nothing broken in what they say; the required terms say how`, g.length >= 30 && bad.length === 0 && noHow.length === 0, JSON.stringify({ bad, noHow }));
+  ok(`holdx ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+  await t.ctx.close();
+  // 2 · a laptop: hover 700 ms shows the card as a popover beside the element; ? on a focused one; Esc; no native tooltips
+  const l = await openUnlocked(browser, 'default', { width: 1440, height: 900 }), q = l.page;
+  await BB_RIB(q);
+  await q.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); document.querySelector('#best .bignum').scrollIntoView({ block: 'center' }); }); await sleep(300);
+  await q.hover('#best .bignum'); await sleep(560);
+  const h0 = await q.evaluate(HX_CARD);
+  await sleep(320);
+  const h1 = await q.evaluate(HX_CARD), er = await q.evaluate(() => { const r = document.querySelector('#best .bignum').getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; });
+  ok(`holdx laptop: hovering a number 560 ms shows nothing yet; at 880 ms its card, a popover beside it (not modal, not over it, inside the screen)`,
+    !h0.open && h1.open && h1.k === 'netApr' && h1.mode === 'pop' && h1.modal === 'false' && !bbOver({ left: h1.l, right: h1.r, top: h1.t, bottom: h1.b }, { left: er.l, right: er.r, top: er.t, bottom: er.b }) && h1.l >= 0 && h1.r <= h1.vw && h1.t >= 0 && h1.b <= h1.vh && !h1.focusIn, JSON.stringify({ h0: h0.open, h1, er }));
+  if (SHOTS) await snap(q, 'hx-laptop-popover');
+  await q.mouse.move(5, 450); await sleep(450);
+  ok('holdx laptop: moving the mouse away puts it away', !(await q.evaluate(HX_CARD)).open);
+  await q.focus('#best .ring'); await q.keyboard.press('?'); await sleep(200);
+  const k1 = await q.evaluate(HX_CARD);
+  await q.keyboard.press('Escape'); await sleep(200);
+  const k2 = await q.evaluate(() => ({ open: !document.querySelector('#hx').hidden, f: (document.activeElement || {}).className || '' }));
+  ok('holdx laptop: ? on a focused gem score opens its card, the focus inside; Esc closes it, the focus back on the score', k1.open && k1.k === 'gem' && k1.via === 'key' && k1.focusIn && !k2.open && /\bring\b/.test(k2.f), JSON.stringify({ k1, k2 }));
+  const tt = await q.evaluate(() => document.querySelectorAll('[data-x][title], [data-x] [title]').length);
+  await q.evaluate(() => document.querySelector('#best [data-act="ws-hist"]').click()); await wsWait(q); await sleep(400);
+  const tt2 = await q.evaluate(() => document.querySelectorAll('[data-x][title], [data-x] [title]').length);
+  ok(`holdx laptop: no native tooltip on what explains (page ${tt}, History ${tt2}): never two tooltips at once`, has && tt === 0 && tt2 === 0, `${tt} ${tt2}`);
+  await q.keyboard.press('Escape'); await sleep(300);
+  const hv = await q.evaluate(async () => { const e = document.querySelector('#gas'); return e ? e.dataset.x || '' : ''; });
+  await q.evaluate(() => { scrollTo(0, 0); }); await sleep(200);
+  await q.hover('#gas'); await sleep(850);
+  const gs = await q.evaluate(HX_CARD);
+  ok(`holdx laptop: the gas reading explains itself on hover, its usual range in its own line ("${(gs.value || '').slice(0, 70)}")`, hv === 'gas' && gs.open && gs.k === 'gas' && /gwei/.test(gs.value) && /p10/.test(gs.value), JSON.stringify(gs));
+  ok('holdx laptop: no page errors', l.errors.length === 0, l.errors[0]);
+  await l.ctx.close();
+  // 3 · reduced motion: the ring shows without filling; the card without sliding
+  const rm = await openUnlocked(browser, 'default', { dev, reducedMotion: 'reduce' }), rp = rm.page;
+  const r1 = await rp.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 210 });
+  const r2 = await rp.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 470 });
+  const an = await rp.evaluate(() => document.getAnimations().filter((x) => x.playState === 'running' && x.effect && x.effect.target && x.effect.target.closest && x.effect.target.closest('#hx, #hxring')).length);
+  ok(`holdx ${tag} reduced motion: the ring and the card show without moving`, r1.ring && r2.card && an === 0, JSON.stringify({ r1: r1.ring, r2: r2.card, an }));
+  await rm.ctx.close();
+  // 4 · roles: a guest's value lines carry the public $1,000 example, never the owner's ticket; the owner's carry theirs
+  const gu = await unlockAs(browser, 'keyed', GUEST_PASS, { dev }), gp = gu.page;
+  await waitApp(gp); if (await gp.isVisible('#gw-ok')) { await gp.click('#gw-ok'); await sleep(250); }
+  await gp.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 470 }); const gv = await gp.evaluate(HX_CARD);
+  await gu.ctx.close();
+  const ow = await openUnlocked(browser, 'keyed', { dev, win: null }), opg = ow.page;
+  await opg.evaluate(HX_HOLD, { sel: '#best .bignum', ms: 470 }); const ov = await opg.evaluate(HX_CARD);
+  await ow.ctx.close();
+  ok(`holdx ${tag}: a guest's card says the guest's example ($1,000), the owner's says the owner's ticket`, /at \$1,000/.test(gv.value || '') && !new RegExp(`\\$${OWNER_TICKET.toLocaleString('en-US')}`).test(gv.value || '') && new RegExp(`at \\$${OWNER_TICKET.toLocaleString('en-US')}`).test(ov.value || ''), JSON.stringify({ g: gv.value, o: ov.value }));
+  // 5 · the one-time tip after the first unlock on a phone: above the bar, clear of ↑; Got it, and never again here
+  const tp = await openUnlocked(browser, 'default', { dev, tip: true }), pp = tp.page;
+  await pp.waitForSelector('#hxtip:not([hidden])', { timeout: 4000 }).catch(() => {});
+  await pp.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, innerHeight * 2); }); await sleep(500);
+  const [tb, tr2, tq] = await pp.evaluate(BB_RECTS, ['#bbar', '#hxtip', '#totop.on']);
+  const tx = await pp.evaluate(() => (document.querySelector('#hxtip') || {}).textContent || '');
+  ok(`holdx ${tag}: after the first unlock a tip says to press and hold a number, above the bar and clear of ↑`, !!tr2 && /press and hold any number/i.test(tx) && tr2.bottom <= tb.top + 0.5 && !bbOver(tr2, tq), JSON.stringify({ tb, tr2, tq }));
+  if (SHOTS) { await BB_RIB(pp); await snap(pp, `hx-${tag.replace(/\W+/g, '')}-tip`); }
+  await pp.click('#hxtip [data-act="hx-tipx"]').catch(() => {}); await sleep(200);
+  const gone = await pp.evaluate(() => ({ hid: !document.querySelector('#hxtip') || document.querySelector('#hxtip').hidden, kept: localStorage.getItem('lps.hxtip') }));
+  await pp.reload(); await waitApp(pp); await sleep(1800);
+  ok(`holdx ${tag}: Got it puts the tip away for good (remembered on this device; not back after a reload)`, gone.hid && gone.kept === '1' && !(await pp.isVisible('#hxtip')), JSON.stringify(gone));
+  await tp.ctx.close();
+}
+// /v080-tests
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks, lazy3d: testLazy3d, a11yfix: testA11yFix }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks', 'lazy3d', 'a11yfix']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks, lazy3d: testLazy3d, a11yfix: testA11yFix, bottombar: testBottomBar, holdx: testHoldx }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks', 'lazy3d', 'a11yfix', 'holdx']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
