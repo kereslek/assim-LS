@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { makeData, writeFixtures, FIXTURE_PASSPHRASE, CASES, PLANTED, DEPTH_FAR, LOG_MAX, STABLE_PROBE_ADDR, oldDepth } from '../tools/fixtures/make-fixture.mjs';
+import { makeData, writeFixtures, FIXTURE_PASSPHRASE, CASES, PLANTED, DEPTH_FAR, LOG_MAX, STABLE_PROBE_ADDR, oldDepth, noLinks } from '../tools/fixtures/make-fixture.mjs';
+import { whyTotal } from '../lib/gem.mjs';
 import { unlock, open } from '../lib/lock.mjs';
 
 const NOW = Date.UTC(2026, 10, 1, 13, 6);
@@ -147,6 +148,27 @@ test('the cases the page must handle are all present', () => {
   const best = W.map((wk) => pools.filter((p) => p.verified !== false && p.w[wk]).sort((a, b) => (b.w[wk].gem.total ?? -1) - (a.w[wk].gem.total ?? -1))[0].pair);
   assert.equal(new Set(best).size, 3, 'three different best finds');
   assert.ok(pools.filter((p) => p.gemFirstAt && NOW - p.gemFirstAt < 24 * 3600e3).length >= 2, 'new gems in the last day');
+});
+
+test('"Why this pool?": every gem why adds up to its score (lib/gem.mjs whyTotal), each case is there, older data has none', () => {
+  let n = 0;
+  const seen = { gem: 0, fail: 0, cap: 0, oneoff: 0, miss: 0, dash: 0 };
+  for (const p of live.pools) for (const wk of W) {
+    const g = p.w[wk]?.gem;
+    if (!g || !g.why) continue;
+    n++;
+    const y = g.why;
+    assert.ok(['sf', 'sn', 'df', 'dn', 'wn'].every((k) => Array.isArray(y[k])) && isNum(y.sp) && isNum(y.dp), `${p.pair} ${wk}: a whole why`);
+    assert.equal(y.sp + y.sf.length + y.sn.length + y.dp + y.df.length + y.dn.length, p.checks.length, 'the why counts the pool\'s checks');
+    for (const k of ['y', 'th', 'mk', 'tr', 'ps', 'sd', 'ws', 'ia']) assert.ok(numOrNull(y[k]), `${k}: a number or null`);
+    if (p.verified === false) { assert.ok(y.sf.length > 0, 'an unverified pool failed a safety check'); seen.fail++; continue; } // the planted score stays planted
+    assert.equal(whyTotal(g), g.total, `${p.pair} ${wk}: the parts less the deductions give the total`);
+    if (g.total == null) seen.miss++; else if (y.sn.length) seen.cap++; else if (y.yx) seen.oneoff++; else if (g.total >= live.gemAt) seen.gem++;
+    if (y.ps == null && g.total != null) seen.dash++;
+  }
+  assert.ok(n > 250, `${n} windows carry a why`);
+  assert.ok(Object.values(seen).every((v) => v > 0), JSON.stringify(seen));
+  assert.ok(noLinks({ live, history, backtest }).live.pools.every((p) => W.every((wk) => !p.w[wk] || !('why' in p.w[wk].gem))), 'older data (nolinks) has no why');
 });
 
 test('backtests add up: series signs, net = fees + lvr + costs, strategies and grid', () => {

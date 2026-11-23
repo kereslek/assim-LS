@@ -16,7 +16,7 @@
 //   rekeyed  live.json sealed under another passphrase than lock.json (the page must show nothing)
 //   nomarket the default data, but the top strip's gas, one price, one 24 h change, the next pass and the watchdog's
 //            last restart unread (null, never 0): the page must show dashes
-//   nolinks  the default data as scanners before v0.7.8 published it: no token links
+//   nolinks  the default data as scanners before v0.7.8 published it: no token links (and no gem why: the page hides "Why ?")
 //   olddepth the default data as older scanners published it: a third of the pools without depthEdges and the full-range
 //            layer (depthStep and depthSpan only), a third with ±45% fine bars and nothing else (the first contract)
 //   nodisc   the default data as scanners before the discovery lanes published it: no discovery, dex, cex or flow, and
@@ -461,6 +461,7 @@ export function makeData({ now = Date.now(), seed = 7, mode = 'default' } = {}) 
   }
   const r2 = rng(seed + 99);
   for (const p of pools) addDaily(r2, p, now);
+  for (const p of pools) addWhy(p); // v0.8.x: "Why this pool?" (no rng draw)
   const r3 = rng(seed + 501); // its own stream: the published bins never shift the draws above
   for (const p of pools) publishDepth(r3, p);
   const byGem = (a, b) => (b.w[DEFAULT_WINDOW]?.gem?.total ?? -1) - (a.w[DEFAULT_WINDOW]?.gem?.total ?? -1);
@@ -631,10 +632,11 @@ export function tokenLinks(t) {
     : sym === LINKS_FIX.both ? { cmc: slug + '-made-up', cg: slug + '-made-up' } : sym === LINKS_FIX.cgOnly || h % 2 ? { cmc: null, cg: slug + '-made-up' } : { cmc: slug + '-made-up', cg: slug + '-made-up' };
   return t;
 }
-// nolinks: the default data as scanners before v0.7.8 published it (no links on any token)
+// nolinks: the default data as scanners before v0.7.8 published it (no links on any token, and no gem why either)
 export function noLinks(data) {
   const live = structuredClone(data.live);
   for (const p of live.pools) for (const t of [p.t0, p.t1]) if (t) delete t.links;
+  for (const p of live.pools) for (const w of Object.values(p.w)) if (w && w.gem) delete w.gem.why;
   return { ...data, live };
 }
 
@@ -891,6 +893,76 @@ function addDaily(r, p, now) {
     const sc = (v, from, to) => (isNum(v) ? Math.round((v / from) * to) : null);
     p.w[wk].gem = { total: g.total, yield: sc(g.yield, 35, 45), thinness: g.stranded, flow: sc(g.flow, 15, 20), staying: sc(g.persistence, 25, 10), warnings: g.warnings, missing: g.missing, tags };
   }
+}
+
+// "Why this pool?" (v0.8.x scanners, docs/DATA.md Window.gem.why): what each part read and how the gates went. No rng draw,
+// so nothing else shifts. The made-up totals stay as scored; the parts are evened out so that they, less 10 a warning and 5
+// a data check not run (capped at 40 when a safety check did not run), give the total, and the inputs are the ones that
+// round to those parts under lib/gem.mjs's formulas. A window the current rules can't explain (a check failed yet a total,
+// or a not-checked pool scored over 40 by the older made-up rules) gets no why: the page hides its link, as for older data.
+// The unverified pools carry one (a failed safety check), the planted gem score too: the page must still say "no score".
+export const SAFE_IDS = ['contract-verified', 'sell-test', 'token-age-rank', 'verified'];
+const HERO_SYMS = new Set(HEROES.map((h) => h.base));
+const Y_FULL = 500 / 365;
+export function whyOf(p, wk) {
+  const w = p.w[wk], g = w && w.gem;
+  if (!g) return null;
+  const ck = p.checks || [], pick = (safe, ok) => ck.filter((c) => SAFE_IDS.includes(c.id) === safe && (ok === null ? c.ok == null : c.ok === ok)).map((c) => c.id);
+  const gates = { sp: pick(true, true).length, sf: pick(true, false), sn: pick(true, null), dp: pick(false, true).length, df: pick(false, false), dn: pick(false, null) };
+  const wn = (g.warnings || []).filter((x) => !/^unverified/.test(x)), blocked = gates.sf.length + gates.df.length > 0;
+  const nets = (p.daily || []).slice(-7).map((d) => d.net).filter(isNum), oneOff = (g.tags || []).includes('one-off');
+  const yd = nets.length - (oneOff ? 1 : 0) >= 3 ? nets.length - (oneOff ? 1 : 0) : 0;
+  const thinOf = isNum(w.lpFeesUsd) && isNum(w.inRangeUsd) && w.inRangeUsd > 0 && w.days > 0 ? w.lpFeesUsd / w.days / w.inRangeUsd : null;
+  const wallSig = (o) => (isNum(o) && isNum(w.sigma) && w.sigma > 0 ? Math.abs(o) / (w.sigma * Math.sqrt(7)) : null);
+  const ws0 = [wallSig(p.shape && p.shape.walls && p.shape.walls.below), wallSig(p.shape && p.shape.walls && p.shape.walls.above)].filter(isNum);
+  const base = { yd, yx: oneOff ? 1 : 0, yh: 0, ...gates, wn };
+  const inputsNull = { y: null, th: sig(thinOf, 3), mk: sig(w.markout, 3), tr: isNum(w.traders) ? Math.round((w.traders * 7) / Math.max(1, w.days)) : null, ps: null,
+    sd: isNum(w.strandedShare) ? sig(30 * w.strandedShare, 3) : null, ws: ws0.length ? sig(Math.min(...ws0), 2) : null, ia: null };
+  if (blocked) return g.total != null && p.verified !== false ? null : { ...inputsNull, ...base };
+  if (g.total == null) return { ...inputsNull, ...base }; // inputs missing: no score
+  // the parts the total needs
+  const ded = 10 * wn.length + 5 * gates.dn.length;
+  let raw;
+  const now = ['yield', 'thinness', 'flow', 'staying'].map((k) => (isNum(g[k]) ? g[k] : 0)), sum = now.reduce((a, v) => a + v, 0);
+  if (gates.sn.length) { if (g.total > 40) return null; raw = g.total === 40 ? Math.max(sum, 40 + ded) : g.total + ded; }
+  else raw = g.total === 0 ? Math.min(sum, ded) : g.total + ded;
+  // about one pool in 16 (none of the heroes): the inactive share was not read, so staying power is not measured (it counts 0
+  // and the page shows a dash, never 0); its points go to the other parts
+  const noStay = !HERO_SYMS.has(p.t0.sym) && parseInt(String(p.id).slice(-1), 16) === 3;
+  const MAX = [45, 25, 20, noStay ? 0 : 10], parts = [...now];
+  if (noStay) parts[3] = 0;
+  let diff = raw - parts.reduce((a, v) => a + v, 0);
+  for (let i = 0; i < 4 && diff; i++) { const to = clamp(parts[i] + diff, 0, MAX[i]); diff -= to - parts[i]; parts[i] = to; }
+  if (diff) return null;
+  const [Y, T, F, S] = parts;
+  Object.assign(g, { yield: Y, thinness: T, flow: F, staying: S });
+  // inputs that round to those parts
+  const y = Y === 45 ? Math.max(Y_FULL, isNum(w.net) ? (w.net * 1000) / 365 : Y_FULL) : Y === 0 ? Math.min(0, isNum(w.net) ? (w.net * 1000) / 365 : 0) : (Y / 45) * Y_FULL;
+  const th = isNum(thinOf) && Math.round(25 * clamp(thinOf / 0.005)) === T ? thinOf : T === 25 ? 0.005 : T === 0 ? 0.00004 : (T / 25) * 0.005;
+  const flowP = (mk, tr) => Math.round(20 * (0.7 * clamp(1 - mk) + 0.3 * clamp(Math.log10(Math.max(1, tr)) / 2)));
+  let mk = isNum(w.markout) ? sig(w.markout, 3) : 0.3, tr = inputsNull.tr ?? 50;
+  if (flowP(mk, tr) !== F) {
+    let found = false;
+    for (let t2 = 1; t2 <= 1000 && !found; t2++) if (flowP(mk, t2) === F) { tr = t2; found = true; }
+    for (let m = 0; m <= 1.2 && !found; m = +(m + 0.01).toFixed(2)) if (flowP(m, tr) === F) { mk = m; found = true; }
+    if (!found) return null;
+  }
+  let st = { ps: null, sd: inputsNull.sd, ws: inputsNull.ws, ia: null };
+  if (S > 0) { // staying power from the persistence inputs; 0 here reads "not measured" (the part counts 0)
+    const sd = isNum(inputsNull.sd) ? inputsNull.sd : 15, ws = isNum(inputsNull.ws) ? inputsNull.ws : 1;
+    const psOf = (a, b, c) => 0.5 * clamp(a / 30) + 0.25 * clamp(b / 2) + 0.25 * clamp(c);
+    let hit = null;
+    for (const [a, b] of [[sd, ws], [sd, 1], [15, 1], [30, 2], [5, 0.5], [0, 0]]) {
+      for (let c = 0; c <= 1 && !hit; c = +(c + 0.01).toFixed(2)) if (Math.round(10 * clamp(psOf(a, b, c))) === S) hit = { sd: a, ws: b, ia: c, ps: sig(psOf(a, b, c), 3) };
+      if (hit) break;
+    }
+    if (!hit) return null;
+    st = hit;
+  }
+  return { ...base, y: sig(y, 4), th: sig(th, 3), mk: sig(mk, 3), tr, ...st };
+}
+function addWhy(p) {
+  for (const wk of WINDOWS) { const g = p.w[wk] && p.w[wk].gem; if (!g) continue; const why = whyOf(p, wk); if (why) g.why = why; }
 }
 
 function makeChecks(r, spec, pool) {
