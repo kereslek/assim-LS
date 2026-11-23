@@ -23,6 +23,8 @@
 //                                                    tokenlinks (v0.7.8: each token a link to its coin page, CoinMarketCap else CoinGecko; rows keep their tap)
 //                                                    guest180 (v0.7.9: the shared guest password's end date and "Restart 180 days", owner only)
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
+//                                                    lazy3d (v0.7.9: the 3D look's code runs only when 3D shows; both ways; idle preload)
+//                                                    a11yfix (v0.7.9: WCAG AA text in both looks, layout shifts under 0.05, a framed page blank)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
 //   node tools/site-test.mjs --repeat 3              run the chosen groups 3 times over (a timing fault shows up sooner)
@@ -49,8 +51,9 @@ const args = process.argv.slice(2);
 const opt = (k, d = null) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
 const flag = (k) => args.includes('--' + k);
 
+// v0.7.9: the page's script and each block it runs later (<script type="text/plain" id=…>, e.g. the 3D layer) by its hash
 export function scriptHashes(html) {
-  return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => `'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+  return [...html.matchAll(/<script(?: type="text\/plain" id="[\w-]+")?>([\s\S]*?)<\/script>/g)].map((m) => `'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
 }
 if (flag('fix-csp')) {
   const html = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8');
@@ -64,7 +67,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -6718,10 +6721,217 @@ async function testTokenLinks(browser) {
   }
 }
 
+// ---------- v0.7.9 · e: the 3D look's code loads only when 3D shows ----------
+// The depth layer waits in <script type="text/plain" id="lps-3d"> (its own hash in the CSP) and runs on demand: a page in
+// Classic 2D never evaluates it; switching works both ways; a page in 3D reads it while the lock screen is idle.
+const V079_SETS = () => (BROWSER === 'webkit' ? [['phone', { phone: true }], ['w1440', { width: 1440, height: 900 }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440, height: 900 }]]);
+const CSP_WATCH = () => { window.__csp = []; document.addEventListener('securitypolicyviolation', (e) => window.__csp.push(e.violatedDirective || 'csp')); };
+const D3_STATE = () => ({ hook: !!(window.__lpsHooks && window.__lpsHooks.d3), ran: !!(window.__lpsHooks && window.__lpsHooks.d3 && window.__lpsHooks.d3()), m3d: document.documentElement.classList.contains('m3d'),
+  canv: document.querySelectorAll('canvas.d3c').length, drawn: [...document.querySelectorAll('canvas.d3c')].filter((c) => c.__d3 && c.__d3.towers > 0).length, glob: typeof window.__lps3d, csp: (window.__csp || []).length });
+async function d3Drawn(p) { // the first chart that stands in depth, scrolled into view (a chart below the fold is drawn when it shows)
+  await p.evaluate(() => { const h = document.querySelector('.pz.liq, .pz.pz-bars'); if (h) h.scrollIntoView({ block: 'center' }); });
+  await p.waitForFunction(() => [...document.querySelectorAll('canvas.d3c')].some((c) => c.__d3 && c.__d3.towers > 0), null, { timeout: 8000 }).catch(() => {});
+  await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await calm(p, BAR_MOVES); // back to the top: the bar shows again
+}
+async function testLazy3d(browser) {
+  const html = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8');
+  const main = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
+  const lazy = (/<script type="text\/plain" id="lps-3d">([\s\S]*?)<\/script>/.exec(html) || [])[1] || '';
+  const csp = (/script-src ([^;]+);/.exec(html) || [])[1] || '';
+  const lazyHash = lazy ? `'sha256-${crypto.createHash('sha256').update(lazy, 'utf8').digest('base64')}'` : null;
+  ok('lazy3d: the depth layer is not in the script the page parses at load (it waits in #lps-3d, allowed by its own hash; no unsafe-inline, no eval)',
+    !/function d3Render\(/.test(main) && /function d3Render\(/.test(lazy) && !!lazyHash && csp.split(/\s+/).includes(lazyHash) && !/unsafe-(inline|eval)/.test(csp),
+    JSON.stringify({ inMain: /function d3Render\(/.test(main), lazy: lazy.length, hashed: !!lazyHash && csp.includes(lazyHash) }));
+  for (const [tag, o] of V079_SETS()) {
+    // Classic 2D: never evaluated, not even when idle; then 3D, 2D and 3D again
+    const t = await newPage(browser, { ...o, mode: '2d' }), p = t.page;
+    await t.ctx.addInitScript(CSP_WATCH);
+    await p.goto(url('default'));
+    await unlockWith(p, FIXTURE_PASSPHRASE); await waitApp(p);
+    await sleep(2500); // past the idle preload's timeout
+    let a = await p.evaluate(D3_STATE);
+    ok(`lazy3d ${tag}: in Classic 2D the 3D code never runs (unlocked, idle 2.5 s): no depth canvas`, a.hook && !a.ran && !a.m3d && a.canv === 0 && a.glob === 'undefined', JSON.stringify(a));
+    await p.click('#viewseg [data-v="3d"]');
+    await d3Drawn(p);
+    a = await p.evaluate(D3_STATE);
+    ok(`lazy3d ${tag}: a tap on 3D runs it at once: ${a.drawn} charts drawn in depth, nothing refused by the CSP, no global left behind`, a.ran && a.m3d && a.drawn >= 1 && a.csp === 0 && a.glob === 'undefined', JSON.stringify(a));
+    await p.click('#viewseg [data-v="2d"]'); await frames(p, 3);
+    const b = await p.evaluate(D3_STATE);
+    await p.click('#viewseg [data-v="3d"]');
+    await d3Drawn(p);
+    const c = await p.evaluate(D3_STATE);
+    ok(`lazy3d ${tag}: back to 2D lets go of every depth canvas, and 3D again draws them (${c.drawn}) from the code already read`, !b.m3d && b.canv === 0 && c.m3d && c.drawn >= 1 && c.csp === 0, JSON.stringify([b, c]));
+    ok(`lazy3d ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+    // 3D: read while the lock screen waits (about to be shown), the depth there as the data opens
+    const u = await newPage(browser, { ...o, mode: '3d' }), q = u.page;
+    await u.ctx.addInitScript(CSP_WATCH);
+    await q.goto(url('default'));
+    await q.waitForSelector('#lockscreen:not([hidden])', { timeout: 20000 });
+    const pre = await q.waitForFunction(() => window.__lpsHooks.d3 && window.__lpsHooks.d3(), null, { timeout: 5000 }).then(() => true).catch(() => false);
+    await unlockWith(q, FIXTURE_PASSPHRASE); await waitApp(q);
+    await d3Drawn(q);
+    a = await q.evaluate(D3_STATE);
+    ok(`lazy3d ${tag}: in 3D it is read while the lock screen is idle, and the charts open in depth (${a.drawn} drawn)`, pre && a.ran && a.m3d && a.drawn >= 1 && a.csp === 0, JSON.stringify({ pre, ...a }));
+    ok(`lazy3d ${tag}: no page errors in 3D`, u.errors.length === 0, u.errors[0]);
+    await u.ctx.close();
+  }
+}
+
+// ---------- v0.7.9 · f: contrast, layout shifts, framing ----------
+// Contrast: every visible text in the audited parts (the lock screen; the bar, the line under it and the first screens of
+// the dashboard) against its background as drawn (sampled from the screen with the text made transparent), WCAG AA:
+// 4.5:1, 3:1 for large text. Both looks, phone and laptop, still (reduced motion).
+const AA_ITEMS = () => {
+  const parse = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return null; const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; };
+  const out = [], tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n; (n = tw.nextNode());) {
+    if (!n.nodeValue.trim()) continue;
+    const el = n.parentElement;
+    if (!el || el.closest('script, style, svg, [aria-hidden="true"], #ribbon, input, textarea, select, button:disabled')) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n); const r = rg.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2 || r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility !== 'visible') continue;
+    let op = 1; for (let e = el; e; e = e.parentElement) op *= +getComputedStyle(e).opacity;
+    if (op < 0.05) continue;
+    const px = parseFloat(cs.fontSize), large = px >= 24 || (+cs.fontWeight >= 700 && px >= 18.66);
+    const cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+    out.push({ sel: el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + cls, fg: parse(cs.color), op, need: large ? 3 : 4.5, rect: [r.left, r.top, r.width, r.height] });
+  }
+  return out;
+};
+const AA_SAMPLE = async ({ b64, items }) => {
+  const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0);
+  const k = img.width / innerWidth;
+  const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const res = [];
+  for (const it of items) {
+    if (!it.fg) continue;
+    const [l, t, w, h] = it.rect.map((v) => Math.round(v * k));
+    const d = x.getImageData(l, t, Math.max(1, w), Math.max(1, h)).data;
+    let R = 0, G = 0, B = 0, n = 0;
+    for (let i = 0; i < d.length; i += 16) { R += d[i]; G += d[i + 1]; B += d[i + 2]; n++; }
+    const bg = { r: R / n, g: G / n, b: B / n }, a = it.fg.a * it.op;
+    const fg = { r: it.fg.r * a + bg.r * (1 - a), g: it.fg.g * a + bg.g * (1 - a), b: it.fg.b * a + bg.b * (1 - a) };
+    const L1 = lum(fg), L2 = lum(bg);
+    res.push({ sel: it.sel, ratio: (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05), need: it.need });
+  }
+  return res;
+};
+async function aaAudit(p, screens = 1) {
+  const all = [];
+  for (let s = 0; s < screens; s++) {
+    await p.evaluate((s) => scrollTo(0, s * innerHeight), s); await frames(p, 3);
+    const items = await p.evaluate(AA_ITEMS);
+    const h = await p.addStyleTag({ content: '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;caret-color:transparent!important}' });
+    await frames(p, 2);
+    const b64 = (await p.screenshot()).toString('base64');
+    await h.evaluate((e) => e.remove()); await frames(p, 1);
+    all.push(...(await p.evaluate(AA_SAMPLE, { b64, items })));
+  }
+  await p.evaluate(() => scrollTo(0, 0));
+  const bad = all.filter((x) => x.ratio < x.need);
+  const worst = all.reduce((m, x) => Math.min(m, x.ratio / x.need), Infinity);
+  const sels = [...new Set(bad.map((x) => x.sel))];
+  return { n: all.length, bad: bad.length, sels, worst: +(worst * 4.5).toFixed(2), first: bad.sort((a, b) => a.ratio - b.ratio).slice(0, 3).map((x) => `${x.sel} ${x.ratio.toFixed(2)}`) };
+}
+// Layout shifts: each frame, every element of the bar, the line under it, the lock card and the footer that was drawn in
+// both frames and moved adds (the area it covers before and after) × (how far it went), as the browser's own CLS counts
+// it, in session windows (1 s gaps, 5 s at most); frames within 0.5 s after a tap or a key don't count. WebKit has no
+// layout-shift entries, so this tracker runs everywhere; Chromium also checks its own number.
+const CLS_TRACK = () => {
+  const SEL = '#top > *, #top, #subhead, #subhead .sub-l > *, #subhead .mstrip > *, footer, footer > *, .lock-card, #ribbon';
+  const st = { prev: new Map(), shifts: [], inputs: [], native: [] };
+  window.__cls = st;
+  for (const ev of ['pointerdown', 'keydown', 'mousedown']) addEventListener(ev, () => st.inputs.push(performance.now()), true);
+  try { new PerformanceObserver((l) => { for (const e of l.getEntries()) st.native.push({ t: e.startTime, v: e.value }); }).observe({ type: 'layout-shift', buffered: true }); } catch (e) { st.native = null; }
+  const G = 48;
+  const tick = (now) => {
+    const vw = innerWidth, vh = innerHeight, cur = new Map(), cells = new Set();
+    let dist = 0;
+    if (document.body) for (const el of document.querySelectorAll(SEL)) {
+      const cs = getComputedStyle(el); const r = el.getBoundingClientRect();
+      const vis = cs.visibility === 'visible' && r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < vh;
+      if (!vis) continue;
+      cur.set(el, { x: r.left, y: r.top, w: r.width, h: r.height });
+      const p = st.prev.get(el);
+      if (!p) continue;
+      const dx = r.left - p.x, dy = r.top - p.y;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      dist = Math.max(dist, Math.abs(dx), Math.abs(dy));
+      for (const q of [p, { x: r.left, y: r.top, w: r.width, h: r.height }]) {
+        const x0 = Math.max(0, q.x), x1 = Math.min(vw, q.x + q.w), y0 = Math.max(0, q.y), y1 = Math.min(vh, q.y + q.h);
+        for (let i = Math.floor(x0 / vw * G); i < Math.ceil(x1 / vw * G); i++) for (let j = Math.floor(y0 / vh * G); j < Math.ceil(y1 / vh * G); j++) cells.add(i * 1000 + j);
+      }
+    }
+    if (dist && !st.inputs.some((t) => now - t >= 0 && now - t < 500)) st.shifts.push({ t: now, v: (cells.size / (G * G)) * (dist / Math.max(vw, vh)) });
+    st.prev = cur;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+};
+const CLS_READ = () => {
+  const win = (list) => { let best = 0, cur = 0, t0 = -1, tl = -1; for (const s of list) { if (t0 < 0 || s.t - tl > 1000 || s.t - t0 > 5000) { cur = 0; t0 = s.t; } cur += s.v; tl = s.t; best = Math.max(best, cur); } return best; };
+  const st = window.__cls;
+  const nat = st.native ? st.native.filter((e) => !st.inputs.some((t) => e.t - t >= 0 && e.t - t < 500)) : null;
+  return { mine: +win(st.shifts).toFixed(4), n: st.shifts.length, native: nat ? +win(nat).toFixed(4) : null };
+};
+async function testA11yFix(browser) {
+  // framing: another site's frame gets a blank page and never the passphrase prompt (a meta CSP can't stop framing)
+  for (const [tag, o] of V079_SETS()) {
+    for (const [how, attrs] of [['another site', ''], ['another site, sandboxed', ' sandbox="allow-scripts allow-forms"']]) {
+      const t = await newPage(browser, o), p = t.page;
+      // another origin on this machine (localhost, not 127.0.0.1), served for real: a browser keeps other address spaces off loopback
+      const fn = `framer-${attrs ? 'sb' : 'plain'}.html`;
+      fs.writeFileSync(path.join(FX, fn), `<!doctype html><title>frame</title><iframe id="f" style="width:100%;height:700px;border:0"${attrs} src="${url('default')}"></iframe>`);
+      await p.goto(ORIGIN.replace('127.0.0.1', 'localhost') + '/fx/' + fn);
+      await sleep(3000);
+      const fr = p.frames().find((f) => f.url().includes('/app/index.html'));
+      const st = fr ? await fr.evaluate(() => { const l = document.querySelector('#lockscreen'), pw = document.querySelector('#pass'); return { lock: !!l && !l.hidden && l.getClientRects().length > 0, pass: !!pw && pw.getClientRects().length > 0, kids: document.body ? document.body.children.length : -1, text: document.body ? document.body.innerText.trim().length : -1 }; }).catch((e) => ({ err: String(e.message).slice(0, 80) })) : { err: 'no frame' };
+      ok(`a11yfix ${tag}: framed by ${how}: the page goes blank, no passphrase prompt`, !st.err && !st.lock && !st.pass && st.kids === 0 && st.text === 0, JSON.stringify(st));
+      await t.ctx.close();
+    }
+  }
+  // layout shifts through load and unlock (a slow network: the data arrive 0.7 s after each request), and a reload with the
+  // key kept (no lock screen)
+  for (const mode of ['3d', '2d']) for (const [tag, o] of V079_SETS()) {
+    const t = await newPage(browser, { ...o, mode }), p = t.page;
+    await t.ctx.addInitScript(CLS_TRACK);
+    await p.route('**/fx/**', async (r) => { await sleep(700); await r.continue().catch(() => {}); });
+    await p.goto(url('default'));
+    await unlockWith(p, FIXTURE_PASSPHRASE); await waitApp(p);
+    await sleep(2500);
+    const a = await p.evaluate(CLS_READ);
+    await p.reload(); await waitApp(p); await sleep(2500);
+    const b = await p.evaluate(CLS_READ);
+    const nat = [a.native, b.native].filter((x) => x != null);
+    ok(`a11yfix ${tag} ${mode}: layout shifts under 0.05 through load and unlock (${a.mine}${a.native != null ? ', the browser: ' + a.native : ''}) and a reload with the key kept (${b.mine}${b.native != null ? ', ' + b.native : ''})`,
+      a.mine < 0.05 && b.mine < 0.05 && nat.every((x) => x < 0.05), JSON.stringify({ a, b }));
+    ok(`a11yfix ${tag} ${mode}: no page errors (layout shifts)`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // contrast, both looks, the lock screen and the dashboard's first screens
+  for (const mode of ['2d', '3d']) for (const [tag, o] of V079_SETS()) {
+    const t = await newPage(browser, { ...o, mode, reducedMotion: 'reduce' }), p = t.page;
+    await p.goto(url('default'));
+    await p.waitForSelector('#lockscreen:not([hidden])', { timeout: 20000 }); await sleep(400);
+    const a = await aaAudit(p, 1);
+    ok(`a11yfix ${tag} ${mode}: the lock screen's text is WCAG AA against what is drawn behind it (${a.n} texts, lowest ${a.worst}:1 scaled to small text)`, a.n >= 8 && a.bad === 0, JSON.stringify(a));
+    await unlockWith(p, FIXTURE_PASSPHRASE); await waitApp(p); await sleep(600);
+    const b = await aaAudit(p, 3);
+    ok(`a11yfix ${tag} ${mode}: the dashboard's first three screens are WCAG AA (${b.n} texts, lowest ${b.worst}:1)`, b.n >= 60 && b.bad === 0, JSON.stringify(b));
+    ok(`a11yfix ${tag} ${mode}: no page errors (contrast)`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks, lazy3d: testLazy3d, a11yfix: testA11yFix }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks', 'lazy3d', 'a11yfix']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

@@ -10,6 +10,9 @@ import { newLockFile, unlock, seal, open } from '../lib/lock.mjs';
 // SITE_PAGE: a candidate page (relative to the repo) checked before it deploys; the deployed page otherwise
 const html = fs.readFileSync(new URL('../' + (process.env.SITE_PAGE || 'site/app/index.html'), import.meta.url), 'utf8');
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+// v0.7.9: blocks the page runs later (the 3D layer): never run by the parser, allowed by their own hash
+const lazy = [...html.matchAll(/<script type="text\/plain" id="[\w-]+">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+const hashed = [...html.matchAll(/<script(?: type="text\/plain" id="[\w-]+")?>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
 const csp = (html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/) || [])[1] || '';
 
 test('privacy and robots headers', () => {
@@ -25,7 +28,7 @@ test('the CSP allows only the page’s own script, its origin and the data branc
   assert.ok(/connect-src 'self' https:\/\/raw\.githubusercontent\.com;/.test(csp), 'connect-src');
   const src = (csp.match(/script-src ([^;]+);/) || [])[1] || '';
   assert.ok(!src.includes('unsafe-inline'), 'no inline scripts beyond the hashed one');
-  const want = scripts.map((s) => `'sha256-${crypto.createHash('sha256').update(s, 'utf8').digest('base64')}'`).join(' ');
+  const want = hashed.map((s) => `'sha256-${crypto.createHash('sha256').update(s, 'utf8').digest('base64')}'`).join(' ');
   assert.equal(src, want, 'stale script hash: run node tools/site-test.mjs --fix-csp');
 });
 
@@ -50,6 +53,7 @@ test('self-contained: no external scripts, styles or fonts', () => {
 test('the inline script compiles and carries the build and lock constants', () => {
   assert.equal(scripts.length, 1);
   new vm.Script(scripts[0]);
+  for (const b of lazy) new vm.Script(b); // v0.7.9: a block run later compiles too
   assert.match(scripts[0], /const BUILD = 'v\d+\.\d+\.\d+';/);
   const lock = newLockFile('x', 1000);
   const check = open(lock.check, unlock(lock, 'x').aes);

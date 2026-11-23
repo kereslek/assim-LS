@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="settle">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u5MEEUO4u1hadvlJp5mWthYGA5OWXOOICTgu1XgEFBY='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-joIbPvO2ZkjApYqGM8k6iQrUeLYdZd2dUKHIzcJqSgg='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -28,6 +28,16 @@
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
+html.settle footer{visibility:hidden} /* v0.7.9: until the lock or the data shows: the footer never jumps */
+/* v0.7.9: with no data shown yet (the lock screen, unlocking) the bar keeps the search, refresh and window controls' places,
+   unseen: nothing in it moves when the data comes in */
+body:has(>#app[hidden]) .top>#qfind[hidden],body:has(>#app[hidden]) .top>#refresh[hidden]{display:inline-grid!important;visibility:hidden}
+body:has(>#app[hidden]) .top>#winseg[hidden]{display:inline-flex!important;visibility:hidden}
+@media (min-width:860px){ /* the ring's place with its time beside it (m:ss) */
+  body:has(>#app[hidden]) .top>#refresh[hidden]{display:inline-flex!important;width:auto;padding:0 12px 0 9px;align-items:center;gap:5px}
+  body:has(>#app[hidden]) .top>#refresh[hidden] .rf-t{display:inline}
+}
+body:has(>#app[hidden]) #phase{min-width:calc(32 * (1ch + .08em))} /* "PHASE 0 · READ-ONLY · MON 23 NOV": the version beside it stays put */
 html{-webkit-text-size-adjust:100%;background:var(--bg);overscroll-behavior-y:contain} /* v0.5.1: the page's own pull to refresh, not the browser's reload (the bounce stays) */
 html.modal-open{overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--fg);font:400 13px/1.45 var(--sans);min-height:100vh}
@@ -652,7 +662,7 @@ footer .btn{font-family:var(--sans)}
   .top #qfind,.top #refresh,.top #winseg{flex:none}
   .top #winseg button>span{padding-left:6px;padding-right:6px}
 }
-@media (max-width:340px){.top{gap:4px}.top #winseg button>span{padding-left:4px;padding-right:4px}.top #refresh{display:none}} /* pull to refresh */
+@media (max-width:340px){.top{gap:4px}.top #winseg button>span{padding-left:4px;padding-right:4px}.top #refresh{display:none!important}} /* pull to refresh */
 
 /* pop-up notes: why a pool stands out, the gas range */
 .pop{position:fixed;z-index:70;max-width:min(320px,calc(100vw - 24px));padding:10px 12px;border-radius:10px;border:1px solid var(--line3);background:rgba(17,23,30,.98);box-shadow:0 12px 30px rgba(0,0,0,.55);font:400 12px/1.45 var(--sans);color:var(--fg2)}
@@ -1025,11 +1035,11 @@ canvas.d3c{position:absolute;left:0;top:0;width:100%;height:100%;display:block;p
 canvas.d3c.mv{opacity:0;transition:none} /* while its chart moves: the flat drawing alone; the depth fades back at rest */
 
 html.m3d{
-  --bg:#0C3438;--head:#0F4246;--surface:#114A4E;--surface2:#0E4145;--raised:#175A5D;
+  --bg:#0C3438;--head:#0F4246;--surface:#114A4E;--surface2:#0E4145;--raised:#135155;
   --line:#1F5D5F;--line2:#2A6C6D;--line3:#3B7F7D;--grid:#17575A;
-  --fg:#E9F7F4;--fg2:#B9DDD6;--muted:#8FBDB6;--faint:#5A8F8A;
-  --accent:#FFB547;--accent2:#5EE6C8;--accent-ink:#2A1900;--band:rgba(94,230,200,.14);--band-edge:rgba(94,230,200,.5);--gold:#FFB547;
-  --pos:#7DF0D4;--neg:#FF8A65;
+  --fg:#E9F7F4;--fg2:#B9DDD6;--muted:#A3D0C9;--faint:#5A8F8A;
+  --accent:#FFB547;--accent2:#5EE6C8;--accent-ink:#2A1900;--band:rgba(94,230,200,.14);--band-edge:rgba(94,230,200,.5);--gold:#FFC266;--sun:.13;
+  --pos:#7DF0D4;--neg:#FFAD94;--bad:#FFAD94;--ok:#4FD970;
   background:#0B3236;color-scheme:dark;
 }
 /* the deep: lighter near the surface, darker further down (one opaque background: nothing to blend while scrolling) */
@@ -1037,7 +1047,7 @@ html.m3d body{background:linear-gradient(180deg,#13545A 0,#0F4448 900px,#0D3A3E 
 /* light from the surface: slow sheets of light and drifting motes over the top of the page, behind everything (transform-only
    motion; it scrolls away with the page, so further down nothing moves) */
 html.m3d .fx3d{display:block;position:absolute;left:0;right:0;top:0;height:max(900px,110vh);z-index:-1;pointer-events:none;overflow:hidden;
-  background:radial-gradient(1100px 520px at 62% -12%,rgba(120,240,220,.26),transparent 62%),radial-gradient(700px 500px at 8% 70%,rgba(255,181,71,.07),transparent 60%);-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent)}
+  background:radial-gradient(1100px 520px at 62% -12%,rgba(120,240,220,var(--sun)),transparent 62%),radial-gradient(700px 500px at 8% 70%,rgba(255,181,71,.07),transparent 60%);-webkit-mask-image:linear-gradient(180deg,#000 55%,transparent);mask-image:linear-gradient(180deg,#000 55%,transparent)}
 html.m3d .fx3d i{position:absolute;display:block;will-change:transform}
 html.m3d .fx3d i:nth-child(1){inset:-20% -15% 0;transform-origin:50% 0;background:repeating-linear-gradient(100deg,transparent 0 6%,rgba(160,255,235,.035) 7.5%,rgba(160,255,235,.07) 9%,rgba(160,255,235,.035) 10.5%,transparent 12% 19%),repeating-linear-gradient(80deg,transparent 0 9%,rgba(255,220,160,.025) 10.5%,rgba(255,220,160,.045) 11.5%,rgba(255,220,160,.025) 12.5%,transparent 14% 23%);animation:rays3 16s ease-in-out infinite alternate}
 html.m3d .fx3d i:nth-child(2){left:0;right:0;top:0;height:calc(100% + 340px);background-image:radial-gradient(1.5px 1.5px at 20% 30%,rgba(200,255,240,.5),transparent),radial-gradient(1px 1px at 70% 60%,rgba(200,255,240,.4),transparent),radial-gradient(1.2px 1.2px at 40% 80%,rgba(255,220,160,.35),transparent),radial-gradient(1px 1px at 85% 20%,rgba(200,255,240,.4),transparent);background-size:340px 340px;animation:drift3 40s linear infinite}
@@ -1068,7 +1078,7 @@ html.m3d .mc.self.chs{box-shadow:inset 3px 0 0 var(--cc),inset 0 0 0 1px rgba(25
 html.m3d .mc.self{border-color:var(--accent)}
 html.m3d .mc.end{background:transparent}
 html.m3d .sim .mc{background:linear-gradient(170deg,#185B5F,#124F53)}
-html.m3d .tab[aria-selected="true"] .tp{background:rgba(255,181,71,.16)}
+html.m3d .tab[aria-selected="true"] .tp{background:rgba(255,181,71,.11)}
 html.m3d .tog[aria-checked="true"]{border-color:rgba(94,230,200,.55)}
 html.m3d .tog[aria-checked="true"] .knob,html.m3d .stt[aria-checked="true"] .tk{background:#5EE6C8}
 html.m3d .stt[aria-checked="true"] b{color:#5EE6C8}
@@ -1111,6 +1121,10 @@ html.m3d .liq:not(.still) .pz-c>svg path,html.m3d .pz-bars:not(.still) .pz-c>svg
 html.m3d .wi.g,html.m3d .mc.dc .k.g,html.m3d .mc-rel.g0,html.m3d .fm-t .up,html.m3d .chip.p-steady{color:#5EE6C8}
 html.m3d .chip.p-steady{border-color:rgba(94,230,200,.55)}
 html.m3d .g-cheap{--gc:#5EE6C8}
+html.m3d .g-normal{--gc:#A8CCFF}
+/* v0.7.9: small text under the surface light (the bar below the header) and on a chart's edge buttons: AA contrast */
+html.m3d .subhead{--muted:var(--fg2);--neg:#FFC9B6}
+html.m3d .pz-edge{color:var(--gold)}
 /* v060-css */
 /* v0.6.0 (the owner, 15 Nov 2026): every tier on; while they build up, a chip waits dim until its layer grows in */
 .mgc.fl-wait{opacity:.42}
@@ -1603,7 +1617,7 @@ body.solo #xn,body.solo #xn-i{display:none!important}
 #refresh[data-s="late"]{color:var(--warn)}#refresh[data-s="late"] .rf-tr{stroke:color-mix(in srgb,var(--warn) 55%,transparent)}
 #refresh.spin svg{animation:none}
 #refresh.spin .rf-ic{animation:spin .9s linear infinite}
-.rf-t{display:none;font:600 11px/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:.02em;color:var(--fg2);white-space:nowrap;min-width:4.4ch;text-align:left}
+.rf-t{display:none;font:600 11px/1 var(--mono);font-variant-numeric:tabular-nums;letter-spacing:.02em;color:var(--fg2);white-space:nowrap;min-width:5ch;text-align:left}
 #refresh[data-s="busy"] .rf-t,#refresh[data-s="due"] .rf-t{color:var(--fg)}
 #refresh[data-s="late"] .rf-t{color:var(--warn)}#refresh[data-s="done"] .rf-t{color:var(--pos)}#refresh[data-s="fail"] .rf-t{color:var(--neg)}
 @media (min-width:860px){
@@ -1905,10 +1919,341 @@ a.tkl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 <div class="ctip" id="ctip" role="tooltip" hidden></div>
 <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 
+<script type="text/plain" id="lps-3d">
+// v0.7.9: the 3D look's depth layer, run by the page (d3Load) only when 3D shows. It hands back start, stop and mark.
+window.__lps3d = (K) => {
+'use strict';
+const { $, $$, D3, D3_HOSTS, PZ, PZA, S, D, H, clamp, isNum, reduced } = K;
+// the depth layer: one canvas per bar chart, drawn after the chart's own drawing changes (a redraw, a drag, a new pool)
+const D3_COL = { '#16C784': '#5EE6C8', '#3A4452': '#2E6E6C', '#E8B84A': '#FFB547' }; // the 2D colours as 3D shows them
+const D3_RISE = 600; // ms: the towers rise with the bars (the same curve as the CSS)
+const d3Ease = (() => { // cubic-bezier(.2,.9,.3,1.12)
+  const B = (t, a, b) => 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
+  return (u) => { if (u <= 0) return 0; if (u >= 1) return 1; let lo = 0, hi = 1, t = u; for (let i = 0; i < 18; i++) { t = (lo + hi) / 2; if (B(t, 0.2, 0.3) < u) lo = t; else hi = t; } return B(t, 0.9, 1.12); };
+})();
+const D3_RGB = new Map();
+function d3Rgb(c) {
+  let v = D3_RGB.get(c);
+  if (!v) { const m = /^#([0-9a-f]{6})$/i.exec(c || ''); v = m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : [94, 230, 200]; D3_RGB.set(c, v); }
+  return v;
+}
+const d3Rgba = (c, k, mixW, a) => { const [r, g, b] = d3Rgb(c), f = (v) => Math.round(Math.min(255, v * k + (255 - v * k) * mixW)); return `rgba(${f(r)},${f(g)},${f(b)},${a.toFixed(3)})`; };
+function d3Start() {
+  if (D3.on) return;
+  D3.on = true;
+  D3.ro = new ResizeObserver((es) => d3Many(es.map((e) => e.target)));
+  D3.io = typeof IntersectionObserver === 'function' ? new IntersectionObserver((es) => {
+    const now = [];
+    for (const e of es) {
+      if (e.isIntersecting) { D3.off.delete(e.target); if (D3.dirty.has(e.target)) { D3.dirty.delete(e.target); now.push(e.target); } } else D3.off.add(e.target);
+    }
+    if (now.length) d3Many(now);
+  }) : null;
+  D3.mo = new MutationObserver(d3Muts);
+  D3.mo.observe(document.body, { childList: true, subtree: true });
+  const fx = $('.fx3d');
+  if (fx && typeof IntersectionObserver === 'function') { D3.fio = new IntersectionObserver((es) => { const e = es[es.length - 1]; document.documentElement.classList.toggle('d3-deep', !e.isIntersecting); }); D3.fio.observe(fx); }
+  d3Many($$(D3_HOSTS), true);
+}
+function d3Stop() {
+  if (!D3.on) return;
+  D3.on = false;
+  D3.mo.disconnect(); D3.ro.disconnect(); if (D3.io) D3.io.disconnect(); if (D3.fio) D3.fio.disconnect();
+  D3.fio = null; document.documentElement.classList.remove('d3-deep', 'd3-busy');
+  D3.mo = D3.ro = D3.io = null; D3.mark = null; D3.rise.clear(); D3.wait.clear(); D3.off = new WeakSet(); D3.dirty = new WeakSet();
+  if (D3.raf) cancelAnimationFrame(D3.raf);
+  D3.raf = 0;
+  for (const c of $$('canvas.d3c')) { c.width = 0; c.height = 0; c.remove(); }
+}
+function d3Muts(recs) {
+  const hs = new Set(), own = (n) => n.nodeType === 1 && (n.classList.contains('d3c') || n.classList.contains('pz-cur'));
+  for (const r of recs) {
+    const t = r.target;
+    if (!t || t.nodeType !== 1) continue;
+    if (t.matches(D3_HOSTS)) { if (![...r.addedNodes, ...r.removedNodes].every(own)) hs.add(t); continue; }
+    const h = t.closest(D3_HOSTS);
+    if (h) { hs.add(h); continue; } // its drawing changed (a drag, a zoom, the flash)
+    for (const n of r.removedNodes) { // a chart re-rendered or gone: let go of it and its pixels (a refresh every minute must not pile them up)
+      if (n.nodeType !== 1 || !n.firstElementChild) continue;
+      for (const x of n.matches(D3_HOSTS) ? [n] : n.querySelectorAll(D3_HOSTS)) d3Drop(x);
+    }
+    for (const n of r.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.matches(D3_HOSTS)) hs.add(n); else if (n.firstElementChild) for (const x of n.querySelectorAll(D3_HOSTS)) hs.add(x);
+    }
+  }
+  if (hs.size) d3Many([...hs]);
+}
+function d3Drop(h) {
+  if (h.isConnected) return;
+  const c = h.querySelector(':scope > canvas.d3c');
+  if (c) { c.width = 0; c.height = 0; c.__m = null; }
+  if (D3.ro) D3.ro.unobserve(h);
+  if (D3.io) D3.io.unobserve(h);
+  D3.rise.delete(h);
+  if (D3.mark && D3.mark.h === h) D3.mark = null;
+}
+// a chart that is being dragged, pinched, coasting or stepping, playing the competition flash, or whose panel is still
+// sliding in shows its flat drawing alone (each frame costs what 2D's does); its depth comes back the moment it rests
+const d3Sliding = (h) => { const c = h.closest('.sheet-card'); return !!c && c.getAnimations().some((a) => a.playState === 'running' || a.pending); };
+const d3Moving = (h) => h.classList.contains('dragging') || !!PZA[h.dataset.pz] || (!!K.pin() && K.pin().host === h) || (!!S.fl && h.dataset.pz === (S.fl.cid || 'liq-detail')) || (!!S.mgT && h.dataset.pz === S.mgT.cid) || d3Sliding(h);
+// all reads first, then all writes: one layout for any number of charts
+function d3Many(hosts, initial = false) {
+  if (!D3.on) return;
+  const ms = [];
+  for (const h of hosts) {
+    if (!h.isConnected || !h.matches(D3_HOSTS)) continue;
+    const c = h.querySelector(':scope > canvas.d3c');
+    if (d3Moving(h)) { if (c && !c.classList.contains('mv')) c.classList.add('mv'); d3Rest(h); continue; }
+    if (D3.off.has(h) && c) { D3.dirty.add(h); continue; } // off screen: drawn when it shows
+    ms.push(d3Model(h));
+  }
+  for (const m of ms) d3Paint(m, initial);
+}
+function d3Rest(h) { // once it stops moving: drawn again
+  if (D3.wait.has(h)) return;
+  D3.wait.add(h);
+  const tick = () => {
+    if (!D3.on || !h.isConnected) { D3.wait.delete(h); return; }
+    if (d3Moving(h)) { requestAnimationFrame(tick); return; }
+    D3.wait.delete(h); d3Many([h]);
+  };
+  requestAnimationFrame(tick);
+}
+// where the price stood at this hour on each of the last 14 days (history.json h, else d), as log moves from the newest row
+function d3Trail(p) {
+  const hp = p && S.hist && S.hist.pools && S.hist.pools[p.id];
+  if (!hp) return [];
+  if (D3.trail && D3.trail.p === p && D3.trail.hp === hp) return D3.trail.v;
+  const pick = (rows) => (Array.isArray(rows) ? rows.filter((r) => Array.isArray(r) && isNum(r[0]) && isNum(r[1]) && r[1] > 0) : []);
+  let rows = pick(hp.h);
+  if (rows.length < 26) rows = pick(hp.d);
+  const v = [];
+  if (rows.length >= 2) {
+    const last = rows[rows.length - 1];
+    for (let k = 1, j = rows.length - 1; k <= 14; k++) {
+      const t = last[0] - k * D;
+      while (j > 0 && Math.abs(rows[j - 1][0] - t) <= Math.abs(rows[j][0] - t)) j--;
+      if (Math.abs(rows[j][0] - t) > 6 * H) break; // before the first row: the floor's rows end there
+      const o = Math.log(rows[j][1] / last[1]);
+      v.push(Math.abs(o) < 4 ? o : null);
+    }
+  }
+  D3.trail = { p, hp, v };
+  return v;
+}
+function d3Model(h) {
+  const hr = h.getBoundingClientRect(), m = { h, w: hr.width, ht: hr.height, empty: true, vis: hr.bottom > 0 && hr.top < innerHeight && hr.right > 0 && hr.left < innerWidth };
+  const svg = h.querySelector(':scope > .pz-c > svg'), vb = svg && svg.viewBox && svg.viewBox.baseVal;
+  if (!svg || !vb || !vb.width || !vb.height || hr.width < 2 || hr.height < 2) return m;
+  const sr = svg.getBoundingClientRect();
+  if (sr.width < 2 || sr.height < 2) return m;
+  const L = sr.left - hr.left, T = sr.top - hr.top, W = sr.width, Hs = sr.height, sx = W / vb.width, sy = Hs / vb.height;
+  const liq = h.classList.contains('liq'), segs = [];
+  if (liq) {
+    for (const el of svg.querySelectorAll(':scope > path')) {
+      const f = el.getAttribute('fill');
+      if (!(f === '#16C784' || f === '#3A4452' || el.classList.contains('mg'))) continue;
+      const col = D3_COL[f] || f, a = el.hasAttribute('fill-opacity') ? +el.getAttribute('fill-opacity') : 1;
+      for (const q of (el.getAttribute('d') || '').matchAll(/M(-?[\d.]+) (-?[\d.]+)v(-?[\d.]+)h([\d.]+)v/g)) {
+        const x0 = L + (+q[1] - vb.x) * sx, yb = T + (+q[2] - vb.y) * sy, hh = -q[3] * sy, ww = +q[4] * sx;
+        if (hh > 0.05 && ww > 0.05) segs.push({ x0, x1: x0 + ww, yb, yt: yb - hh, col, a });
+      }
+    }
+  } else {
+    for (const el of svg.querySelectorAll(':scope > rect')) {
+      const f = el.getAttribute('fill') || '';
+      if (el.classList.contains('unread') || f.startsWith('url(#nr')) continue; // unread: a hatch, never a tower
+      const uc = f.startsWith('url('), c0 = uc ? el.getAttribute('stroke') : f;
+      if (!c0 || c0[0] !== '#') continue;
+      const x0 = L + (+el.getAttribute('x') - vb.x) * sx, yt = T + (+el.getAttribute('y') - vb.y) * sy, ww = +el.getAttribute('width') * sx, hh = +el.getAttribute('height') * sy;
+      if (!(hh > 0.05 && ww > 0.05)) continue;
+      segs.push({ x0, x1: x0 + ww, yb: yt + hh, yt, col: D3_COL[c0] || c0, a: uc ? 0.6 : el.hasAttribute('fill-opacity') ? +el.getAttribute('fill-opacity') : 1 });
+    }
+  }
+  const byX = new Map(); // the pieces of one stack (the pair's pools, a stacked day) make one tower
+  for (const s of segs) { const k = Math.round(s.x0 * 4); let t = byX.get(k); if (!t) byX.set(k, (t = { x0: s.x0, x1: s.x1, segs: [] })); t.segs.push(s); }
+  const towers = [...byX.values()];
+  for (const t of towers) { t.segs.sort((a, b) => b.yb - a.yb); t.yb = t.segs[0].yb; t.cx = (t.x0 + t.x1) / 2; }
+  Object.assign(m, { empty: false, liq, L, T, W, Hs, towers });
+  const P = PZ[h.dataset.pz];
+  if (liq && P && P.kind === 'liq' && P.vw) {
+    const [v0, v1] = P.vw(), r = P.w && isNum(P.w.range) ? P.w.range : null;
+    m.X = (o) => L + ((o - v0) / (v1 - v0)) * W;
+    m.r = r; m.trail = d3Trail(P.p);
+    // the chart's own labels (on top of the canvas): the floor's label keeps clear of them
+    m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint, :scope > .pz-edge', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
+    // v0.5.1: and of its lines (the price now, the walls: thin bars the whole height), which are drawn over it
+    for (const e of svg.querySelectorAll(':scope > rect')) {
+      const rx = +e.getAttribute('x'), ry = +e.getAttribute('y'), rw = +e.getAttribute('width'), rh = +e.getAttribute('height');
+      if (rw > 0 && rw <= 2 && rh >= vb.height / 2) { const x0 = L + (rx - vb.x) * sx; m.avoid.push([x0 - 2, T + (ry - vb.y) * sy, x0 + rw * sx + 2, T + (ry + rh - vb.y) * sy]); }
+    }
+  }
+  return m;
+}
+function d3Paint(m, initial) {
+  const h = m.h;
+  let c = h.querySelector(':scope > canvas.d3c'), fresh = false;
+  if (!c) {
+    c = document.createElement('canvas'); c.className = 'd3c'; c.setAttribute('aria-hidden', 'true');
+    h.prepend(c); fresh = true;
+    D3.ro.observe(h); if (D3.io) D3.io.observe(h);
+  }
+  if (!m.vis && !m.empty) { D3.off.add(h); D3.dirty.add(h); return; } // a new chart below the fold: drawn when it scrolls into view
+  const dpr = Math.min(2, devicePixelRatio || 1), cw = Math.max(1, Math.round(m.w * dpr)), ch = Math.max(1, Math.round(m.ht * dpr)); // never past 2× (a phone's 3×: a third of the pixels)
+  if (c.width !== cw) c.width = cw;
+  if (c.height !== ch) c.height = ch;
+  m.dpr = dpr; c.__m = m;
+  if (c.classList.contains('mv')) c.classList.remove('mv');
+  if (fresh && !initial && m.vis && !h.classList.contains('still') && !reduced() && !document.hidden) { D3.rise.set(h, performance.now()); c.__rise = D3_RISE; d3Loop(); } // a new chart on screen: its towers rise with its bars
+  d3Render(c, m, d3K(h));
+}
+const d3K = (h) => { const t0 = D3.rise.get(h); return t0 == null ? 1 : d3Ease((performance.now() - t0) / D3_RISE); };
+function d3Loop() {
+  if (D3.raf) return;
+  const step = () => {
+    D3.raf = 0;
+    const now = performance.now();
+    for (const [h, t0] of [...D3.rise]) {
+      const done = now - t0 >= D3_RISE, c = h.isConnected && h.querySelector(':scope > canvas.d3c');
+      if (done || !c) D3.rise.delete(h);
+      if (c && c.__m) d3Render(c, c.__m, done ? 1 : d3Ease((now - t0) / D3_RISE));
+    }
+    if (D3.rise.size) D3.raf = requestAnimationFrame(step);
+  };
+  D3.raf = requestAnimationFrame(step);
+}
+function d3Mark(h, x) { // the bar under the chart's note: lit and out of the fog (h null: none)
+  if (!D3.on) return;
+  const old = D3.mark && D3.mark.h;
+  D3.mark = h ? { h, x } : null;
+  for (const k of new Set([old, h])) {
+    const c = k && k.isConnected && k.querySelector(':scope > canvas.d3c');
+    if (c && c.__m) d3Render(c, c.__m, d3K(k));
+  }
+}
+function d3Render(c, m, k = 1) {
+  const x = c.getContext('2d'), info = { kind: m.liq ? 'liq' : 'bars', towers: 0, rows: 0, trail: 0, hl: null, fog: null, dpr: m.dpr, k };
+  c.__d3 = info;
+  if (!x) return;
+  x.setTransform(m.dpr, 0, 0, m.dpr, 0, 0);
+  x.clearRect(0, 0, m.w, m.ht);
+  if (m.empty) return;
+  const { L, T, W, Hs, towers } = m, base = T + Hs, liq = m.liq;
+  const VP = liq ? [L + W * 0.56, T - Hs * 0.62] : [L + W * 0.62, T - Hs * 1.05], gT = liq ? 0.075 : 0.055;
+  const pr = (px, py, g) => [px + (VP[0] - px) * g, py + (VP[1] - py) * g];
+  const poly = (pts) => { x.beginPath(); x.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) x.lineTo(pts[i][0], pts[i][1]); x.closePath(); };
+  const line = (a, b) => { x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); };
+  x.save();
+  x.beginPath(); x.rect(L, 0, W, m.ht); x.clip(); // nothing outside the plot's own width (the edge buttons keep theirs)
+  // the floor
+  if (liq) {
+    const R = 14, zT = gT / (1 - gT), zM = 1.15, gk = (j) => { const z = zT + (j / R) * (zM - zT); return z / (1 + z); }, gR = gk(R);
+    x.lineWidth = 1;
+    for (let j = R; j >= 1; j--) { x.strokeStyle = `rgba(126,240,214,${(0.04 + 0.16 * (1 - j / R)).toFixed(3)})`; line(pr(L, base, gk(j)), pr(L + W, base, gk(j))); }
+    x.strokeStyle = 'rgba(126,240,214,.10)';
+    for (let i = 0; i <= 8; i++) { const px = L + (W * i) / 8; line([px, base], pr(px, base, gR)); }
+    info.rows = R;
+    if (m.X && m.r != null) { // the suggested range: a lit lane into the deep
+      const a = clamp(m.X(-m.r), L - W, L + 2 * W), b = clamp(m.X(m.r), L - W, L + 2 * W);
+      if (b > a) { poly([[a, base], [b, base], pr(b, base, gR), pr(a, base, gR)]); x.fillStyle = 'rgba(94,230,200,.075)'; x.fill(); }
+    }
+    if (m.X) {
+      const X0 = m.X(0);
+      if (X0 >= L && X0 <= L + W) { // the price: a sheet of light into the deep
+        poly([[X0, T], [X0, base], pr(X0, base, gR), pr(X0, T, gR)]); x.fillStyle = 'rgba(255,181,71,.06)'; x.fill();
+        x.strokeStyle = 'rgba(255,181,71,.30)'; line(pr(X0, base, gR), pr(X0, T, gR));
+      }
+      const tr = m.trail || [], pts = [[pr(X0, base, 0), 0, 0]];
+      for (let j = 0; j < tr.length && tr[j] != null; j++) pts.push([pr(m.X(tr[j]), base, gk(j + 1)), tr[j], j + 1]);
+      if (pts.length > 1) { // where the price stood, day by day: inside the range mint, outside it coral
+        x.lineWidth = 1.3; x.strokeStyle = 'rgba(255,181,71,.55)';
+        x.beginPath(); x.moveTo(pts[0][0][0], pts[0][0][1]); for (const q of pts) x.lineTo(q[0][0], q[0][1]); x.stroke();
+        for (const [q, o, j] of pts) {
+          const inr = m.r == null || Math.abs(o) <= m.r + 1e-9, a = 1 - 0.65 * (j / R), rad = Math.max(1, 2.6 * (1 - gk(j)));
+          x.beginPath(); x.arc(q[0], q[1], rad, 0, 2 * Math.PI); x.fillStyle = inr ? `rgba(94,230,200,${a.toFixed(3)})` : `rgba(255,138,101,${a.toFixed(3)})`; x.fill();
+        }
+        const end = pts[pts.length - 1];
+        x.font = '600 9px ui-monospace,Menlo,Consolas,monospace'; x.textBaseline = 'bottom';
+        // v0.5.1: never under a bar either (the flat bar in front, or its side and top going into the deep), nor across
+        // the price line or a wall; on a narrow chart it may say just "14 d", by the oldest day or by the price line
+        const bars = towers.map((t) => { const yt = Math.min(...t.segs.map((s) => s.yt)), a = pr(t.x0, yt, gT), b = pr(t.x1, yt, gT); return [Math.min(t.x0, a[0]) - 1, Math.min(yt, a[1]) - 1, Math.max(t.x1, b[0]) + 1, t.yb]; });
+        const ly0 = end[0][1] - 2, keep = [...(m.avoid || []), ...bars];
+        const free = (lx, ly, tw) => lx >= L + 2 && lx + tw <= L + W - 2 && ly - 10 >= 0 && !keep.some((q) => lx < q[2] && lx + tw > q[0] && ly - 10 < q[3] && ly > q[1]);
+        let at = null;
+        for (const lab of [`${end[2]} d ago`, `${end[2]} d`]) {
+          const tw = x.measureText(lab).width;
+          for (const dy of [0, -11, 11]) {
+            for (const lx of [end[0][0] + 6, end[0][0] - 6 - tw, X0 + 5, X0 - 5 - tw]) if (free(lx, ly0 + dy, tw)) { at = [lx, ly0 + dy, tw, lab]; break; }
+            if (at) break;
+          }
+          if (at) break;
+        }
+        if (at) { x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(at[3], at[0], at[1]); }
+        info.lab = !!at;
+        info.labBox = at ? [+at[0].toFixed(1), +(at[1] - 10).toFixed(1), +(at[0] + at[2]).toFixed(1), +at[1].toFixed(1)] : null;
+        info.labTxt = at ? at[3] : null;
+        info.trail = pts.length - 1;
+      }
+    }
+  } else { // a quiet floor behind a time chart
+    x.lineWidth = 1;
+    [[0.09, 0.12], [0.18, 0.08], [0.3, 0.05]].forEach(([g, a]) => { x.strokeStyle = `rgba(126,240,214,${a})`; line(pr(L, base, g), pr(L + W, base, g)); });
+  }
+  // the towers, farthest from the eye first (outside in), each piece's side and the top
+  const mk = D3.mark && D3.mark.h === m.h ? D3.mark.x : null;
+  let hl = null;
+  if (mk != null) {
+    let best = Infinity;
+    for (const t of towers) { const d = mk >= t.x0 - 1 && mk <= t.x1 + 1 ? 0 : Math.min(Math.abs(mk - t.x0), Math.abs(mk - t.x1)); if (d < best) { best = d; hl = t; } }
+    if (best > 6) hl = null;
+  }
+  const fogAt = (t) => (liq || t === hl ? 1 : 0.28 + 0.72 * Math.pow(clamp((t.cx - L) / Math.max(1, W), 0, 1), 1.3)); // older days further into the fog
+  const dim = hl ? 0.72 : 1; // while a note is open the other towers step back
+  const order = towers.slice().sort((a, b) => Math.abs(b.cx - VP[0]) - Math.abs(a.cx - VP[0]));
+  let fmin = 1, fmax = 0;
+  for (const t of order) {
+    const f0 = fogAt(t), lit = t === hl, fa = lit ? 1 : f0 * dim, g = lit ? gT * 1.6 : gT; // the lit one stands out, a little deeper
+    fmin = Math.min(fmin, f0); fmax = Math.max(fmax, f0);
+    const right = t.cx < VP[0], top = t.segs.reduce((a, s) => (s.yt < a.yt ? s : a));
+    for (const s of t.segs) {
+      const y1 = t.yb - (t.yb - s.yt) * k, y0 = t.yb - (t.yb - s.yb) * k;
+      if (y0 - y1 < 0.05) continue;
+      const xe = right ? t.x1 : t.x0;
+      poly([[xe, y1], pr(xe, y1, g), pr(xe, y0, g), [xe, y0]]);
+      x.fillStyle = d3Rgba(s.col, lit ? 0.9 : 0.55, lit ? 0.12 : 0, lit ? Math.max(0.85, s.a) : s.a * fa); x.fill();
+    }
+    const yt = t.yb - (t.yb - top.yt) * k;
+    poly([[t.x0, yt], [t.x1, yt], pr(t.x1, yt, g), pr(t.x0, yt, g)]);
+    x.fillStyle = d3Rgba(top.col, 1, lit ? 0.55 : 0.3, lit ? 1 : top.a * fa); x.fill();
+    if (t.x1 - t.x0 >= 5 && fa > 0.5) { x.strokeStyle = `rgba(220,255,245,${(0.16 * fa).toFixed(3)})`; x.lineWidth = 0.8; line(pr(t.x0, yt, g), pr(t.x1, yt, g)); }
+    info.towers++;
+  }
+  info.fog = [+fmin.toFixed(3), +fmax.toFixed(3)];
+  if (hl) { // the bar under the note: a light column behind it and a glow round its face
+    const yt = hl.yb - (hl.yb - Math.min(...hl.segs.map((s) => s.yt))) * k, wd = hl.x1 - hl.x0;
+    const cg = x.createLinearGradient(0, T, 0, base); cg.addColorStop(0, 'rgba(255,214,150,0)'); cg.addColorStop(1, 'rgba(255,214,150,.16)');
+    x.fillStyle = cg; x.fillRect(hl.x0 - 4, T, wd + 8, base - T);
+    x.save(); x.shadowColor = 'rgba(255,214,150,.95)'; x.shadowBlur = 16; x.fillStyle = 'rgba(255,222,170,.7)';
+    x.fillRect(hl.x0 - 1.5, yt - 1.5, wd + 3, hl.yb - yt + 1.5); x.restore();
+    info.hl = { x0: +hl.x0.toFixed(1), x1: +hl.x1.toFixed(1), a: fogAt(hl) };
+  }
+  x.restore();
+}
+return { start: d3Start, stop: d3Stop, mark: d3Mark };
+};
+</script>
 <script>
 (() => {
 'use strict';
 const BUILD = 'v0.7.9';
+// v0.7.9: never inside another site's frame (a meta CSP can't say frame-ancestors). A framed page goes blank and never asks
+// for the passphrase; only the dashboard's own full view (same origin, ?full=1) may frame it.
+const FRAMED = (() => {
+  if (window.top === window.self) return false;
+  try { return !(window.top.location.origin === location.origin && new URLSearchParams(location.search).get('full') === '1'); } catch (e) { return true; }
+})();
+if (FRAMED) { document.title = ''; document.body.replaceChildren(); return; }
 // the version, shown small at the top and on the lock screen (the owner can tell at a glance which one runs)
 document.querySelectorAll('#ver, .ver-t').forEach((e) => { e.textContent = BUILD; });
 // iOS Safari keeps a page's zoom (a pinch, or a tap into a small field in an older version) and opens it zoomed in
@@ -2664,7 +3009,12 @@ let rmsgT = 0;
 
 // ---------- unlock / lock ----------
 function lockMsg(t, err) { const m = $('#lock-msg'); m.textContent = t || ''; m.className = 'lock-msg' + (err ? ' err' : ''); }
-function showLock() { popClose(); $('#mstrip').hidden = true; $('#lock-note').hidden = true; $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#qfind').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
+let settleT = 0;
+function pageSettle(on) { // v0.7.9: the footer waits (hidden, its space kept) while the page changes over
+  clearTimeout(settleT); document.documentElement.classList.toggle('settle', on);
+  if (on) settleT = setTimeout(() => pageSettle(false), 15000);
+}
+function showLock() { pageSettle(false); popClose(); $('#mstrip').hidden = true; $('#lock-note').hidden = true; $('#totop').classList.remove('on'); $('#lockscreen').hidden = false; $('#app').hidden = true; $('#winseg').hidden = true; $('#refresh').hidden = true; $('#qfind').hidden = true; $('#refresh-msg').hidden = true; $('#lockbtn').hidden = true; setTimeout(() => { try { $('#pass').focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 0); }
 async function onUnlock(ev) {
   ev.preventDefault();
   const input = $('#pass'), btn = $('#unlock-btn'), pass = input.value;
@@ -2704,6 +3054,7 @@ async function onUnlock(ev) {
   } finally { btn.disabled = false; }
 }
 async function unlocked() {
+  pageSettle(true);
   $('#lockscreen').hidden = true; $('#gend').hidden = true;
   $('#lockbtn').hidden = false; $('#lock-note').hidden = false;
   applyRole();
@@ -2759,6 +3110,7 @@ async function lockDevice(ended = false) { // ended: a guest whose access ended 
   renderFresh(); renderBanner();
 }
 function showLoadError(e) {
+  pageSettle(false);
   $('#app').hidden = true; $('#winseg').hidden = true;
   $('#loaderr').hidden = false;
   $('#loaderr-msg').textContent = e.kind === 'key' ? `Unlocked, but ${e.message}. Nothing is shown.`
@@ -2832,6 +3184,7 @@ function renderAll() {
   if (!SOLO) store.set('lps.lastVisit', String(Date.now())); // a chart window is not a visit
   seenSetup();
   if (SOLO && !S.soloReady) { soloSetup(); S.soloReady = true; }
+  if (document.documentElement.classList.contains('m3d') && !D3X && d3Load()) D3X.start(); // v0.7.9: 3D about to show its charts
   ensureWin();
   $('#winseg').hidden = false; $('#refresh').hidden = false; $('#qfind').hidden = !!SOLO;
   $('#app').hidden = false; $('#loaderr').hidden = true; $('#lockscreen').hidden = true; fitZoom(); // a tap into the passphrase field may have zoomed in
@@ -2850,7 +3203,7 @@ function renderAll() {
   if (S.detail) renderDetail();
   if (S.pair) renderPair();
   if (SOLO) isolate();
-  S.rendered = true;
+  S.rendered = true; pageSettle(false);
   seenSave(); armNext();
   if (!$('#why-legend').innerHTML) $('#why-legend').innerHTML = whyLegend();
   if (store.get('lps.legend') === '1') { $('#why-legend').hidden = false; $('#why-tog').setAttribute('aria-expanded', 'true'); }
@@ -7513,7 +7866,7 @@ function gWelcome(open) {
 }
 // the calm end: never an error, never a blank page
 function showEnded(info = {}) {
-  popClose();
+  pageSettle(false); popClose();
   for (const s of ['#mstrip', '#lock-note', '#lockscreen', '#app', '#winseg', '#refresh', '#qfind', '#refresh-msg', '#lockbtn', '#loaderr', '#gsheet', '#gwel']) $(s).hidden = true;
   $('#totop').classList.remove('on');
   $('#ge-h').textContent = info.why === 'soft' ? `Your ${info.d || 30}-day guest access has ended` : 'Your guest access has ended';
@@ -8185,7 +8538,7 @@ function viewSet(m, keep) {
   for (const b of $$('[data-act="view"]')) { const v = String(b.dataset.v === m); if (b.getAttribute('aria-pressed') !== v) b.setAttribute('aria-pressed', v); }
   const tc = $('meta[name="theme-color"]');
   if (tc) tc.setAttribute('content', on ? '#0F4246' : '#06080B');
-  if (on) d3Start(); else d3Stop();
+  if (on) d3On(); else d3Off();
 }
 function viewPress(el) { // a narrow phone shows one pill (the look you are in): a tap on it switches to the other
   const grp = el.closest('[role="group"]'), sib = grp && [...grp.querySelectorAll('[data-act="view"]')].find((b) => b !== el);
@@ -8193,323 +8546,34 @@ function viewPress(el) { // a narrow phone shows one pill (the look you are in):
   viewSet(alone ? sib.dataset.v : el.dataset.v, true);
   if (alone && sib.getClientRects().length) sib.focus({ preventScroll: true });
 }
-// the depth layer: one canvas per bar chart, drawn after the chart's own drawing changes (a redraw, a drag, a new pool)
+// v0.7.9 (idea e): the depth layer's code waits in #lps-3d (an inline block the CSP knows by its hash) and is read only when
+// 3D shows: on a chart while 3D is on, or once the lock screen is idle in 3D. A page in Classic 2D never parses it.
 const D3_HOSTS = '.pz.liq, .pz.pz-bars';
-const D3_COL = { '#16C784': '#5EE6C8', '#3A4452': '#2E6E6C', '#E8B84A': '#FFB547' }; // the 2D colours as 3D shows them
-const D3_RISE = 600; // ms: the towers rise with the bars (the same curve as the CSS)
-const d3Ease = (() => { // cubic-bezier(.2,.9,.3,1.12)
-  const B = (t, a, b) => 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
-  return (u) => { if (u <= 0) return 0; if (u >= 1) return 1; let lo = 0, hi = 1, t = u; for (let i = 0; i < 18; i++) { t = (lo + hi) / 2; if (B(t, 0.2, 0.3) < u) lo = t; else hi = t; } return B(t, 0.9, 1.12); };
-})();
-const D3_RGB = new Map();
-function d3Rgb(c) {
-  let v = D3_RGB.get(c);
-  if (!v) { const m = /^#([0-9a-f]{6})$/i.exec(c || ''); v = m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : [94, 230, 200]; D3_RGB.set(c, v); }
-  return v;
+let D3X = null;
+function d3Load() {
+  if (D3X) return D3X;
+  const src = document.getElementById('lps-3d');
+  if (!src) return null;
+  const s = document.createElement('script');
+  s.textContent = src.textContent;
+  document.head.appendChild(s); s.remove();
+  const f = window.__lps3d;
+  try { delete window.__lps3d; } catch (e) { window.__lps3d = undefined; }
+  if (typeof f !== 'function') return null; // refused: 3D keeps its colours, without the depth canvases
+  D3X = f({ $, $$, D3, D3_HOSTS, PZ, PZA, S, D, H, clamp, isNum, reduced, pin: () => PIN });
+  return D3X;
 }
-const d3Rgba = (c, k, mixW, a) => { const [r, g, b] = d3Rgb(c), f = (v) => Math.round(Math.min(255, v * k + (255 - v * k) * mixW)); return `rgba(${f(r)},${f(g)},${f(b)},${a.toFixed(3)})`; };
-function d3Start() {
-  if (D3.on) return;
-  D3.on = true;
-  D3.ro = new ResizeObserver((es) => d3Many(es.map((e) => e.target)));
-  D3.io = typeof IntersectionObserver === 'function' ? new IntersectionObserver((es) => {
-    const now = [];
-    for (const e of es) {
-      if (e.isIntersecting) { D3.off.delete(e.target); if (D3.dirty.has(e.target)) { D3.dirty.delete(e.target); now.push(e.target); } } else D3.off.add(e.target);
-    }
-    if (now.length) d3Many(now);
-  }) : null;
-  D3.mo = new MutationObserver(d3Muts);
-  D3.mo.observe(document.body, { childList: true, subtree: true });
-  const fx = $('.fx3d');
-  if (fx && typeof IntersectionObserver === 'function') { D3.fio = new IntersectionObserver((es) => { const e = es[es.length - 1]; document.documentElement.classList.toggle('d3-deep', !e.isIntersecting); }); D3.fio.observe(fx); }
-  d3Many($$(D3_HOSTS), true);
+let d3Idle0 = 0;
+function d3On() {
+  if (D3X || document.querySelector(D3_HOSTS)) { if (d3Load()) D3X.start(); return; }
+  if (d3Idle0) return;
+  const go = () => { d3Idle0 = 0; if (document.documentElement.classList.contains('m3d') && d3Load()) D3X.start(); };
+  d3Idle0 = 1;
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 2000 }); else setTimeout(go, 400);
 }
-function d3Stop() {
-  if (!D3.on) return;
-  D3.on = false;
-  D3.mo.disconnect(); D3.ro.disconnect(); if (D3.io) D3.io.disconnect(); if (D3.fio) D3.fio.disconnect();
-  D3.fio = null; document.documentElement.classList.remove('d3-deep', 'd3-busy');
-  D3.mo = D3.ro = D3.io = null; D3.mark = null; D3.rise.clear(); D3.wait.clear(); D3.off = new WeakSet(); D3.dirty = new WeakSet();
-  if (D3.raf) cancelAnimationFrame(D3.raf);
-  D3.raf = 0;
-  for (const c of $$('canvas.d3c')) { c.width = 0; c.height = 0; c.remove(); }
-}
-function d3Muts(recs) {
-  const hs = new Set(), own = (n) => n.nodeType === 1 && (n.classList.contains('d3c') || n.classList.contains('pz-cur'));
-  for (const r of recs) {
-    const t = r.target;
-    if (!t || t.nodeType !== 1) continue;
-    if (t.matches(D3_HOSTS)) { if (![...r.addedNodes, ...r.removedNodes].every(own)) hs.add(t); continue; }
-    const h = t.closest(D3_HOSTS);
-    if (h) { hs.add(h); continue; } // its drawing changed (a drag, a zoom, the flash)
-    for (const n of r.removedNodes) { // a chart re-rendered or gone: let go of it and its pixels (a refresh every minute must not pile them up)
-      if (n.nodeType !== 1 || !n.firstElementChild) continue;
-      for (const x of n.matches(D3_HOSTS) ? [n] : n.querySelectorAll(D3_HOSTS)) d3Drop(x);
-    }
-    for (const n of r.addedNodes) {
-      if (n.nodeType !== 1) continue;
-      if (n.matches(D3_HOSTS)) hs.add(n); else if (n.firstElementChild) for (const x of n.querySelectorAll(D3_HOSTS)) hs.add(x);
-    }
-  }
-  if (hs.size) d3Many([...hs]);
-}
-function d3Drop(h) {
-  if (h.isConnected) return;
-  const c = h.querySelector(':scope > canvas.d3c');
-  if (c) { c.width = 0; c.height = 0; c.__m = null; }
-  if (D3.ro) D3.ro.unobserve(h);
-  if (D3.io) D3.io.unobserve(h);
-  D3.rise.delete(h);
-  if (D3.mark && D3.mark.h === h) D3.mark = null;
-}
-// a chart that is being dragged, pinched, coasting or stepping, playing the competition flash, or whose panel is still
-// sliding in shows its flat drawing alone (each frame costs what 2D's does); its depth comes back the moment it rests
-const d3Sliding = (h) => { const c = h.closest('.sheet-card'); return !!c && c.getAnimations().some((a) => a.playState === 'running' || a.pending); };
-const d3Moving = (h) => h.classList.contains('dragging') || !!PZA[h.dataset.pz] || (!!PIN && PIN.host === h) || (!!S.fl && h.dataset.pz === (S.fl.cid || 'liq-detail')) || (!!S.mgT && h.dataset.pz === S.mgT.cid) || d3Sliding(h);
-// all reads first, then all writes: one layout for any number of charts
-function d3Many(hosts, initial = false) {
-  if (!D3.on) return;
-  const ms = [];
-  for (const h of hosts) {
-    if (!h.isConnected || !h.matches(D3_HOSTS)) continue;
-    const c = h.querySelector(':scope > canvas.d3c');
-    if (d3Moving(h)) { if (c && !c.classList.contains('mv')) c.classList.add('mv'); d3Rest(h); continue; }
-    if (D3.off.has(h) && c) { D3.dirty.add(h); continue; } // off screen: drawn when it shows
-    ms.push(d3Model(h));
-  }
-  for (const m of ms) d3Paint(m, initial);
-}
-function d3Rest(h) { // once it stops moving: drawn again
-  if (D3.wait.has(h)) return;
-  D3.wait.add(h);
-  const tick = () => {
-    if (!D3.on || !h.isConnected) { D3.wait.delete(h); return; }
-    if (d3Moving(h)) { requestAnimationFrame(tick); return; }
-    D3.wait.delete(h); d3Many([h]);
-  };
-  requestAnimationFrame(tick);
-}
-// where the price stood at this hour on each of the last 14 days (history.json h, else d), as log moves from the newest row
-function d3Trail(p) {
-  const hp = p && S.hist && S.hist.pools && S.hist.pools[p.id];
-  if (!hp) return [];
-  if (D3.trail && D3.trail.p === p && D3.trail.hp === hp) return D3.trail.v;
-  const pick = (rows) => (Array.isArray(rows) ? rows.filter((r) => Array.isArray(r) && isNum(r[0]) && isNum(r[1]) && r[1] > 0) : []);
-  let rows = pick(hp.h);
-  if (rows.length < 26) rows = pick(hp.d);
-  const v = [];
-  if (rows.length >= 2) {
-    const last = rows[rows.length - 1];
-    for (let k = 1, j = rows.length - 1; k <= 14; k++) {
-      const t = last[0] - k * D;
-      while (j > 0 && Math.abs(rows[j - 1][0] - t) <= Math.abs(rows[j][0] - t)) j--;
-      if (Math.abs(rows[j][0] - t) > 6 * H) break; // before the first row: the floor's rows end there
-      const o = Math.log(rows[j][1] / last[1]);
-      v.push(Math.abs(o) < 4 ? o : null);
-    }
-  }
-  D3.trail = { p, hp, v };
-  return v;
-}
-function d3Model(h) {
-  const hr = h.getBoundingClientRect(), m = { h, w: hr.width, ht: hr.height, empty: true, vis: hr.bottom > 0 && hr.top < innerHeight && hr.right > 0 && hr.left < innerWidth };
-  const svg = h.querySelector(':scope > .pz-c > svg'), vb = svg && svg.viewBox && svg.viewBox.baseVal;
-  if (!svg || !vb || !vb.width || !vb.height || hr.width < 2 || hr.height < 2) return m;
-  const sr = svg.getBoundingClientRect();
-  if (sr.width < 2 || sr.height < 2) return m;
-  const L = sr.left - hr.left, T = sr.top - hr.top, W = sr.width, Hs = sr.height, sx = W / vb.width, sy = Hs / vb.height;
-  const liq = h.classList.contains('liq'), segs = [];
-  if (liq) {
-    for (const el of svg.querySelectorAll(':scope > path')) {
-      const f = el.getAttribute('fill');
-      if (!(f === '#16C784' || f === '#3A4452' || el.classList.contains('mg'))) continue;
-      const col = D3_COL[f] || f, a = el.hasAttribute('fill-opacity') ? +el.getAttribute('fill-opacity') : 1;
-      for (const q of (el.getAttribute('d') || '').matchAll(/M(-?[\d.]+) (-?[\d.]+)v(-?[\d.]+)h([\d.]+)v/g)) {
-        const x0 = L + (+q[1] - vb.x) * sx, yb = T + (+q[2] - vb.y) * sy, hh = -q[3] * sy, ww = +q[4] * sx;
-        if (hh > 0.05 && ww > 0.05) segs.push({ x0, x1: x0 + ww, yb, yt: yb - hh, col, a });
-      }
-    }
-  } else {
-    for (const el of svg.querySelectorAll(':scope > rect')) {
-      const f = el.getAttribute('fill') || '';
-      if (el.classList.contains('unread') || f.startsWith('url(#nr')) continue; // unread: a hatch, never a tower
-      const uc = f.startsWith('url('), c0 = uc ? el.getAttribute('stroke') : f;
-      if (!c0 || c0[0] !== '#') continue;
-      const x0 = L + (+el.getAttribute('x') - vb.x) * sx, yt = T + (+el.getAttribute('y') - vb.y) * sy, ww = +el.getAttribute('width') * sx, hh = +el.getAttribute('height') * sy;
-      if (!(hh > 0.05 && ww > 0.05)) continue;
-      segs.push({ x0, x1: x0 + ww, yb: yt + hh, yt, col: D3_COL[c0] || c0, a: uc ? 0.6 : el.hasAttribute('fill-opacity') ? +el.getAttribute('fill-opacity') : 1 });
-    }
-  }
-  const byX = new Map(); // the pieces of one stack (the pair's pools, a stacked day) make one tower
-  for (const s of segs) { const k = Math.round(s.x0 * 4); let t = byX.get(k); if (!t) byX.set(k, (t = { x0: s.x0, x1: s.x1, segs: [] })); t.segs.push(s); }
-  const towers = [...byX.values()];
-  for (const t of towers) { t.segs.sort((a, b) => b.yb - a.yb); t.yb = t.segs[0].yb; t.cx = (t.x0 + t.x1) / 2; }
-  Object.assign(m, { empty: false, liq, L, T, W, Hs, towers });
-  const P = PZ[h.dataset.pz];
-  if (liq && P && P.kind === 'liq' && P.vw) {
-    const [v0, v1] = P.vw(), r = P.w && isNum(P.w.range) ? P.w.range : null;
-    m.X = (o) => L + ((o - v0) / (v1 - v0)) * W;
-    m.r = r; m.trail = d3Trail(P.p);
-    // the chart's own labels (on top of the canvas): the floor's label keeps clear of them
-    m.avoid = $$('.mlab, .cpill, .bylab, .frlab, .tick, .pz-hint, :scope > .pz-edge', h).map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0).map((q) => [q.left - hr.left - 3, q.top - hr.top - 3, q.right - hr.left + 3, q.bottom - hr.top + 3]);
-    // v0.5.1: and of its lines (the price now, the walls: thin bars the whole height), which are drawn over it
-    for (const e of svg.querySelectorAll(':scope > rect')) {
-      const rx = +e.getAttribute('x'), ry = +e.getAttribute('y'), rw = +e.getAttribute('width'), rh = +e.getAttribute('height');
-      if (rw > 0 && rw <= 2 && rh >= vb.height / 2) { const x0 = L + (rx - vb.x) * sx; m.avoid.push([x0 - 2, T + (ry - vb.y) * sy, x0 + rw * sx + 2, T + (ry + rh - vb.y) * sy]); }
-    }
-  }
-  return m;
-}
-function d3Paint(m, initial) {
-  const h = m.h;
-  let c = h.querySelector(':scope > canvas.d3c'), fresh = false;
-  if (!c) {
-    c = document.createElement('canvas'); c.className = 'd3c'; c.setAttribute('aria-hidden', 'true');
-    h.prepend(c); fresh = true;
-    D3.ro.observe(h); if (D3.io) D3.io.observe(h);
-  }
-  if (!m.vis && !m.empty) { D3.off.add(h); D3.dirty.add(h); return; } // a new chart below the fold: drawn when it scrolls into view
-  const dpr = Math.min(2, devicePixelRatio || 1), cw = Math.max(1, Math.round(m.w * dpr)), ch = Math.max(1, Math.round(m.ht * dpr)); // never past 2× (a phone's 3×: a third of the pixels)
-  if (c.width !== cw) c.width = cw;
-  if (c.height !== ch) c.height = ch;
-  m.dpr = dpr; c.__m = m;
-  if (c.classList.contains('mv')) c.classList.remove('mv');
-  if (fresh && !initial && m.vis && !h.classList.contains('still') && !reduced() && !document.hidden) { D3.rise.set(h, performance.now()); c.__rise = D3_RISE; d3Loop(); } // a new chart on screen: its towers rise with its bars
-  d3Render(c, m, d3K(h));
-}
-const d3K = (h) => { const t0 = D3.rise.get(h); return t0 == null ? 1 : d3Ease((performance.now() - t0) / D3_RISE); };
-function d3Loop() {
-  if (D3.raf) return;
-  const step = () => {
-    D3.raf = 0;
-    const now = performance.now();
-    for (const [h, t0] of [...D3.rise]) {
-      const done = now - t0 >= D3_RISE, c = h.isConnected && h.querySelector(':scope > canvas.d3c');
-      if (done || !c) D3.rise.delete(h);
-      if (c && c.__m) d3Render(c, c.__m, done ? 1 : d3Ease((now - t0) / D3_RISE));
-    }
-    if (D3.rise.size) D3.raf = requestAnimationFrame(step);
-  };
-  D3.raf = requestAnimationFrame(step);
-}
-function d3Mark(h, x) { // the bar under the chart's note: lit and out of the fog (h null: none)
-  if (!D3.on) return;
-  const old = D3.mark && D3.mark.h;
-  D3.mark = h ? { h, x } : null;
-  for (const k of new Set([old, h])) {
-    const c = k && k.isConnected && k.querySelector(':scope > canvas.d3c');
-    if (c && c.__m) d3Render(c, c.__m, d3K(k));
-  }
-}
-function d3Render(c, m, k = 1) {
-  const x = c.getContext('2d'), info = { kind: m.liq ? 'liq' : 'bars', towers: 0, rows: 0, trail: 0, hl: null, fog: null, dpr: m.dpr, k };
-  c.__d3 = info;
-  if (!x) return;
-  x.setTransform(m.dpr, 0, 0, m.dpr, 0, 0);
-  x.clearRect(0, 0, m.w, m.ht);
-  if (m.empty) return;
-  const { L, T, W, Hs, towers } = m, base = T + Hs, liq = m.liq;
-  const VP = liq ? [L + W * 0.56, T - Hs * 0.62] : [L + W * 0.62, T - Hs * 1.05], gT = liq ? 0.075 : 0.055;
-  const pr = (px, py, g) => [px + (VP[0] - px) * g, py + (VP[1] - py) * g];
-  const poly = (pts) => { x.beginPath(); x.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) x.lineTo(pts[i][0], pts[i][1]); x.closePath(); };
-  const line = (a, b) => { x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); x.stroke(); };
-  x.save();
-  x.beginPath(); x.rect(L, 0, W, m.ht); x.clip(); // nothing outside the plot's own width (the edge buttons keep theirs)
-  // the floor
-  if (liq) {
-    const R = 14, zT = gT / (1 - gT), zM = 1.15, gk = (j) => { const z = zT + (j / R) * (zM - zT); return z / (1 + z); }, gR = gk(R);
-    x.lineWidth = 1;
-    for (let j = R; j >= 1; j--) { x.strokeStyle = `rgba(126,240,214,${(0.04 + 0.16 * (1 - j / R)).toFixed(3)})`; line(pr(L, base, gk(j)), pr(L + W, base, gk(j))); }
-    x.strokeStyle = 'rgba(126,240,214,.10)';
-    for (let i = 0; i <= 8; i++) { const px = L + (W * i) / 8; line([px, base], pr(px, base, gR)); }
-    info.rows = R;
-    if (m.X && m.r != null) { // the suggested range: a lit lane into the deep
-      const a = clamp(m.X(-m.r), L - W, L + 2 * W), b = clamp(m.X(m.r), L - W, L + 2 * W);
-      if (b > a) { poly([[a, base], [b, base], pr(b, base, gR), pr(a, base, gR)]); x.fillStyle = 'rgba(94,230,200,.075)'; x.fill(); }
-    }
-    if (m.X) {
-      const X0 = m.X(0);
-      if (X0 >= L && X0 <= L + W) { // the price: a sheet of light into the deep
-        poly([[X0, T], [X0, base], pr(X0, base, gR), pr(X0, T, gR)]); x.fillStyle = 'rgba(255,181,71,.06)'; x.fill();
-        x.strokeStyle = 'rgba(255,181,71,.30)'; line(pr(X0, base, gR), pr(X0, T, gR));
-      }
-      const tr = m.trail || [], pts = [[pr(X0, base, 0), 0, 0]];
-      for (let j = 0; j < tr.length && tr[j] != null; j++) pts.push([pr(m.X(tr[j]), base, gk(j + 1)), tr[j], j + 1]);
-      if (pts.length > 1) { // where the price stood, day by day: inside the range mint, outside it coral
-        x.lineWidth = 1.3; x.strokeStyle = 'rgba(255,181,71,.55)';
-        x.beginPath(); x.moveTo(pts[0][0][0], pts[0][0][1]); for (const q of pts) x.lineTo(q[0][0], q[0][1]); x.stroke();
-        for (const [q, o, j] of pts) {
-          const inr = m.r == null || Math.abs(o) <= m.r + 1e-9, a = 1 - 0.65 * (j / R), rad = Math.max(1, 2.6 * (1 - gk(j)));
-          x.beginPath(); x.arc(q[0], q[1], rad, 0, 2 * Math.PI); x.fillStyle = inr ? `rgba(94,230,200,${a.toFixed(3)})` : `rgba(255,138,101,${a.toFixed(3)})`; x.fill();
-        }
-        const end = pts[pts.length - 1];
-        x.font = '600 9px ui-monospace,Menlo,Consolas,monospace'; x.textBaseline = 'bottom';
-        // v0.5.1: never under a bar either (the flat bar in front, or its side and top going into the deep), nor across
-        // the price line or a wall; on a narrow chart it may say just "14 d", by the oldest day or by the price line
-        const bars = towers.map((t) => { const yt = Math.min(...t.segs.map((s) => s.yt)), a = pr(t.x0, yt, gT), b = pr(t.x1, yt, gT); return [Math.min(t.x0, a[0]) - 1, Math.min(yt, a[1]) - 1, Math.max(t.x1, b[0]) + 1, t.yb]; });
-        const ly0 = end[0][1] - 2, keep = [...(m.avoid || []), ...bars];
-        const free = (lx, ly, tw) => lx >= L + 2 && lx + tw <= L + W - 2 && ly - 10 >= 0 && !keep.some((q) => lx < q[2] && lx + tw > q[0] && ly - 10 < q[3] && ly > q[1]);
-        let at = null;
-        for (const lab of [`${end[2]} d ago`, `${end[2]} d`]) {
-          const tw = x.measureText(lab).width;
-          for (const dy of [0, -11, 11]) {
-            for (const lx of [end[0][0] + 6, end[0][0] - 6 - tw, X0 + 5, X0 - 5 - tw]) if (free(lx, ly0 + dy, tw)) { at = [lx, ly0 + dy, tw, lab]; break; }
-            if (at) break;
-          }
-          if (at) break;
-        }
-        if (at) { x.fillStyle = 'rgba(185,221,214,.55)'; x.fillText(at[3], at[0], at[1]); }
-        info.lab = !!at;
-        info.labBox = at ? [+at[0].toFixed(1), +(at[1] - 10).toFixed(1), +(at[0] + at[2]).toFixed(1), +at[1].toFixed(1)] : null;
-        info.labTxt = at ? at[3] : null;
-        info.trail = pts.length - 1;
-      }
-    }
-  } else { // a quiet floor behind a time chart
-    x.lineWidth = 1;
-    [[0.09, 0.12], [0.18, 0.08], [0.3, 0.05]].forEach(([g, a]) => { x.strokeStyle = `rgba(126,240,214,${a})`; line(pr(L, base, g), pr(L + W, base, g)); });
-  }
-  // the towers, farthest from the eye first (outside in), each piece's side and the top
-  const mk = D3.mark && D3.mark.h === m.h ? D3.mark.x : null;
-  let hl = null;
-  if (mk != null) {
-    let best = Infinity;
-    for (const t of towers) { const d = mk >= t.x0 - 1 && mk <= t.x1 + 1 ? 0 : Math.min(Math.abs(mk - t.x0), Math.abs(mk - t.x1)); if (d < best) { best = d; hl = t; } }
-    if (best > 6) hl = null;
-  }
-  const fogAt = (t) => (liq || t === hl ? 1 : 0.28 + 0.72 * Math.pow(clamp((t.cx - L) / Math.max(1, W), 0, 1), 1.3)); // older days further into the fog
-  const dim = hl ? 0.72 : 1; // while a note is open the other towers step back
-  const order = towers.slice().sort((a, b) => Math.abs(b.cx - VP[0]) - Math.abs(a.cx - VP[0]));
-  let fmin = 1, fmax = 0;
-  for (const t of order) {
-    const f0 = fogAt(t), lit = t === hl, fa = lit ? 1 : f0 * dim, g = lit ? gT * 1.6 : gT; // the lit one stands out, a little deeper
-    fmin = Math.min(fmin, f0); fmax = Math.max(fmax, f0);
-    const right = t.cx < VP[0], top = t.segs.reduce((a, s) => (s.yt < a.yt ? s : a));
-    for (const s of t.segs) {
-      const y1 = t.yb - (t.yb - s.yt) * k, y0 = t.yb - (t.yb - s.yb) * k;
-      if (y0 - y1 < 0.05) continue;
-      const xe = right ? t.x1 : t.x0;
-      poly([[xe, y1], pr(xe, y1, g), pr(xe, y0, g), [xe, y0]]);
-      x.fillStyle = d3Rgba(s.col, lit ? 0.9 : 0.55, lit ? 0.12 : 0, lit ? Math.max(0.85, s.a) : s.a * fa); x.fill();
-    }
-    const yt = t.yb - (t.yb - top.yt) * k;
-    poly([[t.x0, yt], [t.x1, yt], pr(t.x1, yt, g), pr(t.x0, yt, g)]);
-    x.fillStyle = d3Rgba(top.col, 1, lit ? 0.55 : 0.3, lit ? 1 : top.a * fa); x.fill();
-    if (t.x1 - t.x0 >= 5 && fa > 0.5) { x.strokeStyle = `rgba(220,255,245,${(0.16 * fa).toFixed(3)})`; x.lineWidth = 0.8; line(pr(t.x0, yt, g), pr(t.x1, yt, g)); }
-    info.towers++;
-  }
-  info.fog = [+fmin.toFixed(3), +fmax.toFixed(3)];
-  if (hl) { // the bar under the note: a light column behind it and a glow round its face
-    const yt = hl.yb - (hl.yb - Math.min(...hl.segs.map((s) => s.yt))) * k, wd = hl.x1 - hl.x0;
-    const cg = x.createLinearGradient(0, T, 0, base); cg.addColorStop(0, 'rgba(255,214,150,0)'); cg.addColorStop(1, 'rgba(255,214,150,.16)');
-    x.fillStyle = cg; x.fillRect(hl.x0 - 4, T, wd + 8, base - T);
-    x.save(); x.shadowColor = 'rgba(255,214,150,.95)'; x.shadowBlur = 16; x.fillStyle = 'rgba(255,222,170,.7)';
-    x.fillRect(hl.x0 - 1.5, yt - 1.5, wd + 3, hl.yb - yt + 1.5); x.restore();
-    info.hl = { x0: +hl.x0.toFixed(1), x1: +hl.x1.toFixed(1), a: fogAt(hl) };
-  }
-  x.restore();
-}
+const d3Off = () => { if (D3X) D3X.stop(); };
+function d3Mark(h, x) { if (D3X) D3X.mark(h, x); }
+if (window.__lpsHooks) window.__lpsHooks.d3 = () => !!D3X; // the browser tests only: has the depth layer's code run
 document.addEventListener('visibilitychange', () => document.documentElement.classList.toggle('d3-hid', document.hidden));
 let d3Idle = 0;
 const d3Busy = () => { // a scroll, a drag, a key: the light holds still until 2.5 s after the last one (each frame then goes to the page)
