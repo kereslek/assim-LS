@@ -1039,7 +1039,7 @@ html.m3d{
   --line:#1F5D5F;--line2:#2A6C6D;--line3:#3B7F7D;--grid:#17575A;
   --fg:#E9F7F4;--fg2:#B9DDD6;--muted:#A3D0C9;--faint:#5A8F8A;
   --accent:#FFB547;--accent2:#5EE6C8;--accent-ink:#2A1900;--band:rgba(94,230,200,.14);--band-edge:rgba(94,230,200,.5);--gold:#FFC266;--sun:.13;
-  --pos:#7DF0D4;--neg:#FFAD94;--bad:#FFAD94;--ok:#4FD970;
+  --pos:#7DF0D4;--neg:#FFAD94;--ok:#4FD970;
   background:#0B3236;color-scheme:dark;
 }
 /* the deep: lighter near the surface, darker further down (one opaque background: nothing to blend while scrolling) */
@@ -1123,7 +1123,10 @@ html.m3d .chip.p-steady{border-color:rgba(94,230,200,.55)}
 html.m3d .g-cheap{--gc:#5EE6C8}
 html.m3d .g-normal{--gc:#A8CCFF}
 /* v0.7.9: small text under the surface light (the bar below the header) and on a chart's edge buttons: AA contrast */
-html.m3d .subhead{--muted:var(--fg2);--neg:#FFC9B6}
+html.m3d .subhead{--fg2:#C4E4DE;--muted:var(--fg2);--neg:#FFC9B6}
+/* the losses' text in the deep's coral (--bad stays the alarm's and the tiles' red) */
+html.m3d :is(.wi.r,.mc-rel.uv,.mc.dc .k.r,.mc.dc .nt.neg,.fm-t .dn,.aprchip .v.neg,.aprh-big .v.neg,.aprh-mini b.neg,.aprb.neg .apr-v,.aprm.neg){color:var(--neg)}
+html.m3d .g-expensive{--gc:var(--neg)}
 html.m3d .pz-edge{color:var(--gold)}
 /* v060-css */
 /* v0.6.0 (the owner, 15 Nov 2026): every tier on; while they build up, a chip waits dim until its layer grows in */
