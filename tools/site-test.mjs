@@ -6822,9 +6822,11 @@ const AA_SAMPLE = async ({ b64, items }) => {
     if (!it.fg) continue;
     const [l, t, w, h] = it.rect.map((v) => Math.round(v * k));
     const d = x.getImageData(l, t, Math.max(1, w), Math.max(1, h)).data;
-    let R = 0, G = 0, B = 0, n = 0;
-    for (let i = 0; i < d.length; i += 16) { R += d[i]; G += d[i + 1]; B += d[i + 2]; n++; }
-    const bg = { r: R / n, g: G / n, b: B / n }, a = it.fg.a * it.op;
+    // the ground is the median pixel by luminance: an icon or a neighbour's edge inside the text's box doesn't move it
+    const px = [];
+    for (let i = 0; i < d.length; i += 16) { const q = { r: d[i], g: d[i + 1], b: d[i + 2] }; q.l = lum(q); px.push(q); }
+    px.sort((u, v) => u.l - v.l);
+    const bg = px[Math.floor(px.length / 2)], a = it.fg.a * it.op;
     const fg = { r: it.fg.r * a + bg.r * (1 - a), g: it.fg.g * a + bg.g * (1 - a), b: it.fg.b * a + bg.b * (1 - a) };
     const L1 = lum(fg), L2 = lum(bg);
     res.push({ sel: it.sel, ratio: (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05), need: it.need });
