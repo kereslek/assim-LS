@@ -6807,7 +6807,7 @@ const AA_ITEMS = () => {
     if (op < 0.05) continue;
     const px = parseFloat(cs.fontSize), large = px >= 24 || (+cs.fontWeight >= 700 && px >= 18.66);
     const cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
-    out.push({ sel: el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + cls, fg: parse(cs.color), op, need: large ? 3 : 4.5, rect: [r.left, r.top, r.width, r.height] });
+    out.push({ sel: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + cls, t: n.nodeValue.trim().slice(0, 10), fg: parse(cs.color), op, need: large ? 3 : 4.5, rect: [r.left, r.top, r.width, r.height] });
   }
   return out;
 };
@@ -6829,7 +6829,7 @@ const AA_SAMPLE = async ({ b64, items }) => {
     const bg = px[Math.floor(px.length / 2)], a = it.fg.a * it.op;
     const fg = { r: it.fg.r * a + bg.r * (1 - a), g: it.fg.g * a + bg.g * (1 - a), b: it.fg.b * a + bg.b * (1 - a) };
     const L1 = lum(fg), L2 = lum(bg);
-    res.push({ sel: it.sel, ratio: (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05), need: it.need });
+    res.push({ sel: it.sel, t: it.t, bg: [bg.r, bg.g, bg.b].join(), fg: [it.fg.r, it.fg.g, it.fg.b].join(), y: Math.round(it.rect[1]), ratio: (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05), need: it.need });
   }
   return res;
 };
@@ -6848,7 +6848,7 @@ async function aaAudit(p, screens = 1) {
   const bad = all.filter((x) => x.ratio < x.need);
   const worst = all.reduce((m, x) => Math.min(m, x.ratio / x.need), Infinity);
   const sels = [...new Set(bad.map((x) => x.sel))];
-  return { n: all.length, bad: bad.length, sels, worst: +(worst * 4.5).toFixed(2), first: bad.sort((a, b) => a.ratio - b.ratio).slice(0, 3).map((x) => `${x.sel} ${x.ratio.toFixed(2)}`) };
+  return { n: all.length, bad: bad.length, sels, worst: +(worst * 4.5).toFixed(2), first: bad.sort((a, b) => a.ratio - b.ratio).slice(0, 3).map((x) => `${x.sel} "${x.t}" y${x.y} rgb(${x.fg}) on rgb(${x.bg}) ${x.ratio.toFixed(2)}`) };
 }
 // Layout shifts: each frame, every element of the bar, the line under it, the lock card and the footer that was drawn in
 // both frames and moved adds (the area it covers before and after) × (how far it went), as the browser's own CLS counts
