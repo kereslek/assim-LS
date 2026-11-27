@@ -21,6 +21,7 @@
 //                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
 //                                                    explainer (v0.7.6: the "How to read this" note on top: shows, hides, comes back, jumps to the scatter)
 //                                                    tokenlinks (v0.7.8: each token a link to its coin page, CoinMarketCap else CoinGecko; rows keep their tap)
+//                                                    why (the gem score's breakdown: "Why ?" by the score, the total = the score, each case, vs #1)
 //                                                    guest180 (v0.8.1: the shared guest password's end date and "Restart 180 days", owner only)
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
 //                                                    lazy3d (v0.7.9: the 3D look's code runs only when 3D shows; both ways; idle preload)
@@ -69,7 +70,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix,bottombar,holdx').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix,bottombar,holdx,why').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -2479,6 +2480,7 @@ async function testClicks(browser) {
       if (act === 'ext') good = /^https:\/\/(etherscan\.io|basescan\.org|app\.uniswap\.org|coinmarketcap\.com|www\.coingecko\.com)\//.test(await p.evaluate(() => (window.__opened || []).slice(-1)[0] || ''));
       if (act === 'why' || act === 'gas' || act === 'term') { good = await p.isVisible('#pop'); await p.keyboard.press('Escape'); await sleep(100); }
       if (act === 'fav') good = good && (await p.$$('#fav .mc')).length > 0;
+      if (act === 'gemwhy') { good = await p.isVisible('#gemwhy'); if (good) { done.add('gemwhy-x'); await p.click('#gemwhy-x'); await sleep(200); good = !(await p.isVisible('#gemwhy')); } } // the gem's why: its own group presses what is inside
       if (act === 'detail' || act === 'pair' || act === 'flash-open') { good = await p.isVisible('#sheet'); if (good) { done.add('close-detail'); await p.click('#sheet-close'); await sleep(200); good = !(await p.isVisible('#sheet')); } }
       if (act === 'bt-row') good = (await p.isVisible('#bt-replay')) && (await headingInView(p, '#bt-replay'));
       if (act === 'bt-close') good = !(await p.isVisible('#bt-replay'));
@@ -7396,10 +7398,229 @@ async function testHoldx(browser) {
 }
 // /v080-tests
 
+// ---------- "Why this pool?" (the owner's pick B + C, 23 Nov 2026): the gem score's breakdown ----------
+// Made-up fixtures (docs/DATA.md Window.gem.why): the total in the breakdown is the score shown by the ring; the four cases a
+// pool can be in read as such (a gem, a failed check, a safety check not run, a one-off day); the "vs #1" toggle shows the
+// same parts beside the window's #1 (or #2) and its median pool; "Why ?" opens from the best-find card and the pool panel
+// (a sheet on a phone, a panel on a laptop) and closes with ✕, Esc, Back and the dimmed background, focus going in and back
+// out; nothing overlaps or runs sideways; older data without the why shows no link; a guest sees it too.
+const WHY_LOOK = () => {
+  const sh = document.querySelector('#gemwhy'), card = document.querySelector('#gemwhy .gy-card');
+  if (!sh || sh.hidden || !card) return { open: false };
+  const r = card.getBoundingClientRect(), body = document.querySelector('#gemwhy-body'), q = (s) => document.querySelector('#gemwhy ' + s);
+  const x = q('#gemwhy-x').getBoundingClientRect(), ae = document.activeElement;
+  const out = [...card.querySelectorAll('*')].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && e.closest('.gy-body') && (b.left < r.left - 1 || b.right > r.right + 1); }).length;
+  return { open: true, w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), right: Math.round(innerWidth - r.right), top: Math.round(r.top), bottom: Math.round(innerHeight - r.bottom), vw: innerWidth, vh: innerHeight,
+    title: document.querySelector('#gemwhy-h').textContent, total: (q('[data-gytotal]') || {}).textContent, score: (q('[data-gyscore]') || {}).textContent,
+    expr: ((q('.gy-tot > span') || {}).textContent || '').replace(/\s+/g, ' '), verdict: (q('[data-verdict]') || {}).dataset?.verdict || null, vtext: (q('[data-verdict]') || {}).textContent || '',
+    chips: [...card.querySelectorAll('.gy-chip')].map((e) => e.textContent), pills: (q('[data-gates]') || {}).textContent || '',
+    parts: [...card.querySelectorAll('.gy-row[data-part]')].map((e) => ({ k: e.dataset.part, v: e.querySelector('[data-v]').textContent, why: (e.querySelector('p') || {}).textContent || '', dim: e.classList.contains('dim'), m: e.querySelector('.gy-m i').style.width })),
+    ded: [...card.querySelectorAll('.gy-row.ded')].map((e) => e.textContent), txt: body.innerText, close: [Math.round(x.width), Math.round(x.height)],
+    focus: !!ae && !!ae.closest('#gemwhy') ? ae.id || ae.dataset.act || ae.tagName : 'outside', hs: body.scrollWidth - body.clientWidth, out,
+    view: (q('[data-act="gemwhy-v"][aria-pressed="true"]') || {}).dataset?.v || null, vs: q('[data-gyvs]') ? [...card.querySelectorAll('[data-gyvs] .gy-cr[data-part]')].map((e) => e.querySelectorAll('.gy-cb').length) : null,
+    legend: (q('.gy-legend') || {}).textContent || '', modal: document.documentElement.classList.contains('modal-open') };
+};
+// the arithmetic the breakdown prints: "a + b + c + d − e = [n →] T"
+const whyAdds = (expr) => {
+  const m = /^([\d +]+?)(?: − (\d+))? = (?:(\d+) → )?(\d+)/.exec(expr.trim());
+  if (!m) return null;
+  const s = m[1].split('+').map((x) => +x.trim()).reduce((a, b) => a + b, 0) - (+m[2] || 0), net = Math.max(0, s);
+  return { net, total: +m[4], ok: m[3] ? +m[3] === net && +m[4] === 40 : net === +m[4] };
+};
+async function whyOpenFrom(p, scope) {
+  await p.evaluate((s) => { window.dispatchEvent(new WheelEvent('wheel')); const b = document.querySelector(`${s} [data-act="gemwhy"]`); b.scrollIntoView({ block: 'center' }); }, scope); await sleep(150);
+  await p.click(`${scope} [data-act="gemwhy"]`); await sleep(300);
+  return p.evaluate(WHY_LOOK);
+}
+const whyRing = (p, scope) => p.evaluate((s) => { const r = document.querySelector(`${s} .ring .rv`); return r ? r.textContent : null; }, scope);
+// WCAG AA inside the breakdown (aaAudit's sampling, kept to the card: the page under the dimmed background is not read)
+async function whyAA(p) {
+  const c = await p.evaluate(() => { const r = document.querySelector('#gemwhy .gy-body').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; });
+  // only the breakdown's own texts: the page under it is set invisible while they are listed (its ground is sampled as drawn)
+  const only = await p.addStyleTag({ content: 'body > *:not(#gemwhy){visibility:hidden!important}' });
+  const items = (await p.evaluate(AA_ITEMS)).filter((it) => it.rect[0] >= c[0] - 1 && it.rect[1] >= c[1] - 1 && it.rect[0] + it.rect[2] <= c[2] + 1 && it.rect[1] + it.rect[3] <= c[3] + 1);
+  await only.evaluate((e) => e.remove());
+  const h = await p.addStyleTag({ content: '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;caret-color:transparent!important}' });
+  await frames(p, 2);
+  const b64 = (await p.screenshot()).toString('base64');
+  await h.evaluate((e) => e.remove()); await frames(p, 1);
+  const all = await p.evaluate(AA_SAMPLE, { b64, items }), bad = all.filter((x) => x.ratio < x.need);
+  return { n: all.length, bad: bad.length, first: bad.sort((x, y) => x.ratio - y.ratio).slice(0, 3).map((x) => `${x.sel} "${x.t}" rgb(${x.fg}) on rgb(${x.bg}) ${x.ratio.toFixed(2)}`) };
+}
+async function testWhy(browser) {
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }], ['w1440', { width: 1440 }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440 }]];
+  const pools = FXD.live.pools, gw = (q, wk) => q.w[wk] && q.w[wk].gem && q.w[wk].gem.why ? q.w[wk].gem : null;
+  // the window's ranking, as the page reads it (stablecoin pairs on: the groups start with them shown)
+  const rank = (wk) => pools.filter((q) => q.verified !== false && q.w[wk] && Number.isFinite(q.w[wk].gem.total)).sort((a, b) => (b.w[wk].gem.total - a.w[wk].gem.total) || ((b.w[wk].net ?? -Infinity) - (a.w[wk].net ?? -Infinity)));
+  const cases = {
+    fail: pools.find((q) => gw(q, '30d') && q.verified === false && q.w['30d'].gem.why.sf.length && q.pair !== 'TALI/WETH'),
+    cap: pools.find((q) => gw(q, '30d') && q.verified !== false && q.w['30d'].gem.why.sn.length && Number.isFinite(q.w['30d'].gem.total)),
+    oneoff: pools.find((q) => gw(q, '24h') && q.w['24h'].gem.why.yx && q.w['24h'].gem.total < 60),
+    low: rank('30d').find((q) => gw(q, '30d') && !q.w['30d'].gem.why.sn.length && !q.w['30d'].gem.why.yx && q.w['30d'].gem.total < 60 && q.w['30d'].gem.total > 20),
+    dash: rank('30d').find((q) => gw(q, '30d') && q.w['30d'].gem.why.ps == null && !q.w['30d'].gem.why.sn.length && !q.w['30d'].gem.why.yx),
+    miss: pools.find((q) => gw(q, '30d') && q.verified !== false && q.w['30d'].gem.total == null && !q.w['30d'].gem.why.sf.length && !q.w['30d'].gem.why.df.length),
+  };
+  ok('why: the fixtures hold each case (a failed check, a safety check not run, a one-off day, under the bar, staying power not measured, inputs not read)', Object.values(cases).every(Boolean), JSON.stringify(Object.fromEntries(Object.entries(cases).map(([k, v]) => [k, !!v]))));
+  for (const [tag, o] of SETS) {
+    const wide = /1440/.test(tag), t = await openUnlocked(browser, 'default', o), p = t.page;
+    // 1. the best find (30 days): "Why ?" under its score, a 44 px target in the ring's column
+    const bid = await bestId(p), best = pools.find((q) => q.id === bid);
+    const e = await p.evaluate(() => { const b = document.querySelector('#best [data-act="gemwhy"]'), r = document.querySelector('#best .ring'); if (!b || !r) return null; const x = b.getBoundingClientRect(), y = r.getBoundingClientRect(); return { txt: b.textContent, w: x.width, h: x.height, cx: x.left + x.width / 2, rl: y.left, rr: y.right, under: x.top >= y.bottom - 6 && x.top <= y.bottom + 6, label: b.getAttribute('aria-label') }; });
+    ok(`why ${tag}: "Why ?" sits under the best find's score, a 44 px target`, e && e.txt === 'Why ?' && e.w >= 44 && e.h >= 44 && e.cx >= e.rl && e.cx <= e.rr && e.under && /^Why this score: /.test(e.label), JSON.stringify(e));
+    let ov = await OVL(p, '#best .best-head');
+    ok(`why ${tag}: the best find's head has no text on text with the link`, ov.length === 0, JSON.stringify(ov[0]));
+    let a = await whyOpenFrom(p, '#best');
+    const g = best.w['30d'].gem, ring = await whyRing(p, '#best');
+    ok(`why ${tag}: it opens as a ${wide ? 'panel in the middle of the screen' : 'sheet from the bottom, the screen\'s width'}`, a.open && (wide ? a.w <= 560 && a.left > 100 && a.right > 100 && a.bottom > 8 : a.w === a.vw && a.bottom <= 1 && a.top >= 8) && a.modal, JSON.stringify({ w: a.w, l: a.left, r: a.right, b: a.bottom, t: a.top }));
+    ok(`why ${tag}: focus moves into it (✕, 44 px)`, a.focus === 'gemwhy-x' && a.close[0] >= 44 && a.close[1] >= 44, JSON.stringify([a.focus, a.close]));
+    const add = whyAdds(a.expr);
+    ok(`why ${tag}: the total (${a.total}) is the score on the ring (${ring}) and the data's, and its sum adds up (${a.expr})`, a.total === String(g.total) && ring === a.total && a.score === a.total && add && add.ok && add.total === g.total, JSON.stringify({ total: a.total, ring, expr: a.expr }));
+    ok(`why ${tag}: a gem: the GEM chip, four parts with a meter and a plain reason each, the gates on top, the verdict last`, a.verdict === 'gem' && a.chips.includes('GEM') && a.parts.length === 4 && a.parts.every((x) => x.why.length > 30 && noJunk(x.why)) && /Safety \d+\/\d+/.test(a.pills) && /Data \d+\/\d+/.test(a.pills) && /^A gem: \d+ ≥ 60\./.test(a.vtext), JSON.stringify({ v: a.verdict, chips: a.chips, n: a.parts.length, pills: a.pills }));
+    ok(`why ${tag}: each part's points are the data's, out of 45, 25, 20 and 10 (a dash where it wasn't measured)`, a.parts.map((x) => x.k).join() === 'yield,thinness,flow,staying'
+      && a.parts.every((x) => (x.k === 'staying' && g.why.ps == null ? x.v === '—' && x.m === '0%' : x.v === String(g[x.k]))), JSON.stringify(a.parts.map((x) => [x.k, x.v, x.m])));
+    ok(`why ${tag}: the reasons are built from the inputs (typical day $${g.why.y.toFixed(2)}, ${Math.round(g.why.tr)} traders)`, a.parts[0].why.includes('$' + Math.abs(g.why.y).toFixed(2) + ' per $1,000') && a.parts[2].why.includes(Math.round(g.why.tr).toLocaleString('en-US') + ' trader'), a.parts.map((x) => x.why.slice(0, 50)).join(' | '));
+    ov = await OVL(p, '#gemwhy');
+    ok(`why ${tag}: nothing overlaps or runs sideways in the breakdown`, ov.length === 0 && a.hs <= 0 && a.out === 0, JSON.stringify({ ov: ov[0], hs: a.hs, out: a.out }));
+    if (SHOTS) await snap(p, `why-${tag}-gem`);
+    // v0.8.0: hold to explain reads the parts and the gates; the phone's bottom bar is out of reach under the breakdown
+    const x = await p.evaluate(() => {
+      if (!(window.__lpsHooks && window.__lpsHooks.hxShow)) return null;
+      const v = document.querySelector('#gemwhy .gy-row[data-part="yield"] .gy-ph > span'), n = document.querySelector('#gemwhy .gy-row[data-part="staying"] .term');
+      const pill = document.querySelector('#gemwhy [data-gates] [data-x="gwsafety"]'), bar = document.querySelector('#bbar');
+      const out = { vx: v && v.dataset.x, nx: n && n.dataset.x, pill: !!pill, bbOn: document.documentElement.classList.contains('bb-on'), inert: !!bar && bar.hasAttribute('inert') };
+      window.__lpsHooks.hxShow(v);
+      out.t = document.querySelector('#hx-t').textContent; out.v = document.querySelector('#hx-v').textContent; out.how = document.querySelector('#hx-h').textContent;
+      out.z = +getComputedStyle(document.querySelector('#hx')).zIndex > +getComputedStyle(document.querySelector('#gemwhy')).zIndex;
+      return out;
+    });
+    if (x) {
+      await p.keyboard.press('Escape'); await sleep(200);
+      const after = await p.evaluate(() => ({ hx: document.querySelector('#hx').hidden, why: !document.querySelector('#gemwhy').hidden }));
+      ok(`why ${tag}: hold to explain: each part's points and name explain it (Yield now: "${x.v.slice(0, 40)}"), the gates too; Esc puts the card away first`, x.vx === 'gwyield' && x.nx === 'gwstay' && x.pill && x.t === 'Yield now' && /^Here: \d+\/45 · 30D window/.test(x.v) && /median of the last 7 days/.test(x.how) && x.z && after.hx && after.why, JSON.stringify({ ...x, after }));
+      ok(`why ${tag}: the phone's bottom bar is inert under the breakdown`, !x.bbOn || x.inert, JSON.stringify(x));
+    }
+    // the list of every check
+    await p.click('#gemwhy [data-act="gemwhy-ck"]'); await sleep(150);
+    const ck = await p.evaluate(() => ({ n: document.querySelectorAll('#gemwhy-ck li').length, vis: !document.querySelector('#gemwhy-ck').hidden, ex: document.querySelector('#gemwhy [data-act="gemwhy-ck"]').getAttribute('aria-expanded') }));
+    ok(`why ${tag}: "All N checks" lists the pool's checks and its warnings`, ck.vis && ck.ex === 'true' && ck.n === best.checks.length + Math.max(1, g.why.wn.length), JSON.stringify(ck));
+    // C: vs #1
+    await p.click('#gemwhy [data-act="gemwhy-v"][data-v="vs"]'); await sleep(250);
+    a = await p.evaluate(WHY_LOOK);
+    const r30 = rank('30d'), top = r30[0] === best ? r30[1] : r30[0], med = r30[Math.floor(r30.length / 2)];
+    ok(`why ${tag}: "vs #1" shows the same four parts as bars for this pool, ${r30[0] === best ? '#2' : '#1'} and the median pool`, a.view === 'vs' && a.vs && a.vs.length === 4 && a.vs.every((n) => n === 3) && a.legend.includes(`${top.pair}`) && a.legend.includes(`median pool${med === best ? ' (this one)' : ''} ${med.w['30d'].gem.total}`) && a.verdict === 'vs', JSON.stringify({ view: a.view, vs: a.vs, legend: a.legend }));
+    ok(`why ${tag}: the comparison's verdict says where the gap is`, r30[0] === best ? /^This is the #1 pool in the 30D window/.test(a.vtext) : new RegExp(`^#1 is ${top.w['30d'].gem.total - g.total} points? ahead`).test(a.vtext), a.vtext.slice(0, 120));
+    ov = await OVL(p, '#gemwhy');
+    ok(`why ${tag}: the comparison has no text on text`, ov.length === 0 && a.hs <= 0 && a.out === 0, JSON.stringify(ov[0]));
+    if (SHOTS) await snap(p, `why-${tag}-vs`);
+    // Tab stays inside; ✕ closes and gives the focus back to "Why ?"
+    let inside = true;
+    for (let i = 0; i < 14; i++) { await p.keyboard.press('Tab'); inside = inside && (await p.evaluate(() => !!document.activeElement && !!document.activeElement.closest('#gemwhy'))); }
+    ok(`why ${tag}: Tab keeps the focus inside the breakdown`, inside);
+    await p.click('#gemwhy-x'); await sleep(200);
+    const back1 = await p.evaluate(() => ({ hid: document.querySelector('#gemwhy').hidden, f: document.activeElement && document.activeElement.dataset.act, modal: document.documentElement.classList.contains('modal-open') }));
+    a = await whyOpenFrom(p, '#best');
+    const again = a.view === 'why';
+    await p.keyboard.press('Escape'); await sleep(200);
+    const esc1 = await p.evaluate(() => ({ hid: document.querySelector('#gemwhy').hidden, f: document.activeElement && document.activeElement.dataset.act }));
+    await whyOpenFrom(p, '#best'); await p.evaluate(() => history.back()); await sleep(450);
+    const bk = await p.evaluate(() => ({ hid: document.querySelector('#gemwhy').hidden, app: !document.querySelector('#app').hidden, url: /index\.html/.test(location.href) }));
+    await whyOpenFrom(p, '#best'); await p.mouse.click(wide ? 20 : 8, wide ? 300 : 8); await sleep(200);
+    const scrim = await p.evaluate(() => document.querySelector('#gemwhy').hidden);
+    ok(`why ${tag}: it closes with ✕, Esc, Back (staying on the dashboard) and the dimmed background; focus goes back to "Why ?"; it opens on "Why" again`, back1.hid && back1.f === 'gemwhy' && !back1.modal && esc1.hid && esc1.f === 'gemwhy' && bk.hid && bk.app && bk.url && scrim && again, JSON.stringify({ back1, esc1, bk, scrim, again }));
+    // 2. the four cases, from the pool panel: each opens from "Why ?" by the panel's score and reads as itself
+    for (const [k, q] of Object.entries(cases)) {
+      if (!q) continue;
+      const wk = k === 'oneoff' ? '24h' : '30d';
+      if (await p.getAttribute(`#winseg [data-w="${wk}"]`, 'aria-pressed') !== 'true') await setWin(p, wk);
+      await openPool(p, q.id.slice(0, 12)); await sleep(250);
+      const gq = q.w[wk].gem, r2 = await whyRing(p, '#sheet');
+      a = await whyOpenFrom(p, '#sheet');
+      const sum = whyAdds(a.expr);
+      const want = { fail: () => a.verdict === 'fail' && a.total === '—' && a.score === '—' && r2 === '—' && a.parts.every((x) => x.dim && x.v === '—') && /^Not a gem: a safety check failed\./.test(a.vtext) && /✕ Safety/.test(a.pills),
+        cap: () => a.verdict === 'cap' && a.total === String(gq.total) && r2 === a.total && gq.total <= 40 && sum && sum.ok && /^Capped at 40: a safety check did not run\./.test(a.vtext) && a.ded.some((x) => /cap 40/.test(x)) && a.chips.includes('UNCHECKED') && a.chips.includes('NOT A GEM'),
+        oneoff: () => a.verdict === 'oneoff' && a.total === String(gq.total) && r2 === a.total && sum && sum.ok && /^Not a gem: the big day was one trader\./.test(a.vtext) && /leaves that day out/.test(a.vtext) && a.chips.includes('ONE-OFF') && /one-off day left out/.test(a.parts[0].why),
+        low: () => a.verdict === 'low' && a.total === String(gq.total) && r2 === a.total && sum && sum.ok && new RegExp(`^Not a gem: ${gq.total} is under 60\\.`).test(a.vtext),
+        dash: () => a.total === String(gq.total) && r2 === a.total && sum && sum.ok && a.parts[3].v === '—' && a.parts[3].m === '0%' && /^Not measured this pass \(—\): a bonus only, it counts 0\./.test(a.parts[3].why) && a.expr.split('+').length === 3,
+        miss: () => a.verdict === 'miss' && a.total === '—' && a.score === '—' && r2 === '—' && /^No score yet: .+ read this pass\./.test(a.vtext) && /never 0/.test(a.vtext) && a.chips.includes('NOT A GEM') }[k];
+      ok(`why ${tag}: ${k === 'fail' ? 'a failed safety check: no score, the check named, the parts not scored' : k === 'cap' ? 'a safety check not run: capped at 40, the check named, UNCHECKED' : k === 'oneoff' ? 'a one-off day: left out of Yield now, ONE-OFF, not a gem' : k === 'low' ? 'under the bar: "Not a gem: N is under 60"' : k === 'dash' ? 'staying power not measured: a dash, never 0, and left out of the sum' : 'an input not read: no score yet, a dash, never 0'} (${q.pair}, ${wk.toUpperCase()})`, want(), JSON.stringify({ v: a.verdict, total: a.total, ring: r2, expr: a.expr, vt: a.vtext.slice(0, 90), chips: a.chips }));
+      ov = await OVL(p, '#gemwhy');
+      ok(`why ${tag}: ${k}: nothing overlaps`, ov.length === 0 && a.hs <= 0 && a.out === 0, JSON.stringify(ov[0]));
+      if (SHOTS) await snap(p, `why-${tag}-${k}`);
+      if (k === 'cap') { // the comparison for a pool that isn't #1
+        await p.click('#gemwhy [data-act="gemwhy-v"][data-v="vs"]'); await sleep(250);
+        const c = await p.evaluate(WHY_LOOK), rk = rank(wk), t1 = rk[0];
+        ok(`why ${tag}: vs #1 from the pool panel: #1 ${t1.pair} is ${t1.w[wk].gem.total - gq.total} points ahead`, c.vs && c.vs.length === 4 && new RegExp(`^#1 is ${t1.w[wk].gem.total - gq.total} points? ahead`).test(c.vtext), c.vtext.slice(0, 100));
+        if (SHOTS) await snap(p, `why-${tag}-cap-vs`);
+      }
+      // Esc closes the breakdown only; the pool panel stays, its "Why ?" has the focus; a second Esc closes the panel
+      await p.keyboard.press('Escape'); await sleep(200);
+      const st = await p.evaluate(() => ({ why: document.querySelector('#gemwhy').hidden, sheet: !document.querySelector('#sheet').hidden, f: document.activeElement && document.activeElement.closest('#sheet') && document.activeElement.dataset.act, modal: document.documentElement.classList.contains('modal-open') }));
+      ok(`why ${tag}: ${k}: Esc closes the breakdown, the pool panel stays with the focus on its "Why ?"`, st.why && st.sheet && st.f === 'gemwhy' && st.modal, JSON.stringify(st));
+      await p.keyboard.press('Escape'); await sleep(200);
+    }
+    // 3. every pool of the 30-day top 10: the breakdown's total is the ring's score
+    if (wide) {
+      await setWin(p, '30d');
+      const tabs = await p.evaluate(() => [...document.querySelectorAll('#best [role="tab"]')].map((x) => x.dataset.id));
+      const bad = [];
+      for (const id of tabs) {
+        await p.evaluate((id) => document.querySelector(`#best [role="tab"][data-id="${id}"]`).click(), id); await sleep(150);
+        const q = pools.find((x) => x.id === id), has = await p.$('#best [data-act="gemwhy"]');
+        if (!gw(q, '30d')) { if (has) bad.push(q.pair + ': a link without a why'); continue; }
+        if (!has) { bad.push(q.pair + ': no link'); continue; }
+        const rr = await whyRing(p, '#best'), b = await whyOpenFrom(p, '#best'), s2 = whyAdds(b.expr);
+        if (!(b.total === rr && (q.verified === false ? b.total === '—' : b.total === String(q.w['30d'].gem.total) && s2 && s2.ok))) bad.push(`${q.pair}: ${b.total} vs ${rr} (${b.expr})`);
+        await p.keyboard.press('Escape'); await sleep(150);
+      }
+      ok(`why ${tag}: across the 30-day top ${tabs.length}, every breakdown adds up to the score on its ring`, tabs.length >= 5 && bad.length === 0, bad.slice(0, 3).join(' | '));
+    }
+    // a window whose data has no why (the 24-hour best find here): no link, the ring as before
+    await setWin(p, '24h');
+    const bid24 = await bestId(p), b24 = pools.find((q) => q.id === bid24);
+    const l24 = await p.evaluate(() => ({ link: !!document.querySelector('#best [data-act="gemwhy"]'), at: !!document.querySelector('#best .gy-at'), ring: !!document.querySelector('#best .ring') }));
+    ok(`why ${tag}: a pool whose data has no why shows no link (${b24.pair}, 24H)`, gw(b24, '24h') ? l24.link : !l24.link && !l24.at && l24.ring, JSON.stringify(l24));
+    ok(`why ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+    // 4. older data (scanners before the why): no link anywhere, no errors
+    const u = await openUnlocked(browser, 'nolinks', o), q = u.page;
+    const n0 = await q.evaluate(() => document.querySelectorAll('[data-act="gemwhy"], .gy-at').length);
+    await openPool(q, 'VELNA/WETH');
+    const n1 = await q.evaluate(() => ({ n: document.querySelectorAll('[data-act="gemwhy"], .gy-at').length, ring: !!document.querySelector('#sheet .ring') }));
+    ok(`why ${tag}: older data without the why: no "Why ?" in the best find or the pool panel, the rings as before, no errors`, n0 === 0 && n1.n === 0 && n1.ring && u.errors.length === 0, JSON.stringify({ n0, n1, e: u.errors[0] }));
+    await u.ctx.close();
+  }
+  // 5. it reads at AA in both looks (still, a phone): the checklist, the comparison, a failed check's red, a capped score's amber
+  for (const mode of ['3d', '2d']) {
+    const t = await openUnlocked(browser, 'default', { ...(BROWSER === 'webkit' ? { phone: true } : { width: 393, height: 852 }), mode, reducedMotion: 'reduce' }), p = t.page;
+    const res = [];
+    await whyOpenFrom(p, '#best'); res.push(['checklist', await whyAA(p)]);
+    await p.click('#gemwhy [data-act="gemwhy-v"][data-v="vs"]'); await sleep(250); res.push(['vs #1', await whyAA(p)]);
+    await p.keyboard.press('Escape'); await sleep(200);
+    for (const k of ['fail', 'cap']) {
+      if (!cases[k]) continue;
+      await openPool(p, cases[k].id.slice(0, 12)); await sleep(250); await whyOpenFrom(p, '#sheet'); res.push([k, await whyAA(p)]);
+      await p.keyboard.press('Escape'); await sleep(150); await p.keyboard.press('Escape'); await sleep(200);
+    }
+    ok(`why ${mode.toUpperCase()}: every text in the breakdown reads at WCAG AA (${res.map(([k, r]) => `${k} ${r.n}`).join(', ')} texts)`, res.length >= 3 && res.every(([, r]) => r.n > 10 && r.bad === 0), JSON.stringify(res.filter(([, r]) => r.bad).map(([k, r]) => [k, r.first])));
+    ok(`why ${mode.toUpperCase()}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // 6. a guest sees it the same way (market data only)
+  const gt = await unlockAs(browser, 'keyed', SHARED_PASS, BROWSER === 'webkit' ? { phone: true } : { width: 393, height: 852 }), gp = gt.page;
+  await waitApp(gp); await gp.click('#gw-ok').catch(() => {}); await sleep(200);
+  await setWin(gp, '30d');
+  const ga = await whyOpenFrom(gp, '#best'), gr = await whyRing(gp, '#best');
+  ok('why guest: the best find\'s "Why ?" opens the same breakdown; its total is the ring\'s score', ga.open && ga.total === gr && ga.parts.length === 4 && whyAdds(ga.expr)?.ok && !ga.txt.includes(`$${OWNER_TICKET.toLocaleString('en-US')}`), JSON.stringify({ open: ga.open, total: ga.total, gr }));
+  if (SHOTS) await snap(gp, 'why-guest');
+  await gp.keyboard.press('Escape'); await sleep(150);
+  ok('why guest: no page errors', gt.errors.length === 0, gt.errors[0]);
+  await gt.ctx.close();
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks, lazy3d: testLazy3d, a11yfix: testA11yFix, bottombar: testBottomBar, holdx: testHoldx }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks', 'lazy3d', 'a11yfix', 'holdx']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks, lazy3d: testLazy3d, a11yfix: testA11yFix, bottombar: testBottomBar, holdx: testHoldx, why: testWhy }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks', 'lazy3d', 'a11yfix', 'holdx', 'why']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {

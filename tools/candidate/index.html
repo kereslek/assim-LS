@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-mlp09A2Y2bF/Yqkb2EEtr0XTK8iNEGfMFDnjHKtPDEg='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-hzLkAkrL/gXVpA+pUhAxu1uLJu46gVk5jcu6hpzDFxc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1772,6 +1772,83 @@ html.m3d .hxtip{background:rgba(10,46,50,.98);border-color:#3B7F7D}
 @media (hover:none),(pointer:coarse){[data-x]{-webkit-user-select:none;user-select:none}}
 @media (prefers-reduced-motion:reduce){.bb,.bb::before,.ws-tab::before{transition:none}.hxring .fl{animation:none!important;stroke-dashoffset:0}}
 /* /v080-css */
+/* gemwhy-css · "Why this pool?" (the owner's pick B + C, 23 Nov 2026): the gem score's breakdown. A "Why ?" pill under the score
+   ring; a sheet on a phone, a panel on a laptop, above the pool panel and the workspace and under a note (the pop) */
+.gy-at{flex:none;display:flex;flex-direction:column;align-items:center}
+.gy-btn{min-height:44px;min-width:44px;margin-top:-4px;padding:0;border:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--accent2);-webkit-tap-highlight-color:transparent}
+.gy-btn>span{display:block;padding:5px 9px;border-radius:999px;border:1px solid rgba(22,199,132,.45);border:1px solid color-mix(in srgb,var(--accent2) 45%,transparent);background:rgba(22,199,132,.1);background:color-mix(in srgb,var(--accent2) 11%,transparent);font:700 11px/1 var(--mono);letter-spacing:.02em;white-space:nowrap}
+.gy-btn:focus-visible{outline:none}.gy-btn:focus-visible>span{outline:2px solid var(--accent2);outline-offset:2px}
+.gemwhy{position:fixed;inset:0;z-index:65;display:flex;align-items:flex-end;justify-content:center}
+.gemwhy[hidden]{display:none}
+.gy-scrim{position:absolute;inset:0;background:rgba(2,4,6,.66);touch-action:none}
+.gy-card{position:relative;width:100%;max-width:560px;max-height:calc(100vh - max(16px,env(safe-area-inset-top)) - 8px);max-height:calc(100dvh - max(16px,env(safe-area-inset-top)) - 8px);display:flex;flex-direction:column;box-sizing:border-box;background:var(--raised);color:var(--fg);border:1px solid var(--line2);border-bottom:0;border-radius:18px 18px 0 0;outline:none;box-shadow:0 -10px 30px rgba(0,0,0,.5)}
+.gy-head{flex:none;display:flex;align-items:center;gap:8px;padding:6px max(10px,env(safe-area-inset-right)) 4px max(16px,env(safe-area-inset-left));border-bottom:1px solid var(--line)}
+.gy-head h2{flex:1 1 auto;min-width:0;margin:0;font:700 15px/1.3 var(--sans);overflow-wrap:anywhere}
+.gy-x{flex:none;width:44px;height:44px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--fg2);font:600 17px/1 var(--sans);cursor:pointer}
+.gy-x:focus-visible,.gy-ckb:focus-visible{outline:2px solid var(--accent2);outline-offset:-2px}
+.gy-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;display:grid;gap:10px;align-content:start;padding:10px max(16px,env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+@media (min-width:700px){.gemwhy{align-items:center;padding:24px}.gy-card{border-bottom:1px solid var(--line2);border-radius:16px;max-height:calc(100vh - 48px);box-shadow:0 18px 50px rgba(0,0,0,.6)}.gy-head{padding:8px 10px 6px 18px}.gy-body{padding:12px 18px 18px}}
+.gy-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px;min-width:0}
+.gy-score{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;min-width:0}
+.gy-score>b{font:700 30px/1 var(--mono);color:var(--gold);font-variant-numeric:tabular-nums}
+.gy-score>.of{font:600 11px/1.2 var(--mono);color:var(--muted)}
+.gy-chip{display:inline-block;font:700 9.5px/1 var(--mono);letter-spacing:.05em;border-radius:999px;padding:4px 7px;white-space:nowrap}
+.gy-chip.gem{background:var(--gold);color:#201400}
+.gy-chip.no{background:rgba(226,102,76,.18);color:#FFB3A3;border:1px solid rgba(226,102,76,.5)}
+.gy-chip.p{border:1px solid var(--line3);color:var(--fg2)}
+.gy-chip.tg{border:1px dashed var(--warn);color:var(--warn)}
+.gy-seg{flex:none}
+.gy-seg button{min-width:0;padding:0 12px;font-size:11px}
+.gy-pills{display:flex;gap:10px 6px;flex-wrap:wrap;align-items:center;padding:2px 0}
+.gy-pill{font:600 10.5px/1 var(--mono);border-radius:999px;padding:5px 8px;white-space:nowrap}
+.gy-pill.ok{background:rgba(47,191,74,.14);color:var(--pos)}
+.gy-pill.fail{background:rgba(226,102,76,.2);color:#FFB3A3}
+.gy-pill.run{background:rgba(250,178,25,.14);color:var(--warn)}
+.gy-pill.zero{background:rgba(170,180,192,.12);color:var(--fg2)}
+.gy-box{background:var(--surface);border:1px solid var(--line2);border-radius:12px;padding:10px 12px;display:grid;min-width:0}
+.gy-row{display:grid;gap:4px;padding:8px 0;border-top:1px solid var(--line);min-width:0}
+.gy-row:first-child{border-top:0;padding-top:0}
+.gy-ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
+.gy-ph>b{font:600 13px/1.3 var(--sans);min-width:0;overflow-wrap:anywhere}
+.gy-ph>span{font:700 12px/1.2 var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.gy-ph>span i{font-style:normal;color:var(--muted);font-weight:500}
+.gy-m{display:block;height:7px;border-radius:4px;background:rgba(22,199,132,.1);background:color-mix(in srgb,var(--accent2) 10%,transparent);overflow:hidden}
+.gy-m i{display:block;height:100%;border-radius:4px;background:var(--accent2)}
+.gy-row p,.gy-note{font-size:12px;line-height:1.45;color:var(--fg2);overflow-wrap:anywhere}
+.gy-row p b,.gy-note b{color:var(--fg);font-weight:600}
+.gy-row.ded .gy-ph>b,.gy-row.ded .gy-ph>span{color:var(--warn)}
+.gy-row.dim .gy-ph>b,.gy-row.dim .gy-ph>span,.gy-row.dim .gy-ph>span i{color:var(--muted)}.gy-row.dim .gy-m{opacity:.6} /* not scored: muted, still AA (never faded) */
+.gy-tot{display:flex;justify-content:space-between;align-items:baseline;gap:4px 10px;flex-wrap:wrap;margin-top:2px;padding-top:9px;border-top:1px solid var(--line3);min-width:0}
+.gy-tot>b{font:700 13px/1.3 var(--sans)}
+.gy-tot>span{font:600 12px/1.3 var(--mono);color:var(--fg2);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:0}
+.gy-tot>span b{font-size:15px;color:var(--gold)}
+.gy-verdict{font-size:12.5px;line-height:1.45;color:var(--fg);background:rgba(250,178,25,.08);border:1px solid rgba(250,178,25,.3);border-radius:10px;padding:8px 10px;overflow-wrap:anywhere}
+.gy-verdict b{color:var(--warn);font-weight:700}
+.gy-verdict.no{background:rgba(226,102,76,.1);border-color:rgba(226,102,76,.45)}
+.gy-verdict.no b{color:#FFB3A3}
+.gy-verdict.ok{background:rgba(22,199,132,.08);border-color:rgba(22,199,132,.35)}
+.gy-verdict.ok b{color:var(--accent2)}
+.gy-ckb{justify-self:start;min-height:44px;padding:0 2px;border:0;background:transparent;color:var(--fg2);font:600 11px/1.3 var(--mono);cursor:pointer;text-align:left}
+.gy-ckb::before{content:"▸ ";color:var(--accent2)}
+.gy-ckb[aria-expanded="true"]::before{content:"▾ "}
+.gy-ck{display:grid;gap:4px;margin:-4px 0 0;padding:0;list-style:none;font-size:11.5px;line-height:1.4;color:var(--fg2)}
+.gy-ck li{display:grid;grid-template-columns:16px minmax(0,1fr);gap:4px;overflow-wrap:anywhere}
+.gy-ck li::before{font:700 12px/1.4 var(--mono)}
+.gy-ck .ok::before{content:"✓";color:var(--pos)}.gy-ck .fail::before{content:"✕";color:var(--neg)}.gy-ck .nr::before{content:"–";color:var(--warn)}.gy-ck .wn::before{content:"!";color:var(--warn)}
+.gy-ck small{color:var(--muted);font:600 9.5px/1 var(--mono);letter-spacing:.06em}
+.gy-cmp{display:grid;gap:10px;min-width:0}
+.gy-cr{display:grid;gap:3px;min-width:0}
+.gy-cb{display:grid;grid-template-columns:58px minmax(0,1fr) 34px;gap:6px;align-items:center;font:600 10px/1.2 var(--mono);color:var(--muted)}
+.gy-cb .gy-tr{display:block;height:7px;border-radius:4px;background:rgba(170,180,192,.08);overflow:hidden}
+.gy-cb .gy-tr i{display:block;height:100%;border-radius:4px}
+.gy-cb>span:last-child{text-align:right;color:var(--fg);font-variant-numeric:tabular-nums}
+.gy-k-me{background:var(--accent2)}.gy-k-top{background:var(--gold)}.gy-k-med{background:rgba(170,180,192,.55)}
+.gy-legend{display:flex;gap:4px 12px;flex-wrap:wrap;font:600 10px/1.35 var(--mono);color:var(--muted);min-width:0}
+.gy-legend>span{min-width:0;overflow-wrap:anywhere}
+.gy-sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+html.m3d .gy-pill.run,html.m3d .gy-chip.tg,html.m3d .gy-verdict:not(.no):not(.ok) b{color:#FFD27A;border-color:#FFD27A} /* 3D: the amber a shade lighter, AA on its tint */
+@media (prefers-reduced-motion:no-preference){.gy-m i,.gy-cb .gy-tr i{transition:width .3s ease}}
+/* /gemwhy-css */
 </style>
 </head>
 <body>
@@ -2051,6 +2128,13 @@ html.m3d .hxtip{background:rgba(10,46,50,.98);border-color:#3B7F7D}
     <div class="eb-acts"><button type="button" class="btn" id="eb-copy" data-act="eb-copy">Copy for the admin</button><button type="button" class="btn" id="eb-dis" data-act="eb-dismiss">Dismiss</button></div>
     <p class="eb-msg" id="eb-msg" role="status" aria-live="polite"></p>
   </div></div>
+<!-- gemwhy-html -->
+<div id="gemwhy" class="gemwhy" hidden><div class="gy-scrim" data-act="gemwhy-x"></div>
+  <div class="gy-card" role="dialog" aria-modal="true" aria-labelledby="gemwhy-h" tabindex="-1">
+    <div class="gy-head"><h2 id="gemwhy-h">Why this pool</h2><button type="button" class="gy-x" id="gemwhy-x" data-act="gemwhy-x" aria-label="Close the breakdown" title="Close (Esc)">✕</button></div>
+    <div class="gy-body" id="gemwhy-body"></div>
+  </div></div>
+<!-- /gemwhy-html -->
 <div class="ctip" id="ctip" role="tooltip" hidden></div>
 <button type="button" class="totop" id="totop" data-act="totop" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M4.5 9.5 10 4l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 <!-- v080-html · B: the phone's bottom tab bar and its More sheet; C: the explanation card, the ring under the finger, the one-time tip -->
@@ -2415,7 +2499,7 @@ return { start: d3Start, stop: d3Stop, mark: d3Mark };
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.8.1';
+const BUILD = 'v0.8.2';
 // v0.7.9: never inside another site's frame (a meta CSP can't say frame-ancestors). A framed page goes blank and never asks
 // for the passphrase; only the dashboard's own full view (same origin, ?full=1) may frame it.
 const FRAMED = (() => {
@@ -2768,6 +2852,14 @@ const GLOSS = {
   bsc: ['BNB Chain', 'The pool lives on BNB Chain, a separate, cheap network. Gas costs cents, so re-centring is cheap.'],
   arbitrum: ['Arbitrum', 'The pool lives on Arbitrum, a cheaper network that settles on Ethereum. Gas costs cents or less, so re-centring is cheap.'],
   gem: ['Gem score', 'How good this pool looks for a new LP right now, 0–100: yield now, how few LPs share the price, trader flow and staying power. 60 or more is a gem.'],
+  // "Why this pool?": the four parts of Gem now and its gates (lib/gem.mjs gemNow)
+  gwyield: ['Yield now', 'The typical day’s net per $1,000 at the price: fees after sharing with the liquidity already in range, minus LVR and re-range costs. The median of the last 7 days, so one burst day can’t carry it. Up to 45 points; $1.37 a day (50% a year) counts in full.'],
+  gwthin: ['Thinness', 'The day’s LP fees ÷ the value already at the price: high when few LPs share the price. Up to 25 points; 0.5% a day counts in full.'],
+  gwflow: ['Flow', 'Who trades here: 70% low toxicity (markout ÷ fee, lower is better) and 30% breadth (distinct traders a week; about 100 counts in full). Up to 20 points.'],
+  gwstay: ['Staying power', 'Whether the edge lasts: days stranded of the last 30 (half), the nearest wall in σ-weeks (a quarter), the share held by inactive wallets (a quarter). A bonus of up to 10 points; not measured counts 0.'],
+  gwsafety: ['Safety checks', 'Both tokens’ source verified, a small sell goes through (95% of the quote or more), tokens ranked and trading long enough, no hook settles swaps outside the pool. One fails: no score. One didn’t run: the score is capped at 40.'],
+  gwdata: ['Data checks', 'Cross-checks of the pool’s own numbers: its swaps against its fee counters, its price and volume against the market, its map against its balances and more. One fails: no score. One didn’t run: 5 points off.'],
+  gwwarn: ['Warnings', 'A hooked pool, under 10 swaps a day, or a price more than 10% off market: 10 points off each.'],
   lvr: ['LVR', 'Loss-versus-rebalancing: what arbitrage traders take from LPs each time the price moves. The fees have to beat it.'],
   net: ['Net APR', 'The yearly return on the example ticket after LVR, re-centring swaps and gas: what you would keep, not the headline fee rate.'],
   feeApr: ['Fee APR', 'Fees alone, for a position inside the suggested range, before LVR and costs are taken off.'],
@@ -3371,6 +3463,7 @@ function renderAll() {
   }
   if (S.detail) renderDetail();
   if (S.pair) renderPair();
+  if (GW.open) gwRender(); // the gem's why follows the data
   if (SOLO) isolate();
   S.rendered = true; pageSettle(false);
   seenSave(); armNext();
@@ -4028,7 +4121,7 @@ function renderBest() {
     + `<div class="lbl acc">${kick} · ${esc(SHAPE_KICK[p.shape && p.shape.tag] || 'POOL')}</div>`
     + `<div class="ttl">${chainMark(p.chain)}<h2 id="best-h"><button type="button" class="best-h-btn" data-act="pair" data-key="${esc(pairKey(p))}" title="Every pool of this pair">${esc(p.pair)}</button></h2>${starBtn(p)}</div>`
     + `<div class="lbl best-meta">${metaTerms(p)} · ${term('range', rangeTxt(w.range))}${tokAbout(p)}</div>`
-    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div>${fmLink(p, 'best')}</div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
+    + `<div class="tags" style="margin-top:6px">${tagsHtml(p, wk, false, true)}</div>${fmLink(p, 'best')}</div>${gwRing(p, wk, ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk)))}</div>`
     + `<div class="best-body"><div class="best-l">`
     + `<div class="bigline"><span class="bignum${w.net < 0 ? ' neg' : ''}">${pct(w.net)}</span><span class="bigsub">${daysTxt} ${term('net', 'net APR')} at ${usdFull(ticketUsd())}<br>after ${term('lvr', 'LVR')}, swaps and gas</span></div>`
     + `<p class="lead" data-lead>${leadLine(w)}</p>` + breakdown(w)
@@ -5735,6 +5828,7 @@ function hlShut(kind) { // the browser went back past this level
   else if (kind === 'ws-lvl') wsLvlClose(true);
   else if (kind === 'pop') popClose();
   else if (kind === 'ebsheet') ebSheet(false); // v0.7.2
+  else if (kind === 'gemwhy') gwClose(); // the gem's why
   else if (kind === 'gsheet') gSheet(false); // v0.7.0
   else if (kind === 'gwel') gWelcome(false);
   else if (kind === 'bmore') bmClose(); // v0.8.0
@@ -6121,7 +6215,7 @@ function renderDetail() {
   const lq = liqChart(p, w, 'liq-detail');
   $('#sheet-main').innerHTML = `<div class="dsec chartbox" data-chartbox="liq-detail"><div class="pane-title"><span class="lbl">Liquidity around the price · ${term('logscale', 'log')} · <span class="pz-cap1">${liqCap('liq-detail')}</span></span>${ztools('liq-detail', p.id)}</div>${lq}</div>` // the shape first
     + `<div class="best-head"><div class="grow"><div class="tags">${tagsHtml(p, wk, false, true)}</div>`
-    + `<p class="sentence lead" data-lead style="margin-top:8px">${w ? `${leadLine(w)} · ${term('net', 'net APR')} ${WIN_LABEL[wk]}` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk))}</div>`
+    + `<p class="sentence lead" data-lead style="margin-top:8px">${w ? `${leadLine(w)} · ${term('net', 'net APR')} ${WIN_LABEL[wk]}` : `No ${WIN_WORD[wk]} reading for this pool yet (${DASH}).`}</p></div>${gwRing(p, wk, ring(p.verified === false ? null : gemOf(p, wk), !isGem(p, wk)))}</div>`
     + (w ? `<div class="dsec"><span class="lbl">Breakdown · ${WIN_LABEL[wk]}</span>${breakdown(w)}</div>` : '')
     + `<div class="dsec"><span class="lbl">Every window</span>${wt}</div>`
     + `<div class="dsec">${dailyStrip(p, w, 'daily-detail')}</div>`
@@ -8444,6 +8538,251 @@ document.addEventListener('submit', (e) => { // the Settings forms and the recov
   if (b && !b.disabled) gClick(b);
 }, true);
 
+// gemwhy-js
+// ---------- "Why this pool?" (the owner's pick B + C, 23 Nov 2026) ----------
+// The gem score's breakdown, from the scanner's own why (docs/DATA.md Window.gem.why): B, a checklist card (the safety and
+// data checks on top as passed, failed or not run; each part a meter of its points out of its maximum with one plain reason
+// built from the inputs it read; the deductions; the total, which is the score shown everywhere else) and C, its "vs #1"
+// toggle (the same parts as small bars beside the window's #1 and its median pool). A pool that is not a gem says why first:
+// a failed check (no score), a safety check not run (capped at 40), a one-off day (left out of Yield now), or simply under the
+// bar. It opens from "Why ?" under the score in the best-find card and the pool panel, for the window in view: a sheet on a
+// phone, a panel on a laptop; ✕, Esc, Back and the dimmed background close it, and focus goes back to its "Why ?". Data from
+// scanners without the why shows no link. Missing is never zero: a part or input not read is a dash. Market data only, so a
+// guest sees it too.
+const GW = { open: false, id: null, wk: null, view: 'why', opener: null, ck: false, mo: false };
+const GW_PARTS = [['yield', 'Yield now', 45, 'gwyield'], ['thinness', 'Thinness', 25, 'gwthin'], ['flow', 'Flow', 20, 'gwflow'], ['staying', 'Staying power', 10, 'gwstay']];
+const GW_SAFE = ['contract-verified', 'sell-test', 'token-age-rank', 'verified']; // lib/gem.mjs SAFETY_CHECKS
+const GW_WARN = { 'hooked pool': 'extra code (a hook) is attached to the pool', 'thin: under 10 swaps a day': 'under 10 swaps a day', 'pool price more than 10% off market': 'its price is more than 10% off the market' };
+// the scanner's why for a pool in a window, or null (older data, or a why that isn't whole)
+const gwOf = (p, wk = S.win) => {
+  const w = W(p, wk), y = w && w.gem && w.gem.why;
+  return y && typeof y === 'object' && ['sf', 'sn', 'df', 'dn', 'wn'].every((k) => Array.isArray(y[k])) && isNum(y.sp) && isNum(y.dp) ? y : null;
+};
+function gwBtn(p, wk) {
+  if (!p || !gwOf(p, wk)) return '';
+  return `<button type="button" class="gy-btn" data-act="gemwhy" data-id="${esc(p.id)}" aria-haspopup="dialog" aria-controls="gemwhy" aria-label="${esc('Why this score: ' + poolWord(p))}" title="Why this score"><span>Why ?</span></button>`;
+}
+const gwRing = (p, wk, r) => { const b = gwBtn(p, wk); return b ? `<div class="gy-at">${r}${b}</div>` : r; };
+const gwCap = (s) => { const t = String(s); return t.charAt(0).toUpperCase() + t.slice(1); };
+const gwLab = (p, id) => { const c = (Array.isArray(p.checks) ? p.checks : []).find((x) => x && x.id === id); return c && c.label ? String(c.label) : String(id).replace(/-/g, ' '); };
+const gwList = (a) => (a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]);
+const gwQ = (p, ids) => gwList(ids.map((id) => `“${esc(gwLab(p, id))}”`)); // check names, quoted (already escaped)
+const gwUsd = (x) => '$' + Math.abs(x).toFixed(2);
+const gwPct = (x) => (!isNum(x) ? DASH : x > 0 && x < 0.0001 ? 'under 0.01%' : pct(x, { dp: Math.abs(x) < 0.1 ? 2 : 0 }));
+// the parts: v is shown (null: a dash), c is what the score counted (staying power not measured shows a dash and counts 0)
+function gwParts(g, y) {
+  return GW_PARTS.map(([k, n, mx, t]) => {
+    const c = g && isNum(g[k]) ? g[k] : null;
+    return { k, n, mx, t, c, v: c != null && !(k === 'staying' && y && y.ps == null) ? c : null };
+  });
+}
+// the score from the parts and the why (lib/gem.mjs whyTotal): null when a check failed or a part is missing
+function gwSum(g, y) {
+  const parts = gwParts(g, y), ded = 10 * y.wn.length + 5 * y.dn.length;
+  if (y.sf.length || y.df.length || parts.some((x) => x.c == null)) return { parts, ded, raw: null, net: null, total: null };
+  const raw = sum(parts.map((x) => x.c)), net = Math.max(0, raw - ded);
+  return { parts, ded, raw, net, total: y.sn.length ? Math.min(net, 40) : net };
+}
+// the window's ranking, as the best-find tabs read it: verified pools with a score, best first (net APR breaks a tie)
+function gwRank(wk) {
+  const nt = (x) => { const w = W(x, wk); return w && isNum(w.net) ? w.net : -Infinity; };
+  return S.live.pools.filter((x) => x.verified !== false && gemOf(x, wk) != null && !hideStable(x)).sort((a, b) => (gemOf(b, wk) - gemOf(a, wk)) || (nt(b) - nt(a)));
+}
+// what each part read, in one plain sentence
+function gwReason(k, y, p) {
+  if (k === 'yield') {
+    if (!isNum(y.y)) return `Not read this pass (${DASH}).`;
+    const from = y.yd ? ` (the median of the last ${y.yd === 7 ? '7 days' : y.yd + ' days'}${y.yx ? ', the one-off day left out' : ''})` : ' (this window’s own net: under 3 days of history)';
+    return `A typical day ${y.y < 0 ? 'loses' : 'nets'} <b>${gwUsd(y.y)} per $1,000</b> after LVR and re-range costs${from}.${y.yh ? ' Halved: one trader paid most of it, with no history to check it against.' : ''} $1.37 counts in full.`;
+  }
+  if (k === 'thinness') {
+    if (!isNum(y.th)) return `Not read this pass (${DASH}).`;
+    return `The day’s LP fees are <b>${gwPct(y.th)}</b> of the value already at the price: ${y.th >= 0.0025 ? 'few' : y.th >= 0.001 ? 'a fair number of' : 'many'} LPs share it. 0.5% counts in full.`;
+  }
+  if (k === 'flow') {
+    const a = !isNum(y.mk) ? `The markout was not read (${DASH})` : y.mk <= 0 ? `Arbitrage takes back nothing of the fee (markout ${pct(y.mk, { dp: 0 })})` : `Arbitrage takes back <b>${pct(y.mk, { dp: 0 })}</b> of the fee (markout)`;
+    const b = isNum(y.tr) ? `<b>${int(y.tr)}</b> trader${y.tr === 1 ? '' : 's'} swapped this week` : `traders not read (${DASH})`;
+    return `${a}, and ${b} (100 counts in full).`;
+  }
+  const bits = [isNum(y.sd) ? `stranded <b>${Math.round(y.sd)} of 30</b> days` : `days stranded not read (${DASH})`,
+    !isNum(y.ws) ? `walls not read (${DASH})` : y.ws >= 99 ? 'no wall in view' : `nearest wall <b>${+y.ws.toFixed(1)}σ</b>-weeks away`,
+    isNum(y.ia) ? `<b>${pct(y.ia, { dp: 0 })}</b> held by inactive wallets` : `inactive wallets not read (${DASH})`];
+  return y.ps == null ? `Not measured this pass (${DASH}): a bonus only, it counts 0. ${gwCap(bits.join(', '))}.` : `${gwCap(bits.join(', '))}.`;
+}
+const gwMeter = (v, mx) => `<span class="gy-m" aria-hidden="true"><i style="width:${isNum(v) ? clamp((v / mx) * 100, 0, 100).toFixed(0) : 0}%"></i></span>`;
+function gwRow(x, reason, dim) {
+  return `<div class="gy-row${dim ? ' dim' : ''}" data-part="${x.k}"><div class="gy-ph"><b>${term(x.t, esc(x.n))}</b><span><span data-v>${isNum(x.v) ? x.v : DASH}</span><i>/${x.mx}</i></span></div>${gwMeter(x.v, x.mx)}${reason ? `<p>${reason}</p>` : ''}</div>`;
+}
+const gwDed = (t, v, why) => `<div class="gy-row ded"><div class="gy-ph"><b>${t}</b><span>${v}</span></div><p>${why}</p></div>`;
+// where the pool stands: fail (a check failed: no score), miss (inputs not read), cap, oneoff, gem, low
+function gwState(p, g, y) {
+  if (y.sf.length || y.df.length || p.verified === false) return 'fail';
+  if (!g || !isNum(g.total)) return 'miss';
+  if (y.sn.length) return 'cap';
+  if (y.yx || (Array.isArray(g.tags) && g.tags.includes('one-off'))) return 'oneoff';
+  return g.total >= gemAt() ? 'gem' : 'low';
+}
+function gwVerdict(p, g, y, st, sm) {
+  const parts = sm.parts.filter((x) => isNum(x.v)), by = (x) => x.v / x.mx;
+  const weak = parts.length ? parts.slice().sort((a, b) => by(a) - by(b))[0] : null, weakTxt = weak ? ` Weakest part: ${weak.n} (${weak.v}/${weak.mx}).` : '';
+  if (st === 'fail') {
+    const s = y.sf, d = y.df;
+    if (s.length || !d.length) return `<div class="gy-verdict no" data-verdict="fail"><b>Not a gem: a safety check failed.</b> ${s.length ? `The check ${gwQ(p, y.sf)} failed.` : 'Its swaps can’t be checked against its fee counters (unverified).'} A pool that fails a safety check is never scored, however good its fees look.${d.length ? ` A data check failed too: ${gwQ(p, y.df)}.` : ''}</div>`;
+    return `<div class="gy-verdict no" data-verdict="fail"><b>Not a gem: a data check failed.</b> The check ${gwQ(p, y.df)} didn’t hold, so the pool’s numbers can’t be trusted yet. It can’t be a gem until ${d.length > 1 ? 'they pass' : 'it passes'}.</div>`;
+  }
+  if (st === 'miss') {
+    const NM = { yield: 'Yield now', net: 'Yield now', thinness: 'Thinness', stranded: 'Thinness', flow: 'Flow', persistence: 'Staying power' };
+    const m = [...new Set((g && Array.isArray(g.missing) ? g.missing : []).map((k) => NM[k] || String(k)))];
+    return `<div class="gy-verdict" data-verdict="miss"><b>No score yet: ${m.length ? esc(gwList(m)) + (m.length > 1 ? ' weren’t' : ' wasn’t') : 'a part wasn’t'} read this pass.</b> A missing input leaves the score blank (${DASH}), never 0.</div>`;
+  }
+  if (st === 'cap') {
+    const n = y.sn.length, over = isNum(sm.net) && sm.net > 40;
+    return `<div class="gy-verdict" data-verdict="cap"><b>Capped at 40: a safety check did not run.</b> ${over ? `The parts come to <b>${sm.net}</b>${sm.ded ? ' after the deductions' : ''}, but the` : `The parts come to ${isNum(sm.net) ? sm.net : DASH}, under the cap anyway; the`} check${n > 1 ? 's' : ''} ${gwQ(p, y.sn)} did not run this pass. Until ${n > 1 ? 'they pass' : 'it passes'} the score stays at 40 or below.</div>`;
+  }
+  if (st === 'oneoff') {
+    const tr = p.burst && isNum(p.burst.oneTrader) ? p.burst.oneTrader : null, gem = g.total >= gemAt();
+    const typ = isNum(y.y) ? ` Without it a typical day ${y.y < 0 ? 'loses' : 'nets'} <b>${gwUsd(y.y)}</b> per $1,000${p.burst && isNum(p.burst.maxDay) ? `; the top day paid ${gwUsd(p.burst.maxDay)} in fees` : ''}.` : '';
+    const unc = Array.isArray(g.tags) && g.tags.includes('unconfirmed') ? ' Its pattern is still emerging, so it is tagged UNCONFIRMED too.' : '';
+    return `<div class="gy-verdict${gem ? ' ok' : ''}" data-verdict="oneoff"><b>${gem ? `A gem even without its one-off day: ${g.total} ≥ ${gemAt()}.` : 'Not a gem: the big day was one trader.'}</b> ${tr != null ? `One trade paid <b>${pct(tr, { dp: 0 })}</b> of the top day’s fees` : 'One trader paid most of the top day’s fees'}, so Yield now leaves that day out.${typ}${unc}</div>`;
+  }
+  if (st === 'gem') {
+    const top = parts.slice().sort((a, b) => by(b) - by(a)).slice(0, 2).map((x) => x.n);
+    return `<div class="gy-verdict ok" data-verdict="gem"><b>A gem: ${g.total} ≥ ${gemAt()}.</b> Carried by ${esc(gwList(top))}.${weakTxt}</div>`;
+  }
+  return `<div class="gy-verdict" data-verdict="low"><b>Not a gem: ${g.total} is under ${gemAt()}.</b> ${gemAt() - g.total} point${gemAt() - g.total === 1 ? '' : 's'} short.${weakTxt}</div>`;
+}
+function gwPills(p, y) {
+  const s = y.sp + y.sf.length + y.sn.length, d = y.dp + y.df.length + y.dn.length, nr = y.sn.length + y.dn.length;
+  return `<div class="gy-pills" data-gates>${termB('gwsafety', `<span class="gy-pill ${y.sf.length ? 'fail' : y.sn.length ? 'run' : 'ok'}">${y.sf.length ? '✕' : y.sn.length ? '–' : '✓'} Safety ${y.sp}/${s}</span>`)}`
+    + `${termB('gwdata', `<span class="gy-pill ${y.df.length ? 'fail' : 'ok'}">${y.df.length ? '✕' : '✓'} Data ${y.dp}/${d}</span>`)}`
+    + (nr ? `<span class="gy-pill run">– ${nr} not run${y.sn.length ? ' · cap 40' : ''}</span>` : '')
+    + `${termB('gwwarn', `<span class="gy-pill ${y.wn.length ? 'run' : 'zero'}">Warnings ${y.wn.length}</span>`)}</div>`;
+}
+function gwWhy(p, wk, g, y) {
+  const st = gwState(p, g, y), sm = gwSum(g, y), blocked = st === 'fail';
+  let rows = '';
+  if (blocked) rows = sm.parts.map((x) => gwRow({ ...x, v: null }, '', true)).join('') + `<p class="gy-note">Parts not scored: a failed check stops the score.</p>`;
+  else {
+    rows = sm.parts.map((x) => gwRow(x, gwReason(x.k, y, p), false)).join('');
+    if (y.wn.length) rows += gwDed(`${y.wn.length} warning${y.wn.length > 1 ? 's' : ''}`, MINUS + 10 * y.wn.length, gwCap(gwList(y.wn.map((x) => esc(GW_WARN[x] || x)))) + ': 10 points off each.');
+    if (y.dn.length) rows += gwDed(`${y.dn.length} data check${y.dn.length > 1 ? 's' : ''} not run`, MINUS + 5 * y.dn.length, `${gwQ(p, y.dn)} did not run this pass (5 points each). ${y.dn.length > 1 ? 'They' : 'It'} may come back next pass.`);
+    if (y.sn.length) rows += gwDed(`Safety check${y.sn.length > 1 ? 's' : ''} not run`, 'cap 40', `${gwQ(p, y.sn)} did not run.${isNum(sm.net) && sm.net > 40 ? ` ${sm.net} → 40.` : ' The score was under 40 anyway.'}`);
+    if (!y.wn.length && !y.dn.length && !y.sn.length) rows += `<div class="gy-row"><div class="gy-ph"><b>Deductions</b><span>0</span></div><p>No warnings, and every check ran.</p></div>`;
+  }
+  // the total: the parts read, less the deductions, = the score shown everywhere else
+  const shown = blocked || !isNum(g && g.total) ? null : g.total;
+  const terms = sm.parts.filter((x) => isNum(x.v)).map((x) => x.v);
+  let expr;
+  if (blocked || shown == null) expr = `no score · <b data-gytotal>${DASH}</b>`;
+  else expr = `${terms.length ? terms.join(' + ') : '0'}${sm.ded ? ' ' + MINUS + ' ' + sm.ded : ''} = ${y.sn.length && isNum(sm.net) && sm.net > 40 ? sm.net + ' → ' : ''}<b data-gytotal>${shown}</b>${y.sn.length ? ' (cap)' : ''}`;
+  const off = shown != null && sm.total !== shown ? `<p class="gy-note" data-gyoff>These parts don’t add up to the published score, so it is shown as published.</p>` : '';
+  const vd = gwVerdict(p, g, y, st, sm);
+  const ck = (Array.isArray(p.checks) ? p.checks : []).filter((c) => c && c.id);
+  const list = ck.map((c) => `<li class="${c.ok === true ? 'ok' : c.ok === false ? 'fail' : 'nr'}">${esc(c.label || c.id)}${c.ok == null ? ' · not run' : ''}${GW_SAFE.includes(c.id) ? ' <small>SAFETY</small>' : ''}</li>`).join('')
+    + (y.wn.length ? y.wn.map((x) => `<li class="wn">warning: ${esc(x)}</li>`).join('') : '<li class="ok">no warnings</li>');
+  return (st !== 'gem' ? vd : '') + gwPills(p, y)
+    + `<div class="gy-box" data-gybox>${rows}<div class="gy-tot"><b>${term('gem', 'Gem now')}</b><span>${expr}</span></div>${off}</div>`
+    + (st === 'gem' ? vd : '')
+    + `<button type="button" class="gy-ckb" data-act="gemwhy-ck" aria-expanded="${GW.ck}" aria-controls="gemwhy-ck">All ${ck.length} checks and the warnings</button><ul class="gy-ck" id="gemwhy-ck"${GW.ck ? '' : ' hidden'}>${list}</ul>`;
+}
+// C: the same parts beside the window's #1 and its median pool
+function gwVs(p, wk, g, y) {
+  const rank = gwRank(wk), me = rank.indexOf(p), first = rank[0] && rank[0] !== p ? rank[0] : rank[1] || null, isTop = rank[0] === p;
+  const med = rank.length ? rank[Math.floor(rank.length / 2)] : null;
+  const st = gwState(p, g, y), mine = st === 'fail' ? GW_PARTS.map(() => null) : gwParts(g, y).map((x) => x.v);
+  const partsOf = (q) => { const gq = W(q, wk) && W(q, wk).gem; return gwParts(gq, gwOf(q, wk)).map((x) => x.v); };
+  const dedOf = (q) => { const gq = W(q, wk) && W(q, wk).gem, c = gwParts(gq, null).map((x) => x.c); return gq && isNum(gq.total) && c.every(isNum) ? gq.total - sum(c) : null; };
+  const A = first ? partsOf(first) : null, M = med ? partsOf(med) : null;
+  const meDed = st === 'fail' ? null : dedOf(p), aDed = first ? dedOf(first) : null, mDed = med ? dedOf(med) : null;
+  const short = (q) => `${esc(q.pair)} ${feeTxt(q.feeTier)}`;
+  const bar = (lab, v, mx, cls) => `<div class="gy-cb"><span>${lab}</span><span class="gy-tr"><i class="${cls}" style="width:${isNum(v) ? clamp((Math.max(0, v) / mx) * 100, 0, 100).toFixed(0) : 0}%"></i></span><span>${isNum(v) ? v : DASH}</span></div>`;
+  const dtx = (v) => (isNum(v) ? (v < 0 ? MINUS + Math.abs(v) : '0') : DASH);
+  const lA = isTop ? '#2' : '#1';
+  const legend = `<div class="gy-legend"><span><i class="gy-sw gy-k-me"></i>this pool ${isNum(gemOf(p, wk)) && st !== 'fail' ? gemOf(p, wk) : DASH}</span>`
+    + (first ? `<span><i class="gy-sw gy-k-top"></i>${lA} ${short(first)} ${gemOf(first, wk)}</span>` : '')
+    + (med ? `<span><i class="gy-sw gy-k-med"></i>median pool${med === p ? ' (this one)' : ''} ${gemOf(med, wk)}</span>` : '') + '</div>';
+  const rows = GW_PARTS.map(([k, n, mx], i) => `<div class="gy-cr" data-part="${k}"><div class="gy-ph"><b style="font-size:12px">${esc(n)}</b><span style="font-size:10px;color:var(--muted)">/${mx}</span></div>`
+    + bar('this', mine[i], mx, 'gy-k-me') + (A ? bar(lA, A[i], mx, 'gy-k-top') : '') + (M ? bar('median', M[i], mx, 'gy-k-med') : '') + '</div>').join('')
+    + `<div class="gy-cr"><div class="gy-ph"><b style="font-size:12px">Deductions</b><span style="font-size:10px;color:var(--muted);white-space:normal;text-align:right">this ${dtx(meDed)}${first ? ` · ${lA} ${dtx(aDed)}` : ''}${med ? ` · median ${dtx(mDed)}` : ''}</span></div></div>`;
+  // the verdict: where the gap comes from
+  let vd;
+  const meT = st === 'fail' ? null : gemOf(p, wk);
+  if (!first) vd = `<b>No other scored pool</b> in the ${WIN_WORD[wk]} window to compare with.`;
+  else if (!isNum(meT)) vd = `<b>No score to compare:</b> ${st === 'fail' ? 'a failed check stops it' : 'an input wasn’t read'}. ${lA} scores ${gemOf(first, wk)} and the median pool ${med ? gemOf(med, wk) : DASH}.`;
+  else {
+    const other = isTop ? M : A, oT = isTop ? (med ? gemOf(med, wk) : null) : gemOf(first, wk), oDed = isTop ? mDed : aDed;
+    const d = GW_PARTS.map(([, n], i) => ({ n, v: isNum(other && other[i]) && isNum(mine[i]) ? other[i] - mine[i] : null })).filter((x) => isNum(x.v) && x.v !== 0);
+    const ahead = d.filter((x) => x.v > 0).sort((a, b) => b.v - a.v), behind = d.filter((x) => x.v < 0).sort((a, b) => a.v - b.v);
+    const dd = isNum(oDed) && isNum(meDed) ? oDed - meDed : 0;
+    if (isTop) {
+      const gap = isNum(oT) ? meT - oT : null;
+      vd = `<b>This is the #1 pool in the ${WIN_LABEL[wk]} window${isNum(gap) && med !== p ? `: ${gap} point${gap === 1 ? '' : 's'} above the median pool` : ''}.</b>${behind.length ? ` Most of it from ${gwList(behind.slice(0, 2).map((x) => `${x.n} (+${-x.v})`))}.` : ''}${dd < 0 ? ` Fewer deductions (+${-dd}).` : ''}`;
+    } else {
+      const gap = oT - meT, items = [...ahead.map((x) => `+${x.v} on ${x.n}`), ...(dd > 0 ? [`+${dd} from fewer deductions`] : [])];
+      vd = gap > 0 ? `<b>#1 is ${gap} point${gap === 1 ? '' : 's'} ahead:</b> ${gwList(items)}.${behind.length ? ` This pool is ahead on ${gwList(behind.map((x) => `${x.n} (+${-x.v})`))}.` : ''}${dd < 0 ? ` It loses ${-dd} fewer points to deductions.` : ''}`
+        : `<b>This pool ties with #1 at ${meT}</b>; #1 ranks first on its net APR.`;
+    }
+  }
+  return `<div class="lbl">This pool vs ${isTop ? '#2' : '#1'} vs the median pool · ${WIN_LABEL[wk]}</div>${legend}<div class="gy-box gy-cmp" data-gyvs>${rows}</div><div class="gy-verdict${isTop ? ' ok' : ''}" data-verdict="vs">${vd}</div>`
+    + (me < 0 && st !== 'fail' && isNum(meT) ? `<p class="gy-note">This pool is not in the ranking in view (stablecoin pairs are off).</p>` : '');
+}
+function gwRender() {
+  const p = poolById(GW.id), y = p ? gwOf(p, GW.wk) : null;
+  if (!p || !y) { gwClose(); return; }
+  const wk = GW.wk, g = W(p, wk).gem, st = gwState(p, g, y);
+  $('#gemwhy-h').textContent = `Why ${p.pair} ${feeTxt(p.feeTier)} · ${chainOf(p.chain).name}`;
+  const tags = (Array.isArray(g.tags) ? g.tags : []).map((t) => ({ 'one-off': 'ONE-OFF', unconfirmed: 'UNCONFIRMED', unchecked: 'UNCHECKED' }[t])).filter(Boolean);
+  const top = `<div class="gy-top"><span class="gy-score"><b data-gyscore>${st === 'fail' || !isNum(g.total) ? DASH : g.total}</b><span class="of">/100 · ${WIN_LABEL[wk]}</span>`
+    + `<span class="gy-chip ${st === 'gem' || (st === 'oneoff' && g.total >= gemAt()) ? 'gem">GEM' : 'no">NOT A GEM'}</span>${PATTERN_TXT[p.pattern] ? `<span class="gy-chip p">${PATTERN_TXT[p.pattern]}</span>` : ''}${tags.map((t) => `<span class="gy-chip tg">${t}</span>`).join('')}</span>`
+    + `<span class="seg gy-seg" role="group" aria-label="Breakdown view"><button type="button" data-act="gemwhy-v" data-v="why" aria-pressed="${GW.view === 'why'}">Why</button><button type="button" data-act="gemwhy-v" data-v="vs" aria-pressed="${GW.view === 'vs'}">vs #1</button></span></div>`;
+  $('#gemwhy-body').innerHTML = top + (GW.view === 'vs' ? gwVs(p, wk, g, y) : gwWhy(p, wk, g, y));
+}
+function gwOpen(id, opener) {
+  const p = poolById(id);
+  if (!p || !gwOf(p, S.win)) return;
+  popClose();
+  Object.assign(GW, { id, wk: S.win, view: 'why', ck: false, opener: opener || null });
+  gwRender();
+  const sh = $('#gemwhy'), h = document.documentElement;
+  if (sh.hidden) { sh.hidden = false; GW.open = true; GW.mo = !h.classList.contains('modal-open'); h.classList.add('modal-open'); hlOpen('gemwhy'); }
+  $('#gemwhy-body').scrollTop = 0;
+  $('#gemwhy-x').focus({ preventScroll: true });
+}
+function gwClose() {
+  const sh = $('#gemwhy');
+  if (!sh || sh.hidden) { GW.open = false; return; }
+  popClose();
+  sh.hidden = true; GW.open = false;
+  if (GW.mo) document.documentElement.classList.remove('modal-open');
+  GW.mo = false;
+  hlClosed('gemwhy');
+  // focus back to the "Why ?" that opened it (or the same pool's, if the card was redrawn meanwhile)
+  let o = GW.opener; GW.opener = null;
+  if (!o || !document.contains(o) || !o.getClientRects().length) o = $$('[data-act="gemwhy"]').find((b) => b.dataset.id === GW.id && b.getClientRects().length) || null;
+  if (o) o.focus({ preventScroll: true });
+}
+function gwClick(el) {
+  const a = el.dataset.act;
+  if (a === 'gemwhy') { if (el.dataset.id) gwOpen(el.dataset.id, el); return; }
+  if (a === 'gemwhy-x') { gwClose(); return; }
+  if (a === 'gemwhy-v') { if (el.dataset.v === GW.view) return; GW.view = el.dataset.v === 'vs' ? 'vs' : 'why'; gwRender(); const b = $(`#gemwhy [data-act="gemwhy-v"][data-v="${GW.view}"]`); if (b) b.focus({ preventScroll: true }); return; }
+  if (a === 'gemwhy-ck') { GW.ck = !GW.ck; el.setAttribute('aria-expanded', String(GW.ck)); const l = $('#gemwhy-ck'); if (l) l.hidden = !GW.ck; }
+}
+// its keys while open: Esc closes it (a note over it first), Tab stays inside it, nothing reaches the page under it
+function gwKey(e) {
+  if (e.key === 'Escape') { if (S.popFor) return false; e.preventDefault(); gwClose(); return true; }
+  if (e.key === 'Tab') {
+    const f = $$('#gemwhy button, #gemwhy [href], #gemwhy [tabindex="0"]').filter((x) => !x.disabled && x.getClientRects().length && !x.closest('[hidden]'));
+    if (!f.length) { e.preventDefault(); return true; }
+    const i = f.indexOf(document.activeElement); // moved here in every browser (Safari's own Tab skips buttons)
+    e.preventDefault();
+    f[i < 0 ? (e.shiftKey ? f.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    return true;
+  }
+  return e.key === '/';
+}
+// /gemwhy-js
+
 // ---------- events ----------
 function setWin(wk) {
   if (!WINS.includes(wk) || wk === S.win) return;
@@ -8463,6 +8802,7 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
   if (S.fl && el.dataset.act !== 'flash') flEnd();
+  if (el.dataset.act.startsWith('gemwhy')) { gwClick(el); return; } // the gem's why: its link, toggle, list and close
   if (el.dataset.act.startsWith('eb-')) { ebClick(el); return; } // v0.7.2: the error badge and its sheet
   if (el.dataset.act.startsWith('ws-') && wsClick(el, e)) return; // v0.6.0: History buttons and the workspace
   if (/^(g|rk|pw|al|sh)-/.test(el.dataset.act)) { gClick(el, e); return; } // v0.7.0: guests, the recovery key, the passphrase, the alarm
@@ -8527,6 +8867,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !$('#gsheet').hidden) { gSheet(false); return; } // v0.7.0: the guest sheet and the welcome card first
   if (e.key === 'Escape' && !$('#gwel').hidden) { gWelcome(false); return; }
   if (e.key === 'Escape' && $('#fullv')) { fullClose(); return; } // the full view first: the panel under it stays
+  if (GW.open && gwKey(e)) return; // the gem's why: Esc closes it (a note over it first), Tab stays inside
   if (WS.open && wsKey(e)) return; // v0.6.0: the workspace's own keys (it sits over the page and the panel)
   if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target.closest && e.target.closest('input, select, textarea, [contenteditable]')) && !$('#fullv') && !WS.open && $('#lockscreen').hidden && !SOLO) { e.preventDefault(); qFind(); return; }
   if (e.key === 'Escape' && FULL && parent !== window) { parent.postMessage('lps-full-close', location.origin); return; } // inside it
@@ -8889,6 +9230,30 @@ const XG = {
   unconfirmed: { title: 'Unconfirmed', meaning: 'Fees just rose, or there are only a day or two of them: the gem isn’t confirmed over time yet.',
     how: 'The scanner tags a pool unconfirmed when its fee pattern is “rising”: the last day at 3× the median of the last 7 or more, or 2 days of fees or fewer.', valueLine: () => xWin() },
 };
+// "Why this pool?": the four parts of Gem now and its gates (lib/gem.mjs gemNow), explained where the breakdown shows them
+Object.assign(XG, {
+  gwyield: { title: 'Yield now', meaning: 'The typical day’s net per $1,000 at the price: up to 45 of the gem’s 100 points.',
+    how: 'The median of the last 7 days’ net per $1,000 a day (fees after sharing with the liquidity already in range, less LVR and re-range costs), so one burst day can’t carry it. $1.37 a day (50% a year) counts in full; a day one trader paid over half of is left out (one-off).',
+    valueLine: (el) => xJoin(xNum(el), xWin()) },
+  gwthin: { title: 'Thinness', meaning: 'How few LPs share the price: up to 25 points.',
+    how: 'The day’s LP fees ÷ the value already inside the suggested range. 0.5% a day counts in full: few LPs at the price split the fees.',
+    valueLine: (el) => xJoin(xNum(el), xWin()) },
+  gwflow: { title: 'Flow', meaning: 'Who trades here: up to 20 points.',
+    how: '70% from low toxicity (1 − markout ÷ fee: what arbitrage takes back of each fee) and 30% from breadth (distinct traders a week; about 100 counts in full).',
+    valueLine: (el) => xJoin(xNum(el), xWin()) },
+  gwstay: { title: 'Staying power', meaning: 'Whether the edge lasts: a bonus of up to 10 points.',
+    how: 'Half from the days stranded of the last 30, a quarter from the nearest wall in σ-weeks (2 counts in full), a quarter from the share held by inactive wallets. Not measured: it counts 0 and shows a dash, never a 0.',
+    valueLine: (el) => xJoin(xNum(el), xWin()) },
+  gwsafety: { title: 'Safety checks', meaning: 'Checks that the pool can be traded safely at all.',
+    how: 'Both tokens’ source verified, a small sell goes through (95% of the quote or more), tokens ranked and trading long enough, no hook settles swaps outside the pool. One fails: no score. One didn’t run: the score is capped at 40 (UNCHECKED).',
+    valueLine: (el) => xNum(el) },
+  gwdata: { title: 'Data checks', meaning: 'Cross-checks of the pool’s own numbers.',
+    how: 'Its swaps against its fee counters, its price and volume against the market, its map against its balances, its volatility against the market’s, and more. One fails: no score. One didn’t run: 5 points off.',
+    valueLine: (el) => xNum(el) },
+  gwwarn: { title: 'Warnings', meaning: 'Things to look at twice: 10 points off each.',
+    how: 'A pool with a hook (or one whose hook wasn’t read), under 10 swaps a day, or a price more than 10% off the market.',
+    valueLine: (el) => xNum(el) },
+});
 // every other explainable word: its note (GLOSS) as the meaning, the rest of it as the how
 const XA = { net: 'netApr', gascost: 'gasCost' };
 for (const k of Object.keys(GLOSS)) {
@@ -8920,6 +9285,7 @@ const XT = [
   ['.shw .sh th button[data-k="gem"]', 'gem'], ['.shw .sh th button[data-k="net"]', 'netApr'], ['.shw .sh th button[data-k="vol"]', 'volDay'], ['.shw .sh th button[data-k="tvl"]', 'tvlNow'], ['.shw .sh th button[data-k="feeApr"]', 'feeApr'],
   ['#all-tbl tbody td:nth-child(6)', 'volDay'], ['#all-tbl tbody td:nth-child(7)', 'tvlNow'], ['#all-tbl tbody td:nth-child(9)', 'feeApr'],
 ];
+XT.push(...[['yield', 'gwyield'], ['thinness', 'gwthin'], ['flow', 'gwflow'], ['staying', 'gwstay']].map(([p, k]) => [`.gy-row[data-part="${p}"] .gy-ph > span`, k])); // the gem's why: each part's points
 // a native tooltip on an explained element (or inside one) moves to data-xt: the card shows it, never two tooltips at once
 function xUntitle(e) { const t = e.getAttribute('title'); if (t == null) return; if (t) e.setAttribute('data-xt', t); e.removeAttribute('title'); }
 function xTag(root) {
@@ -8938,7 +9304,7 @@ function xTag(root) {
 const BB = { el: $('#bbar'), mf: 0, on: false, cov: false, kb: false, main: false, ws: false, tall: 0, tw: 0, act: undefined, pin: null, raf: 0, tip: false };
 const BM = { open: false, opener: null };
 const BB_SEC = { best: '#best', pools: '#all', saved: '#all', tests: '#bt' };
-const BB_WATCH = new Set(['app', 'lockscreen', 'gend', 'loaderr', 'sheet', 'ws', 'ebsheet', 'gsheet', 'gwel', 'settings', 'bmore', 'hx']);
+const BB_WATCH = new Set(['gemwhy', 'app', 'lockscreen', 'gend', 'loaderr', 'sheet', 'ws', 'ebsheet', 'gsheet', 'gwel', 'settings', 'bmore', 'hx']);
 const phoneW = () => matchMedia('(max-width:700px), (max-width:950px) and (max-height:499.98px)').matches;
 const WS_ICO = { // the workspace's tabs, as the bar's icons on a phone
   overview: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7 15.5l3.2-3.6 2.6 2.2 4.2-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -8947,7 +9313,7 @@ const WS_ICO = { // the workspace's tabs, as the bar's icons on a phone
   pair: '<svg viewBox="0 0 24 24"><circle cx="9" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="5.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
   compare: '<svg viewBox="0 0 24 24"><path d="M3.5 17l4.5-5 3.5 3 8.5-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 12.5l4.5 1.5 3.5-4.5 8.5 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/></svg>',
 };
-const bbCovered = () => WS.open || !$('#sheet').hidden || !$('#ebsheet').hidden || !$('#gsheet').hidden || !$('#gwel').hidden || !!$('#fullv');
+const bbCovered = () => WS.open || !$('#sheet').hidden || !$('#gemwhy').hidden || !$('#ebsheet').hidden || !$('#gsheet').hidden || !$('#gwel').hidden || !!$('#fullv');
 function bbInset() { // how much of the screen's bottom a bar takes now: the main bar, or the workspace's tabs
   if (WS.open) { const t = $('#ws-tabs'); return t && phoneW() && t.getClientRects().length && getComputedStyle(t).position === 'fixed' ? Math.max(0, innerHeight - t.getBoundingClientRect().top) : 0; }
   return BB.el.getClientRects().length && !BB.cov ? Math.max(0, innerHeight - BB.el.getBoundingClientRect().top) : 0;
