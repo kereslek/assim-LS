@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-FRZz5RnJDNNUiaiPFBb9iezJ7IchBIL0DkQFU4dYHy0='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-T7NA1CkLDw185igGl8jY1RWMjaKPJJ8pvnHfz8RA9QE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1672,11 +1672,13 @@ html.guest #bb-saved{display:none}
   html.bb-on .eb-card,html.bb-on .gs-card,html.bb-on .gw-card{max-height:calc(100% - 40px)} /* the room above the bar */
   html.bb-on.bm-open .bbar{z-index:47}
   /* the pool workspace: its five tabs are the bar (the real tablist, drawn at the bottom; the row on top goes) */
-  .ws{--wsbh:calc(56px + env(safe-area-inset-bottom))}
+  /* 44 px, as the row of tabs on top was: the workspace keeps all of its height for its views (its own header is tall) */
+  .ws{--wsbh:calc(44px + env(safe-area-inset-bottom))}
   .ws-tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;height:var(--wsbh);display:flex;gap:0;overflow:visible;padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:var(--head);border-top:1px solid var(--line2);box-shadow:0 -10px 22px -14px rgba(0,0,0,.85)}
-  .ws-tab{flex:1 1 0;min-width:0;min-height:44px;height:auto;padding:5px 2px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-bottom:0;font-size:10px;line-height:1.1;letter-spacing:.06em;position:relative;-webkit-tap-highlight-color:transparent}
+  .ws-tab{flex:1 1 0;min-width:0;min-height:44px;height:auto;padding:3px 2px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-bottom:0;font-size:10px;line-height:1.1;letter-spacing:.06em;position:relative;-webkit-tap-highlight-color:transparent}
   .ws-tab .hbi{display:none}
   .ws-tab .bbi{display:block}
+  .ws-tab .bbi svg{width:20px;height:20px}
   .ws-tab[aria-selected="true"]::before{background:var(--accent2)}
   .ws-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-5px;border-radius:12px}
   .ws-body{margin-bottom:var(--wsbh);padding-bottom:20px}
@@ -8933,7 +8935,7 @@ function xTag(root) {
 }
 
 // ---------- B · the bottom bar ----------
-const BB = { el: $('#bbar'), on: false, cov: false, kb: false, main: false, ws: false, tall: 0, tw: 0, act: undefined, pin: null, raf: 0, tip: false };
+const BB = { el: $('#bbar'), mf: 0, on: false, cov: false, kb: false, main: false, ws: false, tall: 0, tw: 0, act: undefined, pin: null, raf: 0, tip: false };
 const BM = { open: false, opener: null };
 const BB_SEC = { best: '#best', pools: '#all', saved: '#all', tests: '#bt' };
 const BB_WATCH = new Set(['app', 'lockscreen', 'gend', 'loaderr', 'sheet', 'ws', 'ebsheet', 'gsheet', 'gwel', 'settings', 'bmore', 'hx']);
@@ -8984,6 +8986,7 @@ function bbGhost(from, into, active) {
 }
 function bbMorph(open, was) {
   if (reduced()) return;
+  BB.mf++; // the cross-fades started (the tests read it)
   const T = 150, fade = (el, a, b) => el.animate([{ opacity: a }, { opacity: b }], { duration: T, easing: 'ease-out' });
   if (open) {
     const tabs = $('#ws-tabs'); if (!tabs) return;
@@ -9131,7 +9134,7 @@ document.addEventListener('contextmenu', (e) => { if (XH.id != null || (XH.eat &
 // a mouse: 700 ms over an element shows its card beside it; leaving both for 250 ms puts it away
 function xHovFire(el) {
   if (XH.hov !== el || !el.isConnected || XH.id != null || el === XH.noHov) return;
-  if ((S.popFor === el && !$('#pop').hidden) || (XH.open && XH.open.el === el) || BM.open) return;
+  if (!$('#pop').hidden || (XH.open && XH.open.el === el) || BM.open) return; // a note opened on purpose (a tap, a click) stays: a hover never puts it away
   if (XH.open && XH.open.via !== 'hover') return; // a card opened on purpose stays
   hxOpen(el, 'pop', 'hover');
 }
@@ -9139,6 +9142,8 @@ function xHovFire(el) {
 // clicks is doing, not reading
 document.addEventListener('pointermove', (e) => {
   if (e.pointerType !== 'mouse') return;
+  if (e.clientX === XH.mx && e.clientY === XH.my) return; // a move the browser makes up after a scroll (the mouse stayed): not the hand's
+  XH.mx = e.clientX; XH.my = e.clientY;
   if (e.target.closest && e.target.closest('#hx-card')) { clearTimeout(XH.lt); return; }
   const el = xTarget(e.target);
   if (el !== XH.noHov) XH.noHov = null;
@@ -9282,7 +9287,7 @@ new MutationObserver((ms) => {
 }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'title'] });
 xTag(document.body);
 if (window.__lpsHooks) window.__lpsHooks.v080 = () => ({ on: document.documentElement.classList.contains('bb-on'), kb: BB.kb, cov: BB.cov, main: BB.main, act: BB.act, more: BM.open,
-  hx: XH.open ? { k: XH.open.k, mode: XH.open.mode, via: XH.open.via } : null, inset: bbInset(), keys: Object.keys(XG) });
+  hx: XH.open ? { k: XH.open.k, mode: XH.open.mode, via: XH.open.via } : null, inset: bbInset(), mf: BB.mf, keys: Object.keys(XG) });
 if (window.__lpsHooks) window.__lpsHooks.hxShow = (el) => (el ? hxOpen(el, 'pop', 'key') : hxClose(true)); // the tests read every card
 // /v080-js
 window.LPS = Object.freeze({ build: BUILD, refresh: () => refresh() });

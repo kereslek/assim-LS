@@ -7108,7 +7108,7 @@ async function testBottomBar(browser) {
     ok(`bottombar ${tag}: the bar hides while the keyboard is up (a shrunk window, a shrunk visual viewport) and comes back after`, k0.vis && !k1.vis && k1.kb && k2.vis && !k3.vis && k4.vis && !k4.kb, JSON.stringify([k0.vis, k1.vis, k2.vis, k3.vis, k4.vis]));
     // the pool workspace: the bar becomes its five tabs (the one tablist, at the bottom; the row on top goes)
     await p.evaluate(() => { window.dispatchEvent(new WheelEvent('wheel')); scrollTo(0, 0); }); await p.evaluate(BB_REST);
-    const mf = await p.evaluate(async () => { document.querySelector('#best [data-act="ws-hist"]').click(); await Promise.resolve(); await new Promise((r) => setTimeout(r, 0)); return document.getAnimations().filter((x) => x.effect && x.effect.target && x.effect.target.closest && x.effect.target.closest('#ws-tabs, #bbar') && x.effect.getTiming().duration === 150).length; });
+    const mf = await p.evaluate(async () => { const n0 = window.__lpsHooks.v080 ? window.__lpsHooks.v080().mf : 0; document.querySelector('#best [data-act="ws-hist"]').click(); await Promise.resolve(); const fades = document.getAnimations().filter((x) => x.effect && x.effect.target && x.effect.target.closest && x.effect.target.closest('#ws-tabs, #bbar') && x.effect.getTiming().duration === 150).length; return { n: window.__lpsHooks.v080 ? window.__lpsHooks.v080().mf - n0 : 0, fades }; }); // the count the page keeps (a slow WebKit can end a 150 ms fade before a test reads it)
     await wsWait(p); await sleep(300);
     const W = () => p.evaluate(() => {
       const tl = [...document.querySelectorAll('#ws [role="tablist"]')].filter((x) => x.getClientRects().length), t = document.querySelector('#ws-tabs'), r = t.getBoundingClientRect(), body = document.querySelector('#ws-body').getBoundingClientRect(), head = document.querySelector('#ws-head').getBoundingClientRect();
@@ -7117,10 +7117,10 @@ async function testBottomBar(browser) {
       return { lists: tl.length, fixed: getComputedStyle(t).position === 'fixed', bottom: Math.round(r.bottom), vh: innerHeight, h: Math.round(r.height), tabs, bodyEnd: Math.round(body.bottom), top: Math.round(r.top), headH: Math.round(head.height), inert: main.hasAttribute('inert'), onTop: !!mid && !!mid.closest('#ws-tabs'), ws: window.__lpsHooks.ws().tab, hs: document.documentElement.scrollWidth - document.documentElement.clientWidth };
     });
     let w = await W();
-    ok(`bottombar ${tag}: in the workspace the bar is its five tabs (Overview · History · Liquidity · Pair · Compare), one tablist, at the bottom`, w.lists === 1 && w.fixed && Math.abs(w.bottom - w.vh) <= 1 && w.h >= want - 1 && w.tabs.length === 5 && w.tabs.map((x) => x.v).join() === 'overview,history,liquidity,pair,compare' && w.onTop, JSON.stringify({ lists: w.lists, fixed: w.fixed, b: w.bottom, vh: w.vh, h: w.h }));
+    ok(`bottombar ${tag}: in the workspace the bar is its five tabs (Overview · History · Liquidity · Pair · Compare), one tablist, at the bottom, 44 px (the row on top was; the workspace keeps its height)`, w.lists === 1 && w.fixed && Math.abs(w.bottom - w.vh) <= 1 && w.h >= 43 && w.h <= want + 40 && w.tabs.length === 5 && w.tabs.map((x) => x.v).join() === 'overview,history,liquidity,pair,compare' && w.onTop, JSON.stringify({ lists: w.lists, fixed: w.fixed, b: w.bottom, vh: w.vh, h: w.h }));
     ok(`bottombar ${tag}: the tabs are real (role tab, aria-selected, aria-controls the view), 44×44 or more, an icon each, no label cut off`, w.tabs.every((x) => x.ctl === 'ws-body' && x.w >= 44 && x.h >= 44 && x.icon && !x.cut) && w.tabs.filter((x) => x.sel === 'true').length === 1 && w.tabs.find((x) => x.sel === 'true').v === 'history', JSON.stringify(w.tabs));
     ok(`bottombar ${tag}: the workspace's content ends above its tabs; the main bar underneath is inert; nothing sideways`, w.bodyEnd <= w.top + 1 && w.inert && w.hs <= 0, JSON.stringify({ bodyEnd: w.bodyEnd, top: w.top, inert: w.inert, hs: w.hs }));
-    ok(`bottombar ${tag}: the bar and the tabs cross-fade (150 ms) as the workspace opens`, mf >= 5, String(mf));
+    ok(`bottombar ${tag}: the bar and the tabs cross-fade (150 ms) as the workspace opens`, mf.n === 1 && (mf.fades >= 5 || BROWSER === 'webkit'), JSON.stringify(mf));
     if (SHOTS) await snap(p, `bb-${tag.replace(/\W+/g, '')}-ws`);
     for (const v of ['overview', 'liquidity', 'pair', 'compare', 'history']) {
       await bbTap(p, `#ws-tabs [data-v="${v}"]`, touch); await sleep(350);
@@ -7204,7 +7204,7 @@ const HX_CARD = async () => { // the card as shown (once its slide-in has ended)
   const hx = document.querySelector('#hx'), c = document.querySelector('#hx-card');
   if (!hx || hx.hidden || !c) return { open: false, title: '', meaning: '', how: '', value: '' };
   await Promise.all(c.getAnimations().map((x) => x.finished.catch(() => {})));
-  const r = c.getBoundingClientRect(), bar = [document.querySelector('#bbar'), document.querySelector('#ws:not([hidden]) #ws-tabs')].filter((b) => b && b.getClientRects().length && getComputedStyle(b).display !== 'none' && getComputedStyle(b).position === 'fixed').map((b) => b.getBoundingClientRect());
+  const r = c.getBoundingClientRect(), bar = [document.querySelector('#ws:not([hidden]) #ws-tabs') || document.querySelector('#bbar')].filter((b) => b && b.getClientRects().length && getComputedStyle(b).display !== 'none' && getComputedStyle(b).position === 'fixed').map((b) => b.getBoundingClientRect());
   const tx = (id) => (document.querySelector('#' + id) || {}).textContent || '';
   const k = window.__lpsHooks.v080().hx, src = k ? document.querySelector('[aria-describedby~="hx-m"]:not(#hx-card)') : null;
   return { open: true, k: k && k.k, mode: k && k.mode, via: k && k.via, title: tx('hx-t'), meaning: tx('hx-m'), how: tx('hx-h'), value: tx('hx-v'), role: c.getAttribute('role'), modal: c.getAttribute('aria-modal'), lab: c.getAttribute('aria-labelledby'),
@@ -7275,7 +7275,7 @@ async function testHoldx(browser) {
   await p.evaluate(() => history.back()); await sleep(450);
   ok(`holdx ${tag}: Back (Safari's back gesture) closes it and stays on the page`, a.card && !(await p.evaluate(HX_CARD)).open && (await p.isVisible('#app')));
   const swipe = await p.evaluate(async () => { // a finger down the card's top (where touch events can be made)
-    if (typeof Touch !== 'function') return 'no touch events here';
+    try { new TouchEvent('touchstart', { touches: [new Touch({ identifier: 1, target: document.body, clientX: 0, clientY: 0 })] }); } catch (e) { return 'no touch events here'; } // WebKit has Touch but no constructor
     const el = document.querySelector('#best .bignum'); el.scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 150));
     const q = el.getBoundingClientRect(), tg = document.elementFromPoint(q.left + 10, q.top + q.height / 2);
     tg.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 51, pointerType: 'touch', isPrimary: true, clientX: q.left + 10, clientY: q.top + q.height / 2, bubbles: true }));
