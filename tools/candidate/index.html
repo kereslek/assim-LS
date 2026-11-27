@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-T7NA1CkLDw185igGl8jY1RWMjaKPJJ8pvnHfz8RA9QE='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-mlp09A2Y2bF/Yqkb2EEtr0XTK8iNEGfMFDnjHKtPDEg='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -2415,7 +2415,7 @@ return { start: d3Start, stop: d3Stop, mark: d3Mark };
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.8.0';
+const BUILD = 'v0.8.1';
 // v0.7.9: never inside another site's frame (a meta CSP can't say frame-ancestors). A framed page goes blank and never asks
 // for the passphrase; only the dashboard's own full view (same origin, ?full=1) may frame it.
 const FRAMED = (() => {

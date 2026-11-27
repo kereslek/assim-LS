@@ -21,7 +21,7 @@
 //                                                    scatter (v0.7.5: the forecast-vs-backtest scatter crowded: no text on text, labels by their dots, +N)
 //                                                    explainer (v0.7.6: the "How to read this" note on top: shows, hides, comes back, jumps to the scatter)
 //                                                    tokenlinks (v0.7.8: each token a link to its coin page, CoinMarketCap else CoinGecko; rows keep their tap)
-//                                                    guest180 (v0.7.9: the shared guest password's end date and "Restart 180 days", owner only)
+//                                                    guest180 (v0.8.1: the shared guest password's end date and "Restart 180 days", owner only)
 //                                                    refreshcd (v0.7.6: the refresh button's ring and m:ss to the next pass, ~3 s on a tap, done, late, reduced)
 //                                                    lazy3d (v0.7.9: the 3D look's code runs only when 3D shows; both ways; idle preload)
 //                                                    a11yfix (v0.7.9: WCAG AA text in both looks, layout shifts under 0.05, a framed page blank)
@@ -5528,7 +5528,7 @@ async function testGuestAdmin(browser) {
   ok('guestadmin: owner pages have no errors', t.errors.length === 0, t.errors.slice(0, 3).join(' | '));
   await t.ctx.close();
 }
-// ---------- v0.7.9 · guest180: the shared guest password lasts 180 days from the day the owner hands it out. Settings shows its
+// ---------- v0.8.1 · guest180: the shared guest password lasts 180 days from the day the owner hands it out. Settings shows its
 // end (dd Mon yyyy, CET) and "Restart 180 days", which seals extend-shared-guest through the same "Send to the loop" flow; the
 // loop's own code keeps the password and the market key and ends it 180 days from its pass; a restart after the end is refused
 // and said; guests and members never get the button. Made-up fixtures only ----------
@@ -7047,7 +7047,7 @@ async function testBottomBar(browser) {
     });
     let m = await M();
     ok(`bottombar ${tag}: More opens a sheet above the bar (the bar on top of its dim, More pressed), the focus inside`, m.open && m.above && m.barOnTop && m.dialog && m.exp === 'true' && m.focusIn && m.fit, JSON.stringify(m));
-    ok(`bottombar ${tag}: More holds How to read this, the market strip (gas, 3 prices, the next pass), Sign out and the version`, m.its.includes('bm-xn') && m.its.includes('bm-lock') && m.gas && m.px === 3 && /next pass/.test(m.mkt) && /updated/.test(m.mkt) && /v0\.8\.0/.test(m.ver) && noJunk(m.mkt), JSON.stringify({ its: m.its, mkt: m.mkt, ver: m.ver }));
+    ok(`bottombar ${tag}: More holds How to read this, the market strip (gas, 3 prices, the next pass), Sign out and the version`, m.its.includes('bm-xn') && m.its.includes('bm-lock') && m.gas && m.px === 3 && /next pass/.test(m.mkt) && /updated/.test(m.mkt) && /\bv\d+\.\d+\.\d+\b/.test(m.ver) && noJunk(m.mkt), JSON.stringify({ its: m.its, mkt: m.mkt, ver: m.ver }));
     if (SHOTS) await snap(p, `bb-${tag.replace(/\W+/g, '')}-more`);
     await p.evaluate(() => document.querySelector('#bmore [data-act="gas"]').click()); await sleep(250);
     const gp = await p.evaluate(() => { const pop = document.querySelector('#pop'), r = pop.getBoundingClientRect(), b = document.querySelector('#bbar').getBoundingClientRect(); return { vis: !pop.hidden, txt: pop.textContent, above: r.bottom <= b.top + 1 }; });
