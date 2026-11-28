@@ -25,7 +25,9 @@ test('privacy and robots headers', () => {
 
 test('the CSP allows only the page’s own script, its origin and the data branch', () => {
   assert.ok(csp.includes("default-src 'none'"));
-  assert.ok(/connect-src 'self' https:\/\/raw\.githubusercontent\.com;/.test(csp), 'connect-src');
+  // v0.8.3: the D1 archive's read API (worker/, docs/DATA.md "Archive API") is the one other origin a page with it may connect to
+  const AR = /const AR_API = 'https:\/\/assim-ls-api\.kereslek\.workers\.dev'/.test(html);
+  assert.ok((AR ? /connect-src 'self' https:\/\/raw\.githubusercontent\.com https:\/\/assim-ls-api\.kereslek\.workers\.dev;/ : /connect-src 'self' https:\/\/raw\.githubusercontent\.com;/).test(csp), 'connect-src');
   const src = (csp.match(/script-src ([^;]+);/) || [])[1] || '';
   assert.ok(!src.includes('unsafe-inline'), 'no inline scripts beyond the hashed one');
   const want = hashed.map((s) => `'sha256-${crypto.createHash('sha256').update(s, 'utf8').digest('base64')}'`).join(' ');
@@ -40,7 +42,7 @@ test('self-contained: no external scripts, styles or fonts', () => {
   // v0.7.0: github.com, for the owner's two links (a sealed request as a new inbox/ file; the LOCK_PASSPHRASE secret's page)
   // v0.7.8: each token's coin page (CoinMarketCap, else CoinGecko), a link too
   const LINKS = ['etherscan.io', 'basescan.org', 'app.uniswap.org', ...(/const INBOX_NEW = /.test(html) ? ['github.com'] : []), ...(/const COIN_PAGES = /.test(html) ? ['coinmarketcap.com', 'www.coingecko.com'] : [])];
-  assert.deepEqual([...new Set(hosts)].filter((h) => h !== 'www.w3.org' && !LINKS.includes(h)).sort(), ['raw.githubusercontent.com']); // w3.org: the svg namespace, never fetched
+  assert.deepEqual([...new Set(hosts)].filter((h) => h !== 'www.w3.org' && !LINKS.includes(h)).sort(), [...(/const AR_API = /.test(html) ? ['assim-ls-api.kereslek.workers.dev'] : []), 'raw.githubusercontent.com']); // w3.org: the svg namespace, never fetched
   for (const h of LINKS) assert.ok(!csp.includes(h), `${h} is a link target, not a source`);
   const linkLines = html.split('\n').filter((l) => LINKS.some((h) => l.includes('https://' + h)));
   assert.ok(linkLines.length >= 1 && linkLines.every((l) => /^const (EXPLORER|UNI_CHAIN|INBOX_NEW|SECRET_URL|COIN_PAGES) = |^  const id = String\(p\.id/.test(l)), 'link hosts only in the link builders');
