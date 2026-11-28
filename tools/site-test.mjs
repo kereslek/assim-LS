@@ -7733,6 +7733,15 @@ async function arAA(p, sel) { // the texts inside sel, sampled as drawn (as whyA
   const all = await p.evaluate(AA_SAMPLE, { b64, items }), bad = all.filter((x) => x.ratio < x.need);
   return { n: all.length, bad: bad.length, first: bad.sort((x, y) => x.ratio - y.ratio).slice(0, 3).map((x) => `${x.sel} "${x.t}" rgb(${x.fg}) on rgb(${x.bg}) ${x.ratio.toFixed(2)}`) };
 }
+// a tap on a found day, then the mouse nudged 1 px where it rests (as WebKit sends a move when the view changes under it):
+// the crosshair must stay on the day found
+async function arTap(p, sel) {
+  await p.locator(sel).scrollIntoViewIfNeeded().catch(() => {}); await sleep(150);
+  const b = await p.locator(sel).boundingBox();
+  if (!b) { await p.click(sel); return; }
+  const x = b.x + b.width / 2, y = b.y + b.height / 2;
+  await p.mouse.click(x, y); await sleep(500); await p.mouse.move(x + 1, y + 1); await sleep(150);
+}
 async function testArchive(browser) {
   const F = AR_FX, html = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8');
   const csp = (/connect-src ([^;]*);/.exec(html) || [])[1] || '';
@@ -7787,13 +7796,13 @@ async function testArchive(browser) {
     // C · tapping a row opens that pool's History on that day (an archive-only day: the range goes to All)
     await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`); await sleep(150);
     if (!(await p.$('#ar-res .ar-row'))) { await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`); await sleep(300); }
-    await p.click(`#ar-res .ar-row[data-id="${F.other.id}"]`); await sleep(700);
+    await arTap(p, `#ar-res .ar-row[data-id="${F.other.id}"]`); await sleep(700);
     const o1 = await p.evaluate(() => ({ ...window.__lpsHooks.ws(), on: (document.querySelector('#ws .hst tr.on') || { dataset: {} }).dataset.t }));
     const t1 = Date.parse(F.find.spikes10x.rows[1].day + 'T00:00:00Z');
     ok(`archive ${tag}: a found day opens that pool's History with the crosshair and the table on that day`, o1.id === F.other.id && o1.tab === 'history' && o1.cur === t1 && +o1.on === t1, JSON.stringify({ id: o1.id === F.other.id, tab: o1.tab, cur: o1.cur, t1, on: o1.on }));
     await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`).catch(() => {}); await sleep(150);
     if (!(await p.$(`#ar-res .ar-row[data-id="${F.p.id}"]`))) { await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`).catch(() => {}); await sleep(300); }
-    await p.click(`#ar-res .ar-row[data-id="${F.p.id}"]`); await sleep(900);
+    await arTap(p, `#ar-res .ar-row[data-id="${F.p.id}"]`); await sleep(900);
     const o2 = await p.evaluate(AR_VIEW), w2 = await p.evaluate(() => window.__lpsHooks.ws());
     ok(`archive ${tag}: an archive-only day opens too (the range goes to All, the card on its day, "~" on it)`, w2.id === F.p.id && o2.cur === F.tF && /~\$/.test(o2.card) && /volume backs 51%/.test(o2.card), JSON.stringify({ id: w2.id === F.p.id, cur: o2.cur, tF: F.tF, card: o2.card.slice(0, 90) }));
     // the layout: nothing sideways, no text on text in the archive card, AA text (both looks: the a11yfix group checks the page)

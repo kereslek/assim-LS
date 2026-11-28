@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-zacLbJfe1YYPih16SoYRJMc67vL9ZpXKf9klsHB4npc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com https://assim-ls-api.kereslek.workers.dev; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-neU1DIwJ8uRYKbvK0PfbTdbDNa/RJrvkQmRvBi4gALg='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com https://assim-ls-api.kereslek.workers.dev; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -6579,7 +6579,7 @@ function wsLiquidity(p) {
 const AR_API = 'https://assim-ls-api.kereslek.workers.dev', AR_MS = 9000, AR_TOK = /^lps1\.[A-Za-z0-9_-]{43}$/, AR_ID = /^0x[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const AR_Q = [['spikes10x', '★ 10× spikes', 'Every day at 10× its pool’s median or more, last 30 days'], ['doubled', 'Doubled', 'Pools whose fees a day doubled week on week'], ['quietest', 'Quietest', 'The lowest fee APR over the last 30 days'], ['outliers', '⚠ Outliers', 'Big days the scanner can’t vouch for: likely data errors']];
 const AR_WHY = { auth: 'login refused', rate: 'busy, try again in a minute', timeout: 'too slow to answer', network: 'not reachable', server: 'server error', answer: 'unreadable answer', token: 'no login', notfound: 'not in the archive' };
-const AR = { tok: null, gen: 0, st: 'off', why: '', meta: null, ver: 0, days: new Map(), hours: new Map(), find: new Map(), q: null, hz: null, want: null };
+const AR = { tok: null, gen: 0, st: 'off', why: '', meta: null, ver: 0, days: new Map(), hours: new Map(), find: new Map(), q: null, hz: null, want: null, still: null };
 const arB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const arB64url = (u8) => { let s = ''; for (const c of u8) s += String.fromCharCode(c); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 async function arToken(keyB64, label) { // lib/apitoken.mjs apiToken
@@ -6831,9 +6831,9 @@ function arBkLine(m, t) {
   for (const [d, x] of m.bk) if (!k || x.f > k.f) { k = x; tt = d; }
   return `~ marks ${m.bk.size === 1 ? 'a big day' : m.bk.size + ' big days'} the volume backs only part of. ` + arBackTxt(tt, k);
 }
-function arClick(act, el) { // History's archive controls (wsClick)
+function arClick(act, el, e) { // History's archive controls (wsClick)
   if (act === 'ar-find') { if (AR.st === 'ok') { const q = el.dataset.v; if (AR.q === q) { AR.q = null; arPaint(); } else arFind(q); } return true; }
-  if (act === 'ar-open') { arOpen(el); return true; }
+  if (act === 'ar-open') { AR.still = e && isNum(e.clientX) && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : null; arOpen(el); return true; }
   if (act === 'ar-hours') { const t = isNum(WS.cur) ? WS.cur : WS.v && WS.v.rows.length ? WS.v.rows[WS.v.rows.length - 1] : null; if (isNum(t) && WS.id) arHoursOpen(WS.id, t); return true; }
   if (act === 'ar-hwk') { const z = AR.hz; if (z) arHoursOpen(z.id, z.from + 3 * D + Number(el.dataset.v) * 7 * D); return true; }
   if (act === 'ar-hclose') { AR.hz = null; arPaint(); refocus('#ws .ar-hzb'); return true; }
@@ -7428,6 +7428,7 @@ function hsZoomTo(a, b) {
 // the mouse: hover shows a day, a drag across the dates zooms into them, a double-click resets; a finger: hold, then slide
 document.addEventListener('pointermove', (e) => {
   const v = WS.v; if (!v || !WS.open || e.pointerType === 'touch') return;
+  if (AR.still) { if (Math.hypot(e.clientX - AR.still.x, e.clientY - AR.still.y) < 4) return; AR.still = null; } // v0.8.3: a found day keeps the crosshair until the mouse really moves (WebKit sends a move when the view changes under it)
   if (!v.st.isConnected || !v.st.contains(e.target)) { if (!(WS.drag && WS.drag.id === e.pointerId)) return; }
   const i = hsIdx(v, e.clientX);
   if (WS.drag && WS.drag.id === e.pointerId) { if (Math.abs(i - WS.drag.i0) >= 1) WS.drag.moved = true; if (WS.drag.moved) hsSel(WS.drag.i0, i); }
@@ -9118,7 +9119,7 @@ document.addEventListener('click', (e) => {
   if (el.dataset.act.startsWith('gemwhy')) { gwClick(el); return; } // the gem's why: its link, toggle, list and close
   if (el.dataset.act.startsWith('eb-')) { ebClick(el); return; } // v0.7.2: the error badge and its sheet
   if (el.dataset.act.startsWith('ws-') && wsClick(el, e)) return; // v0.6.0: History buttons and the workspace
-  if (el.dataset.act.startsWith('ar-') && arClick(el.dataset.act, el)) return; // v0.8.3: the archive's controls in History
+  if (el.dataset.act.startsWith('ar-') && arClick(el.dataset.act, el, e)) return; // v0.8.3: the archive's controls in History
   if (/^(g|rk|pw|al|sh)-/.test(el.dataset.act)) { gClick(el, e); return; } // v0.7.0: guests, the recovery key, the passphrase, the alarm
   switch (el.dataset.act) {
     case 'fav': toggleFav(el.dataset.id, el); break;
