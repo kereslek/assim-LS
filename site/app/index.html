@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-hzLkAkrL/gXVpA+pUhAxu1uLJu46gVk5jcu6hpzDFxc='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-u0J8pOz52yZ+a85WpsJv4Nx7xkAQn67xzDZOS3Q6Eu4=' 'sha256-neU1DIwJ8uRYKbvK0PfbTdbDNa/RJrvkQmRvBi4gALg='; style-src 'unsafe-inline'; img-src data:; connect-src 'self' https://raw.githubusercontent.com https://assim-ls-api.kereslek.workers.dev; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#06080B">
 <meta name="lps-data" content="https://raw.githubusercontent.com/kereslek/assim-LS/data/">
@@ -1849,6 +1849,35 @@ html.m3d .hxtip{background:rgba(10,46,50,.98);border-color:#3B7F7D}
 html.m3d .gy-pill.run,html.m3d .gy-chip.tg,html.m3d .gy-verdict:not(.no):not(.ok) b{color:#FFD27A;border-color:#FFD27A} /* 3D: the amber a shade lighter, AA on its tint */
 @media (prefers-reduced-motion:no-preference){.gy-m i,.gy-cb .gy-tr i{transition:width .3s ease}}
 /* /gemwhy-css */
+/* v0.8.3 · the D1 archive in History (A + C + F): its state, the hourly zoom, "Find days"; ~ a big day the volume backs only part of */
+.ar{display:grid;gap:8px;padding:10px 12px;min-width:0}
+.ar-h,.ar-hh,.ar-fh{display:flex;align-items:center;justify-content:space-between;gap:4px 10px;flex-wrap:wrap;min-width:0}
+.ar-st{text-transform:none;letter-spacing:.02em;color:var(--fg2)}
+.ar[data-ar="down"] .ar-st{color:var(--muted)}
+.ar-hz{display:grid;gap:4px;min-width:0}
+.ar-nav{display:inline-flex;gap:2px}
+.ar-nav .tbtn{width:44px;height:44px;font:600 15px/1 var(--mono)}
+.ar-hsvg{display:block;width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:6px}
+.ar-hdays{display:grid;grid-template-columns:repeat(7,1fr);font:500 10px/1.2 var(--mono);color:var(--muted);text-align:center}
+.ar-q{flex-wrap:wrap;row-gap:0}
+.ar-res{min-width:0}
+.ar-list{list-style:none;margin:0;padding:0;display:grid;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;overscroll-behavior:contain}
+.ar-list li+li{border-top:1px solid var(--line)}
+.ar-row{width:100%;min-height:44px;display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:2px 10px;padding:6px 10px;border:0;background:transparent;color:var(--fg);text-align:left;font:500 12px/1.3 var(--sans);cursor:pointer}
+.ar-row:hover:not(:disabled),.ar-row:focus-visible{background:var(--raised)}
+.ar-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.ar-row:disabled{cursor:default;color:var(--fg2)}
+.ar-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.ar-n small{font:500 10.5px var(--mono);color:var(--muted)}
+.ar-d,.ar-v,.ar-x{font:500 11px/1.2 var(--mono);color:var(--fg2);white-space:nowrap;text-align:right}
+.ar-v{color:var(--fg)}
+.ar-x .sdc{margin:0 4px 0 0}
+.ar-p{font:600 9.5px/1 var(--mono);color:var(--muted);border:1px solid var(--line3);border-radius:999px;padding:2px 5px;margin-right:4px}
+.ar-off{grid-column:1/-1;font:500 10.5px/1.2 var(--mono);color:var(--muted)}
+.ar-ap{text-decoration:underline dotted #FAB219 1.5px;text-underline-offset:3px}
+.hs-dv.ar-bk .q{color:#F6C76A}
+.ar-bkn{color:var(--fg2)}
+@media (max-width:520px){.ar-row{grid-template-columns:minmax(0,1fr) auto auto}.ar-d{grid-row:2;grid-column:1;text-align:left}.ar-v{grid-row:1;grid-column:2}.ar-x{grid-row:1;grid-column:3}}
 </style>
 </head>
 <body>
@@ -2499,7 +2528,7 @@ return { start: d3Start, stop: d3Stop, mark: d3Mark };
 <script>
 (() => {
 'use strict';
-const BUILD = 'v0.8.2';
+const BUILD = 'v0.8.3';
 // v0.7.9: never inside another site's frame (a meta CSP can't say frame-ancestors). A framed page goes blank and never asks
 // for the passphrase; only the dashboard's own full view (same origin, ?full=1) may frame it.
 const FRAMED = (() => {
@@ -3350,7 +3379,7 @@ function wipeData(words) {
 async function lockDevice(ended = false) { // ended: a guest whose access ended (the key stays until "Use a different passphrase")
   const words = lockWords(S.live);
   stopTimer(); stopPlay();
-  wsClose(true); closeDetail(); popClose(); WS.cmp = []; WS.list = []; WS.mod = WS.lmod = null; HSC.h = null; HSC.m = new Map(); // v0.6.0: the workspace goes too
+  wsClose(true); closeDetail(); popClose(); WS.cmp = []; WS.list = []; WS.mod = WS.lmod = null; HSC.h = null; HSC.m = new Map(); arReset(); // v0.6.0: the workspace goes too (v0.8.3: the archive's token and answers)
   for (const s of ['#ws-title', '#ws-pos']) $(s).textContent = s === '#ws-title' ? '—' : ''; $('#ws-title').removeAttribute('aria-label'); for (const s of ['#ws-cg', '#ws-chips', '#ws-gem', '#ws-star', '#ws-tabs']) $(s).innerHTML = '';
   for (const k of Object.keys(PZA)) pzStop(k);
   for (const k of Object.keys(PZ)) delete PZ[k];
@@ -6539,6 +6568,277 @@ function wsLiquidity(p) {
   return `<div class="card chartbox ws-liqtab" data-chartbox="liq-ws"><div class="pane-title"><span class="lbl">Liquidity around the price · ${term('logscale', 'log')} · <span class="pz-cap1">${liqCap('liq-ws')}</span></span>${ztools('liq-ws', p.id)}</div>${lq}`
     + '<p class="hs-note" style="margin-top:6px">Drag sideways to move along the prices, pinch or − + to zoom, a double-tap resets. The chips stack the pair’s other tiers on this pool’s bars.</p></div>';
 }
+// ---------- v0.8.3 · the D1 archive: History to ALL, an hourly zoom, "Find days", how much volume backs a spike ----------
+// The owner's A + C + F (docs/briefs/SQL-plan.md part 2, docs/DATA.md "Archive API"). After unlock the page derives its role's
+// bearer token from what its key slot opened, as lib/apitoken.mjs does (copied below): the owner's is an HMAC under the private
+// key with the label owner|g<gen>, a guest's or member's under the market key with slot|<id>. No key that decrypts anything is
+// sent. The token lives in memory only: never stored, logged or shown, and gone at a sign-out.
+// Missing is never zero: the archive unreachable, slow (9 s), refusing (401, 403, 429) or a field null shows "—" or "archive
+// unavailable", and History keeps working from its own file exactly as before. A page with no key slots (no token) shows no
+// archive at all.
+const AR_API = 'https://assim-ls-api.kereslek.workers.dev', AR_MS = 9000, AR_TOK = /^lps1\.[A-Za-z0-9_-]{43}$/, AR_ID = /^0x[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+const AR_Q = [['spikes10x', '★ 10× spikes', 'Every day at 10× its pool’s median or more, last 30 days'], ['doubled', 'Doubled', 'Pools whose fees a day doubled week on week'], ['quietest', 'Quietest', 'The lowest fee APR over the last 30 days'], ['outliers', '⚠ Outliers', 'Big days the scanner can’t vouch for: likely data errors']];
+const AR_WHY = { auth: 'login refused', rate: 'busy, try again in a minute', timeout: 'too slow to answer', network: 'not reachable', server: 'server error', answer: 'unreadable answer', token: 'no login', notfound: 'not in the archive' };
+const AR = { tok: null, gen: 0, st: 'off', why: '', meta: null, ver: 0, days: new Map(), hours: new Map(), find: new Map(), q: null, hz: null, want: null, still: null };
+const arB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const arB64url = (u8) => { let s = ''; for (const c of u8) s += String.fromCharCode(c); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+async function arToken(keyB64, label) { // lib/apitoken.mjs apiToken
+  if (typeof keyB64 !== 'string' || !/^[A-Za-z0-9+/]{43}=$/.test(keyB64) || typeof label !== 'string' || !label) throw new Error('bad token input');
+  const raw = arB64(keyB64);
+  const key = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']); // non-extractable
+  raw.fill(0);
+  return 'lps1.' + arB64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, ENC.encode(`assim-ls-api/v1|${label}`))));
+}
+async function arTokenFor(o) { // lib/apitoken.mjs apiTokenFor: the master slot makes the owner's, a guest or member slot its own
+  if (o && typeof o.pk === 'string') { if (!Number.isInteger(o.g) || o.g < 0) throw new Error('bad token input'); return arToken(o.pk, `owner|g${o.g}`); }
+  if (o && typeof o.k === 'string' && typeof o.s === 'string' && /^[0-9a-f]{16}$/.test(o.s)) return arToken(o.k, `slot|${o.s}`);
+  throw new Error('bad token input');
+}
+function arReset() { AR.gen++; AR.tok = null; AR.st = 'off'; AR.why = ''; AR.meta = null; AR.days.clear(); AR.hours.clear(); AR.find.clear(); AR.q = null; AR.hz = null; AR.want = null; AR.ver++; }
+function arStart(opened) { // a slot just opened (a new key list): a new token, the archive read afresh
+  arReset();
+  const gen = AR.gen;
+  AR.st = 'wait';
+  arTokenFor(opened).then((t) => { if (gen !== AR.gen) return; if (!AR_TOK.test(t)) throw new Error('token'); AR.tok = t; return arMetaLoad(gen); })
+    .catch(() => { if (gen === AR.gen) { AR.st = 'down'; AR.why = 'token'; arPaint(); } });
+}
+// one GET: { ok: answer } or { err: word } (never the token, never a body's text)
+async function arGet(path) {
+  const tok = AR.tok, gen = AR.gen;
+  if (!tok) return { err: 'token' };
+  const ac = new AbortController(), tm = setTimeout(() => ac.abort(), AR_MS);
+  try {
+    const r = await fetch(AR_API + path, { method: 'GET', headers: { authorization: 'Bearer ' + tok }, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', mode: 'cors', signal: ac.signal });
+    if (gen !== AR.gen) return { err: 'gone' };
+    if (!r.ok) return { err: r.status === 401 || r.status === 403 ? 'auth' : r.status === 429 ? 'rate' : r.status === 404 ? 'notfound' : 'server' };
+    const j = await r.json();
+    if (gen !== AR.gen) return { err: 'gone' };
+    return j && typeof j === 'object' && j.v === 1 ? { ok: j } : { err: 'answer' };
+  } catch (e) { return { err: gen !== AR.gen ? 'gone' : e && e.name === 'AbortError' ? 'timeout' : 'network' }; }
+  finally { clearTimeout(tm); }
+}
+async function arMetaLoad(gen) {
+  const r = await arGet('/v1/meta');
+  if (gen !== AR.gen || r.err === 'gone') return;
+  if (r.ok && r.ok.days && typeof r.ok.days === 'object') { AR.meta = r.ok; AR.st = 'ok'; } else { AR.st = 'down'; AR.why = r.err || 'answer'; }
+  arPaint();
+}
+const arDay = (s) => (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) ? Date.parse(s + 'T00:00:00Z') : NaN);
+const arNum = (x) => (isNum(x) && x >= 0 ? x : null);
+// a pool's days, ALL (4,000 a call; `more` asks again from the last day): { st: 'ok', rows } | { st: 'none' } | { st: 'down', why }
+async function arDaysGet(id) {
+  if (!AR_ID.test(id)) return { st: 'none', rows: [] };
+  const rows = [];
+  let from = null;
+  for (let k = 0; k < 4; k++) {
+    const r = await arGet(`/v1/days?pool=${id}${from ? '&from=' + from : ''}`);
+    if (r.err) return r.err === 'notfound' ? { st: 'none', rows: [] } : { st: 'down', why: r.err };
+    const c = Array.isArray(r.ok.cols) ? r.ok.cols : [], ix = (n) => c.indexOf(n), list = Array.isArray(r.ok.rows) ? r.ok.rows : [];
+    const I = { d: ix('day'), f: ix('fees_usd'), fs: ix('fees_src'), fu: ix('fees_unconfirmed'), v: ix('volume_usd'), vs: ix('volume_src'), tv: ix('tvl_usd'), ts: ix('tvl_src'), lr: ix('lp_fee_rate') };
+    if (I.d < 0 || I.f < 0) return { st: 'down', why: 'answer' };
+    for (const a of list) {
+      if (!Array.isArray(a)) continue;
+      const t = arDay(a[I.d]);
+      if (!isNum(t)) continue;
+      const f = arNum(a[I.f]), v = I.v >= 0 ? arNum(a[I.v]) : null, tv = I.tv >= 0 ? arNum(a[I.tv]) : null, lr = I.lr >= 0 && isNum(a[I.lr]) && a[I.lr] > 0 && a[I.lr] < 1 ? a[I.lr] : null;
+      rows.push({ t, f, fs: f == null ? null : ['e', 's', 'x'].includes(a[I.fs]) ? a[I.fs] : 'x', fu: f != null && a[I.fu] === 1, v, vs: v == null ? null : a[I.vs] === 's' ? 's' : 'g', tv, ts: tv == null ? null : ['b', 'r', 'm'].includes(a[I.ts]) ? a[I.ts] : 'b', lr });
+    }
+    if (!r.ok.more || !list.length) break;
+    const last = list[list.length - 1][I.d];
+    if (typeof last !== 'string' || last === from) break;
+    from = last;
+  }
+  return { st: 'ok', rows };
+}
+// A: the archive's days merged into a pool's own (hsDays): the page's file wins a day it holds; a value it didn't read is taken
+// from the archive (never a 0 for a null); the archive's LP fee rate is kept for F
+function arMerge(id, m) {
+  const a = AR.days.get(id), n = { n: 0, f: 0, v: 0, tv: 0 };
+  if (!a || a.st !== 'ok') return n;
+  for (const x of a.rows) {
+    const cur = m.get(x.t);
+    if (cur) {
+      if (isNum(x.lr)) cur.lr = x.lr;
+      if (cur.f == null && isNum(x.f)) { cur.f = x.f; cur.fs = x.fs; cur.fu = x.fu; cur.ar = true; }
+      if (cur.v == null && isNum(x.v)) { cur.v = x.v; cur.vs = x.vs; cur.ar = true; }
+      if (cur.tv == null && isNum(x.tv)) { cur.tv = x.tv; cur.ts = x.ts; cur.ar = true; }
+      cur.a = hsAprOf(cur.f, cur.tv);
+      continue;
+    }
+    m.set(x.t, { f: x.f, fs: x.fs, fu: x.fu, v: x.v, vs: x.vs, tv: x.tv, ts: x.ts, a: hsAprOf(x.f, x.tv), lr: x.lr, ar: true });
+    n.n++; if (isNum(x.f)) n.f++; if (isNum(x.v)) n.v++; if (isNum(x.tv)) n.tv++;
+  }
+  return n;
+}
+// F: how much of a big day's fees its volume backs: volume × the pool's fee rate (the archive's, else the fee tier × the LPs' share)
+// ÷ the fees counted. Marked "~" on a confirmed big day (★ or 3×) the volume backs under 90% of: the spike is real (volume backs at
+// least a quarter of it), its size may be smaller. One pool at a time (combined tiers: each tier's own share is unknown).
+const AR_BK = 0.9;
+const arRate = (q, x) => (x && isNum(x.lr) ? x.lr : isNum(q.feeTier) && isNum(q.lpKeeps) && q.feeTier > 0 && q.lpKeeps > 0 ? q.feeTier * q.lpKeeps : null);
+function arBacks(m) {
+  const by = new Map();
+  if (!m || m.comb || !m.tiers.length || !m.sd) return by;
+  const q = m.tiers[0].q;
+  for (const r of m.rows) {
+    const z = m.sd.by.get(r.t), x = r.xs[0];
+    if (!z || (z.k !== 'h' && z.k !== 'g') || !x || r.pre || r.fe || hsUn(r) || !isNum(r.f) || r.f <= 0 || !isNum(r.v)) continue;
+    const rate = arRate(q, x);
+    if (!isNum(rate)) continue;
+    const vr = r.v * rate, b = vr / r.f;
+    if (b < AR_BK) by.set(r.t, { b, vr, rate, f: r.f, v: r.v });
+  }
+  return by;
+}
+const arPct = (b) => (b >= 0.995 ? '100%' : Math.max(1, Math.round(b * 100)) + '%');
+// the plain words (the owner's wording: what "volume backs 51%" means)
+const arBackTxt = (t, k) => `${dm(t)}: volume backs ${arPct(k.b)} of the fees. The day’s volume (${usd(k.v)}) × the pool’s fee rate (${pct(k.rate, { dp: 2 })}) accounts for only ${usd(k.vr)}, ${arPct(k.b)} of the ${usd(k.f)} in fees counted, so the spike is real but its size may be smaller.`;
+// what History shows of the archive: its state, the hourly zoom on a past week, the "Find days" presets
+function arHtml(p) {
+  if (AR.st === 'off' || !p) return '';
+  const ok = AR.st === 'ok', mt = AR.meta, from = ok && mt.days ? arDay(mt.days.from) : NaN;
+  const d = ok ? AR.days.get(p.id) : null;
+  const head = AR.st === 'wait' ? 'archive: connecting…' : !ok ? `archive unavailable · ${AR_WHY[AR.why] || 'not reachable'} · the history above is this page’s own` :
+    d && d.st === 'down' ? `archive: this pool’s days ${DASH} (${AR_WHY[d.why] || 'not reachable'})` : d && d.st === 'none' ? 'archive: no days of this pool' :
+    `archive · every day since ${isNum(from) ? dm(from) + ' ' + new Date(from).getUTCFullYear() : DASH}${d && d.st === 'ok' ? ` · ${int(d.rows.length)} of this pool’s` : d ? ' · reading…' : ''}`;
+  const qs = AR_Q.map(([q, t, l]) => `<button type="button" data-act="ar-find" data-v="${q}" aria-pressed="${AR.q === q}"${ok ? '' : ' disabled'} aria-label="${esc(l)}" title="${esc(l)}"><span>${t}</span></button>`).join('');
+  return `<div class="card ar" data-ar="${AR.st}">`
+    + `<div class="ar-h"><span class="lbl ar-st" role="status" data-x="arch">${esc(head)}</span>${ok ? `<button type="button" class="linkbtn ar-hzb" data-act="ar-hours" aria-label="Hourly zoom: the week around the day picked">Hourly · the week around the day picked ▸</button>` : ''}</div>`
+    + `<div class="ar-hz" id="ar-hz"${AR.hz && AR.hz.id === p.id && ok ? '' : ' hidden'}>${AR.hz && AR.hz.id === p.id && ok ? arHoursHtml() : ''}</div>`
+    + `<div class="ar-fh"><span class="lbl" data-x="arFind">Find days · every pool</span><div class="seg pills ar-q" role="group" aria-label="Find days in the archive">${qs}</div></div>`
+    + `<div class="ar-res" id="ar-res" aria-live="polite">${ok && AR.q ? arFindHtml() : ''}</div></div>`;
+}
+function arPaint() { // the archive's card in place (a state change never redraws the charts)
+  const el = $('#ws .ar'), p = WS.open && WS.tab === 'history' && !WS.lvl ? poolById(WS.id) : null;
+  if (!p) return;
+  if (!el) { if (AR.st !== 'off') { wsRender(); } return; }
+  const af = document.activeElement, sig = af && el.contains(af) ? (af.dataset.act || '') + '|' + (af.dataset.v || '') : null;
+  el.outerHTML = arHtml(p) || '<div class="ar" hidden></div>';
+  const nw = $('#ws .ar'); if (nw) xTag(nw);
+  if (sig) { const [a, v] = sig.split('|'); const b = $(`#ws .ar [data-act="${a}"]${v ? `[data-v="${v}"]` : ''}`); if (b && !b.disabled) b.focus({ preventScroll: true }); }
+  arAfter();
+}
+// after History draws: read the archive's days of the pools on screen (once each), then draw again with them
+function arAfter() {
+  const m = WS.mod;
+  if (AR.st !== 'ok' || !m || WS.tab !== 'history') return;
+  const ids = m.all.map((e) => e.q.id).filter((id) => !AR.days.has(id)).slice(0, 8);
+  if (ids.length) {
+    const gen = AR.gen;
+    for (const id of ids) AR.days.set(id, { st: 'wait' });
+    Promise.all(ids.map(async (id) => [id, await arDaysGet(id)])).then((res) => {
+      if (gen !== AR.gen) return;
+      let more = false;
+      for (const [id, d] of res) { AR.days.set(id, d); if (d.st === 'ok' && d.rows.length) more = true; }
+      AR.ver++;
+      if (WS.open && WS.tab === 'history' && !WS.lvl && ids.includes(WS.id)) { if (more) wsRender(); else arPaint(); }
+    });
+  }
+  if (AR.want && AR.want.id === WS.id && WS.v) { // a found day: the crosshair on it once its row is in view
+    const i = WS.v.rows.indexOf(AR.want.t);
+    if (i >= 0) { hsCursor(i, true); AR.want = null; } else if (AR.days.get(WS.id) && AR.days.get(WS.id).st !== 'wait') AR.want = null;
+  }
+}
+// A: the hourly zoom: 7 days around the day picked (/v1/hours, at most 8 days a call), ‹ › a week at a time
+async function arHoursOpen(id, t) {
+  const from = Math.floor(t / D) * D - 3 * D, to = from + 7 * D, key = `${id}|${from}`;
+  AR.hz = { id, from, to };
+  if (!AR.hours.has(key)) {
+    AR.hours.set(key, { st: 'wait' });
+    arPaint();
+    const gen = AR.gen, r = AR_ID.test(id) ? await arGet(`/v1/hours?pool=${id}&from=${from}&to=${to}`) : { err: 'notfound' };
+    if (gen !== AR.gen) return;
+    if (r.err) AR.hours.set(key, { st: 'down', why: r.err });
+    else {
+      const c = Array.isArray(r.ok.cols) ? r.ok.cols : [], it = c.indexOf('t'), iff = c.indexOf('fees_usd'), m = new Map();
+      for (const a of Array.isArray(r.ok.rows) ? r.ok.rows : []) {
+        if (!Array.isArray(a) || !isNum(a[it])) continue;
+        const h = Math.floor(a[it] / H), f = arNum(a[iff]);
+        if (h < from / H || h >= to / H) continue;
+        const o = m.get(h); m.set(h, o === undefined ? f : isNum(o) && isNum(f) ? o + f : null); // two rows in an hour add up; a null in it is a gap
+      }
+      AR.hours.set(key, { st: 'ok', m });
+    }
+  }
+  if (AR.hz && AR.hz.from === from && AR.hz.id === id) arPaint();
+}
+function arHoursHtml() {
+  const z = AR.hz, d = z && AR.hours.get(`${z.id}|${z.from}`);
+  const cap = `${dm(z.from)} – ${dm(z.to - D)} ${new Date(z.to - D).getUTCFullYear()}`;
+  const nav = `<span class="ar-nav"><button type="button" class="tbtn" data-act="ar-hwk" data-v="-1" aria-label="The week before" title="The week before">‹</button><button type="button" class="tbtn" data-act="ar-hwk" data-v="1" aria-label="The week after" title="The week after"${z.to > Date.now() ? ' disabled' : ''}>›</button><button type="button" class="tbtn" data-act="ar-hclose" aria-label="Close the hourly zoom" title="Close">✕</button></span>`;
+  let body;
+  if (!d || d.st === 'wait') body = `<p class="hs-note">reading the hours…</p>`;
+  else if (d.st === 'down') body = `<p class="hs-note">hours ${DASH} · archive unavailable (${esc(AR_WHY[d.why] || 'not reachable')})</p>`;
+  else {
+    const N = 7 * 24, h0 = z.from / H, vals = []; let read = 0, tot = 0;
+    for (let i = 0; i < N; i++) { const v = d.m.has(h0 + i) ? d.m.get(h0 + i) : undefined; vals.push(v); if (isNum(v)) { read++; tot += v; } }
+    const mx = Math.max(0, ...vals.filter(isNum)), W = 336, Ht = 76, sl = W / N;
+    let bars = '', gaps = '';
+    vals.forEach((v, i) => { const x = (i * sl).toFixed(2); if (!isNum(v)) gaps += `M${x} 0h${sl.toFixed(2)}V${Ht}H${x}z`; else if (v > 0 && mx > 0) { const hh = Math.max(0.8, (v / mx) * (Ht - 4)); bars += `M${x} ${(Ht - hh).toFixed(2)}h${Math.max(0.5, sl - 0.3).toFixed(2)}V${Ht}H${x}z`; } });
+    let grid = ''; for (let k = 1; k < 7; k++) grid += `M${(k * 24 * sl).toFixed(2)} 0V${Ht}`;
+    const days = Array.from({ length: 7 }, (_, k) => `<span>${esc(dayName(z.from + k * D).split(' ')[0])} ${new Date(z.from + k * D).getUTCDate()}</span>`).join('');
+    body = `<svg class="ar-hsvg" viewBox="0 0 ${W} ${Ht}" preserveAspectRatio="none" width="100%" height="${Ht}" role="img" aria-label="LP fees an hour, ${esc(cap)}: ${read} of ${N} hours read" data-read="${read}" data-n="${N}"><path d="${grid}" stroke="var(--line2)" stroke-width="1" vector-effect="non-scaling-stroke"/><path class="ar-hgap" d="${gaps}" fill="rgba(139,150,163,.14)"/><path class="ar-hb" d="${bars}" fill="var(--accent)"/></svg>`
+      + `<div class="ar-hdays" aria-hidden="true">${days}</div>`
+      + `<p class="hs-note">${read} of ${N} hours read · ${read ? `fees ${usd(tot)} in the hours read · top hour ${usd(mx)}` : DASH} · an hour not read is a gap, never 0 · UTC</p>`;
+  }
+  return `<div class="ar-hh"><span class="lbl">Hourly LP fees · ${esc(cap)}</span>${nav}</div>${body}`;
+}
+// C: "Find days": the four presets over every pool in the archive; a row opens that pool's History on that day
+async function arFind(q) {
+  AR.q = q;
+  if (!AR.find.has(q)) {
+    AR.find.set(q, { st: 'wait' });
+    arPaint();
+    const gen = AR.gen, r = await arGet(`/v1/find?q=${q}`);
+    if (gen !== AR.gen) return;
+    AR.find.set(q, r.err ? { st: 'down', why: r.err } : { st: 'ok', a: r.ok });
+  }
+  if (AR.q === q) arPaint();
+}
+function arFindHtml() {
+  const q = AR.q, d = AR.find.get(q), name = (AR_Q.find((x) => x[0] === q) || [])[2] || '';
+  if (!d || d.st === 'wait') return `<p class="hs-note">finding…</p>`;
+  if (d.st === 'down') return `<p class="hs-note">${DASH} · archive unavailable (${esc(AR_WHY[d.why] || 'not reachable')})</p>`;
+  const a = d.a, rows = Array.isArray(a.rows) ? a.rows : [], pools = a.pools && typeof a.pools === 'object' ? a.pools : {};
+  if (!rows.length) return `<p class="hs-note">${esc(name)}: no days match (${esc(String(a.from || DASH))} to ${esc(String(a.to || DASH))}).</p>`;
+  const val = (r) => (q === 'quietest' ? (isNum(r.value) ? pct(r.value) + ' APR' : DASH) : q === 'doubled' ? (isNum(r.value) ? usd(r.value) + '/day' : DASH) : usd(r.value));
+  const mul = (r) => (!isNum(r.multiple) ? DASH : q === 'quietest' ? `${sdX(r.multiple)}× median` : `${sdX(r.multiple)}×`);
+  const li = rows.slice(0, 60).map((r) => {
+    const id = String(r.pool || '').toLowerCase(), t = arDay(r.day), pm = pools[r.pool] || pools[id] || {}, p = poolById(id), in1 = !!p && isNum(t);
+    const nm = p ? `${p.pair} ${feeTxt(p.feeTier)}` : `${esc(pm.symbol0 || '?')}/${esc(pm.symbol1 || '?')} ${feeTxt(pm.fee_tier)}`;
+    const mk = r.mark === 'o' ? '<span class="sdc o">⚠</span>' : r.mark === 'h' ? '<span class="sdc h">★</span>' : r.mark === 'p' ? '<span class="ar-p" title="fewer days than the window">part</span>' : '';
+    return `<li><button type="button" class="ar-row" data-act="ar-open" data-id="${esc(id)}" data-t="${isNum(t) ? t : ''}"${in1 ? '' : ' disabled'} aria-label="${esc(`${p ? poolWord(p) : nm}, ${isNum(t) ? hsDayTxt(t) : DASH}: ${val(r)}, ${mul(r)}${in1 ? ' · open in History' : ' · not in this scan'}`)}">`
+      + `<span class="ar-n">${p ? esc(nm) : nm}${pm.chain ? ` <small>${esc(chainOf(pm.chain).name)}</small>` : ''}</span><span class="ar-d">${isNum(t) ? dm(t) : DASH}</span><span class="ar-v">${val(r)}</span><span class="ar-x">${mk}${mul(r)}</span>${in1 ? '' : '<span class="ar-off">not in this scan</span>'}</button></li>`;
+  }).join('');
+  return `<p class="hs-note ar-cnt">${esc(name)} · ${int(rows.length)} found${rows.length > 60 ? ', the first 60 shown' : ''} · ${esc(String(a.from || DASH))} to ${esc(String(a.to || DASH))}</p><ul class="ar-list" data-n="${rows.length}">${li}</ul>`;
+}
+function arOpen(el) {
+  const id = el.dataset.id, t = Number(el.dataset.t), p = poolById(id);
+  if (!p || !isNum(t)) return;
+  const d = hsDays(p), last = d ? d.last : Math.floor(Date.now() / D) * D, back = (last - t) / D;
+  const R = back < 29 ? 30 : back < 89 ? 90 : back < 364 ? 365 : 0;
+  AR.want = { id, t };
+  if (!WS.open || WS.id !== id) wsOpen(id, 'history', el, { list: WS.open ? WS.list : undefined });
+  else if (WS.tab !== 'history') wsTab('history');
+  WS.tiers = [id]; WS.zoom = null; WS.rangeOv = R; WS.cur = t; WS.sdf = 'all';
+  wsRender();
+  refocus('#ws .hs-stack');
+}
+// the F note under History: the day picked when the volume backs only part of it, else the biggest such day in view
+function arBkLine(m, t) {
+  if (!m || !m.bk || !m.bk.size) return '';
+  let k = isNum(t) ? m.bk.get(t) : null, tt = t;
+  if (k) return '~ ' + arBackTxt(tt, k);
+  for (const [d, x] of m.bk) if (!k || x.f > k.f) { k = x; tt = d; }
+  return `~ marks ${m.bk.size === 1 ? 'a big day' : m.bk.size + ' big days'} the volume backs only part of. ` + arBackTxt(tt, k);
+}
+function arClick(act, el, e) { // History's archive controls (wsClick)
+  if (act === 'ar-find') { if (AR.st === 'ok') { const q = el.dataset.v; if (AR.q === q) { AR.q = null; arPaint(); } else arFind(q); } return true; }
+  if (act === 'ar-open') { AR.still = e && isNum(e.clientX) && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : null; arOpen(el); return true; }
+  if (act === 'ar-hours') { const t = isNum(WS.cur) ? WS.cur : WS.v && WS.v.rows.length ? WS.v.rows[WS.v.rows.length - 1] : null; if (isNum(t) && WS.id) arHoursOpen(WS.id, t); return true; }
+  if (act === 'ar-hwk') { const z = AR.hz; if (z) arHoursOpen(z.id, z.from + 3 * D + Number(el.dataset.v) * 7 * D); return true; }
+  if (act === 'ar-hclose') { AR.hz = null; arPaint(); refocus('#ws .ar-hzb'); return true; }
+  return false;
+}
 // ---------- History: the data ----------
 // A pool's days from history.json: y (fees, src s/x/e), yv (volume, s/g) and yt (TVL, b/r/m), row for row; a pool with no
 // fee history yet has its daily rows' fees only. null = not read (never 0); a day before the pool existed has no row.
@@ -6546,12 +6846,12 @@ const HSC = { h: null, m: new Map() };
 const HS_NR = Object.freeze({ f: null, fs: null, fu: false, v: null, vs: null, tv: null, ts: null, a: null, nr: true });
 const hsAprOf = (f, tv) => (isNum(f) && isNum(tv) && tv > 0 ? (f / tv) * 365 : null); // a day's fee APR: unread fees or TVL is a gap, never 0%
 function hsDays(q) {
-  if (HSC.h !== S.hist) { HSC.h = S.hist; HSC.m = new Map(); }
+  if (HSC.h !== S.hist || HSC.v !== AR.ver) { HSC.h = S.hist; HSC.v = AR.ver; HSC.m = new Map(); }
   if (HSC.m.has(q.id)) return HSC.m.get(q.id);
   const h = S.hist && S.hist.pools && S.hist.pools[q.id], ok = (x) => isNum(x) && x >= 0;
   let out = null;
+  const m = new Map(), hasY = !!h && Array.isArray(h.y) && h.y.some((r) => Array.isArray(r) && isNum(r[0]));
   if (h) {
-    const m = new Map(), hasY = Array.isArray(h.y) && h.y.some((r) => Array.isArray(r) && isNum(r[0]));
     if (hasY) {
       const yv = Array.isArray(h.yv) && h.yv.length === h.y.length ? h.yv : null, yt = Array.isArray(h.yt) && h.yt.length === h.y.length ? h.yt : null;
       h.y.forEach((r, i) => {
@@ -6564,10 +6864,11 @@ function hsDays(q) {
       const fd = fcDays(q);
       if (fd) for (const [t, x] of fd.m) m.set(t, { f: isNum(x.v) ? x.v : null, fs: isNum(x.v) ? x.s : null, fu: !!x.u, v: null, vs: null, tv: null, ts: null, a: null });
     }
-    if (m.size) {
-      const ks = [...m.keys()].sort((a, b) => a - b);
-      out = { m, first: ks[0], last: ks[ks.length - 1], y: hasY, yp: h.yp && typeof h.yp === 'object' ? h.yp : null, ytp: h.ytp && typeof h.ytp === 'object' ? h.ytp : null, yvp: h.yvp && typeof h.yvp === 'object' ? h.yvp : null, hasV: hasY && Array.isArray(h.yv), hasT: hasY && Array.isArray(h.yt) };
-    }
+  }
+  const an = arMerge(q.id, m); // v0.8.3 · A: the archive's days the file doesn't hold
+  if (m.size) {
+    const ks = [...m.keys()].sort((a, b) => a - b), o = (k) => (h && h[k] && typeof h[k] === 'object' ? h[k] : null);
+    out = { m, first: ks[0], last: ks[ks.length - 1], y: hasY || an.f > 0, yp: o('yp'), ytp: o('ytp'), yvp: o('yvp'), hasV: (hasY && Array.isArray(h.yv)) || an.v > 0, hasT: (hasY && Array.isArray(h.yt)) || an.tv > 0, ar: an.n };
   }
   HSC.m.set(q.id, out);
   return out;
@@ -6660,6 +6961,7 @@ function hsModel(p) {
     return r;
   });
   out.sd = hsMarks(out.rows); // v0.7.7
+  out.bk = arBacks(out); // v0.8.3 · F
   return out;
 }
 const hsSrcOf = (m, r, k) => { // the day's source letters (combined: each pool's, joined)
@@ -6687,7 +6989,7 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) {
   const conf = rows.map((r) => { const v = val(r); return k === 'f' && isNum(v) && hsUn(r) ? sum(r.xs.filter((x) => x && isNum(x.f) && !hsUf(x)).map((x) => x.f)) : v; });
   const sc = hsScale(conf.some((v) => isNum(v) && v > 0) ? conf : rows.map(val), Ht), Y = sc.Y;
   const paths = new Map(), add = (key, d) => paths.set(key, (paths.get(key) || '') + d), offs = [], ucc = new Set();
-  let nr = '', na = '', line = '', prevEnd = null, cap = '', partN = 0, uN = 0;
+  let nr = '', na = '', line = '', prevEnd = null, cap = '', partN = 0, uN = 0, bkd = '', bkv = '', bkN = 0;
   rows.forEach((r, i) => {
     const x0 = HS_AX + i * slot, pt = hsPart(r, k), v = pt ? pt.v : r[k];
     if (v === undefined) { if (r.pre) { pre += `M${x0.toFixed(2)} ${HS_PT}h${slot.toFixed(2)}V${base}H${x0.toFixed(2)}z`; preN++; if (preA == null) preA = x0; preB = x0 + slot; } prevEnd = null; return; }
@@ -6709,6 +7011,7 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) {
       add(key, `M${xb.toFixed(2)} ${y1.toFixed(2)}h${bw.toFixed(2)}V${y0.toFixed(2)}H${xb.toFixed(2)}z`);
     }
     if (hasU) uN++;
+    if (k === 'f' && m.bk && m.bk.has(r.t) && cum > 0) { const yt = Y(cum), yb = Y(m.bk.get(r.t).vr); bkd += `M${xb.toFixed(2)} ${yt.toFixed(2)}h${bw.toFixed(2)}`; bkv += `M${(xb - 1).toFixed(2)} ${yb.toFixed(2)}h${(bw + 2).toFixed(2)}`; bkN++; } // v0.8.3 · F
     if (hasU && cum > sc.top * (1 + 1e-6)) offs.push({ cx: xb + bw / 2, v: cum });
     if (pt && cum > 0) { const yc = Y(cum); cap += `M${xb.toFixed(2)} ${(yc - 4).toFixed(2)}h${bw.toFixed(2)}v4H${xb.toFixed(2)}z`; partN++; } // partial: a hatched cap
     if (kind === 'area' && cum > 0) { const y = Y(cum).toFixed(2); line += prevEnd === i ? `V${y}H${(x0 + slot).toFixed(2)}` : `M${x0.toFixed(2)} ${y}H${(x0 + slot).toFixed(2)}`; prevEnd = i + 1; } else if (kind === 'area') prevEnd = null;
@@ -6726,10 +7029,11 @@ function hsBars(m, k, Wd, Ht, kind, fr = null) {
     g += `<path class="hs-b${e ? ' e' : ''}${u ? ' u' : ''}${pp ? ' p' : ''}" d="${d}" fill="${u ? `url(#hs-uc-${k}-${col.slice(1)})` : col}"${kind === 'area' ? ` fill-opacity="${pp ? '.2' : '.34'}"` : e ? ' fill-opacity=".38"' : u ? '' : pp ? ' fill-opacity=".55"' : ''}${u ? ` stroke="${col}" stroke-width="1"` : ''}/>`;
   }
   if (cap) g += `<path class="hs-pt" d="${cap}" fill="url(#hs-nr-${k})" stroke="rgba(230,237,243,.45)" stroke-width=".6"/>`;
+  if (bkd) g += `<path class="ar-bkt" d="${bkd}" fill="none" stroke="#FAB219" stroke-width="1.6" stroke-dasharray="3 2"/><path class="ar-bkv" d="${bkv}" fill="none" stroke="#FAB219" stroke-width="1" stroke-opacity=".7"/>`; // v0.8.3 · F: the top dashed, a tick where the volume reaches
   g += hsOffs(offs, Wd, fcAx);
   if (line) g += `<path class="hs-l" d="${line}" fill="none" stroke="${m.tiers.length === 1 ? m.tiers[0].col : '#E6EDF3'}" stroke-width="1.6"/>`;
   g += `<line x1="${HS_AX}" x2="${Wd - HS_PR}" y1="${base + 0.5}" y2="${base + 0.5}" stroke="#3B4756" stroke-width="1"/>`;
-  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" data-part="${partN}" data-top="${sc.top}" data-u="${uN}" data-off="${offs.length}" aria-hidden="true">${g}</svg>`;
+  return `<svg width="${Wd}" height="${Ht}" viewBox="0 0 ${Wd} ${Ht}" data-k="${k}" data-n="${n}" data-gaps="${(nr.match(/M/g) || []).length}" data-na="${(na.match(/M/g) || []).length}" data-pre="${preN}" data-part="${partN}" data-top="${sc.top}" data-u="${uN}" data-off="${offs.length}" data-bk="${bkN}" aria-hidden="true">${g}</svg>`;
 }
 // v0.7.1 · E: "Fee APR a day": each day's fees ÷ TVL × 365 as a bar on its own % axis from 0, with a 7-day average line; a day
 // with its fees or TVL not read is a hatched gap labelled "not read" (never 0%); a partial combined day carries the same cap.
@@ -6882,6 +7186,8 @@ function hsHtml(p) {
     + `<div class="hs-card" id="hs-card" aria-live="polite"></div>`
     + hsStackHtml(`Fees, volume and TVL a day, ${m.comb ? 'all tiers combined' : poolWord(one.q)}`, m.rows.length)
     + leg + (notes.length ? `<p class="hs-note">${notes.map((x) => esc(plain(x))).join(' · ')}</p>` : '') + (prog ? `<p class="hs-note">${prog}</p>` : '')
+    + (m.bk && m.bk.size ? `<p class="hs-note ar-bkn" id="ar-bkn" data-x="arBacks" aria-live="polite">${esc(arBkLine(m, null))}</p>` : '')
+    + arHtml(p)
     + `</div><div class="hs-side">${hsTableHtml(m)}</div></div>`;
 }
 // the day table: the days in view, sortable, following the crosshair; a row puts the crosshair on its day
@@ -6927,7 +7233,8 @@ function hsCell(r, k) {
   if (pt) return `<td class="pt${un ? ' uc' : ''}" title="${esc(hsPartTxt(pt))}">${uw}${usd(pt.v)}<span class="s">${pt.n}/${pt.of}</span></td>`; // partial: never shown as the day's total
   if (!isNum(v)) return `<td class="nr">${(k === 'tv' && r.tvNa) || (k === 'f' && r.fNa) ? DASH : 'not read'}</td>`;
   const z = k === 'f' && WS.mod && WS.mod.sd ? WS.mod.sd.by.get(r.t) : null, cl = [un ? 'uc' : '', z ? 'sb' : ''].filter(Boolean).join(' '); // v0.7.7: the fee cell's bar
-  return `<td${cl ? ` class="${cl}"` : ''}${z ? ` style="--w:${(z.w * 100).toFixed(1)}%"` : ''}>${uw}${k === 'f' && r.fe ? '≈ ' : ''}${usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
+  const bk = k === 'f' && WS.mod && WS.mod.bk ? WS.mod.bk.get(r.t) : null; // v0.8.3 · F: "~", the volume backs only part of it
+  return `<td${cl ? ` class="${cl}"` : ''}${z ? ` style="--w:${(z.w * 100).toFixed(1)}%"` : ''}>${uw}${k === 'f' && r.fe ? '≈ ' : ''}${bk ? `<span class="ar-ap" data-x="arBacks" data-bk="${bk.b.toFixed(4)}">~${usd(v)}</span>` : usd(v)}${src ? `<span class="s">${src}</span>` : ''}</td>`;
 }
 function hsTableHtml(m) {
   const all = hsSorted(m), sd = m.sd || hsMarks(m.rows), n = sd.n, nsd = n.h + n.l + n.o;
@@ -6969,6 +7276,8 @@ function hsCardHtml(m, r) {
     else if (v === undefined) q = 'the pool wasn’t there yet';
     const tt = s.map((x) => (map[x] ? map[x][2] : '')).filter(Boolean).join('; ') + (un ? `; ${HS_UTXT}` : '');
     if (uq && isNum(v)) q = uq;
+    const bk = k === 'f' && m.bk ? m.bk.get(r.t) : null; // v0.8.3 · F
+    if (bk) return `<span class="hs-dv ar-bk" data-k="f" data-x="arBacks" data-bk="${bk.b.toFixed(4)}"><span class="lbl">${label}</span><b class="ar-ap">~${usd(v)}</b><span class="q">volume backs ${arPct(bk.b)}</span></span>`;
     const naV = (v === null && ((k === 'tv' && r.tvNa) || (k === 'f' && r.fNa))) || r.pre;
     return `<span class="hs-dv${uq && isNum(v) ? ' uc' : ''}" data-k="${k}"><span class="lbl">${label}</span><b class="${isNum(v) ? '' : 'nr'}">${naV ? DASH : hsMoney(v, k === 'f' && r.fe)}</b><span class="q${naV ? ' na' : ''}" title="${esc(tt || q)}">${esc(q)}</span></span>`;
   };
@@ -7017,6 +7326,7 @@ function hsMount() {
   let i = rows.indexOf(WS.cur);
   if (i < 0) i = rows.length - 1;
   hsCursor(i, false);
+  if (WS.tab === 'history' && WS.mod) arAfter(); // v0.8.3
 }
 // the History chips' build-up (the owner, 15 Nov 2026): the whole stack flashes, collapses, then each tier grows back in
 // (this pool first, then the others by their fees in view), its chip lit as it grows; once per pool in a page's life
@@ -7089,6 +7399,7 @@ function hsCursor(i, scrollRow = true) {
   x.hidden = false; x.style.left = (HS_AX + (i + 0.5) * v.slot).toFixed(1) + 'px';
   const c = $('#hs-card') || $('#ln-card');
   if (c) c.innerHTML = v.cardOf(i);
+  const bn = $('#ar-bkn'); if (bn && WS.mod) { const tx = arBkLine(WS.mod, WS.cur); if (bn.textContent !== tx) bn.textContent = tx; } // v0.8.3 · F
   const tb = $('#ws .hs-tbl');
   if (tb) {
     const old = tb.querySelector('tr.on'), now = tb.querySelector(`tr[data-t="${WS.cur}"]`);
@@ -7117,6 +7428,7 @@ function hsZoomTo(a, b) {
 // the mouse: hover shows a day, a drag across the dates zooms into them, a double-click resets; a finger: hold, then slide
 document.addEventListener('pointermove', (e) => {
   const v = WS.v; if (!v || !WS.open || e.pointerType === 'touch') return;
+  if (AR.still) { if (Math.hypot(e.clientX - AR.still.x, e.clientY - AR.still.y) < 4) return; AR.still = null; } // v0.8.3: a found day keeps the crosshair until the mouse really moves (WebKit sends a move when the view changes under it)
   if (!v.st.isConnected || !v.st.contains(e.target)) { if (!(WS.drag && WS.drag.id === e.pointerId)) return; }
   const i = hsIdx(v, e.clientX);
   if (WS.drag && WS.drag.id === e.pointerId) { if (Math.abs(i - WS.drag.i0) >= 1) WS.drag.moved = true; if (WS.drag.moved) hsSel(WS.drag.i0, i); }
@@ -8043,6 +8355,7 @@ async function resolveKeys(sig = null) {
     S.dks = [await aesKey(m.k), ...(await Promise.all((m.p || []).map((x) => aesKey(x))))];
     S.pks = [await aesKey(m.pk), ...(await Promise.all((m.pp || []).map((x) => aesKey(x))))];
     S.mdekRaw = m.k; S.gen = m.g; S.keys = k;
+    arStart(m); // v0.8.3: the archive's token, from the master slot
     return 'ok';
   }
   if (!k) { S.gi = { ...(S.gi || {}), why: 'gone' }; return 'ended'; }
@@ -8051,6 +8364,7 @@ async function resolveKeys(sig = null) {
     if (!g) { S.gi = { ...(S.gi || {}), why: 'gone' }; return 'ended'; }
     S.gi = slotInfo(g); S.role = S.gi.role;
     S.dks = [await aesKey(g.k)]; S.pks = []; S.keys = k;
+    arStart(g); // v0.8.3: the archive's token, from this guest's or member's slot
   }
   return softEnded() ? 'ended' : 'ok';
 }
@@ -8805,6 +9119,7 @@ document.addEventListener('click', (e) => {
   if (el.dataset.act.startsWith('gemwhy')) { gwClick(el); return; } // the gem's why: its link, toggle, list and close
   if (el.dataset.act.startsWith('eb-')) { ebClick(el); return; } // v0.7.2: the error badge and its sheet
   if (el.dataset.act.startsWith('ws-') && wsClick(el, e)) return; // v0.6.0: History buttons and the workspace
+  if (el.dataset.act.startsWith('ar-') && arClick(el.dataset.act, el, e)) return; // v0.8.3: the archive's controls in History
   if (/^(g|rk|pw|al|sh)-/.test(el.dataset.act)) { gClick(el, e); return; } // v0.7.0: guests, the recovery key, the passphrase, the alarm
   switch (el.dataset.act) {
     case 'fav': toggleFav(el.dataset.id, el); break;
@@ -9254,6 +9569,16 @@ Object.assign(XG, {
     how: 'A pool with a hook (or one whose hook wasn’t read), under 10 swaps a day, or a price more than 10% off the market.',
     valueLine: (el) => xNum(el) },
 });
+// v0.8.3: the archive (A + C + F)
+Object.assign(XG, {
+  arBacks: { title: 'Volume backs x%', meaning: 'How much of a big day’s fees its trading volume can account for.',
+    how: '“Volume backs 51%” means the day’s volume × the pool’s fee rate (the fee tier × the share LPs keep) accounts for only 51% of the fees counted. The spike is real (volume backs at least a quarter of it, so it counts as confirmed), but its size may be smaller than the figure. ~ before the value, a dotted underline and a dashed bar top mark such a day; the thin tick on the bar is where the volume reaches.',
+    valueLine: (el) => { const e = (el.closest && el.closest('[data-bk]')) || el, b = Number(e.dataset && e.dataset.bk); return xJoin(e.dataset && e.dataset.bk && isNum(b) ? `volume backs ${arPct(b)} of the fees` : xText(el), xDay(el)); } },
+  arch: { title: 'The archive', meaning: 'Every day and hour the scanner has recorded of every pool, kept for good.',
+    how: 'History reads its own file first (a year of days); the archive adds the older days, so All reaches the pool’s first recorded day, and the hourly zoom reads any past week. Market data only, read with this device’s login. Unreachable or refused: “archive unavailable”, and History works as before. A day or an hour not read is a gap, never 0.', valueLine: (el) => xText(el) },
+  arFind: { title: 'Find days', meaning: 'Four questions asked of every pool in the archive at once.',
+    how: '★ 10× spikes: days at 10× the pool’s median of the last 30 days or more (⚠ when the day looks like a data error). Doubled: a week’s fees a day at least twice the week before (5 days read in each at least). Quietest: the lowest fee APR over 30 days. ⚠ Outliers: big days unconfirmed, or with a fee ÷ volume out of line. A row opens that pool’s History on that day.', valueLine: (el) => xText(el) },
+});
 // every other explainable word: its note (GLOSS) as the meaning, the rest of it as the how
 const XA = { net: 'netApr', gascost: 'gasCost' };
 for (const k of Object.keys(GLOSS)) {
@@ -9285,6 +9610,7 @@ const XT = [
   ['.shw .sh th button[data-k="gem"]', 'gem'], ['.shw .sh th button[data-k="net"]', 'netApr'], ['.shw .sh th button[data-k="vol"]', 'volDay'], ['.shw .sh th button[data-k="tvl"]', 'tvlNow'], ['.shw .sh th button[data-k="feeApr"]', 'feeApr'],
   ['#all-tbl tbody td:nth-child(6)', 'volDay'], ['#all-tbl tbody td:nth-child(7)', 'tvlNow'], ['#all-tbl tbody td:nth-child(9)', 'feeApr'],
 ];
+XT.push(['.hs-dv.ar-bk', 'arBacks'], ['.ar-ap', 'arBacks'], ['#ar-bkn', 'arBacks'], ['.ar-st', 'arch'], ['.ar-fh > .lbl', 'arFind'], ['.ar-q button', 'arFind']); // v0.8.3
 XT.push(...[['yield', 'gwyield'], ['thinness', 'gwthin'], ['flow', 'gwflow'], ['staying', 'gwstay']].map(([p, k]) => [`.gy-row[data-part="${p}"] .gy-ph > span`, k])); // the gem's why: each part's points
 // a native tooltip on an explained element (or inside one) moves to data-xt: the card shows it, never two tooltips at once
 function xUntitle(e) { const t = e.getAttribute('title'); if (t == null) return; if (t) e.setAttribute('data-xt', t); e.removeAttribute('title'); }
