@@ -1,6 +1,6 @@
 // Sealed backups of the published data (.github/workflows/backup.yml). The `data` branch is an orphan that
 // every pass overwrites; this keeps dated copies of it apart from it (docs/RESTORE.md):
-//   - every copy (about every 50 minutes: the live loop dispatches backup.yml) as an Actions artifact
+//   - every copy (about every 2 hours: the live loop dispatches backup.yml) as an Actions artifact
 //     backup-<stamp>, kept 2 days: the hourly tier;
 //   - the day's first copy also as a dated folder on the `backup` branch, which keeps what planRetention keeps:
 //     every folder of the last 48 hours, the first of each UTC day for 90 days, the first of each ISO week for

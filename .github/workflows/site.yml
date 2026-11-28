@@ -4,9 +4,9 @@ name: site
 # Logs show pass/fail, counts and timings only.
 # A dispatch can test a candidate page before it deploys: put it under tools/candidate/ (that path never triggers
 # the pages workflow) and pass its path as `page`.
+# Dispatch only (28 Nov 2026, less Actions time): every release tests its candidate with one dispatch before it
+# deploys, so a run on each push only re-tested the old page and was thrown away.
 on:
-  push:
-    paths: ['site/**', 'tools/fixtures/**', 'tools/site-test.mjs', 'test/site*.test.mjs', 'lib/lock.mjs', '.github/workflows/site.yml']
   workflow_dispatch:
     inputs:
       page:

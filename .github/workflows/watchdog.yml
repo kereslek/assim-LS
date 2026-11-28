@@ -7,7 +7,7 @@ name: watchdog
 # Public log: counts, minutes and yes/no only.
 on:
   schedule:
-    - cron: '7-59/10 * * * *'   # every 10 min at :07, :17, ... (clear of the loop's :23 backup cron)
+    - cron: '7-59/20 * * * *'   # every 20 min at :07, :27, :47 (clear of the loop's :23 backup cron; every 10 min until 28 Nov 2026)
   workflow_dispatch:
     inputs:
       dry_run:

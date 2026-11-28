@@ -7,12 +7,12 @@ is unreadable.
 
 | Tier | Where | Kept | Made by |
 |---|---|---|---|
-| Hourly | Actions artifact `backup-<stamp>` | 2 days | `backup.yml`, which the live loop dispatches when it starts and every 50 minutes (`loop.yml`, "Start the hourly sealed copies"), plus an hourly cron as a fallback |
+| Hourly | Actions artifact `backup-<stamp>` | 2 days | `backup.yml`, which the live loop dispatches when it starts and every 2 hours (`loop.yml`, "Start the sealed copies"), plus a 2-hourly cron as a fallback (every 50 minutes until 28 Nov 2026) |
 | Daily | folder `<stamp>/` on the `backup` branch | the first copy of each UTC day for 90 days | `backup.yml`, on the day's first copy |
 | Weekly | the same folders | the first copy of each ISO week for 365 days | (kept by the same rule) |
 
 - **The rule:** `scripts/backup.mjs` `planRetention` keeps every folder of the last 48 hours, each day's first for 90 days, each week's first for a year, and always the newest. Each daily commit drops what the rule lets go. On the 1st of each month `backup-trim.yml` folds the branch's history into one commit with the same folders (tag `backup-pre-trim-YYYYMMDD` first) and deletes all but the newest 2 pre-trim tags.
-- **At most an hour of data lost:** while the loop runs, a new copy lands every 50 minutes, give or take a few minutes of dispatch lag, and one when each loop run starts. When the loop is down, nothing new is made, so there is nothing new to lose.
+- **At most about 2 hours of data lost:** while the loop runs, a new copy lands every 2 hours, give or take a few minutes of dispatch lag, and one when each loop run starts. When the loop is down, nothing new is made, so there is nothing new to lose.
 - **A stamp** is `YYYY-MM-DDTHHMMZ` (UTC): the time the copy was taken. A folder holds the data branch's files (`live.json`, `history.json`, `snapshots.json`, `backtest.json`, `log.json`, `lock.json`) and `lock/` (the repo's lock files).
 - **Size (15 Nov 2026):** one copy is about 10.2 MB, about 7.6 MB stored by git. The branch's folders come to about 130 copies, about 1.3 GB, or about 1.0 GB stored. The hourly artifacts add about 0.6 GB outside git.
 - **Drill:** `restore-drill.yml` runs on Sundays and on dispatch. It decrypts the newest hourly copy and the newest branch folder, checks them against `docs/DATA.md`, rebuilds each as the data branch, has the loop's own code restore it and start a dry-run pass, and compares the counts with the live data. Public log: pass/fail, counts and ages only.

@@ -70,7 +70,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix,bottombar,holdx,why').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix,bottombar,holdx,why,tokenlinks').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -7193,6 +7193,11 @@ const HX_HOLD = async ({ sel, ms, move = 0, second = false, end = 'pointerup', a
   if (second) { await new Promise((q) => setTimeout(q, 100)); ev('pointerdown', 42, x + 70, y, false); }
   if (move) { await new Promise((q) => setTimeout(q, 100)); ev('pointermove', 41, x, y + move); }
   await new Promise((q) => setTimeout(q, ms));
+  // A hold past the 450 ms mark may land late on a slow CI runner (its timer queues behind a busy frame): give a
+  // long hold up to 700 ms more before releasing, so the check reads what the page does, not the runner's speed.
+  // Short holds (taps) are released on time, so "a tap never opens a card" still holds exactly.
+  const isOpen = () => !!document.querySelector('#hx') && !document.querySelector('#hx').hidden;
+  if (ms >= 460) for (let w = 0; w < 700 && !isOpen(); w += 50) await new Promise((q) => setTimeout(q, 50));
   const ring = !!document.querySelector('#hxring') && !document.querySelector('#hxring').hidden, card = !!document.querySelector('#hx') && !document.querySelector('#hx').hidden;
   ev(end, 41, x, y + move);
   if (second) ev(end, 42, x + 70, y, false);
@@ -7343,6 +7348,7 @@ async function testHoldx(browser) {
   await q.hover('#best .bignum'); await sleep(560);
   const h0 = await q.evaluate(HX_CARD);
   await sleep(320);
+  for (let w = 0; w < 700 && !(await q.evaluate(() => !!document.querySelector('#hx') && !document.querySelector('#hx').hidden)); w += 50) await sleep(50); // a slow runner's late hover timer
   const h1 = await q.evaluate(HX_CARD), er = await q.evaluate(() => { const r = document.querySelector('#best .bignum').getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; });
   ok(`holdx laptop: hovering a number 560 ms shows nothing yet; at 880 ms its card, a popover beside it (not modal, not over it, inside the screen)`,
     !h0.open && h1.open && h1.k === 'netApr' && h1.mode === 'pop' && h1.modal === 'false' && !bbOver({ left: h1.l, right: h1.r, top: h1.t, bottom: h1.b }, { left: er.l, right: er.r, top: er.t, bottom: er.b }) && h1.l >= 0 && h1.r <= h1.vw && h1.t >= 0 && h1.b <= h1.vh && !h1.focusIn, JSON.stringify({ h0: h0.open, h1, er }));

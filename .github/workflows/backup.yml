@@ -3,8 +3,8 @@ name: backup
 # (docs/RESTORE.md). Each run copies the data branch's *.json and the repo's lock/*.json into <stamp>/ and
 # <stamp>/lock/, refusing if any data file other than lock.json and inbox.json is not a sealed envelope, then:
 #   - uploads it as the artifact backup-<stamp>, kept 2 days: the hourly tier. The live loop dispatches this
-#     workflow when it starts and every 50 minutes (loop.yml), so the newest copy is under an hour old while the
-#     loop runs; the hourly cron below is only a fallback (GitHub fires it a few times a day);
+#     workflow when it starts and every 2 hours (loop.yml), so the newest copy is under about 2 hours old while
+#     the loop runs; the 2-hourly cron below is only a fallback (GitHub fires it a few times a day);
 #   - when the backup branch holds no folder of this UTC day yet, puts the copy there too (the day's first), in
 #     a normal commit that also drops what scripts/backup.mjs planRetention lets go (48 hours, the day's first
 #     for 90 days, the week's first for a year, the newest). Only the branch's trees are fetched, never its files.
@@ -12,7 +12,7 @@ name: backup
 # Public log: dates, counts and pass/fail only.
 on:
   schedule:
-    - cron: '17 * * * *'   # hourly fallback (best-effort)
+    - cron: '17 */2 * * *'   # 2-hourly fallback (best-effort)
   workflow_dispatch:
     inputs:
       by:
