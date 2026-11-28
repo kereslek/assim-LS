@@ -7824,6 +7824,9 @@ async function testArchive(browser) {
     await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, F.tF); await sleep(200); // the day again (a resting mouse may have moved the crosshair as the card grew)
     const res = [];
     for (const sel of ['#ws .ar', '#ar-bkn', '#hs-card .hs-dv.ar-bk']) {
+      await p.mouse.move(1, 1); // off the charts: WebKit moves the crosshair under a resting mouse as the view scrolls
+      await p.evaluate((s) => { const e = document.querySelector(s); if (e) e.scrollIntoView({ block: 'center' }); }, sel); await sleep(250);
+      await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, F.tF); await sleep(150);
       await p.evaluate((s) => { const e = document.querySelector(s); if (e) e.scrollIntoView({ block: 'center' }); }, sel); await sleep(250);
       const r = await arAA(p, sel); r.has = await p.evaluate((s) => !!document.querySelector(s), sel); res.push([sel, r]);
     }
