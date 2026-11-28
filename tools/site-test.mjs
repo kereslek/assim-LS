@@ -27,6 +27,7 @@
 //                                                    lazy3d (v0.7.9: the 3D look's code runs only when 3D shows; both ways; idle preload)
 //                                                    a11yfix (v0.7.9: WCAG AA text in both looks, layout shifts under 0.05, a framed page blank)
 //                                                    bottombar (v0.8.0: the phone's bottom tab bar: Best Pools Saved Tests More, the workspace's tabs, More, overlap, keyboard)
+//                                                    archive (v0.8.3: History's All from the D1 archive, the hourly zoom, Find days, ~ volume backs x%; made-up API answers)
 //                                                    holdx (v0.8.0: hold a number 450 ms, hover 700 ms or ? for its card: the glossary, the ring, what cancels, charts left alone)
 //   node tools/site-test.mjs --page <file>          test another copy of the page (planted faults)
 //   node tools/site-test.mjs --verbose              also list every passing check
@@ -70,7 +71,7 @@ const pw = require('playwright');
 const BROWSER = opt('browser', 'chromium');
 const DEVICE = opt('device');
 const SHOTS = opt('shots');
-const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix,bottombar,holdx,why,tokenlinks').split(',');
+const ONLY = (opt('only') || 'unlock,layout,windows,market,states,tabs,daily,pairs,charts,pan,depth,history,stable,touch,sheets,sticky,top,header,zoomfit,overlap,rows,refresh,fav,table,similar,chains,highlight,search,links,terms,fold,locknote,clicks,motion,merge,feebar,stablewalk,flash,dates,feescale,perday,disc,view,balance,wraps,floorlab,iphone,back,pull,full,way,qsearch,stress,workspace,compare,deeplink,tiers,tools,guest,member,guestend,guestadmin,guest180,recovery,passchange,mismatch,histbtn,apr,errbadge,spike,scatter,explainer,refreshcd,standout,lazy3d,a11yfix,bottombar,holdx,why,tokenlinks,archive').split(',');
 const MODE = ['3d', '2d'].includes(opt('mode')) ? opt('mode') : null; // v0.5.0: the look every page starts in (null: the page's own default)
 const WIDTHS = DEVICE ? [] : [360, 375, 390, 430, 768, 1024, 1300, 1440, 1920];
 const LAPTOP = DEVICE ? [768, 1440] : [];
@@ -7623,10 +7624,220 @@ async function testWhy(browser) {
   await gt.ctx.close();
 }
 
+// ---------- v0.8.3 · the D1 archive in History (the owner's A + C + F) ----------
+// Every answer of the archive's Worker is made up here and served by route interception (no real network): A (History's All
+// reaches the archive's older days; the hourly zoom on a past week, ‹ › a week, ✕), C (each "Find days" preset lists its days;
+// a tap opens that pool's History on that day, an archive-only day included), F (a big day the volume backs only 51% of:
+// "~", the dashed bar top, the owner's plain words, its hold-to-explain card), and the archive unreachable, refusing (401,
+// 429) or answering nulls: "—" or "archive unavailable", History as before. The CSP lets exactly one new origin connect; the
+// bearer token is well formed, differs by role, and never appears in the page.
+const AR_HOST = 'https://assim-ls-api.kereslek.workers.dev';
+const AR_CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization', 'access-control-allow-methods': 'GET, OPTIONS', 'cache-control': 'no-store' };
+const AR_FX = (() => {
+  const H = FXD.history.pools, hex = /^0x[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+  const ps = FXD.live.pools.filter((q) => hex.test(q.id) && H[q.id] && Array.isArray(H[q.id].y) && Array.isArray(H[q.id].yv) && H[q.id].y.length > 40 && !(H[q.id].yp && H[q.id].yp.lim === 'archive') && !(H[q.id].ytp && H[q.id].ytp.lim));
+  const p = ps[0], h = H[p.id], first = h.y[0][0], last = h.y[h.y.length - 1][0];
+  const fv = h.y.map((r, i) => (h.yv[i] && h.yv[i][0] > 0 && r[1] > 0 ? r[1] / h.yv[i][0] : null)).filter((x) => x != null).sort((a, b) => a - b);
+  const rate = fv[fv.length >> 1], fees = h.y.map((r) => r[1]).filter((x) => x > 0).sort((a, b) => a - b), med = fees[fees.length >> 1];
+  const OLD = 300, t0 = first - OLD * D, tF = first - 120 * D, rows = [];
+  for (let i = 0; i < OLD; i++) { // the archive's older days: made up around the pool's median; one gap; one 40× day volume backs 51% of
+    const t = t0 + i * D, day = new Date(t).toISOString().slice(0, 10), k = 0.75 + ((i * 37) % 50) / 100;
+    if (t === first - 200 * D) { rows.push([day, null, null, 0, null, null, null, null, null, rate, 0]); continue; } // not read: a gap, never 0
+    const f = t === tF ? med * 40 : med * k, v = t === tF ? (0.51 * f) / rate : f / rate;
+    rows.push([day, f, 's', 0, v, 's', 2.5e6 * k, 'b', 1, rate, 1]);
+  }
+  const mid = last - 10 * D, other = ps[1];
+  const pm = (q) => ({ chain: q.chain, dex: 'uniswap', version: 3, fee_tier: q.feeTier, symbol0: 'MOCKA', symbol1: 'MOCKB' });
+  const ghost = '0x' + 'ab'.repeat(20), dayOf = (t) => new Date(t).toISOString().slice(0, 10);
+  const find = {
+    spikes10x: { rows: [{ pool: p.id, day: dayOf(tF), value: med * 40, multiple: 40, mark: 'h', n: 28 }, { pool: other.id, day: dayOf(mid), value: 1234, multiple: 12.5, mark: 'h', n: 29 }, { pool: ghost, day: dayOf(mid), value: 999, multiple: 11, mark: 'h', n: 30 }] },
+    doubled: { rows: [{ pool: other.id, day: dayOf(last - 7 * D), value: 800, multiple: 2.4, mark: null, n: 7 }, { pool: p.id, day: dayOf(last), value: 600, multiple: 2.1, mark: 'p', n: 6 }] },
+    quietest: { rows: [{ pool: other.id, day: dayOf(last), value: 0.012, multiple: 0.2, mark: null, n: 30 }, { pool: p.id, day: dayOf(last - D), value: 0.03, multiple: 0.5, mark: 'p', n: 20 }, { pool: ghost, day: dayOf(last), value: 0.04, multiple: 0.7, mark: null, n: 30 }, { pool: ps[2].id, day: dayOf(last - 3 * D), value: 0.05, multiple: 0.9, mark: null, n: 30 }] },
+    outliers: { rows: [{ pool: ps[2].id, day: dayOf(mid - 2 * D), value: 5000, multiple: 6, mark: 'o', n: 28 }] },
+  };
+  const pools = { [p.id]: pm(p), [other.id]: pm(other), [ps[2].id]: pm(ps[2]), [ghost]: { chain: 'ethereum', dex: 'uniswap', version: 3, fee_tier: 0.003, symbol0: 'MOCKC', symbol1: 'MOCKD' } };
+  return { p, other, rows, t0, tF, first, last, rate, med, find, pools, ghost, inPage: h.y.length };
+})();
+function arAnswer(u, mode) {
+  const q = u.searchParams, path = u.pathname, nul = mode === 'null';
+  if (path === '/v1/meta') return { v: 1, t: Date.now(), role: 'owner', api: 'mock', schema: 2, pools: 3, days: nul ? { pools: 0, from: null, to: null } : { pools: 3, from: new Date(AR_FX.t0).toISOString().slice(0, 10), to: new Date(AR_FX.last).toISOString().slice(0, 10) }, hours: { pools: 3, from: null, to: null }, lastWrite: null, writtenToday: null, sweep: null, limits: { dayRows: 4000, hoursDays: 8, findMax: 200, findDays: [7, 365] } };
+  if (path === '/v1/days') {
+    const id = q.get('pool');
+    const cols = ['day', 'fees_usd', 'fees_src', 'fees_unconfirmed', 'volume_usd', 'volume_src', 'tvl_usd', 'tvl_src', 'price', 'lp_fee_rate', 'valued'];
+    if (id !== AR_FX.p.id) return { v: 1, pool: { id }, from: null, to: null, more: false, cols, rows: [] };
+    const rows = nul ? AR_FX.rows.map((r) => [r[0], null, null, null, null, null, null, null, null, null, null]) : AR_FX.rows;
+    return { v: 1, pool: { id }, from: null, to: null, more: false, cols, rows };
+  }
+  if (path === '/v1/hours') {
+    const from = Number(q.get('from')), to = Number(q.get('to')), rows = [];
+    for (let t = from; t < to; t += 36e5) { const i = (t - from) / 36e5; if (i % 29 === 5) continue; rows.push([t + 600e3, 1, 1, nul || i % 41 === 7 ? null : 10 + (i % 24), 0, 3600]); } // gaps and nulls: never 0
+    return { v: 1, pool: { id: q.get('pool') }, from, to, cols: ['t', 'price', 'liquidity', 'fees_usd', 'parked', 'span_s'], rows };
+  }
+  if (path === '/v1/find') {
+    const f = AR_FX.find[q.get('q')];
+    const rows = nul ? f.rows.map((r) => ({ ...r, value: null, multiple: null })) : f.rows;
+    return { v: 1, q: q.get('q'), days: 30, chain: 'any', from: '2026-10-28', to: '2026-11-26', n: rows.length, rows, pools: AR_FX.pools };
+  }
+  return null;
+}
+async function arRoute(ctx, mode, log) {
+  await ctx.route((u) => u.origin === AR_HOST, async (route) => {
+    const req = route.request(), u = new URL(req.url());
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: AR_CORS });
+    log.push({ path: u.pathname, search: u.search, auth: req.headers().authorization || '' });
+    if (mode === 'down') return route.abort('connectionrefused');
+    if (mode === '401') return route.fulfill({ status: 401, headers: { ...AR_CORS, 'content-type': 'text/plain' }, body: 'auth' });
+    if (mode === '429') return route.fulfill({ status: 429, headers: { ...AR_CORS, 'content-type': 'text/plain' }, body: 'rate' });
+    if (mode === 'meta429' && u.pathname !== '/v1/meta') return route.fulfill({ status: 429, headers: { ...AR_CORS, 'content-type': 'text/plain' }, body: 'rate' });
+    const a = arAnswer(u, mode);
+    if (!a) return route.fulfill({ status: 404, headers: AR_CORS, body: 'notfound' });
+    return route.fulfill({ status: 200, headers: { ...AR_CORS, 'content-type': 'application/json' }, body: JSON.stringify(a) });
+  });
+}
+async function arUnlock(browser, mode, o = {}, pass = FIXTURE_PASSPHRASE) {
+  const t = await newPage(browser, o); t.log = [];
+  t.csp = [];
+  t.page.on('console', (m) => { if (/Content Security Policy|Refused to connect/i.test(m.text())) t.csp.push(m.text().slice(0, 120)); });
+  await arRoute(t.ctx, mode, t.log);
+  await t.page.goto(url('keyed'));
+  await unlockWith(t.page, pass);
+  await waitApp(t.page);
+  await t.page.click('#gw-ok', { timeout: 1500 }).catch(() => {}); await sleep(150);
+  return t;
+}
+const AR_VIEW = () => {
+  const hs = document.querySelector('#ws .hs'), ar = document.querySelector('#ws .ar'), st = document.querySelector('#ws .ar-st');
+  const rows = [...document.querySelectorAll('#ws .hst tbody tr[data-t]')].map((r) => +r.dataset.t);
+  return { rows: hs ? +hs.dataset.rows : 0, trs: rows.length, min: rows.length ? Math.min(...rows) : null, ar: ar ? ar.dataset.ar : null, st: st ? st.textContent : '', cur: window.__lpsHooks.ws().cur,
+    card: (document.querySelector('#hs-card') || {}).textContent || '', bkn: (document.querySelector('#ar-bkn') || {}).textContent || '', fsvg: +((document.querySelector('#ws [data-svg="f"] svg') || { dataset: {} }).dataset.bk || 0) };
+};
+async function arHist(p, id, range) {
+  await wsHashOpen(p, id, 'history');
+  if (range != null) { await p.click(`#ws [data-act="ws-range"][data-v="${range}"]`).catch(() => {}); }
+  await p.waitForFunction(() => { const a = document.querySelector('#ws .ar'); return !a || a.dataset.ar !== 'wait'; }, null, { timeout: 8000 }).catch(() => {});
+  await sleep(600);
+}
+async function testArchive(browser) {
+  const F = AR_FX, html = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8');
+  const csp = (/connect-src ([^;]*);/.exec(html) || [])[1] || '';
+  ok(`archive: the CSP lets exactly one new origin connect (${csp})`, csp.split(/\s+/).sort().join(' ') === ["'self'", 'https://raw.githubusercontent.com', AR_HOST].sort().join(' '), csp);
+  const SETS = BROWSER === 'webkit' ? [['phone', { phone: true }], ['w1440', { width: 1440, height: 900 }]] : [['w393', { width: 393, height: 852 }], ['w1440', { width: 1440, height: 900 }]];
+  let ownerTok = '';
+  for (const [tag, o] of SETS) {
+    const t = await arUnlock(browser, 'ok', o), p = t.page;
+    await p.waitForFunction(() => true); await sleep(300);
+    const tok = (t.log.find((x) => x.path === '/v1/meta') || {}).auth || '';
+    ok(`archive ${tag}: after unlock the page reads /v1/meta with a bearer token of the archive's shape (lps1. + 43)`, /^Bearer lps1\.[A-Za-z0-9_-]{43}$/.test(tok) && t.log.every((x) => x.auth === tok), JSON.stringify(t.log.slice(0, 3).map((x) => x.path)));
+    ownerTok = tok.slice(7);
+    // A · 30 days stay the file's; All reaches the archive's first day
+    await arHist(p, F.p.id, 30);
+    const v30 = await p.evaluate(AR_VIEW);
+    ok(`archive ${tag}: History 30D is the file's own 30 days, the archive's state shows (${v30.st})`, v30.rows === 30 && v30.ar === 'ok' && /archive · every day since/.test(v30.st), JSON.stringify(v30));
+    ok(`archive ${tag}: the pool's days are read once from /v1/days (ALL: no from or to)`, t.log.filter((x) => x.path === '/v1/days' && x.search.includes(F.p.id.slice(0, 12))).length === 1 && t.log.some((x) => x.path === '/v1/days' && !/from=|to=/.test(x.search)), JSON.stringify(t.log.map((x) => x.path + x.search.slice(0, 20))));
+    await p.click('#ws [data-act="ws-range"][data-v="0"]'); await sleep(500);
+    const va = await p.evaluate(AR_VIEW), want = Math.round((F.last - F.t0) / D) + 1;
+    ok(`archive ${tag}: All reaches the archive (${va.rows} days from ${new Date(va.min).toISOString().slice(0, 10)}, the file holds ${F.inPage})`, va.rows === want && va.min === F.t0 && va.trs === want, JSON.stringify({ rows: va.rows, want, min: va.min, t0: F.t0 }));
+    const gap = await p.evaluate((t) => { const r = document.querySelector(`#ws .hst tr[data-t="${t}"]`); return r ? r.cells[1].textContent : ''; }, F.first - 200 * D);
+    ok(`archive ${tag}: an archive day not read is "not read", never $0 (${gap})`, /not read/.test(gap) && !/\$0/.test(gap), gap);
+    // F · the 40× day volume backs 51% of
+    await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, F.tF); await sleep(200);
+    const vf = await p.evaluate(AR_VIEW), cell = await p.evaluate((t) => { const r = document.querySelector(`#ws .hst tr[data-t="${t}"]`), a = r && r.querySelector('.ar-ap'); return a ? { t: a.textContent, x: a.dataset.x, deco: getComputedStyle(a).textDecorationStyle } : null; }, F.tF);
+    ok(`archive ${tag}: the day card shows "~" and "volume backs 51%" (${vf.card.slice(0, 80)})`, /Fees~\$[\d.,]+[KM]?volume backs 51%/.test(vf.card.replace(/\s+/g, '')) || (/~\$/.test(vf.card) && /volume backs 51%/.test(vf.card)), vf.card);
+    ok(`archive ${tag}: the table's fee cell is "~$…" with a dotted underline, explained by arBacks`, !!cell && /^~\$/.test(cell.t) && cell.x === 'arBacks' && cell.deco === 'dotted', JSON.stringify(cell));
+    ok(`archive ${tag}: the fee chart draws the dashed top on that day (${vf.fsvg})`, vf.fsvg >= 1, String(vf.fsvg));
+    ok(`archive ${tag}: the plain words say what "volume backs 51%" means: "${vf.bkn}"`, /volume backs 51% of the fees/.test(vf.bkn) && /volume \(\$[\d.,]+[KMB]?\) × the pool’s fee rate \([\d.]+%\) accounts for only \$[\d.,]+[KMB]?, 51% of the \$[\d.,]+[KMB]? in fees counted, so the spike is real but its size may be smaller\./.test(vf.bkn), vf.bkn);
+    const hx = await p.evaluate(() => { const e = document.querySelector('#hs-card .hs-dv.ar-bk'); if (!e) return null; window.__lpsHooks.hxShow(e); const t = (id) => document.querySelector('#' + id).textContent; const o = { x: e.dataset.x, t: t('hx-t'), m: t('hx-m'), h: t('hx-h'), v: t('hx-v') }; window.__lpsHooks.hxShow(null); return o; });
+    ok(`archive ${tag}: hold-to-explain on it says what it means ("${hx && hx.v}")`, !!hx && hx.x === 'arBacks' && /Volume backs/.test(hx.t) && /accounts for only 51% of the fees counted/.test(hx.h) && /spike is real/.test(hx.h) && /volume backs 51% of the fees/.test(hx.v), JSON.stringify(hx));
+    // A · the hourly zoom: the week around the day picked; ‹ a week back; ✕
+    const hz0 = t.log.length;
+    await p.click('#ws [data-act="ar-hours"]'); await p.waitForSelector('#ar-hz svg.ar-hsvg', { timeout: 6000 }).catch(() => {}); await sleep(200);
+    const hz = await p.evaluate(() => { const s = document.querySelector('#ar-hz svg.ar-hsvg'); return s ? { read: +s.dataset.read, n: +s.dataset.n, cap: document.querySelector('#ar-hz .ar-hh').textContent, note: document.querySelector('#ar-hz .hs-note').textContent, w: s.getBoundingClientRect().width } : null; });
+    const hreq = t.log.slice(hz0).find((x) => x.path === '/v1/hours'), hp = hreq ? new URLSearchParams(hreq.search) : null, from = Math.floor(F.tF / D) * D - 3 * D;
+    let read = 0; for (let i = 0; i < 168; i++) if (i % 29 !== 5 && i % 41 !== 7) read++;
+    ok(`archive ${tag}: the hourly zoom reads 7 days around the day picked (one call, ≤ 8 days) and draws ${hz && hz.read} of 168 hours, gaps never 0 ("${hz && hz.note}")`, !!hz && !!hp && +hp.get('from') === from && +hp.get('to') - +hp.get('from') === 7 * D && hz.n === 168 && hz.read === read && /gap, never 0/.test(hz.note) && hz.w > 200, JSON.stringify({ hz, q: hreq && hreq.search }));
+    await p.click('#ar-hz [data-act="ar-hwk"][data-v="-1"]'); await sleep(500);
+    const hreq2 = t.log.filter((x) => x.path === '/v1/hours').pop(), hp2 = new URLSearchParams(hreq2.search);
+    ok(`archive ${tag}: ‹ steps the hourly zoom a week back`, +hp2.get('from') === from - 7 * D && !!(await p.$('#ar-hz svg.ar-hsvg')), hreq2.search);
+    await p.click('#ar-hz [data-act="ar-hclose"]'); await sleep(200);
+    ok(`archive ${tag}: ✕ closes the hourly zoom`, await p.evaluate(() => document.querySelector('#ar-hz').hidden), '');
+    // C · each preset lists its days; a row of a pool not in this scan can't be opened
+    const fr = {};
+    for (const q of ['spikes10x', 'doubled', 'quietest', 'outliers']) {
+      await p.click(`#ws [data-act="ar-find"][data-v="${q}"]`); await p.waitForSelector('#ar-res .ar-list, #ar-res .hs-note', { timeout: 6000 }).catch(() => {}); await sleep(250);
+      fr[q] = await p.evaluate(() => { const b = [...document.querySelectorAll('#ar-res .ar-row')]; return { n: b.length, off: b.filter((x) => x.disabled).length, txt: (document.querySelector('#ar-res') || {}).textContent || '' }; });
+    }
+    const ghosts = (q) => F.find[q].rows.filter((r) => r.pool === F.ghost).length;
+    ok(`archive ${tag}: each "Find days" preset lists its days (${Object.entries(fr).map(([k, v]) => `${k} ${v.n}`).join(', ')}), a pool not in this scan disabled`, Object.entries(fr).every(([k, v]) => v.n === F.find[k].rows.length && v.off === ghosts(k)) && /40×/.test(fr.spikes10x.txt) && /APR/.test(fr.quietest.txt) && /⚠/.test(fr.outliers.txt), JSON.stringify(fr));
+    // C · tapping a row opens that pool's History on that day (an archive-only day: the range goes to All)
+    await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`); await sleep(150);
+    if (!(await p.$('#ar-res .ar-row'))) { await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`); await sleep(300); }
+    await p.click(`#ar-res .ar-row[data-id="${F.other.id}"]`); await sleep(700);
+    const o1 = await p.evaluate(() => ({ ...window.__lpsHooks.ws(), on: (document.querySelector('#ws .hst tr.on') || { dataset: {} }).dataset.t }));
+    const t1 = Date.parse(F.find.spikes10x.rows[1].day + 'T00:00:00Z');
+    ok(`archive ${tag}: a found day opens that pool's History with the crosshair and the table on that day`, o1.id === F.other.id && o1.tab === 'history' && o1.cur === t1 && +o1.on === t1, JSON.stringify({ id: o1.id === F.other.id, tab: o1.tab, cur: o1.cur, t1, on: o1.on }));
+    await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`).catch(() => {}); await sleep(150);
+    if (!(await p.$(`#ar-res .ar-row[data-id="${F.p.id}"]`))) { await p.click(`#ws [data-act="ar-find"][data-v="spikes10x"]`).catch(() => {}); await sleep(300); }
+    await p.click(`#ar-res .ar-row[data-id="${F.p.id}"]`); await sleep(900);
+    const o2 = await p.evaluate(AR_VIEW), w2 = await p.evaluate(() => window.__lpsHooks.ws());
+    ok(`archive ${tag}: an archive-only day opens too (the range goes to All, the card on its day, "~" on it)`, w2.id === F.p.id && o2.cur === F.tF && /~\$/.test(o2.card) && /volume backs 51%/.test(o2.card), JSON.stringify({ id: w2.id === F.p.id, cur: o2.cur, tF: F.tF, card: o2.card.slice(0, 90) }));
+    // the layout: nothing sideways, no text on text in the archive card, AA text (both looks: the a11yfix group checks the page)
+    const ov = await OVL(p, '#ws .ar'), fit = await p.evaluate(APR_FIT);
+    ok(`archive ${tag}: no text on text in the archive card, no sideways scroll (page ${fit.page}, workspace ${fit.ws})`, ov.length === 0 && fit.page <= 1 && fit.ws <= 1, JSON.stringify(ov.slice(0, 2)));
+    const dom = await p.evaluate(() => document.documentElement.outerHTML + JSON.stringify(Object.entries(localStorage)) + JSON.stringify(Object.entries(sessionStorage)));
+    ok(`archive ${tag}: the token is nowhere in the page, its attributes or this browser's storage`, !!ownerTok && !dom.includes(ownerTok) && !dom.includes(ownerTok.slice(5, 25)), '');
+    ok(`archive ${tag}: no CSP refusal`, t.csp.length === 0, t.csp[0]);
+    ok(`archive ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // the guest's token: its own, of the same shape, never the owner's
+  {
+    const t = await arUnlock(browser, 'ok', BROWSER === 'webkit' ? { phone: true } : { width: 393, height: 852 }, SHARED_PASS), p = t.page;
+    await sleep(400);
+    const tok = (t.log.find((x) => x.path === '/v1/meta') || {}).auth || '';
+    ok('archive guest: a guest reads the archive with a token of its own (from its slot, never the owner\'s)', /^Bearer lps1\.[A-Za-z0-9_-]{43}$/.test(tok) && tok.slice(7) !== ownerTok, '');
+    await arHist(p, F.p.id, 0);
+    const v = await p.evaluate(AR_VIEW);
+    ok(`archive guest: History All reaches the archive for a guest too (${v.rows} days)`, v.rows === Math.round((F.last - F.t0) / D) + 1 && v.ar === 'ok', JSON.stringify({ rows: v.rows, ar: v.ar }));
+    ok('archive guest: no page errors', t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // missing is never zero: unreachable, 401, 429 and nulls show "—" or "archive unavailable"; History works as before
+  for (const mode of ['down', '401', 'meta429', 'null']) {
+    const t = await arUnlock(browser, mode, BROWSER === 'webkit' ? { phone: true } : { width: 393, height: 852 }), p = t.page;
+    await arHist(p, F.p.id, 30);
+    const v = await p.evaluate(AR_VIEW);
+    const base = v.rows === 30 && v.trs === 30;
+    if (mode === 'down' || mode === '401') {
+      const btn = await p.evaluate(() => [...document.querySelectorAll('#ws [data-act="ar-find"]')].map((b) => b.disabled));
+      ok(`archive ${mode}: "archive unavailable", the presets off, History's 30 days as before ("${v.st}")`, base && v.ar === 'down' && /^archive unavailable · (not reachable|login refused) · the history above is this page’s own$/.test(v.st) && btn.length === 4 && btn.every(Boolean), JSON.stringify({ rows: v.rows, ar: v.ar, st: v.st, btn }));
+      await p.click('#ws [data-act="ws-range"][data-v="0"]'); await sleep(400);
+      const va = await p.evaluate(AR_VIEW);
+      ok(`archive ${mode}: All is the file's own days, as before (${va.rows})`, va.rows === F.inPage && va.min === F.first, JSON.stringify({ rows: va.rows }));
+    } else if (mode === 'meta429') {
+      await p.click('#ws [data-act="ar-find"][data-v="spikes10x"]'); await sleep(600);
+      const r = await p.evaluate(() => (document.querySelector('#ar-res') || {}).textContent || '');
+      ok(`archive 429: the pool's days and a preset refused as busy say so ("${v.st}" · "${r}"), History as before`, base && /this pool’s days — \(busy, try again in a minute\)/.test(v.st) && /^— · archive unavailable \(busy, try again in a minute\)$/.test(r), JSON.stringify({ rows: v.rows, st: v.st, r }));
+    } else {
+      await p.click('#ws [data-act="ws-range"][data-v="0"]'); await sleep(500);
+      const va = await p.evaluate(AR_VIEW), cells = await p.evaluate((t) => { const r = document.querySelector(`#ws .hst tr[data-t="${t}"]`); return r ? [...r.cells].slice(1).map((c) => c.textContent) : null; }, F.tF);
+      ok(`archive null: the archive's null days are "not read" / "—", never $0 (${cells && cells.join(' | ')})`, !!cells && /not read/.test(cells[0]) && cells.every((c) => !/\$0\b/.test(c)) && va.rows > F.inPage, JSON.stringify({ cells, rows: va.rows }));
+      ok(`archive null: the meta's null range shows "—" ("${va.st}")`, /every day since —/.test(va.st), va.st);
+      await p.click('#ws [data-act="ar-find"][data-v="spikes10x"]'); await sleep(500);
+      const r = await p.evaluate(() => [...document.querySelectorAll('#ar-res .ar-row')].map((b) => [b.querySelector('.ar-v').textContent, b.querySelector('.ar-x').textContent]));
+      ok(`archive null: a found day's null value and multiple show "—" (${JSON.stringify(r[0])})`, r.length === 3 && r.every(([a, b]) => a === '—' && /—$/.test(b)), JSON.stringify(r));
+      await p.click('#ws [data-act="ws-range"][data-v="30"]'); await sleep(300); await p.click('#ws [data-act="ar-hours"]'); await sleep(600);
+      const hz = await p.evaluate(() => { const s = document.querySelector('#ar-hz svg'); return s ? { read: +s.dataset.read, note: document.querySelector('#ar-hz .hs-note').textContent } : null; });
+      ok(`archive null: hours with null fees are gaps ("${hz && hz.note}")`, !!hz && hz.read === 0 && /^0 of 168 hours read · — /.test(hz.note), JSON.stringify(hz));
+    }
+    ok(`archive ${mode}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+}
+
 const groups = { unlock: testUnlock, layout: testLayout, windows: testWindows, states: testStates, tabs: testTabs, daily: testDaily, pairs: testPairs, charts: testCharts, pan: testPan, depth: testDepth, history: async (b) => { await testHistory(b); if (!(BROWSER === 'webkit' && MODE === '3d' && !opt('only'))) await testWsHistory(b); else console.log('  · history (workspace): in the WebKit 2D job'); }, stable: testStable, touch: testTouch, sheets: testSheets, sticky: testSticky, top: testTop, header: testHeader, zoomfit: testZoomFit, overlap: testOverlap, rows: testRows, refresh: testRefresh, market: testMarket, fav: testFav, table: testTable2, similar: testSimilar, chains: testChains, highlight: testHighlight, search: testSearch, links: testLinks, terms: testTerms, fold: testFold, locknote: testLockNote, clicks: testClicks, motion: testMotion, merge: testMerge, feebar: testFeeBar, stablewalk: testStableWalk, flash: testFlash, dates: testDates, feescale: testFeeScale, perday: testPerDay, disc: testDisc, view: testView , balance: testBalance, wraps: testWraps, floorlab: testFloorLab, iphone: testIphone, back: testBack, pull: testPull, full: testFull, way: async (b) => { await testWay(b); await testWayWs(b); }, qsearch: testQsearch, stress: testStress,
   workspace: testWorkspace, compare: testCompare, deeplink: testDeeplink, tiers: testTiers, tools: testTools,
-  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks, lazy3d: testLazy3d, a11yfix: testA11yFix, bottombar: testBottomBar, holdx: testHoldx, why: testWhy }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
-const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks', 'lazy3d', 'a11yfix', 'holdx', 'why']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
+  guest: testGuest, member: testMember, guestend: testGuestEnd, guestadmin: testGuestAdmin, guest180: testGuest180, recovery: testRecovery, passchange: testPassChange, mismatch: testMismatch, histbtn: testHistBtn, apr: testApr, errbadge: testErrBadge, spike: testSpike, scatter: testScatter, explainer: testExplainer, refreshcd: testRefreshCd, standout: testStandout, tokenlinks: testTokenLinks, lazy3d: testLazy3d, a11yfix: testA11yFix, bottombar: testBottomBar, holdx: testHoldx, why: testWhy, archive: testArchive }; // v0.7.0 // v0.6.0 (the history group adds the workspace's History, way the workspace's ways out)
+const WK_2D_ONLY = new Set(['iphone', 'full', 'way', 'qsearch', 'stress', 'compare', 'deeplink', 'tiers', 'guest', 'member', 'guestend', 'guestadmin', 'guest180', 'recovery', 'passchange', 'mismatch', 'histbtn', 'apr', 'errbadge', 'explainer', 'refreshcd', 'tokenlinks', 'lazy3d', 'a11yfix', 'holdx', 'why', 'archive']); // look-independent (histbtn walks both looks in the WebKit 2D job) (the fit, the full view, the ways out)
 const REPEAT = Math.max(1, Math.min(9, +opt('repeat', 1) || 1)); // --repeat N: the groups N times over (hunting a timing fault)
 try {
   for (let rep = 0; rep < REPEAT; rep++) for (const g of ONLY) {
