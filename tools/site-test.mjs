@@ -7821,12 +7821,13 @@ async function testArchive(browser) {
     await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, F.tF); await sleep(200);
     await p.click('#ws [data-act="ar-hours"]'); await p.waitForSelector('#ar-hz svg.ar-hsvg', { timeout: 6000 }).catch(() => {});
     await p.click('#ws [data-act="ar-find"][data-v="spikes10x"]'); await p.waitForSelector('#ar-res .ar-list', { timeout: 6000 }).catch(() => {}); await sleep(300);
+    await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, F.tF); await sleep(200); // the day again (a resting mouse may have moved the crosshair as the card grew)
     const res = [];
     for (const sel of ['#ws .ar', '#ar-bkn', '#hs-card .hs-dv.ar-bk']) {
       await p.evaluate((s) => { const e = document.querySelector(s); if (e) e.scrollIntoView({ block: 'center' }); }, sel); await sleep(250);
-      res.push([sel, await arAA(p, sel)]);
+      const r = await arAA(p, sel); r.has = await p.evaluate((s) => !!document.querySelector(s), sel); res.push([sel, r]);
     }
-    ok(`archive ${mode.toUpperCase()}: every text of the archive card, the ~ entry and the note reads at WCAG AA (${res.map(([s, r]) => `${s} ${r.n}`).join(', ')})`, res.every(([, r]) => r.n > 0 && r.bad === 0), JSON.stringify(res.filter(([, r]) => r.bad).map(([s, r]) => [s, r.first])));
+    ok(`archive ${mode.toUpperCase()}: every text of the archive card, the ~ entry and the note reads at WCAG AA (${res.map(([s, r]) => `${s} ${r.n}`).join(', ')})`, res.every(([, r]) => r.n > 0 && r.bad === 0), JSON.stringify(res.filter(([, r]) => r.bad || !r.n).map(([s, r]) => [s, r.has, r.first])));
     ok(`archive ${mode.toUpperCase()}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
