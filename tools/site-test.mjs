@@ -134,6 +134,9 @@ async function newPage(browser, { phone = false, width = 390, height = 860, redu
     if (!window.__keepFull) { const c = document.querySelector('#fullv [data-act="fullclose"]'); if (c) c.click(); }
   }).observe(document, { childList: true, subtree: true }));
   await ctx.addInitScript(() => document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a && !window.__allowExt) { e.preventDefault(); (window.__opened ||= []).push(a.href); } }, true)); // explorer links: recorded, never followed
+  // v0.8.3: the tests never reach the real archive API: a keyed page's archive calls are refused here (the archive group
+  // serves made-up answers through a route of its own, added later, which wins)
+  await ctx.route((u) => u.hostname === 'assim-ls-api.kereslek.workers.dev', (r) => r.abort('connectionrefused'));
   const page = await ctx.newPage();
   // ST_CPU=6 (Chromium only, local): a slow device, to shake out checks that assume a frame every 16 ms
   if (process.env.ST_CPU && BROWSER === 'chromium') { const cdp = await ctx.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: +process.env.ST_CPU }); }
