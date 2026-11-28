@@ -7717,6 +7717,19 @@ async function arHist(p, id, range) {
   await p.waitForFunction(() => { const a = document.querySelector('#ws .ar'); return !a || a.dataset.ar !== 'wait'; }, null, { timeout: 8000 }).catch(() => {});
   await sleep(600);
 }
+async function arAA(p, sel) { // the texts inside sel, sampled as drawn (as whyAA)
+  const c = await p.evaluate((s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }, sel);
+  if (!c) return { n: 0, bad: 0, first: [] };
+  const only = await p.addStyleTag({ content: 'body > *:not(#ws){visibility:hidden!important}' }); // the page under the workspace isn't listed
+  const items = (await p.evaluate(AA_ITEMS)).filter((it) => it.rect[0] >= c[0] - 1 && it.rect[1] >= c[1] - 1 && it.rect[0] + it.rect[2] <= c[2] + 1 && it.rect[1] + it.rect[3] <= c[3] + 1 && it.rect[1] >= 0 && it.rect[1] + it.rect[3] <= (p.viewportSize() || { height: 900 }).height);
+  await only.evaluate((e) => e.remove());
+  const h = await p.addStyleTag({ content: '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;caret-color:transparent!important;text-decoration-color:transparent!important}' });
+  await frames(p, 2);
+  const b64 = (await p.screenshot()).toString('base64');
+  await h.evaluate((e) => e.remove()); await frames(p, 1);
+  const all = await p.evaluate(AA_SAMPLE, { b64, items }), bad = all.filter((x) => x.ratio < x.need);
+  return { n: all.length, bad: bad.length, first: bad.sort((x, y) => x.ratio - y.ratio).slice(0, 3).map((x) => `${x.sel} "${x.t}" rgb(${x.fg}) on rgb(${x.bg}) ${x.ratio.toFixed(2)}`) };
+}
 async function testArchive(browser) {
   const F = AR_FX, html = fs.readFileSync(PAGE_OVERRIDE || PAGE, 'utf8');
   const csp = (/connect-src ([^;]*);/.exec(html) || [])[1] || '';
@@ -7787,6 +7800,22 @@ async function testArchive(browser) {
     ok(`archive ${tag}: the token is nowhere in the page, its attributes or this browser's storage`, !!ownerTok && !dom.includes(ownerTok) && !dom.includes(ownerTok.slice(5, 25)), '');
     ok(`archive ${tag}: no CSP refusal`, t.csp.length === 0, t.csp[0]);
     ok(`archive ${tag}: no page errors`, t.errors.length === 0, t.errors[0]);
+    await t.ctx.close();
+  }
+  // AA text in both looks: the archive card (the state, the hourly zoom, the found days), the ~ day card entry and the note
+  for (const mode of ['3d', '2d']) {
+    const t = await arUnlock(browser, 'ok', BROWSER === 'webkit' ? { phone: true, mode } : { width: 1440, height: 900, mode }), p = t.page;
+    await arHist(p, F.p.id, 0);
+    await p.evaluate((t) => { const b = document.querySelector(`#ws button.rb[data-t="${t}"]`); if (b) b.click(); }, F.tF); await sleep(200);
+    await p.click('#ws [data-act="ar-hours"]'); await p.waitForSelector('#ar-hz svg.ar-hsvg', { timeout: 6000 }).catch(() => {});
+    await p.click('#ws [data-act="ar-find"][data-v="spikes10x"]'); await p.waitForSelector('#ar-res .ar-list', { timeout: 6000 }).catch(() => {}); await sleep(300);
+    const res = [];
+    for (const sel of ['#ws .ar', '#ar-bkn', '#hs-card .hs-dv.ar-bk']) {
+      await p.evaluate((s) => { const e = document.querySelector(s); if (e) e.scrollIntoView({ block: 'center' }); }, sel); await sleep(250);
+      res.push([sel, await arAA(p, sel)]);
+    }
+    ok(`archive ${mode.toUpperCase()}: every text of the archive card, the ~ entry and the note reads at WCAG AA (${res.map(([s, r]) => `${s} ${r.n}`).join(', ')})`, res.every(([, r]) => r.n > 0 && r.bad === 0), JSON.stringify(res.filter(([, r]) => r.bad).map(([s, r]) => [s, r.first])));
+    ok(`archive ${mode.toUpperCase()}: no page errors`, t.errors.length === 0, t.errors[0]);
     await t.ctx.close();
   }
   // the guest's token: its own, of the same shape, never the owner's
